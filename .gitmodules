@@ -1,0 +1,3 @@
+[submodule "benchmark/pyjuice"]
+	path = benchmark/pyjuice
+	url = https://github.com/Juice-jl/pyjuice.git
