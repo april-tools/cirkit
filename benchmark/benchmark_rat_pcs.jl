@@ -69,7 +69,7 @@ function run_benchmark(train_data, test_data; batch_size = 100, num_nodes_region
     # Benchmark feed-forward pass time (on CPU)
     #trial = @benchmark loglikelihoods($pc, $test_data; batch_size=$batch_size) seconds=60
     # Benchmark feed-forward pass time (on GPU)
-    trial = @benchmark CUDA.@sync loglikelihoods($pc, $test_data; batch_size=$batch_size) seconds=60
+    trial = @benchmark (CUDA.@sync loglikelihoods($pc, $test_data; batch_size=$batch_size)) seconds=60
     #dump(trial)
     median_trial = median(trial)
     #dump(median(trial))
@@ -77,7 +77,7 @@ function run_benchmark(train_data, test_data; batch_size = 100, num_nodes_region
     #println("Test LL: $(mean(ll))")
     
     # Benchmark feed-forward GPU memory
-    cuda_trial = @grab_output CUDA.@time loglikelihoods($pc, $test_data; batch_size=$batch_size)
+    cuda_trial = @grab_output CUDA.@time loglikelihoods(pc, test_data; batch_size=batch_size)
     cuda_alloc_memory = split(cuda_trial)[11]
     cuda_alloc_memory_fmt = chop(split(cuda_trial)[12])
     if cuda_alloc_memory_fmt == "MiB"
@@ -89,8 +89,8 @@ function run_benchmark(train_data, test_data; batch_size = 100, num_nodes_region
     else
         throw(BoundsError("Something is wrong!"))
     end
-    cuda_alloc_memory /= to_bytes
-    
+    cuda_alloc_memory *= to_bytes
+
     Dict(
         "hparams" => Dict(
             "num_nodes_region" => num_nodes_region,
