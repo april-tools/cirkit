@@ -77,19 +77,19 @@ function run_benchmark(train_data, test_data; batch_size = 100, num_nodes_region
     #println("Test LL: $(mean(ll))")
     
     # Benchmark feed-forward GPU memory
-    cuda_trial = @grab_output CUDA.@time loglikelihoods(pc, test_data; batch_size=batch_size)
-    cuda_alloc_memory = split(cuda_trial)[11]
-    cuda_alloc_memory_fmt = chop(split(cuda_trial)[12])
-    if cuda_alloc_memory_fmt == "MiB"
+    cuda_trial = @grab_output (CUDA.@time loglikelihoods(pc, test_data; batch_size=batch_size))
+    cuda_alloc_memory = parse(Float64, split(split(cuda_trial[2], "GPU allocations:")[2])[1])
+    cuda_alloc_memory_fmt = chop(split(split(cuda_trial[2], "GPU allocations:")[2])[2])
+    if cuda_alloc_memory_fmt == "KiB"
         to_bytes = 1e3
     elseif cuda_alloc_memory_fmt == "MiB"
         to_bytes = 1e6
     elseif cuda_alloc_memory_fmt == "GiB"
         to_bytes = 1e9
     else
-        throw(BoundsError("Something is wrong!"))
+        throw(AssertionError("Invalid memory format: " * cuda_alloc_memory_fmt))
     end
-    cuda_alloc_memory *= to_bytes
+    cuda_alloc_memory = trunc(Int64, cuda_alloc_memory * to_bytes)
 
     Dict(
         "hparams" => Dict(
