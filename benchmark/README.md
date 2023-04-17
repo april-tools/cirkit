@@ -7,7 +7,7 @@ Launch ```julia```, open the package mode with ```]``` and run the following com
 
 ```
 dev ProbabilisticCircuits.jl/
-add CUDA Images MLDatasets BenchmarkTools JSON
+add CUDA Images MLDatasets BenchmarkTools JSON StatsBase
 ```
 
 Note that ```ProbabilisticCircuits.jl/``` is the local directory of the [ProbabilisticCircuits.jl](https://github.com/Juice-jl/ProbabilisticCircuits.jl) git submodule (tag v0.4.0).
