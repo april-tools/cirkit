@@ -2,7 +2,7 @@
 
 ## ProbabilisticCircuits.jl
 
-To be able to run the benchmark script ```benchmark_rat_pcs.jl``` install the dependencies first.
+To be able to run the benchmark script ```benchmark_juice_pcs.jl``` install the dependencies first.
 Launch ```julia```, open the package mode with ```]``` and run the following commands.
 
 ```
@@ -12,7 +12,7 @@ add CUDA Images MLDatasets BenchmarkTools JSON StatsBase
 
 Note that ```ProbabilisticCircuits.jl/``` is the local directory of the [ProbabilisticCircuits.jl](https://github.com/Juice-jl/ProbabilisticCircuits.jl) git submodule (tag v0.4.0).
 
-Launch the script ```benchmark_rat_pcs.jl``` by specifying the CUDA device id, e.g.,
+Launch the script ```benchmark_juice_pcs.jl``` by specifying the CUDA device id and the model to benchmark (either RAT or HCLT), e.g.,
 ```
-julia benchmark_rat_pcs.jl 1
+julia benchmark_juice_pcs.jl 1 RAT
 ```
