@@ -174,7 +174,7 @@ function run_benchmark_hclt(train_data, mis_train_data, truncated_data; batch_si
 
     # Layerize the circuit, move to GPU and run benchmarks
     pc = CuBitsProbCircuit(BitsProbCircuit(pc));
-    results = run_benchmark(pc, train_data, mis_train_data; benchmark_map=false, batch_size=batch_size)
+    results = run_benchmark(pc, train_data, mis_train_data; batch_size=batch_size)
 
     Dict(
         "hparams" => Dict(
@@ -202,7 +202,7 @@ function main()
     # Load the dataset
     train_data_cpu, _ = cifar10_dataset()
     train_data = cu(train_data_cpu)
-    mis_train_data = Array{Union{Missing, UInt32}}(train_data)
+    mis_train_data = Array{Union{Missing, UInt8}}(train_data)
     Random.seed!(42)
     # Construct data set with 50% missing features
     cols_to_marginalise = StatsBase.sample(1:size(train_data, 2), trunc(Int64, size(train_data, 2) / 2), replace = false)
