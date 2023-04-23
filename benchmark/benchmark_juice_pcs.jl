@@ -92,7 +92,7 @@ function retrieve_stats(pc::ProbCircuit)
     )
 end
 
-function run_benchmark(pc::CuBitsProbCircuit, train_data, mis_train_data; benchmark_map = true, batch_size = 100, budget = 60)
+function run_benchmark(pc::CuBitsProbCircuit, train_data, mis_train_data; benchmark_map = true, batch_size = 100, budget = 90)
     # Benchmark feed-forward pass time (on CPU)
     #trial = @benchmark loglikelihoods($pc, $train_data; batch_size=$batch_size) seconds=60
     # Benchmark feed-forward pass time (on GPU)
@@ -257,7 +257,7 @@ function main()
         trunc_idx = StatsBase.sample(1:size(train_data_cpu, 1), trunc(Int64, 0.1 * size(train_data_cpu, 1)), replace = false)
         truncated_data = truncated_data[trunc_idx, :]
 
-        hp_latents = [2, 4, 8, 16, 32, 64, 128]
+        hp_latents = [2, 4, 8, 16, 32, 64, 128, 256]
         results = Dict()
 
         # Benchmark by varying the support size for each latent variable
