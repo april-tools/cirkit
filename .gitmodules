@@ -1,3 +1,6 @@
 [submodule "benchmark/pyjuice"]
 	path = benchmark/pyjuice
 	url = https://github.com/Juice-jl/pyjuice.git
+[submodule "benchmark/ProbabilisticCircuits.jl"]
+	path = benchmark/ProbabilisticCircuits.jl
+	url = https://github.com/Juice-jl/ProbabilisticCircuits.jl.git
