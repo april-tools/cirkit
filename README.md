@@ -18,6 +18,6 @@ venv\Scripts\activate
 ```
 Then install the required dependencies in [development mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html).
 ```shell
-pip intall .[dev]
+pip intall -e .[dev]
 ```
 This will install not only the core dependencies of the library itself (e.g., PyTorch) but also additional dependencies useful for development (e.g., PyTest).
