@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools >= 64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cirkit*"]
+
+[project]
+name = "cirkit"
+version = "0.0.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text="GPLv3" }
+keywords = []
+authors = [
+  { name="The APRIL Lab." }
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "torch>=2.0.0",
+  "numpy>=1.24.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "black==23.*",
+  "pytest",
+  "pytest-cov"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/april-tools/cirkit"
+
+[tool.pytest.ini_options]
+pythonpath = "."
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
