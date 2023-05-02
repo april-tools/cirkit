@@ -32,7 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "black==23.*",
+  "black~=23.0",
   "pytest",
   "pytest-cov"
 ]
