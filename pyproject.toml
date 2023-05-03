@@ -33,6 +33,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "black~=23.0",
+  "pylint",
+  "mypy",
+  "pydocstyle[toml]",
   "pytest",
   "pytest-cov"
 ]
@@ -47,6 +50,61 @@ benchmark = [
 pythonpath = "."
 testpaths = ["tests"]
 
+# Following are configs for code quality checks. Any change should be put into
+# a separate PR and merge with care. Rules can only be modified after discussion.
+
+# code style
 [tool.black]
 line-length = 100
 target-version = ['py38']
+required-version = 23
+
+# general linting
+[tool.pylint.main]
+jobs = 0
+py-version = "3.8"
+load-plugins = [
+  "pylint.extensions.bad_builtin",
+  "pylint.extensions.broad_try_clause",
+  "pylint.extensions.check_elif",
+  "pylint.extensions.code_style",
+  "pylint.extensions.comparetozero",
+  "pylint.extensions.comparison_placement",
+  "pylint.extensions.confusing_elif",
+  "pylint.extensions.consider_refactoring_into_while_condition",
+  "pylint.extensions.consider_ternary_expression",
+  "pylint.extensions.dict_init_mutate",
+  "pylint.extensions.docparams",
+  "pylint.extensions.docstyle",
+  "pylint.extensions.dunder",
+  "pylint.extensions.empty_comment",
+  "pylint.extensions.emptystring",
+  "pylint.extensions.eq_without_hash",
+  "pylint.extensions.for_any_all",
+  "pylint.extensions.magic_value",
+  "pylint.extensions.mccabe",
+  "pylint.extensions.no_self_use",
+  "pylint.extensions.overlapping_exceptions",
+  "pylint.extensions.private_import",
+  "pylint.extensions.redefined_loop_name",
+  "pylint.extensions.redefined_variable_type",
+  "pylint.extensions.set_membership",
+  "pylint.extensions.typing",
+  "pylint.extensions.while_used"
+]
+[tool.pylint.parameter_documentation]
+accept-no-param-doc = false
+accept-no-raise-doc = false
+accept-no-return-doc = false
+accept-no-yields-doc = false
+default-docstring-type = "google"
+
+# type checking
+[tool.mypy]
+python_version = 3.8
+strict = true
+
+# doc style
+[tool.pydocstyle]
+convention = "google"
+add_select = "D203,D204,D213,D215,D400,D401,D404,D406,D407,D408,D409,D413"
