@@ -92,6 +92,10 @@ load-plugins = [
   "pylint.extensions.typing",
   "pylint.extensions.while_used"
 ]
+[tool.pylint."messages control"]
+disable = [
+  "missing-module-docstring"
+]
 [tool.pylint.parameter_documentation]
 accept-no-param-doc = false
 accept-no-raise-doc = false
@@ -108,3 +112,4 @@ strict = true
 [tool.pydocstyle]
 convention = "google"
 add_select = "D203,D204,D213,D215,D400,D401,D404,D406,D407,D408,D409,D413"
+add_ignore = "D100,D104"
