@@ -59,6 +59,14 @@ line-length = 100
 target-version = ['py38']
 required-version = 23
 
+# import style
+[tool.isort]
+py_version = 39
+profile = "black"
+line_length = 100
+balanced_wrapping = true
+skip_gitignore = true
+
 # general linting
 [tool.pylint.main]
 jobs = 0
