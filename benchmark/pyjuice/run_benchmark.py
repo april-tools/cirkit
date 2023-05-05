@@ -2,7 +2,7 @@ import argparse
 import logging
 import time
 import warnings
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import pyjuice as juice
@@ -14,7 +14,7 @@ logging.getLogger("torch._inductor.utils").setLevel(logging.ERROR)
 logging.getLogger("torch._inductor.compile_fx").setLevel(logging.ERROR)
 
 
-def process_args():
+def process_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=512, help="batch_size")
     parser.add_argument("--cuda", type=int, default=0, help="cuda idx")
@@ -32,7 +32,11 @@ def process_args():
     return args
 
 
-def evaluate(pc: juice.ProbCircuit, loader: DataLoader, alphas: Optional[torch.Tensor] = None):
+def evaluate(
+    pc: juice.ProbCircuit,
+    loader: DataLoader[Tuple[torch.Tensor, ...]],
+    alphas: Optional[torch.Tensor] = None,
+) -> float:
     lls_total = 0.0
     for batch in loader:
         x = batch[0].to(pc.device)
@@ -43,7 +47,11 @@ def evaluate(pc: juice.ProbCircuit, loader: DataLoader, alphas: Optional[torch.T
     return lls_total
 
 
-def evaluate_miss(pc: juice.ProbCircuit, loader: DataLoader, alphas: Optional[torch.Tensor] = None):
+def evaluate_miss(
+    pc: juice.ProbCircuit,
+    loader: DataLoader[Tuple[torch.Tensor, ...]],
+    alphas: Optional[torch.Tensor] = None,
+) -> float:
     lls_total = 0.0
     for batch in loader:
         x = batch[0].to(pc.device)
@@ -55,7 +63,15 @@ def evaluate_miss(pc: juice.ProbCircuit, loader: DataLoader, alphas: Optional[to
     return lls_total
 
 
-def mini_batch_em_epoch(num_epochs, pc, optimizer, scheduler, train_loader, test_loader, device):
+def mini_batch_em_epoch(
+    num_epochs: int,
+    pc: juice.ProbCircuit,
+    optimizer: juice.optim.CircuitOptimizer,
+    scheduler: juice.optim.CircuitScheduler,
+    train_loader: DataLoader[Tuple[torch.Tensor, ...]],
+    test_loader: DataLoader[Tuple[torch.Tensor, ...]],
+    device: torch.device,
+) -> None:
     for epoch in range(num_epochs):
         t0 = time.time()
         train_ll = 0.0
@@ -83,7 +99,12 @@ def mini_batch_em_epoch(num_epochs, pc, optimizer, scheduler, train_loader, test
         )
 
 
-def full_batch_em_epoch(pc, train_loader, test_loader, device):
+def full_batch_em_epoch(
+    pc: juice.ProbCircuit,
+    train_loader: DataLoader[Tuple[torch.Tensor, ...]],
+    test_loader: DataLoader[Tuple[torch.Tensor, ...]],
+    device: torch.device,
+) -> None:
     with torch.no_grad():
         t0 = time.time()
         train_ll = 0.0
@@ -107,7 +128,9 @@ def full_batch_em_epoch(pc, train_loader, test_loader, device):
         )
 
 
-def load_circuit(filename, verbose=False, device=None):
+def load_circuit(
+    filename: str, verbose: bool = False, device: Optional[torch.device] = None
+) -> juice.ProbCircuit:
     t0 = time.time()
     if verbose:
         print(f"Loading circuit....{filename}.....", end="")
@@ -124,7 +147,7 @@ def load_circuit(filename, verbose=False, device=None):
     return pc
 
 
-def save_circuit(pc, filename, verbose=False):
+def save_circuit(pc: juice.ProbCircuit, filename: str, verbose: bool = False) -> None:
     if verbose:
         print(f"Saving pc into {filename}.....", end="")
     t0_save = time.time()
@@ -134,7 +157,7 @@ def save_circuit(pc, filename, verbose=False):
         print(f"took {t1_save - t0_save:.2f} (s)")
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     torch.cuda.set_device(args.cuda)
     device = torch.device(f"cuda:{args.cuda}")
     filename = f"{args.output_dir}/dummydataset_{args.num_latents}.torch"
