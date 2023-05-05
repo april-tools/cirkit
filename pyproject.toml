@@ -67,7 +67,6 @@ py_version = 39
 profile = "black"
 line_length = 100
 balanced_wrapping = true
-skip_gitignore = true
 
 # doc style
 [tool.pydocstyle]
