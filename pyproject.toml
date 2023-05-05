@@ -31,11 +31,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+lint = [
   "black~=23.0",
   "pylint",
   "mypy",
-  "pydocstyle[toml]",
+  "pydocstyle[toml]"
+]
+test = [
   "pytest",
   "pytest-cov"
 ]
@@ -65,7 +67,12 @@ py_version = 39
 profile = "black"
 line_length = 100
 balanced_wrapping = true
-skip_gitignore = true
+
+# doc style
+[tool.pydocstyle]
+convention = "google"
+add_select = "D203,D204,D213,D215,D400,D401,D404,D406,D407,D408,D409,D413"
+add_ignore = "D100,D104"
 
 # general linting
 [tool.pylint.main]
@@ -115,9 +122,3 @@ default-docstring-type = "google"
 [tool.mypy]
 python_version = 3.8
 strict = true
-
-# doc style
-[tool.pydocstyle]
-convention = "google"
-add_select = "D203,D204,D213,D215,D400,D401,D404,D406,D407,D408,D409,D413"
-add_ignore = "D100,D104"
