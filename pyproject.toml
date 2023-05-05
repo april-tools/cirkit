@@ -31,11 +31,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+lint = [
   "black~=23.0",
   "pylint",
   "mypy",
-  "pydocstyle[toml]",
+  "pydocstyle[toml]"
+]
+test = [
   "pytest",
   "pytest-cov"
 ]
