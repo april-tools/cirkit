@@ -16,8 +16,8 @@ fi
 # juice.jl does not include pip dependency
 
 if [[ "$@" == *"pyjuice"* || "$@" == *"all"* ]]; then
-  echo "Installing submodule for pyjuice: "$(dirname $0)/pyjuice/pyjuice""
-  pip install --no-deps -e "$(dirname $0)/pyjuice/pyjuice"
+  echo "Installing submodule for pyjuice: "$(dirname $0)/pyjuice/pyjuice-april""
+  pip install --no-deps -e "$(dirname $0)/pyjuice/pyjuice-april"
 fi
 
 if [[ "$@" == *"einet"* || "$@" == *"all"* ]]; then
