@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[lint]
+          pip install -e .[lint]
       - name: Run Black
         run: black --verbose --check --diff .
 
@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[lint]
+          pip install -e .[lint]
       - name: Run isort
         run: isort --verbose --check --diff .
 
@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[lint]
+          pip install -e .[lint]
       - name: Run pydocstyle
         run: pydocstyle --verbose .
 
@@ -72,7 +72,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[lint]
+          pip install -e .[lint]
           bash ./benchmark/install_submodule.sh all
       - name: Run Pylint
         run: pylint --verbose --persistent=n --recursive=y .
@@ -92,7 +92,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[lint]
+          pip install -e .[lint]
           bash ./benchmark/install_submodule.sh all
       - name: Run Mypy
         run: mypy .
