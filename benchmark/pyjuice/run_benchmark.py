@@ -15,6 +15,11 @@ logging.getLogger("torch._inductor.compile_fx").setLevel(logging.ERROR)
 
 
 def process_args() -> argparse.Namespace:
+    """Process command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed args.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=512, help="batch_size")
     parser.add_argument("--cuda", type=int, default=0, help="cuda idx")
@@ -37,6 +42,16 @@ def evaluate(
     loader: DataLoader[Tuple[torch.Tensor, ...]],
     alphas: Optional[torch.Tensor] = None,
 ) -> float:
+    """Evaluate the circuit.
+
+    Args:
+        pc (juice.ProbCircuit): The PC to evaluate.
+        loader (DataLoader[Tuple[torch.Tensor, ...]]): The evaluation data.
+        alphas (Optional[torch.Tensor], optional): Alpha on image. Defaults to None.
+
+    Returns:
+        float: The average LL on data.
+    """
     lls_total = 0.0
     for batch in loader:
         x = batch[0].to(pc.device)
@@ -52,6 +67,16 @@ def evaluate_miss(
     loader: DataLoader[Tuple[torch.Tensor, ...]],
     alphas: Optional[torch.Tensor] = None,
 ) -> float:
+    """Evaluate with missing data.
+
+    Args:
+        pc (juice.ProbCircuit): The PC to evaluate.
+        loader (DataLoader[Tuple[torch.Tensor, ...]]): The evaluation data.
+        alphas (Optional[torch.Tensor], optional): Alpha on image. Defaults to None.
+
+    Returns:
+        float: The average LL on data.
+    """
     lls_total = 0.0
     for batch in loader:
         x = batch[0].to(pc.device)
@@ -72,6 +97,17 @@ def mini_batch_em_epoch(
     test_loader: DataLoader[Tuple[torch.Tensor, ...]],
     device: torch.device,
 ) -> None:
+    """Perform EM on mini batches.
+
+    Args:
+        num_epochs (int): Number of epochs to do.
+        pc (juice.ProbCircuit): The PC to optimize.
+        optimizer (juice.optim.CircuitOptimizer): The optimizer.
+        scheduler (juice.optim.CircuitScheduler): The lr scheduler.
+        train_loader (DataLoader[Tuple[torch.Tensor, ...]]): Training data.
+        test_loader (DataLoader[Tuple[torch.Tensor, ...]]): Testing data.
+        device (torch.device): The device to put data on.
+    """
     for epoch in range(num_epochs):
         t0 = time.time()
         train_ll = 0.0
@@ -105,6 +141,14 @@ def full_batch_em_epoch(
     test_loader: DataLoader[Tuple[torch.Tensor, ...]],
     device: torch.device,
 ) -> None:
+    """Perform EM on whole dataset.
+
+    Args:
+        pc (juice.ProbCircuit): The PC to optimize.
+        train_loader (DataLoader[Tuple[torch.Tensor, ...]]): Training data.
+        test_loader (DataLoader[Tuple[torch.Tensor, ...]]): Testing data.
+        device (torch.device): The device to put data on.
+    """
     with torch.no_grad():
         t0 = time.time()
         train_ll = 0.0
@@ -131,6 +175,16 @@ def full_batch_em_epoch(
 def load_circuit(
     filename: str, verbose: bool = False, device: Optional[torch.device] = None
 ) -> juice.ProbCircuit:
+    """Load circuit from file.
+
+    Args:
+        filename (str): The file name of saved circuit.
+        verbose (bool, optional): Whether to print extra info. Defaults to False.
+        device (Optional[torch.device], optional): The device to load the circuit on. Defaults to None.
+
+    Returns:
+        juice.ProbCircuit: Loaded circuit.
+    """
     t0 = time.time()
     if verbose:
         print(f"Loading circuit....{filename}.....", end="")
@@ -148,6 +202,13 @@ def load_circuit(
 
 
 def save_circuit(pc: juice.ProbCircuit, filename: str, verbose: bool = False) -> None:
+    """Save circuit to file.
+
+    Args:
+        pc (juice.ProbCircuit): The circuit to save.
+        filename (str): The file name to save circuit.
+        verbose (bool, optional): Whether to print extra info. Defaults to False.
+    """
     if verbose:
         print(f"Saving pc into {filename}.....", end="")
     t0_save = time.time()
@@ -158,6 +219,11 @@ def save_circuit(pc: juice.ProbCircuit, filename: str, verbose: bool = False) ->
 
 
 def main(args: argparse.Namespace) -> None:
+    """Invoke different procedures based on command line args.
+
+    Args:
+        args (argparse.Namespace): The arguments passed in.
+    """
     torch.cuda.set_device(args.cuda)
     device = torch.device(f"cuda:{args.cuda}")
     filename = f"{args.output_dir}/dummydataset_{args.num_latents}.torch"
