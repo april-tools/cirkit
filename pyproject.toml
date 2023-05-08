@@ -71,7 +71,7 @@ balanced_wrapping = true
 # doc style
 [tool.pydocstyle]
 convention = "google"
-add_select = "D204,D215,D400,D401,D404,D406,D407,D408,D409,D413"
+add_select = "D204,D400,D401,D404,D406,D413"
 add_ignore = "D100,D104"
 
 # general linting
