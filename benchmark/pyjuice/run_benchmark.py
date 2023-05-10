@@ -131,7 +131,8 @@ def mini_batch_em_epoch(
         t2 = time.time()
 
         print(
-            f"[Epoch {epoch}/{num_epochs}][train LL: {train_ll:.2f}; test LL: {test_ll:.2f}].....[train forward+backward+step {t1-t0:.2f}; test forward {t2-t1:.2f}] "
+            f"[Epoch {epoch}/{num_epochs}][train LL: {train_ll:.2f}; test LL: {test_ll:.2f}]....."
+            f"[train forward+backward+step {t1-t0:.2f}; test forward {t2-t1:.2f}] "
         )
 
 
@@ -168,7 +169,8 @@ def full_batch_em_epoch(
         test_ll = evaluate(pc, loader=test_loader)
         t2 = time.time()
         print(
-            f"[train LL: {train_ll:.2f}; test LL: {test_ll:.2f}].....[train forward+backward+step {t1-t0:.2f}; test forward {t2-t1:.2f}] "
+            f"[train LL: {train_ll:.2f}; test LL: {test_ll:.2f}]....."
+            f"[train forward+backward+step {t1-t0:.2f}; test forward {t2-t1:.2f}] "
         )
 
 
@@ -180,7 +182,8 @@ def load_circuit(
     Args:
         filename (str): The file name of saved circuit.
         verbose (bool, optional): Whether to print extra info. Defaults to False.
-        device (Optional[torch.device], optional): The device to load the circuit on. Defaults to None.
+        device (Optional[torch.device], optional): The device to load the circuit on.
+            Defaults to None.
 
     Returns:
         juice.ProbCircuit: Loaded circuit.
@@ -283,7 +286,8 @@ def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-n
         test_bpd = -test_ll / (num_features * np.log(2))
 
         print(
-            f"Compilation+test took {t0-t_compile:.2f} (s); train_ll {t1-t0:.2f} (s); test_ll {t2-t1:.2f} (s)"
+            f"Compilation+test took {t0-t_compile:.2f} (s); "
+            f"train_ll {t1-t0:.2f} (s); test_ll {t2-t1:.2f} (s)"
         )
         print(f"train_ll: {train_ll:.2f}, test_ll: {test_ll:.2f}")
         print(f"train_bpd: {train_bpd:.2f}, test_bpd: {test_bpd:.2f}")
@@ -323,7 +327,8 @@ def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-n
         print(f"train_ll: {train_ll:.2f}, train_bpd: {train_bpd:.2f}; time = {t1-t0:.2f} (s)")
         print(f"test_ll: {test_ll:.2f}, test_bpd: {test_bpd:.2f}; time = {t2-t1:.2f} (s)")
         print(
-            f"test_miss_ll: {test_ll_miss:.2f}, test_miss_bpd: {test_miss_bpd:.2f}; time = {t3-t2:.2f} (s)"
+            f"test_miss_ll: {test_ll_miss:.2f}, test_miss_bpd: {test_miss_bpd:.2f}; "
+            f"time = {t3-t2:.2f} (s)"
         )
     elif args.mode == "alphas":
         print("===========================ALPHAS===============================")
