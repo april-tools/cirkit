@@ -109,7 +109,8 @@ load-plugins = [
 ]
 [tool.pylint."messages control"]
 disable = [
-  "missing-module-docstring"
+  "missing-module-docstring",
+  "no-member"
 ]
 [tool.pylint.parameter_documentation]
 accept-no-param-doc = false
