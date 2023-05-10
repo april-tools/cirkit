@@ -109,7 +109,7 @@ def mini_batch_em_epoch(
         device (torch.device): The device to put data on.
     """
     for epoch in range(num_epochs):
-        t0 = time.time()
+        t_start = time.time()
         train_ll = 0.0
         for batch in train_loader:
             x = batch[0].to(device)
@@ -126,13 +126,14 @@ def mini_batch_em_epoch(
 
         train_ll /= len(train_loader)
 
-        t1 = time.time()
+        t_train = time.time()
         test_ll = evaluate(pc, loader=test_loader)
-        t2 = time.time()
+        t_eval = time.time()
 
         print(
             f"[Epoch {epoch}/{num_epochs}][train LL: {train_ll:.2f}; test LL: {test_ll:.2f}]....."
-            f"[train forward+backward+step {t1-t0:.2f}; test forward {t2-t1:.2f}] "
+            f"[train forward+backward+step {t_train-t_start:.2f};"
+            f" test forward {t_eval-t_train:.2f}] "
         )
 
 
@@ -151,7 +152,7 @@ def full_batch_em_epoch(
         device (torch.device): The device to put data on.
     """
     with torch.no_grad():
-        t0 = time.time()
+        t_start = time.time()
         train_ll = 0.0
         for batch in train_loader:
             x = batch[0].to(device)
@@ -165,12 +166,13 @@ def full_batch_em_epoch(
 
         train_ll /= len(train_loader)
 
-        t1 = time.time()
+        t_train = time.time()
         test_ll = evaluate(pc, loader=test_loader)
-        t2 = time.time()
+        t_eval = time.time()
         print(
             f"[train LL: {train_ll:.2f}; test LL: {test_ll:.2f}]....."
-            f"[train forward+backward+step {t1-t0:.2f}; test forward {t2-t1:.2f}] "
+            f"[train forward+backward+step {t_train-t_start:.2f};"
+            f" test forward {t_eval-t_train:.2f}] "
         )
 
 
@@ -188,16 +190,16 @@ def load_circuit(
     Returns:
         juice.ProbCircuit: Loaded circuit.
     """
-    t0 = time.time()
+    t_start = time.time()
     if verbose:
         print(f"Loading circuit....{filename}.....", end="")
     pc = juice.model.ProbCircuit.load(filename)
     if device is not None:
         print(f"...into device {device}...", end="")
         pc.to(device)
-    t1 = time.time()
+    t_loaded = time.time()
     if verbose:
-        print(f"Took {t1-t0:.2f} (s)")
+        print(f"Took {t_loaded-t_start:.2f} (s)")
         print("pc params size", pc.params.size())
         print("pc num nodes ", pc.num_nodes)
 
@@ -214,11 +216,11 @@ def save_circuit(pc: juice.ProbCircuit, filename: str, verbose: bool = False) ->
     """
     if verbose:
         print(f"Saving pc into {filename}.....", end="")
-    t0_save = time.time()
+    t_start = time.time()
     torch.save(pc, filename)
-    t1_save = time.time()
+    t_saved = time.time()
     if verbose:
-        print(f"took {t1_save - t0_save:.2f} (s)")
+        print(f"took {t_saved - t_start:.2f} (s)")
 
 
 def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-name
@@ -273,21 +275,21 @@ def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-n
         print("===========================LOAD===============================")
         pc = load_circuit(filename, verbose=True, device=device)
 
-        t_compile = time.time()
+        t_start = time.time()
         test_ll = evaluate(pc, loader=test_loader)  # force compilation
 
-        t0 = time.time()
+        t_compile = time.time()
         train_ll = evaluate(pc, loader=train_loader)
-        t1 = time.time()
+        t_evaltrain = time.time()
         test_ll = evaluate(pc, loader=test_loader)
-        t2 = time.time()
+        t_evaltest = time.time()
 
         train_bpd = -train_ll / (num_features * np.log(2))
         test_bpd = -test_ll / (num_features * np.log(2))
 
         print(
-            f"Compilation+test took {t0-t_compile:.2f} (s); "
-            f"train_ll {t1-t0:.2f} (s); test_ll {t2-t1:.2f} (s)"
+            f"Compilation+test took {t_compile-t_start:.2f} (s); "
+            f"train_ll {t_evaltrain-t_compile:.2f} (s); test_ll {t_evaltest-t_evaltrain:.2f} (s)"
         )
         print(f"train_ll: {train_ll:.2f}, test_ll: {test_ll:.2f}")
         print(f"train_bpd: {train_bpd:.2f}, test_bpd: {test_bpd:.2f}")
@@ -308,27 +310,33 @@ def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-n
             shuffle=False,
             drop_last=True,
         )
-        t_compile = time.time()
+        t_start = time.time()
         test_ll = evaluate(pc, loader=test_loader)
         test_ll_miss = evaluate_miss(pc, loader=test_loader_miss)
 
-        t0 = time.time()
+        t_compile = time.time()
         train_ll = evaluate(pc, loader=train_loader)
-        t1 = time.time()
+        t_evaltrain = time.time()
         test_ll = evaluate(pc, loader=test_loader)
-        t2 = time.time()
+        t_evaltest = time.time()
         test_ll_miss = evaluate_miss(pc, loader=test_loader_miss)
-        t3 = time.time()
+        t_evalmiss = time.time()
 
         train_bpd = -train_ll / (num_features * np.log(2))
         test_bpd = -test_ll / (num_features * np.log(2))
         test_miss_bpd = -test_ll_miss / (num_features * np.log(2))
 
-        print(f"train_ll: {train_ll:.2f}, train_bpd: {train_bpd:.2f}; time = {t1-t0:.2f} (s)")
-        print(f"test_ll: {test_ll:.2f}, test_bpd: {test_bpd:.2f}; time = {t2-t1:.2f} (s)")
+        print(
+            f"train_ll: {train_ll:.2f}, train_bpd: {train_bpd:.2f}; "
+            f"time = {t_evaltrain-t_compile:.2f} (s)"
+        )
+        print(
+            f"test_ll: {test_ll:.2f}, test_bpd: {test_bpd:.2f}; "
+            f"time = {t_evaltest-t_evaltrain:.2f} (s)"
+        )
         print(
             f"test_miss_ll: {test_ll_miss:.2f}, test_miss_bpd: {test_miss_bpd:.2f}; "
-            f"time = {t3-t2:.2f} (s)"
+            f"time = {t_evalmiss-t_evaltest:.2f} (s)"
         )
     elif args.mode == "alphas":
         print("===========================ALPHAS===============================")
@@ -338,15 +346,15 @@ def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-n
         test_ll = evaluate(pc, loader=test_loader)
         train_ll = evaluate(pc, loader=train_loader)
 
-        t0 = time.time()
+        t_compile = time.time()
         train_ll_alpha = evaluate(pc, loader=train_loader, alphas=alphas)
-        t1 = time.time()
+        t_evaltrain = time.time()
         test_ll_alpha = evaluate(pc, loader=test_loader, alphas=alphas)
-        t2 = time.time()
+        t_evaltest = time.time()
 
         print(f"train_ll: {train_ll:.2f}, test_ll: {test_ll:.2f}")
         print(f"train_ll_alpha: {train_ll_alpha:.2f}, test_ll_alpha: {test_ll_alpha:.2f}")
-        print(f"train {t1-t0:.2f} (s); test {t2-t1:.2f} (s)")
+        print(f"train {t_evaltrain-t_compile:.2f} (s); test {t_evaltest-t_evaltrain:.2f} (s)")
 
     print(f"Memory allocated: {torch.cuda.memory_allocated(device) / 1024 / 1024 / 1024:.1f}GB")
     print(f"Memory reserved: {torch.cuda.memory_reserved(device) / 1024 / 1024 / 1024:.1f}GB")
