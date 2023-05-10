@@ -33,7 +33,7 @@ def process_args() -> argparse.Namespace:
         help="load circuit from file instead of learning structure",
     )
     parser.add_argument("--output_dir", type=str, default="examples", help="output directory")
-    args = parser.parse_args()
+    args = parser.parse_args()  # pylint: disable=redefined-outer-name
     return args
 
 
@@ -218,7 +218,7 @@ def save_circuit(pc: juice.ProbCircuit, filename: str, verbose: bool = False) ->
         print(f"took {t1_save - t0_save:.2f} (s)")
 
 
-def main(args: argparse.Namespace) -> None:
+def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-name
     """Invoke different procedures based on command line args.
 
     Args:
