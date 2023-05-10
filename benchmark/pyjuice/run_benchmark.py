@@ -88,7 +88,7 @@ def evaluate_miss(
     return lls_total
 
 
-def mini_batch_em_epoch(
+def mini_batch_em_epoch(  # pylint: disable=too-many-arguments,too-many-locals
     num_epochs: int,
     pc: juice.ProbCircuit,
     optimizer: juice.optim.CircuitOptimizer,
@@ -223,7 +223,8 @@ def save_circuit(pc: juice.ProbCircuit, filename: str, verbose: bool = False) ->
         print(f"took {t_saved - t_start:.2f} (s)")
 
 
-def main(args: argparse.Namespace) -> None:  # pylint: disable=redefined-outer-name
+# pylint: disable-next=redefined-outer-name,too-many-locals,too-many-statements
+def main(args: argparse.Namespace) -> None:
     """Invoke different procedures based on command line args.
 
     Args:
