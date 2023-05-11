@@ -96,7 +96,6 @@ load-plugins = [
   "pylint.extensions.emptystring",
   "pylint.extensions.eq_without_hash",
   "pylint.extensions.for_any_all",
-  "pylint.extensions.magic_value",
   "pylint.extensions.mccabe",
   "pylint.extensions.no_self_use",
   "pylint.extensions.overlapping_exceptions",
@@ -109,8 +108,13 @@ load-plugins = [
 ]
 [tool.pylint."messages control"]
 disable = [
-  "missing-module-docstring"
+  "missing-module-docstring",
+  "no-member"
 ]
+[tool.pylint.basic]
+argument-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
+attr-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
+variable-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
 [tool.pylint.parameter_documentation]
 accept-no-param-doc = false
 accept-no-raise-doc = false
