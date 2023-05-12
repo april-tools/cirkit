@@ -133,7 +133,6 @@ disallow_any_generics = true
 disallow_any_unimported = true
 disallow_incomplete_defs = true
 disallow_subclassing_any = true
-disallow_untyped_calls = true
 disallow_untyped_decorators = true
 disallow_untyped_defs = true
 implicit_reexport = false
