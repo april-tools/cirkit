@@ -125,4 +125,29 @@ default-docstring-type = "google"
 # type checking
 [tool.mypy]
 python_version = 3.8
-strict = true
+check_untyped_defs = true
+disallow_any_decorated = true
+disallow_any_explicit = true
+disallow_any_expr = true
+disallow_any_generics = true
+disallow_any_unimported = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+implicit_reexport = false
+strict_concatenate = true
+strict_equality = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+enable_error_code = [
+  "ignore-without-code",
+  "redundant-expr",
+  "redundant-self",
+  "truthy-bool",
+  "truthy-iterable"
+]
