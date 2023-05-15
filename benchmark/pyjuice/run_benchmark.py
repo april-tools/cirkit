@@ -121,13 +121,14 @@ def full_em_epoch(
 
 
 def main() -> None:
-    """TODO."""
+    """Execute the main procedure."""
     args = process_args()
+    print(args)
 
     seed_all()
 
     num_features = 28 * 28
-    data_size = 60000
+    data_size = 10240
     rand_data = torch.randint(256, (data_size, num_features), dtype=torch.uint8)
     data_loader = DataLoader(
         dataset=TensorDataset(rand_data),
@@ -151,9 +152,13 @@ def main() -> None:
 
     optimizer = juice.optim.CircuitOptimizer(pc)  # just keep it default
 
-    batch_em_epoch(pc, optimizer, data_loader)
-    full_em_epoch(pc, data_loader)
-    evaluate(pc, data_loader)
+    ll_batch = batch_em_epoch(pc, optimizer, data_loader)
+    ll_full = full_em_epoch(pc, data_loader)
+    ll_eval = evaluate(pc, data_loader)
+    print("train and test LLs:", ll_batch, ll_full, ll_eval, sep="\n")
+
+    # -4285.7583... is an exact float32 number, 2^-10 is 2eps
+    assert abs(ll_eval - -4285.75830078125) < 2**-10, "eval LL out of allowed error range"
 
 
 if __name__ == "__main__":
