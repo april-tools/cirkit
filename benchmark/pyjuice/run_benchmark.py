@@ -1,7 +1,8 @@
 import argparse
+import functools
 import os
 import random
-from typing import Tuple
+from typing import Callable, Tuple, TypeVar
 
 import numpy as np
 import torch
@@ -47,6 +48,34 @@ def process_args() -> _ArgsNamespace:
     return parser.parse_args(namespace=_ArgsNamespace())
 
 
+T = TypeVar("T")
+
+
+def benchmarker(fn: Callable[[], T]) -> Tuple[T, Tuple[float, float]]:
+    """Benchmark a given function and record time and GPU memory cost.
+
+    Args:
+        fn (Callable[[], T]): The function to benchmark.
+
+    Returns:
+        Tuple[T, Tuple[float, float]]: The original return value, \
+            followed by time in milliseconds and peak memory in megabytes.
+    """
+    torch.cuda.synchronize()  # finish all prev ops and reset mem counter
+    torch.cuda.reset_peak_memory_stats()
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    start_event.record(torch.cuda.current_stream())
+
+    ret = fn()
+
+    end_event.record(torch.cuda.current_stream())
+    torch.cuda.synchronize()  # wait for event finish
+    elapsed_time: float = start_event.elapsed_time(end_event)  # ms
+    peak_memory = torch.cuda.max_memory_allocated() / 2**20  # MB
+    return ret, (elapsed_time, peak_memory)
+
+
 @torch.no_grad()
 def evaluate(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, ...]]) -> float:
     """Evaluate circuit on given data.
@@ -58,11 +87,16 @@ def evaluate(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, ...]])
     Returns:
         float: The average LL.
     """
+
+    def _iter(x: Tensor) -> Tensor:
+        return pc(x)  # type: ignore[no-any-return,misc]
+
     ll_total = 0.0
     batch: Tuple[Tensor]
     for batch in data_loader:
         x = batch[0].to(device)
-        ll: Tensor = pc(x)
+        ll, (t, m) = benchmarker(functools.partial(_iter, x))
+        print(t, m)
         ll_total += ll.mean().item()
     return ll_total / len(data_loader)
 
@@ -82,15 +116,21 @@ def batch_em_epoch(
     Returns:
         float: The average LL.
     """
-    ll_total = 0.0
-    batch: Tuple[Tensor]
-    for batch in data_loader:
+
+    def _iter(x: Tensor) -> Tensor:
         optimizer.zero_grad()
-        x = batch[0].to(device)
         ll: Tensor = pc(x)
         ll = ll.mean()
         ll.backward()
         optimizer.step()
+        return ll
+
+    ll_total = 0.0
+    batch: Tuple[Tensor]
+    for batch in data_loader:
+        x = batch[0].to(device)
+        ll, (t, m) = benchmarker(functools.partial(_iter, x))
+        print(t, m)
         ll_total += ll.item()
     return ll_total / len(data_loader)
 
@@ -109,14 +149,24 @@ def full_em_epoch(
     Returns:
         float: The average LL.
     """
+
+    def _iter(x: Tensor) -> Tensor:
+        ll: Tensor = pc(x)
+        pc.backward(x, flows_memory=1.0)
+        return ll
+
     ll_total = 0.0
     batch: Tuple[Tensor]
     for batch in data_loader:
         x = batch[0].to(device)
-        ll: Tensor = pc(x)
-        pc.backward(x, flows_memory=1.0)
+        ll, (t, m) = benchmarker(functools.partial(_iter, x))
+        print(t, m)
         ll_total += ll.mean().item()
-    pc.mini_batch_em(step_size=1.0, pseudocount=0.1)
+
+    em_step = functools.partial(pc.mini_batch_em, step_size=1.0, pseudocount=0.1)
+    _, (t, m) = benchmarker(em_step)  # type: ignore[misc]
+    # TODO: this is mypy bug  # pylint: disable=fixme
+    print(t, m)
     return ll_total / len(data_loader)
 
 
