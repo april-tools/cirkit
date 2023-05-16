@@ -1,4 +1,5 @@
 import argparse
+import enum
 import functools
 import os
 import random
@@ -31,7 +32,15 @@ def seed_all() -> None:
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
 
+class _Modes(str, enum.Enum):
+    SANITY = "sanity"
+    BATCH_EM = "batch_em"
+    FULL_EM = "full_em"
+    EVAL = "eval"
+
+
 class _ArgsNamespace(argparse.Namespace):  # pylint: disable=too-few-public-methods
+    mode: _Modes
     batch_size: int
     num_latents: int
 
@@ -43,6 +52,13 @@ def process_args() -> _ArgsNamespace:
         ArgsNamespace: Parsed args.
     """
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        type=_Modes,
+        default="sanity",
+        choices=["sanity", "batch_em", "full_em", "eval"],
+        help="mode",
+    )
     parser.add_argument("--batch_size", type=int, default=512, help="batch_size")
     parser.add_argument("--num_latents", type=int, default=32, help="num_latents")
     return parser.parse_args(namespace=_ArgsNamespace())
@@ -174,11 +190,14 @@ def main() -> None:
     """Execute the main procedure."""
     args = process_args()
     print(args)
+    assert (
+        not args.mode == _Modes.SANITY or args.batch_size == 512 and args.num_latents == 32
+    ), "Must use default hyper-params for sanity check."
 
     seed_all()
 
     num_features = 28 * 28
-    data_size = 10240
+    data_size = 10240 if args.mode == _Modes.SANITY else 100 * args.batch_size
     rand_data = torch.randint(256, (data_size, num_features), dtype=torch.uint8)
     data_loader = DataLoader(
         dataset=TensorDataset(rand_data),
@@ -200,15 +219,19 @@ def main() -> None:
     )
     pc.to(device)
 
-    optimizer = juice.optim.CircuitOptimizer(pc)  # just keep it default
-
-    ll_batch = batch_em_epoch(pc, optimizer, data_loader)
-    ll_full = full_em_epoch(pc, data_loader)
-    ll_eval = evaluate(pc, data_loader)
-    print("train and test LLs:", ll_batch, ll_full, ll_eval, sep="\n")
-
-    # -4285.7583... is an exact float32 number, 2^-10 is 2eps
-    assert abs(ll_eval - -4285.75830078125) < 2**-10, "eval LL out of allowed error range"
+    if args.mode in (_Modes.BATCH_EM, _Modes.SANITY):
+        optimizer = juice.optim.CircuitOptimizer(pc)  # just keep it default
+        ll_batch = batch_em_epoch(pc, optimizer, data_loader)
+        print("batch_em LL:", ll_batch)
+    if args.mode in (_Modes.FULL_EM, _Modes.SANITY):
+        ll_full = full_em_epoch(pc, data_loader)
+        print("full_em LL:", ll_full)
+    if args.mode in (_Modes.EVAL, _Modes.SANITY):
+        ll_eval = evaluate(pc, data_loader)
+        print("eval LL:", ll_eval)
+        if args.mode == _Modes.SANITY:
+            # -4285.7583... is an exact float32 number, 2^-10 is 2eps
+            assert abs(ll_eval - -4285.75830078125) < 2**-10, "eval LL out of allowed error range"
 
 
 if __name__ == "__main__":
