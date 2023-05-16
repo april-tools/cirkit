@@ -1,6 +1,7 @@
 import argparse
 import enum
 import functools
+import logging
 import os
 import random
 from typing import Callable, Tuple, TypeVar
@@ -16,6 +17,10 @@ from torch.utils.data import DataLoader, TensorDataset
 os.environ["JUICE_COMPILE_FLAG"] = str(0b0011_1111_1111_1111)
 print(os.environ["JUICE_COMPILE_FLAG"])
 import pyjuice as juice  # pylint: disable=wrong-import-position
+
+# disable only the following warnings (there shouldn't be other warnings by torch._inductor.utils)
+# torch._inductor.utils: [WARNING] skipping cudagraphs due to input mutation
+logging.getLogger("torch._inductor.utils").setLevel(logging.ERROR)
 
 device = torch.device("cuda")
 
