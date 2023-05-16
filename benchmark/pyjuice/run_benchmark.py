@@ -41,6 +41,7 @@ class _Modes(str, enum.Enum):
 
 class _ArgsNamespace(argparse.Namespace):  # pylint: disable=too-few-public-methods
     mode: _Modes
+    first_pass_only: bool
     batch_size: int
     num_latents: int
 
@@ -59,6 +60,7 @@ def process_args() -> _ArgsNamespace:
         choices=["sanity", "batch_em", "full_em", "eval"],
         help="mode",
     )
+    parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
     parser.add_argument("--batch_size", type=int, default=512, help="batch_size")
     parser.add_argument("--num_latents", type=int, default=32, help="num_latents")
     return parser.parse_args(namespace=_ArgsNamespace())
@@ -197,7 +199,13 @@ def main() -> None:
     seed_all()
 
     num_features = 28 * 28
-    data_size = 10240 if args.mode == _Modes.SANITY else 100 * args.batch_size
+    data_size = (
+        10240
+        if args.mode == _Modes.SANITY
+        else args.batch_size
+        if args.first_pass_only
+        else 100 * args.batch_size
+    )
     rand_data = torch.randint(256, (data_size, num_features), dtype=torch.uint8)
     data_loader = DataLoader(
         dataset=TensorDataset(rand_data),
