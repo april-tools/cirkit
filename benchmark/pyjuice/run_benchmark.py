@@ -47,6 +47,7 @@ class _Modes(str, enum.Enum):
 class _ArgsNamespace(argparse.Namespace):  # pylint: disable=too-few-public-methods
     mode: _Modes
     first_pass_only: bool
+    num_batches: int
     batch_size: int
     num_latents: int
 
@@ -66,6 +67,7 @@ def process_args() -> _ArgsNamespace:
         help="mode",
     )
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
+    parser.add_argument("--num_batches", type=int, default=20, help="num_batches")
     parser.add_argument("--batch_size", type=int, default=512, help="batch_size")
     parser.add_argument("--num_latents", type=int, default=32, help="num_latents")
     return parser.parse_args(namespace=_ArgsNamespace())
@@ -159,10 +161,7 @@ def batch_em_epoch(
 
 
 @torch.no_grad()
-def full_em_epoch(
-    pc: juice.ProbCircuit,
-    data_loader: DataLoader[Tuple[Tensor, ...]],
-) -> float:
+def full_em_epoch(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, ...]]) -> float:
     """Perform EM optimization on full dataset for one epoch.
 
     Args:
@@ -197,20 +196,14 @@ def main() -> None:
     """Execute the main procedure."""
     args = process_args()
     print(args)
-    assert (
-        not args.mode == _Modes.SANITY or args.batch_size == 512 and args.num_latents == 32
+    assert not args.mode == _Modes.SANITY or (
+        args.num_batches == 20 and args.batch_size == 512 and args.num_latents == 32
     ), "Must use default hyper-params for sanity check."
 
     seed_all()
 
     num_features = 28 * 28
-    data_size = (
-        10240
-        if args.mode == _Modes.SANITY
-        else args.batch_size
-        if args.first_pass_only
-        else 100 * args.batch_size
-    )
+    data_size = args.batch_size if args.first_pass_only else args.num_batches * args.batch_size
     rand_data = torch.randint(256, (data_size, num_features), dtype=torch.uint8)
     data_loader = DataLoader(
         dataset=TensorDataset(rand_data),
