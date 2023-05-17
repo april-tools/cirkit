@@ -12,9 +12,10 @@ import torch.backends.cudnn  # this is not exported
 from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
 
-# cat  prod ---sum---
-# 0011_1111_1111_1111
-os.environ["JUICE_COMPILE_FLAG"] = str(0b0011_1111_1111_1111)
+if "JUICE_COMPILE_FLAG" not in os.environ:
+    # cat  prod ---sum---
+    # 0011_1111_1111_1111
+    os.environ["JUICE_COMPILE_FLAG"] = str(0b0011_1111_1111_1111)
 print(os.environ["JUICE_COMPILE_FLAG"])
 import pyjuice as juice  # pylint: disable=wrong-import-position
 
