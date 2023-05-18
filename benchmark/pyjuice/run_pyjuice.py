@@ -27,9 +27,14 @@ logging.getLogger("torch._inductor.utils").setLevel(logging.ERROR)
 device = torch.device("cuda")
 
 
-def seed_all() -> None:
-    """Seed all random generators to guarantee reproducible results (may limit performance)."""
-    seed = 0xC699345C  # CRC32 of 'april-tools'
+def seed_all(seed: int) -> None:
+    """Seed all random generators and enforce deterministic algorithms to \
+        guarantee reproducible results (may limit performance).
+
+    Args:
+        seed (int): The seed shared by all RNGs.
+    """
+    seed = seed % 2**32  # some only accept 32bit seed
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -49,6 +54,7 @@ class _Modes(str, enum.Enum):
 @dataclass
 class _ArgsNamespace(argparse.Namespace):
     mode: _Modes = _Modes.SANITY
+    seed: int = 0xC699345C  # default is CRC32 of 'april-tools'
     first_pass_only: bool = False
     num_batches: int = 20
     batch_size: int = 512
@@ -63,6 +69,7 @@ def process_args() -> _ArgsNamespace:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=_Modes, choices=_Modes.__members__.values(), help="mode")
+    parser.add_argument("--seed", type=int, help="seed")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
     parser.add_argument("--num_batches", type=int, help="num_batches")
     parser.add_argument("--batch_size", type=int, help="batch_size")
@@ -80,8 +87,8 @@ def benchmarker(fn: Callable[[], T]) -> Tuple[T, Tuple[float, float]]:
         fn (Callable[[], T]): The function to benchmark.
 
     Returns:
-        Tuple[T, Tuple[float, float]]: The original return value, \
-            followed by time in milliseconds and peak memory in megabytes.
+        Tuple[T, Tuple[float, float]]: The original return value, followed by \
+            time in milliseconds and peak memory in megabytes.
     """
     torch.cuda.synchronize()  # finish all prev ops and reset mem counter
     torch.cuda.reset_peak_memory_stats()
@@ -194,12 +201,13 @@ def main() -> None:
     args = process_args()
     print(args)
     assert not args.mode == _Modes.SANITY or (
-        args.num_batches == _ArgsNamespace.num_batches
+        args.seed == _ArgsNamespace.seed
+        and args.num_batches == _ArgsNamespace.num_batches
         and args.batch_size == _ArgsNamespace.batch_size
         and args.num_latents == _ArgsNamespace.num_latents
     ), "Must use default hyper-params for sanity check."
 
-    seed_all()
+    seed_all(args.seed)
 
     num_features = 28 * 28
     data_size = args.batch_size if args.first_pass_only else args.num_batches * args.batch_size
