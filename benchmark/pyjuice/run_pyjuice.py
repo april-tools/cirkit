@@ -4,6 +4,7 @@ import functools
 import logging
 import os
 import random
+from dataclasses import dataclass
 from typing import Callable, Tuple, TypeVar
 
 import numpy as np
@@ -12,9 +13,9 @@ import torch.backends.cudnn  # this is not exported
 from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
 
+# cat  prod ---sum---
+# 0011_1111_1111_1111
 if "JUICE_COMPILE_FLAG" not in os.environ:
-    # cat  prod ---sum---
-    # 0011_1111_1111_1111
     os.environ["JUICE_COMPILE_FLAG"] = str(0b0011_1111_1111_1111)
 print(os.environ["JUICE_COMPILE_FLAG"])
 import pyjuice as juice  # pylint: disable=wrong-import-position
@@ -45,12 +46,13 @@ class _Modes(str, enum.Enum):
     EVAL = "eval"
 
 
-class _ArgsNamespace(argparse.Namespace):  # pylint: disable=too-few-public-methods
-    mode: _Modes
-    first_pass_only: bool
-    num_batches: int
-    batch_size: int
-    num_latents: int
+@dataclass
+class _ArgsNamespace(argparse.Namespace):
+    mode: _Modes = _Modes.SANITY
+    first_pass_only: bool = False
+    num_batches: int = 20
+    batch_size: int = 512
+    num_latents: int = 32
 
 
 def process_args() -> _ArgsNamespace:
@@ -60,17 +62,11 @@ def process_args() -> _ArgsNamespace:
         ArgsNamespace: Parsed args.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--mode",
-        type=_Modes,
-        default="sanity",
-        choices=["sanity", "batch_em", "full_em", "eval"],
-        help="mode",
-    )
+    parser.add_argument("--mode", type=_Modes, choices=_Modes.__members__.values(), help="mode")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
-    parser.add_argument("--num_batches", type=int, default=20, help="num_batches")
-    parser.add_argument("--batch_size", type=int, default=512, help="batch_size")
-    parser.add_argument("--num_latents", type=int, default=32, help="num_latents")
+    parser.add_argument("--num_batches", type=int, help="num_batches")
+    parser.add_argument("--batch_size", type=int, help="batch_size")
+    parser.add_argument("--num_latents", type=int, help="num_latents")
     return parser.parse_args(namespace=_ArgsNamespace())
 
 
@@ -198,7 +194,9 @@ def main() -> None:
     args = process_args()
     print(args)
     assert not args.mode == _Modes.SANITY or (
-        args.num_batches == 20 and args.batch_size == 512 and args.num_latents == 32
+        args.num_batches == _ArgsNamespace.num_batches
+        and args.batch_size == _ArgsNamespace.batch_size
+        and args.num_latents == _ArgsNamespace.num_latents
     ), "Must use default hyper-params for sanity check."
 
     seed_all()
