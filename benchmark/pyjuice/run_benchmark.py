@@ -1,21 +1,21 @@
 import os
 import subprocess
-from typing import cast
 
 env = os.environ.copy()
 
 command = ["python", "run_pyjuice.py", "--mode", "eval"]
 env["JUICE_COMPILE_FLAG"] = str(0b0011_1111_1111_1111)
 
-try:
-    result = subprocess.run(
-        command, capture_output=True, cwd=os.path.split(__file__)[0], check=True, text=True, env=env
-    )
-except subprocess.CalledProcessError as e:
-    print(cast(str, e.stderr))  # should be str with text=True
-    raise e
-
+result = subprocess.run(
+    command, capture_output=True, cwd=os.path.split(__file__)[0], check=False, text=True, env=env
+)
 print("STDERR:")
 print(result.stderr)  # have an extra newline
+result.check_returncode()
+
+output = result.stdout.splitlines()
 print("STDOUT:")
-print(result.stdout, end="")
+print(output[0], output[1], output[-1], sep="\n")
+
+results = [{"time": ln.split()[0], "mem": ln.split()[1]} for ln in output[2:-1]]
+print(results)
