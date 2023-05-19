@@ -127,6 +127,7 @@ def evaluate(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, ...]])
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
         print(t, m)
         ll_total += ll.mean().item()
+        del x, ll
     return ll_total / len(data_loader)
 
 
@@ -152,7 +153,7 @@ def batch_em_epoch(
         ll = ll.mean()
         ll.backward()
         optimizer.step()
-        return ll
+        return ll.detach()
 
     ll_total = 0.0
     batch: Tuple[Tensor]
@@ -161,6 +162,7 @@ def batch_em_epoch(
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
         print(t, m)
         ll_total += ll.item()
+        del x, ll
     return ll_total / len(data_loader)
 
 
@@ -188,10 +190,11 @@ def full_em_epoch(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, .
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
         print(t, m)
         ll_total += ll.mean().item()
+        del x, ll
 
     em_step = functools.partial(pc.mini_batch_em, step_size=1.0, pseudocount=0.1)
-    _, (t, m) = benchmarker(em_step)  # type: ignore[misc]
     # TODO: this is mypy bug  # pylint: disable=fixme
+    _, (t, m) = benchmarker(em_step)  # type: ignore[misc]
     print(t, m)
     return ll_total / len(data_loader)
 
