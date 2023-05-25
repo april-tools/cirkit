@@ -4,8 +4,8 @@ from typing import Dict, List
 import networkx as nx
 
 from cirkit.region_graph.graph import (
-    DistributionVector,
-    Product,
+    RegionNode,
+    PartitionNode,
     get_leaves,
     get_products,
     get_roots,
@@ -23,8 +23,8 @@ def deserialize(path: str) -> nx.DiGraph:
     """
     graph_json = json.load(open(path, "r"))
     regions: Dict[str, List[int, ...]] = graph_json["regions"]
-    region_nodes: Dict[str, DistributionVector] = {idx: DistributionVector(scope)
-                                                   for idx, scope in regions.items()}
+    region_nodes: Dict[str, RegionNode] = {idx: RegionNode(scope)
+                                           for idx, scope in regions.items()}
 
     graph = nx.DiGraph()
 
@@ -33,7 +33,7 @@ def deserialize(path: str) -> nx.DiGraph:
         left_child_node = region_nodes[str(partition["l"])]
         right_child_node = region_nodes[str(partition["r"])]
 
-        product_node = Product(parent_node.scope)
+        product_node = PartitionNode(parent_node.scope)
 
         graph.add_edge(parent_node, product_node)
         graph.add_edge(product_node, left_child_node)
@@ -49,11 +49,11 @@ def serialize(graph: nx.DiGraph, path: str):
 
     graph_json: Dict = {}
 
-    root: DistributionVector = get_roots(graph)[0]
+    root: RegionNode = get_roots(graph)[0]
 
     # insert "regions"
-    regions: List[DistributionVector] = get_region_nodes(graph)
-    regions_dict: Dict[DistributionVector, int] = {node: n for n, node in enumerate(regions)}
+    regions: List[RegionNode] = get_region_nodes(graph)
+    regions_dict: Dict[RegionNode, int] = {node: n for n, node in enumerate(regions)}
     graph_json["regions"] = {str(n): list(map(int, node.scope)) for node, n in regions_dict.items()}
 
     products = get_products(graph)
@@ -75,7 +75,7 @@ def serialize(graph: nx.DiGraph, path: str):
 
 
 def get_region_nodes(graph):
-    return [n for n in graph.nodes() if type(n) == DistributionVector]
+    return [n for n in graph.nodes() if type(n) == RegionNode]
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ class EiNetAddress:
         self.replica_idx = replica_idx
 
 
-class DistributionVector:
+class RegionNode:
     """
     Represents either a vectorized leaf or a vectorized sum node in the PC.
 
@@ -57,13 +57,13 @@ class DistributionVector:
         return self.scope.__repr__()
 
     def __lt__(self, other):
-        if type(other) == Product:
+        if type(other) == PartitionNode:
             return True
         else:
             return (self.scope, self.id) < (other.scope, other.id)
 
 
-class Product:
+class PartitionNode:
     """
     Represents a (cross-)product in the PC.
 
@@ -81,7 +81,7 @@ class Product:
         return "Prod for " + self.scope.__repr__()
 
     def __lt__(self, other):
-        if type(other) == DistributionVector:
+        if type(other) == RegionNode:
             return False
         else:
             return (self.scope, self.id) < (other.scope, other.id)
@@ -111,7 +111,7 @@ def check_graph(graph: nx.DiGraph) -> (bool, str):
     :return: True/False (bool), string description
     """
 
-    contains_only_PC_nodes = all([type(n) == DistributionVector or type(n) == Product for n in graph.nodes()])
+    contains_only_PC_nodes = all([type(n) == RegionNode or type(n) == PartitionNode for n in graph.nodes()])
 
     is_DAG = nx.is_directed_acyclic_graph(graph)
     is_connected = nx.is_connected(graph.to_undirected())
@@ -122,8 +122,8 @@ def check_graph(graph: nx.DiGraph) -> (bool, str):
     products_one_parents = all([len(list(graph.predecessors(p))) == 1 for p in products])
     products_two_children = all([len(list(graph.successors(p))) == 2 for p in products])
 
-    sum_to_products = all([all([type(p) == Product for p in graph.successors(s)]) for s in sums])
-    product_to_dist = all([all([type(s) == DistributionVector for s in graph.successors(p)]) for p in products])
+    sum_to_products = all([all([type(p) == PartitionNode for p in graph.successors(s)]) for s in sums])
+    product_to_dist = all([all([type(s) == RegionNode for s in graph.successors(p)]) for p in products])
     alternating = sum_to_products and product_to_dist
 
     proper_scope = all([len(n.scope) == len(set(n.scope)) for n in graph.nodes()])
@@ -168,11 +168,11 @@ def get_roots(graph):
 
 
 def get_sums(graph):
-    return [n for n, d in graph.out_degree() if d > 0 and type(n) == DistributionVector]
+    return [n for n, d in graph.out_degree() if d > 0 and type(n) == RegionNode]
 
 
 def get_products(graph):
-    return [n for n in graph.nodes() if type(n) == Product]
+    return [n for n in graph.nodes() if type(n) == PartitionNode]
 
 
 def get_leaves(graph):
@@ -181,7 +181,7 @@ def get_leaves(graph):
 
 def get_distribution_nodes_by_scope(graph, scope):
     scope = tuple(sorted(scope))
-    return [n for n in graph.nodes if type(n) == DistributionVector and n.scope == scope]
+    return [n for n in graph.nodes if type(n) == RegionNode and n.scope == scope]
 
 
 def partition_on_node(graph, node, scope_partition):
@@ -201,9 +201,9 @@ def partition_on_node(graph, node, scope_partition):
     if not check_if_is_partition(node.scope, scope_partition):
         raise AssertionError("Not a partition.")
 
-    product = Product(node.scope)
+    product = PartitionNode(node.scope)
     graph.add_edge(node, product)
-    product_children = [DistributionVector(scope) for scope in scope_partition]
+    product_children = [RegionNode(scope) for scope in scope_partition]
     for c in product_children:
         graph.add_edge(product, c)
 
@@ -269,7 +269,7 @@ def random_binary_trees(num_var, depth, num_repetitions):
     :return: generated graph (DiGraph)
     """
     graph = nx.DiGraph()
-    root = DistributionVector(range(num_var))
+    root = RegionNode(range(num_var))
     graph.add_node(root)
 
     for repetition in range(num_repetitions):
@@ -505,7 +505,7 @@ def poon_domingos_structure(shape, delta, axes=None, max_split_depth=None):
     hypercube_scope = hypercube_to_scope(hypercube, shape)
 
     graph = nx.DiGraph()
-    root = DistributionVector(hypercube_scope)
+    root = RegionNode(hypercube_scope)
     graph.add_node(root)
 
     Q = [hypercube]
@@ -543,12 +543,12 @@ def poon_domingos_structure(shape, delta, axes=None, max_split_depth=None):
                         if len(c_node) == 1:
                             c_node = c_node[0]
                         else:
-                            c_node = DistributionVector(c_scope)
+                            c_node = RegionNode(c_scope)
                             depth_dict[c_scope] = depth + 1
                             Q.append(c_cube)
                         child_nodes.append(c_node)
 
-                    product = Product(node.scope)
+                    product = PartitionNode(node.scope)
                     graph.add_edge(node, product)
                     for c_node in child_nodes:
                         graph.add_edge(product, c_node)
@@ -603,8 +603,8 @@ def plot_graph(graph):
         for j, item in enumerate(layer):
             pos[item] = np.array([float(j) - 0.25 + 0.5 * np.random.rand(), float(i)])
 
-    distributions = [n for n in graph.nodes if type(n) == DistributionVector]
-    products = [n for n in graph.nodes if type(n) == Product]
+    distributions = [n for n in graph.nodes if type(n) == RegionNode]
+    products = [n for n in graph.nodes if type(n) == PartitionNode]
     node_sizes = [3 + 10 * i for i in range(len(graph))]
 
     nx.draw_networkx_nodes(graph, pos, distributions, node_shape='p')
@@ -661,7 +661,7 @@ def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
             hypercube = ((i, j), (i+1, j+1))
 
             c_scope = hypercube_to_scope(hypercube, shape)
-            c_node = DistributionVector(c_scope)
+            c_node = RegionNode(c_scope)
             graph.add_node(c_node)
             buffer[i].append(c_node)
 
@@ -705,13 +705,13 @@ def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
     return graph
 
 
-def merge_2_regions(regions: List[DistributionVector], graph: nx.DiGraph) -> DistributionVector:
+def merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
 
     assert len(regions) == 2
 
     scope = list(set(sorted(regions[0].scope + regions[1].scope)))
-    p = Product(scope)
-    d = DistributionVector(scope)
+    p = PartitionNode(scope)
+    d = RegionNode(scope)
 
     graph.add_edge(p, regions[0])
     graph.add_edge(p, regions[1])
@@ -720,7 +720,7 @@ def merge_2_regions(regions: List[DistributionVector], graph: nx.DiGraph) -> Dis
     return d
 
 
-def merge_4_regions(regions: List[DistributionVector], graph: nx.DiGraph) -> DistributionVector:
+def merge_4_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
 
     assert len(regions) == 4
 
@@ -728,10 +728,10 @@ def merge_4_regions(regions: List[DistributionVector], graph: nx.DiGraph) -> Dis
     # MERGE TL & TR, BL & BR
     tscope = list(set(sorted(regions[0].scope + regions[1].scope)))
     bscope = list(set(sorted(regions[2].scope + regions[3].scope)))
-    t_p = Product(tscope)
-    t_d = DistributionVector(tscope)
-    b_p = Product(bscope)
-    b_d = DistributionVector(bscope)
+    t_p = PartitionNode(tscope)
+    t_d = RegionNode(tscope)
+    b_p = PartitionNode(bscope)
+    b_d = RegionNode(bscope)
 
     graph.add_edge(t_p, regions[0])
     graph.add_edge(t_p, regions[1])
@@ -742,17 +742,17 @@ def merge_4_regions(regions: List[DistributionVector], graph: nx.DiGraph) -> Dis
 
     # MERGE T & B
     whole_scope = list(set(sorted(t_d.scope + b_d.scope)))
-    horiz_p = Product(whole_scope)
+    horiz_p = PartitionNode(whole_scope)
     graph.add_edge(horiz_p, t_d)
     graph.add_edge(horiz_p, b_d)
 
     # MERGE TL & BL, TR & BR
     lscope = list(set(sorted(regions[0].scope + regions[2].scope)))
     rscope = list(set(sorted(regions[1].scope + regions[3].scope)))
-    l_p = Product(lscope)
-    l_d = DistributionVector(lscope)
-    r_p = Product(rscope)
-    r_d = DistributionVector(rscope)
+    l_p = PartitionNode(lscope)
+    l_d = RegionNode(lscope)
+    r_p = PartitionNode(rscope)
+    r_d = RegionNode(rscope)
 
     graph.add_edge(l_p, regions[0])
     graph.add_edge(l_p, regions[2])
@@ -763,18 +763,18 @@ def merge_4_regions(regions: List[DistributionVector], graph: nx.DiGraph) -> Dis
 
     # MERGE T & B
     assert whole_scope == list(set(sorted(l_d.scope + r_d.scope)))
-    vert_p = Product(whole_scope)
+    vert_p = PartitionNode(whole_scope)
     graph.add_edge(vert_p, l_d)
     graph.add_edge(vert_p, r_d)
 
-    whole_d = DistributionVector(whole_scope)
+    whole_d = RegionNode(whole_scope)
     graph.add_edge(whole_d, horiz_p)
     graph.add_edge(whole_d, vert_p)
 
     return whole_d
 
 
-def square_from_buffer(buffer, i, j) -> List[DistributionVector]:
+def square_from_buffer(buffer, i, j) -> List[RegionNode]:
 
     values = [buffer[i][j]]
 
