@@ -111,7 +111,9 @@ def check_graph(graph: nx.DiGraph) -> (bool, str):
     :return: True/False (bool), string description
     """
 
-    contains_only_PC_nodes = all([type(n) == RegionNode or type(n) == PartitionNode for n in graph.nodes()])
+    contains_only_PC_nodes = all(
+        [type(n) == RegionNode or type(n) == PartitionNode for n in graph.nodes()]
+    )
 
     is_DAG = nx.is_directed_acyclic_graph(graph)
     is_connected = nx.is_connected(graph.to_undirected())
@@ -122,43 +124,51 @@ def check_graph(graph: nx.DiGraph) -> (bool, str):
     products_one_parents = all([len(list(graph.predecessors(p))) == 1 for p in products])
     products_two_children = all([len(list(graph.successors(p))) == 2 for p in products])
 
-    sum_to_products = all([all([type(p) == PartitionNode for p in graph.successors(s)]) for s in sums])
-    product_to_dist = all([all([type(s) == RegionNode for s in graph.successors(p)]) for p in products])
+    sum_to_products = all(
+        [all([type(p) == PartitionNode for p in graph.successors(s)]) for s in sums]
+    )
+    product_to_dist = all(
+        [all([type(s) == RegionNode for s in graph.successors(p)]) for p in products]
+    )
     alternating = sum_to_products and product_to_dist
 
     proper_scope = all([len(n.scope) == len(set(n.scope)) for n in graph.nodes()])
     smooth = all([all([p.scope == s.scope for p in graph.successors(s)]) for s in sums])
-    decomposable = all([check_if_is_partition(p.scope, [s.scope for s in graph.successors(p)]) for p in products])
+    decomposable = all(
+        [check_if_is_partition(p.scope, [s.scope for s in graph.successors(p)]) for p in products]
+    )
 
-    check_passed = contains_only_PC_nodes \
-                   and is_DAG \
-                   and is_connected \
-                   and products_one_parents \
-                   and products_two_children \
-                   and alternating \
-                   and proper_scope \
-                   and smooth \
-                   and decomposable
+    check_passed = (
+        contains_only_PC_nodes
+        and is_DAG
+        and is_connected
+        and products_one_parents
+        and products_two_children
+        and alternating
+        and proper_scope
+        and smooth
+        and decomposable
+    )
 
-    msg = ''
+    msg = ""
     if check_passed:
-        msg += 'Graph check passed.\n'
+        msg += "Graph check passed.\n"
     if not contains_only_PC_nodes:
-        msg += 'Graph does not only contain DistributionVector or Product nodes.\n'
+        msg += "Graph does not only contain DistributionVector or Product nodes.\n"
     if not is_connected:
-        msg += 'Graph not connected.\n'
+        msg += "Graph not connected.\n"
     if not products_one_parents:
-        msg += 'Products do not have exactly one parent.\n'
+        msg += "Products do not have exactly one parent.\n"
     if not products_two_children:
-        msg += 'Products do not have exactly two children.\n'
+        msg += "Products do not have exactly two children.\n"
     if not alternating:
-        msg += 'Graph not alternating.\n'
+        msg += "Graph not alternating.\n"
     if not proper_scope:
-        msg += 'Scope is not proper.\n'
+        msg += "Scope is not proper.\n"
     if not smooth:
-        msg += 'Graph is not smooth.\n'
+        msg += "Graph is not smooth.\n"
     if not decomposable:
-        msg += 'Graph is not decomposable.\n'
+        msg += "Graph is not decomposable.\n"
 
     return check_passed, msg.rstrip()
 
@@ -233,7 +243,9 @@ def randomly_partition_on_node(graph, node, num_parts=2, proportions=None, rand_
         proportions = np.ones(num_parts).astype(np.float64)
 
     if num_parts > len(node.scope):
-        raise AssertionError("Cannot split scope of length {} into {} parts.".format(len(node.scope), num_parts))
+        raise AssertionError(
+            "Cannot split scope of length {} into {} parts.".format(len(node.scope), num_parts)
+        )
 
     proportions /= proportions.sum()
     if rand_state is not None:
@@ -332,6 +344,7 @@ class HypercubeToScopeCache:
 
     This class just represents a cached mapping from hypercubes to their scopes.
     """
+
     def __init__(self):
         self._hyper_cube_to_scope = {}
 
@@ -483,12 +496,14 @@ def poon_domingos_structure(shape, delta, axes=None, max_split_depth=None):
         try:
             delta[c] = list(delta[c])
             if len(delta[c]) != len(axes):
-                raise AssertionError("Each delta must either be list of length len(axes), or numeric.")
+                raise AssertionError(
+                    "Each delta must either be list of length len(axes), or numeric."
+                )
         except TypeError:
             delta[c] = [float(delta[c])] * len(axes)
 
-    if any([dd < 1. for d in delta for dd in d]):
-        raise AssertionError('Any delta must be >= 1.0.')
+    if any([dd < 1.0 for d in delta for dd in d]):
+        raise AssertionError("Any delta must be >= 1.0.")
 
     sub_shape = tuple(s for c, s in enumerate(shape) if c in axes)
     global_cut_points = []
@@ -528,7 +543,11 @@ def poon_domingos_structure(shape, delta, axes=None, max_split_depth=None):
             if found_cut_on_level:
                 break
             for ac, axis in enumerate(axes):
-                cut_points = [c for c in cur_global_cut_points[ac] if hypercube[0][axis] < c < hypercube[1][axis]]
+                cut_points = [
+                    c
+                    for c in cur_global_cut_points[ac]
+                    if hypercube[0][axis] < c < hypercube[1][axis]
+                ]
                 if len(cut_points) > 0:
                     found_cut_on_level = True
 
@@ -576,12 +595,20 @@ def topological_layers(graph):
     num_internal_nodes = len(sums) + len(products)
 
     while len(visited_nodes) != num_internal_nodes:
-        sum_layer = [s for s in sums if s not in visited_nodes and all([p in visited_nodes for p in graph.predecessors(s)])]
+        sum_layer = [
+            s
+            for s in sums
+            if s not in visited_nodes and all([p in visited_nodes for p in graph.predecessors(s)])
+        ]
         sum_layer = sorted(sum_layer)
         layers.insert(0, sum_layer)
         visited_nodes.update(sum_layer)
 
-        product_layer = [p for p in products if p not in visited_nodes and all([s in visited_nodes for s in graph.predecessors(p)])]
+        product_layer = [
+            p
+            for p in products
+            if p not in visited_nodes and all([s in visited_nodes for s in graph.predecessors(p)])
+        ]
         product_layer = sorted(product_layer)
         layers.insert(0, product_layer)
         visited_nodes.update(product_layer)
@@ -607,9 +634,9 @@ def plot_graph(graph):
     products = [n for n in graph.nodes if type(n) == PartitionNode]
     node_sizes = [3 + 10 * i for i in range(len(graph))]
 
-    nx.draw_networkx_nodes(graph, pos, distributions, node_shape='p')
-    nx.draw_networkx_nodes(graph, pos, products, node_shape='^')
-    nx.draw_networkx_edges(graph, pos, node_size=node_sizes, arrowstyle='->', arrowsize=10, width=2)
+    nx.draw_networkx_nodes(graph, pos, distributions, node_shape="p")
+    nx.draw_networkx_nodes(graph, pos, products, node_shape="^")
+    nx.draw_networkx_edges(graph, pos, node_size=node_sizes, arrowstyle="->", arrowsize=10, width=2)
 
 
 """
@@ -643,7 +670,6 @@ if __name__ == '__main__':
 
 
 def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
-
     assert width == height and width > 0
 
     shape = (width, height)
@@ -658,23 +684,27 @@ def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
     for i in range(width):
         buffer[i] = []
         for j in range(height):
-            hypercube = ((i, j), (i+1, j+1))
+            hypercube = ((i, j), (i + 1, j + 1))
 
             c_scope = hypercube_to_scope(hypercube, shape)
             c_node = RegionNode(c_scope)
             graph.add_node(c_node)
             buffer[i].append(c_node)
 
-    lr_choice = 0 # random.choice([0, 1])
-    td_choice = 0 # random.choice([0, 1])
+    lr_choice = 0  # random.choice([0, 1])
+    td_choice = 0  # random.choice([0, 1])
 
     old_buffer_width = width
     old_buffer_height = height
     old_buffer = buffer
 
     while old_buffer_width != 1 and old_buffer_height != 1:
-        buffer_width = old_buffer_width // 2 if old_buffer_width % 2 == 0 else old_buffer_width // 2 + 1
-        buffer_height = old_buffer_height // 2 if old_buffer_height % 2 == 0 else old_buffer_height // 2 + 1
+        buffer_width = (
+            old_buffer_width // 2 if old_buffer_width % 2 == 0 else old_buffer_width // 2 + 1
+        )
+        buffer_height = (
+            old_buffer_height // 2 if old_buffer_height % 2 == 0 else old_buffer_height // 2 + 1
+        )
         buffer = [[] for _ in range(buffer_width)]
 
         for i in range(buffer_width):
@@ -706,7 +736,6 @@ def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
 
 
 def merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
-
     assert len(regions) == 2
 
     scope = list(set(sorted(regions[0].scope + regions[1].scope)))
@@ -721,7 +750,6 @@ def merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
 
 
 def merge_4_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
-
     assert len(regions) == 4
 
     # regions have to have TL, TR, BL, BR
@@ -775,15 +803,14 @@ def merge_4_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
 
 
 def square_from_buffer(buffer, i, j) -> List[RegionNode]:
-
     values = [buffer[i][j]]
 
-    if len(buffer) > i+1:
-        values.append(buffer[i+1][j])
-    if len(buffer[i]) > j+1:
-        values.append(buffer[i][j+1])
-    if len(buffer) > i+1 and len(buffer[i]) > j+1:
-        values.append(buffer[i+1][j+1])
+    if len(buffer) > i + 1:
+        values.append(buffer[i + 1][j])
+    if len(buffer[i]) > j + 1:
+        values.append(buffer[i][j + 1])
+    if len(buffer) > i + 1 and len(buffer[i]) > j + 1:
+        values.append(buffer[i + 1][j + 1])
 
     return values
 
@@ -793,4 +820,3 @@ if __name__ == "__main__":
 
     graph = quad_tree_graph(28, 28)
     serialization.serialize(graph, "simple_image_graph.json")"""
-

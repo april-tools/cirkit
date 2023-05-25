@@ -4,8 +4,8 @@ from typing import Dict, List
 import networkx as nx
 
 from cirkit.region_graph.graph import (
-    RegionNode,
     PartitionNode,
+    RegionNode,
     get_leaves,
     get_products,
     get_roots,
@@ -23,8 +23,7 @@ def deserialize(path: str) -> nx.DiGraph:
     """
     graph_json = json.load(open(path, "r"))
     regions: Dict[str, List[int, ...]] = graph_json["regions"]
-    region_nodes: Dict[str, RegionNode] = {idx: RegionNode(scope)
-                                           for idx, scope in regions.items()}
+    region_nodes: Dict[str, RegionNode] = {idx: RegionNode(scope) for idx, scope in regions.items()}
 
     graph = nx.DiGraph()
 
@@ -46,7 +45,6 @@ def deserialize(path: str) -> nx.DiGraph:
 
 
 def serialize(graph: nx.DiGraph, path: str):
-
     graph_json: Dict = {}
 
     root: RegionNode = get_roots(graph)[0]
@@ -65,9 +63,13 @@ def serialize(graph: nx.DiGraph, path: str):
         assert len(children) == 2
         assert len(parent) == 1
 
-        partitions.append({"p": regions_dict[parent[0]],
-                           "l": regions_dict[children[0]],
-                           "r": regions_dict[children[1]]})
+        partitions.append(
+            {
+                "p": regions_dict[parent[0]],
+                "l": regions_dict[children[0]],
+                "r": regions_dict[children[1]],
+            }
+        )
 
     graph_json["graph"] = partitions
     print(graph_json)
@@ -79,7 +81,6 @@ def get_region_nodes(graph):
 
 
 if __name__ == "__main__":
-
     structure = "quad_tree"
 
     if structure == "quad_tree":
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     elif structure == "poon_domingos":
         pd_num_pieces = [4]
         pd_delta = [[28 / d, 28 / d] for d in pd_num_pieces]
-        graph = poon_domingos_structure((28,28), pd_delta)
+        graph = poon_domingos_structure((28, 28), pd_delta)
         serialize(graph, "poon_domingos_28_28.json")
     else:
         raise AssertionError("Unknown region graph")
