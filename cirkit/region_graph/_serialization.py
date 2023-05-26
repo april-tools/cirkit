@@ -3,7 +3,7 @@ from typing import Dict, List
 
 import networkx as nx
 
-from cirkit.region_graph.graph import (
+from cirkit.region_graph._graph import (
     PartitionNode,
     RegionNode,
     get_leaves,
