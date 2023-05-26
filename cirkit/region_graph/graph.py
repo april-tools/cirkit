@@ -815,6 +815,37 @@ def square_from_buffer(buffer, i, j) -> List[RegionNode]:
     return values
 
 
+def topological_layers_bottom_up(graph):
+    """
+    Arranging the PC graph in topological layers -- see Algorithm 1 in the paper.
+
+    :param graph: the PC graph (DiGraph)
+    :return: list of layers, alternating between DistributionVector and Product layers (list of lists of nodes).
+    """
+    sums = list(sorted(get_sums(graph)))
+    products = list(sorted(get_products(graph)))
+    leaves = list(sorted(get_leaves(graph)))
+
+    visited_nodes = set(leaves)
+    layers = []
+
+    num_nodes = len(leaves) + len(sums) + len(products)
+
+    while len(visited_nodes) != num_nodes:
+        product_layer = [p for p in products if p not in visited_nodes and all([s in visited_nodes for s in graph.successors(p)])]
+        product_layer = sorted(product_layer)
+        layers.append(product_layer)
+        visited_nodes.update(product_layer)
+
+        sum_layer = [s for s in sums if s not in visited_nodes and all([p in visited_nodes for p in graph.successors(s)])]
+        sum_layer = sorted(sum_layer)
+        layers.append(sum_layer)
+        visited_nodes.update(sum_layer)
+
+    layers.insert(0, leaves)
+
+    return layers
+
 """
 if __name__ == "__main__":
 
