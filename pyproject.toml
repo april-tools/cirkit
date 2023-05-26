@@ -67,6 +67,9 @@ py_version = 39
 profile = "black"
 line_length = 100
 balanced_wrapping = true
+extra_standard_library = [  # we treat these as stdlib
+  "typing_extensions"
+]
 
 # doc style
 [tool.pydocstyle]
