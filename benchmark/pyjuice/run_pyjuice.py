@@ -9,7 +9,7 @@ from typing import Callable, Tuple, TypeVar
 
 import numpy as np
 import torch
-import torch.backends.cudnn  # this is not exported
+import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -35,7 +35,9 @@ def seed_all(seed: int) -> None:
         seed (int): The seed shared by all RNGs.
     """
     seed = seed % 2**32  # some only accept 32bit seed
-    os.environ["PYTHONHASHSEED"] = str(seed)
+    assert os.environ.get("PYTHONHASHSEED", "") == str(
+        seed
+    ), "Must set PYTHONHASHSEED to the same seed before starting python."
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -55,10 +57,10 @@ class _Modes(str, enum.Enum):
 class _ArgsNamespace(argparse.Namespace):
     mode: _Modes = _Modes.SANITY
     seed: int = 0xC699345C  # default is CRC32 of 'april-tools'
-    first_pass_only: bool = False
     num_batches: int = 20
     batch_size: int = 512
     num_latents: int = 32
+    first_pass_only: bool = False
 
 
 def process_args() -> _ArgsNamespace:
@@ -70,10 +72,10 @@ def process_args() -> _ArgsNamespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=_Modes, choices=_Modes.__members__.values(), help="mode")
     parser.add_argument("--seed", type=int, help="seed")
-    parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
     parser.add_argument("--num_batches", type=int, help="num_batches")
     parser.add_argument("--batch_size", type=int, help="batch_size")
     parser.add_argument("--num_latents", type=int, help="num_latents")
+    parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
     return parser.parse_args(namespace=_ArgsNamespace())
 
 
@@ -88,7 +90,7 @@ def benchmarker(fn: Callable[[], T]) -> Tuple[T, Tuple[float, float]]:
 
     Returns:
         Tuple[T, Tuple[float, float]]: The original return value, followed by \
-            time in milliseconds and peak memory in megabytes.
+            time in milliseconds and peak memory in megabytes (1024 scale).
     """
     torch.cuda.synchronize()  # finish all prev ops and reset mem counter
     torch.cuda.reset_peak_memory_stats()
@@ -125,7 +127,7 @@ def evaluate(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, ...]])
     for batch in data_loader:
         x = batch[0].to(device)
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
-        print(t, m)
+        print("t/m:", t, m)
         ll_total += ll.mean().item()
         del x, ll
     return ll_total / len(data_loader)
@@ -160,7 +162,7 @@ def batch_em_epoch(
     for batch in data_loader:
         x = batch[0].to(device)
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
-        print(t, m)
+        print("t/m:", t, m)
         ll_total += ll.item()
         del x, ll
     return ll_total / len(data_loader)
@@ -188,14 +190,14 @@ def full_em_epoch(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, .
     for batch in data_loader:
         x = batch[0].to(device)
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
-        print(t, m)
+        print("t/m:", t, m)
         ll_total += ll.mean().item()
         del x, ll
 
     em_step = functools.partial(pc.mini_batch_em, step_size=1.0, pseudocount=0.1)
-    # TODO: this is mypy bug  # pylint: disable=fixme
+    # TODO: this is mypy bug
     _, (t, m) = benchmarker(em_step)  # type: ignore[misc]
-    print(t, m)
+    print("t/m:", t, m)
     return ll_total / len(data_loader)
 
 
