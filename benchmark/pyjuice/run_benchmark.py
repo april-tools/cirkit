@@ -25,11 +25,13 @@ command = [
     str(NUM_BATCHES),
     "--batch_size",
     str(BATCH_SIZE),
+    "--region_graph",
+    "../quad_tree_stdec_28_28.json",  # cwd is HERE
     "--num_latents",
     "32",
     "--first_pass_only",
 ]
-position = {"mode": 3, "seed": 5, "num_latents": 11, "first_pass_only": 12}
+position = {"mode": 3, "seed": 5, "num_latents": 13, "first_pass_only": 14}
 env = os.environ.copy()
 env["PYTHONHASHSEED"] = str(BASE_SEED)
 env["JUICE_COMPILE_FLAG"] = "0"
@@ -57,6 +59,7 @@ def parse_run() -> List[Tuple[float, float]]:
     if result.returncode:
         return [(-1, -1)]  # meaning this run is broken
 
+    print("STDOUT:")
     time_mem: List[Tuple[float, float]] = []
     for ln in result.stdout.splitlines():
         if ln[:5] == "t/m: ":
@@ -64,6 +67,7 @@ def parse_run() -> List[Tuple[float, float]]:
             time_mem.append((float(t_m[0]), float(t_m[1])))
         else:
             print(ln)
+    print("\n")  # add an extra newline
     return time_mem
 
 
@@ -78,10 +82,10 @@ for compiled in (False, True):
                     ["--first_pass_only"] if first_pass_only else []
                 )
                 # add a dummy entry so that the first is always ignored
-                results: List[Tuple[float, float]] = [(0, 0)] if first_pass_only else []
+                time_memory: List[Tuple[float, float]] = [(-1, -1)] if first_pass_only else []
                 for seed in range(1, 10) if first_pass_only else (0,):
                     env["PYTHONHASHSEED"] = command[position["seed"]] = str(BASE_SEED + seed)
-                    results.extend(parse_run())
+                    time_memory.extend(parse_run())
 
                 with open(
                     os.path.join(
@@ -92,5 +96,5 @@ for compiled in (False, True):
                     "w",
                     encoding="utf-8",
                 ) as f:
-                    for t, m in results[1:]:
+                    for t, m in time_memory[1:]:
                         print(f"{t},{m}", file=f)

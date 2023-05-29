@@ -10,6 +10,8 @@ from typing import Callable, Tuple, TypeVar
 import numpy as np
 import torch
 import torch.backends.cudnn  # TODO: this is not exported
+from load_rg import load_region_graph
+from pyjuice.model import ProbCircuit
 from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -47,6 +49,8 @@ def seed_all(seed: int) -> None:
 
 
 class _Modes(str, enum.Enum):
+    """Execution modes."""
+
     SANITY = "sanity"
     BATCH_EM = "batch_em"
     FULL_EM = "full_em"
@@ -56,9 +60,10 @@ class _Modes(str, enum.Enum):
 @dataclass
 class _ArgsNamespace(argparse.Namespace):
     mode: _Modes = _Modes.SANITY
-    seed: int = 0xC699345C  # default is CRC32 of 'april-tools'
+    seed: int = 0xC699345C  # default is CRC32 of 'april-tools' = 3331929180
     num_batches: int = 20
     batch_size: int = 512
+    region_graph: str = "from_data"
     num_latents: int = 32
     first_pass_only: bool = False
 
@@ -74,6 +79,7 @@ def process_args() -> _ArgsNamespace:
     parser.add_argument("--seed", type=int, help="seed")
     parser.add_argument("--num_batches", type=int, help="num_batches")
     parser.add_argument("--batch_size", type=int, help="batch_size")
+    parser.add_argument("--region_graph", type=str, help="region_graph filename")
     parser.add_argument("--num_latents", type=int, help="num_latents")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
     return parser.parse_args(namespace=_ArgsNamespace())
@@ -194,9 +200,10 @@ def full_em_epoch(pc: juice.ProbCircuit, data_loader: DataLoader[Tuple[Tensor, .
         ll_total += ll.mean().item()
         del x, ll
 
-    em_step = functools.partial(pc.mini_batch_em, step_size=1.0, pseudocount=0.1)
     # TODO: this is mypy bug
-    _, (t, m) = benchmarker(em_step)  # type: ignore[misc]
+    _, (t, m) = benchmarker(  # type: ignore[misc]
+        functools.partial(pc.mini_batch_em, step_size=1.0, pseudocount=0.1)
+    )
     print("t/m:", t, m)
     return ll_total / len(data_loader)
 
@@ -209,7 +216,9 @@ def main() -> None:
         args.seed == _ArgsNamespace.seed
         and args.num_batches == _ArgsNamespace.num_batches
         and args.batch_size == _ArgsNamespace.batch_size
+        and args.region_graph == _ArgsNamespace.region_graph
         and args.num_latents == _ArgsNamespace.num_latents
+        and args.first_pass_only == _ArgsNamespace.first_pass_only
     ), "Must use default hyper-params for sanity check."
 
     seed_all(args.seed)
@@ -225,16 +234,20 @@ def main() -> None:
         drop_last=True,
     )
 
-    num_bins = 32
-    sigma = 0.5 / 32
-    chunk_size = 32
-    pc = juice.structures.HCLT(
-        rand_data.to(device),
-        num_bins=num_bins,
-        sigma=sigma,
-        chunk_size=chunk_size,
-        num_latents=args.num_latents,
-    )
+    if args.region_graph == _ArgsNamespace.region_graph:
+        num_bins = 32
+        sigma = 0.5 / 32
+        chunk_size = 32
+        pc = juice.structures.HCLT(
+            rand_data.to(device),
+            num_bins=num_bins,
+            sigma=sigma,
+            chunk_size=chunk_size,
+            num_latents=args.num_latents,
+        )
+    else:
+        rg = load_region_graph(args.region_graph, args.num_latents)
+        pc = ProbCircuit(rg)
     pc.to(device)
 
     if args.mode in (_Modes.BATCH_EM, _Modes.SANITY):
