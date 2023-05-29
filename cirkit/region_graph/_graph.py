@@ -668,8 +668,8 @@ if __name__ == '__main__':
 
 """
 
+def quad_tree_graph(width: int, height: int, stdec=False) -> nx.DiGraph:
 
-def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
     assert width == height and width > 0
 
     shape = (width, height)
@@ -684,28 +684,27 @@ def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
     for i in range(width):
         buffer[i] = []
         for j in range(height):
-            hypercube = ((i, j), (i + 1, j + 1))
+            hypercube = ((i, j), (i+1, j+1))
 
             c_scope = hypercube_to_scope(hypercube, shape)
             c_node = RegionNode(c_scope)
             graph.add_node(c_node)
             buffer[i].append(c_node)
 
-    lr_choice = 0  # random.choice([0, 1])
-    td_choice = 0  # random.choice([0, 1])
+    lr_choice = 0 # random.choice([0, 1])
+    td_choice = 0 # random.choice([0, 1])
 
     old_buffer_width = width
     old_buffer_height = height
     old_buffer = buffer
 
     while old_buffer_width != 1 and old_buffer_height != 1:
-        buffer_width = (
-            old_buffer_width // 2 if old_buffer_width % 2 == 0 else old_buffer_width // 2 + 1
-        )
-        buffer_height = (
-            old_buffer_height // 2 if old_buffer_height % 2 == 0 else old_buffer_height // 2 + 1
-        )
+        buffer_width = old_buffer_width // 2 if old_buffer_width % 2 == 0 else old_buffer_width // 2 + 1
+        buffer_height = old_buffer_height // 2 if old_buffer_height % 2 == 0 else old_buffer_height // 2 + 1
         buffer = [[] for _ in range(buffer_width)]
+
+        # lr_idx = [2 * i + lr_choice for i in range(old_buffer_width // 2 + 1)]
+        # td_idx = [2 * j + td_choice for j in range(old_buffer_height // 2 + 1)]
 
         for i in range(buffer_width):
             buffer[i] = [[] for _ in range(buffer_height)]
@@ -717,7 +716,7 @@ def quad_tree_graph(width: int, height: int) -> nx.DiGraph:
                 elif len(regions) == 2:
                     buffer[i][j] = merge_2_regions(regions, graph)
                 elif len(regions) == 4:
-                    buffer[i][j] = merge_4_regions(regions, graph)
+                    buffer[i][j] = merge_4_regions(regions, graph, stdec)
                 else:
                     raise AssertionError("Invalid number of regions")
 
@@ -749,57 +748,87 @@ def merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
     return d
 
 
-def merge_4_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
-    assert len(regions) == 4
+def merge_4_regions(regions: List[RegionNode], graph: nx.DiGraph, stdec: bool) -> RegionNode:
 
-    # regions have to have TL, TR, BL, BR
-    # MERGE TL & TR, BL & BR
-    tscope = list(set(sorted(regions[0].scope + regions[1].scope)))
-    bscope = list(set(sorted(regions[2].scope + regions[3].scope)))
-    t_p = PartitionNode(tscope)
-    t_d = RegionNode(tscope)
-    b_p = PartitionNode(bscope)
-    b_d = RegionNode(bscope)
+    assert len(regions) ==4
 
-    graph.add_edge(t_p, regions[0])
-    graph.add_edge(t_p, regions[1])
-    graph.add_edge(t_d, t_p)
-    graph.add_edge(b_p, regions[2])
-    graph.add_edge(b_p, regions[3])
-    graph.add_edge(b_d, b_p)
+    if not stdec:
+        # regions have to have TL, TR, BL, BR
+        # MERGE TL & TR, BL & BR
+        tscope = list(set(sorted(regions[0].scope + regions[1].scope)))
+        bscope = list(set(sorted(regions[2].scope + regions[3].scope)))
+        t_p = PartitionNode(tscope)
+        t_d = RegionNode(tscope)
+        b_p = PartitionNode(bscope)
+        b_d = RegionNode(bscope)
 
-    # MERGE T & B
-    whole_scope = list(set(sorted(t_d.scope + b_d.scope)))
-    horiz_p = PartitionNode(whole_scope)
-    graph.add_edge(horiz_p, t_d)
-    graph.add_edge(horiz_p, b_d)
+        graph.add_edge(t_p, regions[0])
+        graph.add_edge(t_p, regions[1])
+        graph.add_edge(t_d, t_p)
+        graph.add_edge(b_p, regions[2])
+        graph.add_edge(b_p, regions[3])
+        graph.add_edge(b_d, b_p)
 
-    # MERGE TL & BL, TR & BR
-    lscope = list(set(sorted(regions[0].scope + regions[2].scope)))
-    rscope = list(set(sorted(regions[1].scope + regions[3].scope)))
-    l_p = PartitionNode(lscope)
-    l_d = RegionNode(lscope)
-    r_p = PartitionNode(rscope)
-    r_d = RegionNode(rscope)
+        # MERGE T & B
+        whole_scope = list(set(sorted(t_d.scope + b_d.scope)))
+        horiz_p = PartitionNode(whole_scope)
+        graph.add_edge(horiz_p, t_d)
+        graph.add_edge(horiz_p, b_d)
 
-    graph.add_edge(l_p, regions[0])
-    graph.add_edge(l_p, regions[2])
-    graph.add_edge(l_d, l_p)
-    graph.add_edge(r_p, regions[1])
-    graph.add_edge(r_p, regions[3])
-    graph.add_edge(r_d, r_p)
+        # MERGE TL & BL, TR & BR
+        lscope = list(set(sorted(regions[0].scope + regions[2].scope)))
+        rscope = list(set(sorted(regions[1].scope + regions[3].scope)))
+        l_p = PartitionNode(lscope)
+        l_d = RegionNode(lscope)
+        r_p = PartitionNode(rscope)
+        r_d = RegionNode(rscope)
 
-    # MERGE T & B
-    assert whole_scope == list(set(sorted(l_d.scope + r_d.scope)))
-    vert_p = PartitionNode(whole_scope)
-    graph.add_edge(vert_p, l_d)
-    graph.add_edge(vert_p, r_d)
+        graph.add_edge(l_p, regions[0])
+        graph.add_edge(l_p, regions[2])
+        graph.add_edge(l_d, l_p)
+        graph.add_edge(r_p, regions[1])
+        graph.add_edge(r_p, regions[3])
+        graph.add_edge(r_d, r_p)
 
-    whole_d = RegionNode(whole_scope)
-    graph.add_edge(whole_d, horiz_p)
-    graph.add_edge(whole_d, vert_p)
+        # MERGE L & R
+        assert whole_scope == list(set(sorted(l_d.scope + r_d.scope)))
+        vert_p = PartitionNode(whole_scope)
+        graph.add_edge(vert_p, l_d)
+        graph.add_edge(vert_p, r_d)
 
-    return whole_d
+        # Mix
+        whole_d = RegionNode(whole_scope)
+        graph.add_edge(whole_d, horiz_p)
+        graph.add_edge(whole_d, vert_p)
+
+        return whole_d
+
+    else: # Horizontal and then vertical
+        tscope = list(set(sorted(regions[0].scope + regions[1].scope)))
+        bscope = list(set(sorted(regions[2].scope + regions[3].scope)))
+        t_p = PartitionNode(tscope)
+        t_d = RegionNode(tscope)
+        b_p = PartitionNode(bscope)
+        b_d = RegionNode(bscope)
+
+        graph.add_edge(t_p, regions[0])
+        graph.add_edge(t_p, regions[1])
+        graph.add_edge(t_d, t_p)
+        graph.add_edge(b_p, regions[2])
+        graph.add_edge(b_p, regions[3])
+        graph.add_edge(b_d, b_p)
+
+        # MERGE T & B
+        whole_scope = list(set(sorted(t_d.scope + b_d.scope)))
+        horiz_p = PartitionNode(whole_scope)
+        graph.add_edge(horiz_p, t_d)
+        graph.add_edge(horiz_p, b_d)
+
+        whole_d = RegionNode(whole_scope)
+        graph.add_edge(whole_d, horiz_p)
+
+        return whole_d
+
 
 
 def square_from_buffer(buffer, i, j) -> List[RegionNode]:
