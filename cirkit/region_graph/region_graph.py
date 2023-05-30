@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
-from typing import Any, List, Set, Union
+import json
+from typing import Any, Dict, List, Set, TypedDict, Union
 
 import networkx as nx
 
@@ -8,6 +8,13 @@ from .rg_node import PartitionNode, RegionNode, RGNode
 # TODO: unify what names to use: sum/region, product/partition, leaf/input
 # TODO: confirm the direction of edges
 # TODO: directly subclass the DiGraph?
+
+
+class _RGJson(TypedDict):
+    """The structure of region graph json file."""
+
+    regions: Dict[str, List[int]]
+    graph: List[Dict[str, int]]
 
 
 def _get_sums(graph: nx.DiGraph) -> List[RegionNode]:
@@ -22,11 +29,19 @@ def _get_products(graph: nx.DiGraph) -> List[PartitionNode]:
     return [n for n in graph.nodes() if isinstance(n, PartitionNode)]  # type: ignore[misc]
 
 
+def _get_region_nodes(graph: nx.DiGraph) -> List[RegionNode]:
+    return [n for n in graph.nodes() if isinstance(n, RegionNode)]  # type: ignore[misc]
+
+
+# def _get_roots(graph: nx.DiGraph) -> List[RegionNode]:
+#     return [n for n, d in graph.in_degree() if not d]  # type: ignore[misc]
+
+
 def _get_leaves(graph: nx.DiGraph) -> List[RegionNode]:
     return [n for n, d in graph.out_degree() if not d]  # type: ignore[misc]
 
 
-class RegionGraph(ABC):
+class RegionGraph:
     """The base class for region graphs."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[misc]
@@ -35,9 +50,79 @@ class RegionGraph(ABC):
         self._graph = self._construct_graph(*args, **kwargs)  # type: ignore[misc]
 
     @staticmethod
-    @abstractmethod
     def _construct_graph(*args: Any, **kwargs: Any) -> nx.DiGraph:  # type: ignore[misc]
-        pass
+        raise NotImplementedError  # TODO: how to make it work with load?
+
+    def save(self, filename: str) -> None:
+        """Save the region graph to json file.
+
+        Args:
+            filename (str): The file name to save.
+        """
+        graph_json: _RGJson = {"regions": {}, "graph": []}
+
+        regions = _get_region_nodes(self._graph)
+        regions_dict = {node: n for n, node in enumerate(regions)}
+        graph_json["regions"] = {str(n): list(node.scope) for node, n in regions_dict.items()}
+
+        products = _get_products(self._graph)
+
+        for product in products:
+            children: List[RegionNode] = list(self._graph.successors(product))  # type: ignore[misc]
+            parent: List[RegionNode] = list(self._graph.predecessors(product))  # type: ignore[misc]
+            assert len(children) == 2
+            assert len(parent) == 1
+
+            graph_json["graph"].append(
+                {
+                    "p": regions_dict[parent[0]],
+                    "l": regions_dict[children[0]],
+                    "r": regions_dict[children[1]],
+                }
+            )
+
+        # TODO: log graph_json
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(graph_json, f)
+
+    @staticmethod
+    def load(filename: str) -> "RegionGraph":
+        """Load a region graph from json file.
+
+        Args:
+            filename (str): The file name to load.
+
+        Returns:
+            RegionGraph: The loaded region graph.
+        """
+        with open(filename, "r", encoding="utf-8") as f:
+            graph_json: _RGJson = json.load(f)
+        regions = graph_json["regions"]
+        region_nodes: Dict[str, RegionNode] = {
+            idx: RegionNode(scope) for idx, scope in regions.items()
+        }
+
+        graph = nx.DiGraph()
+
+        for partition in graph_json["graph"]:
+            parent_node = region_nodes[str(partition["p"])]
+            left_child_node = region_nodes[str(partition["l"])]
+            right_child_node = region_nodes[str(partition["r"])]
+
+            product_node = PartitionNode(parent_node.scope)
+
+            graph.add_edge(product_node, parent_node)
+            graph.add_edge(left_child_node, product_node)
+            graph.add_edge(right_child_node, product_node)
+
+        # TODO: need to set?
+        # for node in get_leaves(graph):
+        #     node.einet_address.replica_idx = 0
+
+        rg = RegionGraph()
+        rg._graph = graph  # pylint: disable=protected-access
+        # TODO: how to fix this warning?
+        return rg
 
     def topological_layers(
         self, bottom_up: bool

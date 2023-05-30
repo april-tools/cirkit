@@ -91,12 +91,6 @@ def check_graph(graph: nx.DiGraph) -> (bool, str):
     return check_passed, msg.rstrip()
 
 
-def get_roots(graph):
-    return [n for n, d in graph.in_degree() if d == 0]
-
-
-
-
 def plot_graph(graph):
     """
     Plots the PC graph.
