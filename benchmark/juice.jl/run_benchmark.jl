@@ -27,10 +27,11 @@ macro grab_output(ex)
     end
 end
 
-function cifar10_dataset()
-    # Load the CIFAR10 dataset and preprocess it
-    train_int = transpose(reshape(CIFAR10(UInt8, split=:train).features, 32 * 32 * 3, :));
-    test_int = transpose(reshape(CIFAR10(UInt8, split=:test).features, 32 * 32 * 3, :));
+
+function mnist_dataset()
+    # Load the MNIST dataset and preprocess it
+    train_int = transpose(reshape(MNIST(UInt8, split=:train).features, 28 * 28, :));
+    test_int = transpose(reshape(MNIST(UInt8, split=:test).features, 28 * 28, :));
     train_data = UInt32.(train_int)
     test_data = UInt32.(test_int)
     train_data, test_data
@@ -77,7 +78,15 @@ function retrieve_stats(pc::ProbCircuit)
     )
 end
 
-function run_benchmark(pc::CuBitsProbCircuit, train_data, mis_train_data; batch_size = 100, samples = 50, burnin = 5)
+function run_benchmark(
+    pc::CuBitsProbCircuit, train_data, mis_train_data; batch_size = 128, samples = 100, burnin = 5,
+    benchmark_mar = false, benchmark_map = false)
+    # Select a batch of data only
+    indices = StatsBase.sample(1:size(train_data, 1), batch_size, replace = false)
+    train_data = train_data[indices, :]
+    if benchmark_mar || benchmark_map
+        mis_train_data = mis_train_data[indices, :]
+
     # Benchmark feed-forward pass time (on CPU)
     #trial = @benchmark loglikelihoods($pc, $train_data; batch_size=$batch_size) samples=samples
     # Benchmark feed-forward pass time (on GPU)
@@ -101,40 +110,44 @@ function run_benchmark(pc::CuBitsProbCircuit, train_data, mis_train_data; batch_
             "cuda_alloc_memory" => evi_cuda_alloc_memory
         ))
 
-    # Benchmark MAR inference (on GPU)
-    mar_trial = @benchmark (CUDA.@sync loglikelihoods($pc, $mis_train_data; batch_size=$batch_size)) samples=total_samples
-    #mar_trial = median(mar_trial)
-    cuda_trial = @grab_output (CUDA.@time loglikelihoods(pc, mis_train_data; batch_size=batch_size))
-    cuda_alloc_memory = parse(Float64, split(split(cuda_trial[2], "GPU allocations:")[2])[1])
-    cuda_alloc_memory_fmt = chop(split(split(cuda_trial[2], "GPU allocations:")[2])[2])
-    mar_cuda_alloc_memory = convert_to_bytes(cuda_alloc_memory, cuda_alloc_memory_fmt)
-    res["mar"] = Dict(
-        "times" => last(mar_trial.times, length(mar_trial.times) - burnin),
-        "gctimes" => last(mar_trial.gctimes, length(mar_trial.gctimes) - burnin),
-        "cpu_alloc_memory" => mar_trial.memory,
-        "cuda_alloc_memory" => mar_cuda_alloc_memory
-    )
+    if benchmark_mar
+        # Benchmark MAR inference (on GPU)
+        mar_trial = @benchmark (CUDA.@sync loglikelihoods($pc, $mis_train_data; batch_size=$batch_size)) samples=total_samples
+        #mar_trial = median(mar_trial)
+        cuda_trial = @grab_output (CUDA.@time loglikelihoods(pc, mis_train_data; batch_size=batch_size))
+        cuda_alloc_memory = parse(Float64, split(split(cuda_trial[2], "GPU allocations:")[2])[1])
+        cuda_alloc_memory_fmt = chop(split(split(cuda_trial[2], "GPU allocations:")[2])[2])
+        mar_cuda_alloc_memory = convert_to_bytes(cuda_alloc_memory, cuda_alloc_memory_fmt)
+        res["mar"] = Dict(
+            "times" => last(mar_trial.times, length(mar_trial.times) - burnin),
+            "gctimes" => last(mar_trial.gctimes, length(mar_trial.gctimes) - burnin),
+            "cpu_alloc_memory" => mar_trial.memory,
+            "cuda_alloc_memory" => mar_cuda_alloc_memory
+        )
+    end
 
-    # Benchmark MAP inference (on GPU)
-    map_trial = @benchmark (CUDA.@sync MAP($pc, $mis_train_data; batch_size=$batch_size)) samples=total_samples
-    #map_trial = median(map_trial)
-    cuda_trial = @grab_output (CUDA.@time MAP(pc, mis_train_data; batch_size=batch_size))
-    cuda_alloc_memory = parse(Float64, split(split(cuda_trial[2], "GPU allocations:")[2])[1])
-    cuda_alloc_memory_fmt = chop(split(split(cuda_trial[2], "GPU allocations:")[2])[2])
-    map_cuda_alloc_memory = convert_to_bytes(cuda_alloc_memory, cuda_alloc_memory_fmt)
-    res["map"] = Dict(
-        "times" => last(map_trial.times, length(map_trial.times) - burnin),
-        "gctimes" => last(map_trial.gctimes, length(map_trial.gctimes) - burnin),
-        "cpu_alloc_memory" => map_trial.memory,
-        "cuda_alloc_memory" => map_cuda_alloc_memory
-    )
+    if benchmark_map
+        # Benchmark MAP inference (on GPU)
+        map_trial = @benchmark (CUDA.@sync MAP($pc, $mis_train_data; batch_size=$batch_size)) samples=total_samples
+        #map_trial = median(map_trial)
+        cuda_trial = @grab_output (CUDA.@time MAP(pc, mis_train_data; batch_size=batch_size))
+        cuda_alloc_memory = parse(Float64, split(split(cuda_trial[2], "GPU allocations:")[2])[1])
+        cuda_alloc_memory_fmt = chop(split(split(cuda_trial[2], "GPU allocations:")[2])[2])
+        map_cuda_alloc_memory = convert_to_bytes(cuda_alloc_memory, cuda_alloc_memory_fmt)
+        res["map"] = Dict(
+            "times" => last(map_trial.times, length(map_trial.times) - burnin),
+            "gctimes" => last(map_trial.gctimes, length(map_trial.gctimes) - burnin),
+            "cpu_alloc_memory" => map_trial.memory,
+            "cuda_alloc_memory" => map_cuda_alloc_memory
+        )
+    end
 
     res
 end
 
 function run_benchmark_rat(
         train_data, mis_train_data;
-        batch_size = 100, num_nodes_region = 2, num_nodes_leaf = 2, rg_depth = 1, rg_replicas = 1)
+        batch_size = 128, num_nodes_region = 2, num_nodes_leaf = 2, rg_depth = 1, rg_replicas = 1)
     num_features = size(train_data, 2)
 
     # Only categorical and binomial distributions are available
@@ -183,10 +196,16 @@ function run_benchmark_hclt(train_data, mis_train_data, truncated_data; batch_si
     )
 end
 
+# Install the following Julia dependencies
+# add ProbabilisticCircuits.jl CUDA Images MLDatasets BenchmarkTools JSON StatsBase
+# 
+# Executes a benchmark on HCLTs on cuda:1 using batch size 128
+# julia run_benchmark.jl 1 HCLT 128
+#
 function main()
     # Get arguments
     if length(ARGS) < 3
-        println("Specify CUDA device id (e.g., 1), model name (either RAT or HCLT), and batch size (e.g., 500)")
+        println("Specify CUDA device id (e.g., 1), model name (either RAT or HCLT), and batch size (e.g., 128)")
         exit(1)
     end
     device_id = parse(UInt64, ARGS[1])
@@ -197,10 +216,10 @@ function main()
     end
     batch_size = parse(Int64, ARGS[3])
     device!(device_id)
-    BenchmarkTools.DEFAULT_PARAMETERS.seconds = 3600
+    BenchmarkTools.DEFAULT_PARAMETERS.seconds = 7200
 
     # Load the dataset
-    train_data_cpu, _ = cifar10_dataset()
+    train_data_cpu, _ = mnist_dataset()
     train_data = cu(train_data_cpu)
     mis_train_data = Array{Union{Missing, UInt8}}(train_data)
     Random.seed!(42)
@@ -210,12 +229,9 @@ function main()
     mis_train_data = cu(mis_train_data)
 
     if model_name == "RAT"
-        default_num_sum = 16
-        default_rg_depth = 4
-        default_rg_replicas = 16
-        hp_num_sum = [2, 4, 8, 16, 32, 64]
-        hp_rg_depth = [4, 5, 6, 7, 8, 9]
-        hp_rg_replicas = [2, 4, 8, 16, 32, 64]
+        default_rg_depth = 9
+        default_rg_replicas = 1
+        hp_num_sum = [16, 32, 64, 128, 256, 512]
         results = Dict()
 
         # Benchmark by varying the number of sum and leaf units per region
@@ -227,33 +243,13 @@ function main()
             )
             push!(results["num_sum_region"], res)
         end
-
-        # Benchmark by varying the depth
-        results["rg_depth"] = []
-        for d in hp_rg_depth
-            res = run_benchmark_rat(train_data, mis_train_data;
-                batch_size = batch_size, num_nodes_region = default_num_sum, num_nodes_leaf = default_num_sum,
-                rg_depth = d, rg_replicas = default_rg_replicas
-            )
-            push!(results["rg_depth"], res)
-        end
-
-        # Benchmark by varying the number of replicas
-        results["rg_replicas"] = []
-        for r in hp_rg_replicas
-            res = run_benchmark_rat(train_data, mis_train_data;
-                batch_size = batch_size, num_nodes_region = default_num_sum, num_nodes_leaf = default_num_sum,
-                rg_depth = default_rg_depth, rg_replicas = r
-            )
-            push!(results["rg_replicas"], res)
-        end
     else  # model_name == "HCLT"
         # Sample and preprocess a subset of the data for the Chow-Liu Tree algorithm
-        filtered_data = collect(transpose(reshape(train_data_cpu, 32 * 32 * 3, :)))
+        filtered_data = collect(transpose(reshape(train_data_cpu, 28 * 28, :)))
         truncated_data = truncate_data(filtered_data; bits = 3)
         truncated_data = cu(truncated_data)
 
-        hp_latents = [2, 4, 8, 16, 32, 64, 128, 256, 512]
+        hp_latents = [16, 32, 64, 128, 256, 512]
         results = Dict()
 
         # Benchmark by varying the support size for each latent variable
@@ -266,7 +262,7 @@ function main()
         end
     end
 
-    open("pcs-jl-" * model_name * "-" * string(batch_size) * "-" * "-trials.json", "w") do f 
+    open("pcs-jl-" * model_name * "-" * "-trials.json", "w") do f 
         JSON.print(f, results, 4)
     end
 end
