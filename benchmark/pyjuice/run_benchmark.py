@@ -33,8 +33,8 @@ command = [
 ]
 position = {"mode": 3, "seed": 5, "num_latents": 13, "first_pass_only": 14}
 env = os.environ.copy()
-env["PYTHONHASHSEED"] = str(BASE_SEED)
-env["JUICE_COMPILE_FLAG"] = "0"
+bench_env = {"PYTHONHASHSEED": str(BASE_SEED), "JUICE_COMPILE_FLAG": "0"}
+env.update(bench_env)
 
 
 def parse_run() -> List[Tuple[float, float]]:
@@ -56,9 +56,6 @@ def parse_run() -> List[Tuple[float, float]]:
     print("STDERR:")
     print(result.stderr)  # have an extra newline
 
-    if result.returncode:
-        return [(-1, -1)]  # meaning this run is broken
-
     print("STDOUT:")
     time_mem: List[Tuple[float, float]] = []
     for ln in result.stdout.splitlines():
@@ -68,11 +65,15 @@ def parse_run() -> List[Tuple[float, float]]:
         else:
             print(ln)
     print("\n")  # add an extra newline
+
+    if result.returncode:
+        return [(-1, -1)]  # meaning this run is broken
+
     return time_mem
 
 
 for compiled in (False, True):
-    env["JUICE_COMPILE_FLAG"] = str(compiled * COMPILE_FLAG)
+    bench_env["JUICE_COMPILE_FLAG"] = str(compiled * COMPILE_FLAG)
     for mode in ("batch_em", "full_em", "eval"):
         command[position["mode"]] = mode
         for num_latents in K_SETTINGS:
@@ -83,8 +84,10 @@ for compiled in (False, True):
                 )
                 # add a dummy entry so that the first is always ignored
                 time_memory: List[Tuple[float, float]] = [(-1, -1)] if first_pass_only else []
-                for seed in range(1, 10) if first_pass_only else (0,):
-                    env["PYTHONHASHSEED"] = command[position["seed"]] = str(BASE_SEED + seed)
+                for seed in range(1, NUM_FIRST_PASSES) if first_pass_only else (0,):
+                    bench_env["PYTHONHASHSEED"] = command[position["seed"]] = str(BASE_SEED + seed)
+                    env.update(bench_env)
+                    print(" ".join([f"{k}={v}" for k, v in bench_env.items()] + command))
                     time_memory.extend(parse_run())
 
                 with open(
