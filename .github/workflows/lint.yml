@@ -105,5 +105,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[lint]
           bash ./benchmark/install_submodule.sh all
+          git clone https://github.com/lkct/python-type-stubs.git $HOME/python-type-stubs
       - name: Run Mypy
         run: mypy $(git ls-files "*.py")
