@@ -86,6 +86,7 @@ function run_benchmark(
     train_data = train_data[indices, :]
     if benchmark_mar || benchmark_map
         mis_train_data = mis_train_data[indices, :]
+    end
 
     # Benchmark feed-forward pass time (on CPU)
     #trial = @benchmark loglikelihoods($pc, $train_data; batch_size=$batch_size) samples=samples
