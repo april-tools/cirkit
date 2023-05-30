@@ -237,6 +237,7 @@ function main()
         # Benchmark by varying the number of sum and leaf units per region
         results["num_sum_region"] = []
         for k in hp_num_sum
+            println("Benchmarking RAT with K = " * string(k))
             res = run_benchmark_rat(train_data, mis_train_data;
                 batch_size = batch_size, num_nodes_region = k, num_nodes_leaf = k,
                 rg_depth = default_rg_depth, rg_replicas = default_rg_replicas
@@ -255,6 +256,7 @@ function main()
         # Benchmark by varying the support size for each latent variable
         results["latents"] = []
         for l in hp_latents
+            println("Benchmarking HCLT with L = " * string(l))
             res = run_benchmark_hclt(train_data, mis_train_data, truncated_data;
                 batch_size = batch_size, latents = l
             )
