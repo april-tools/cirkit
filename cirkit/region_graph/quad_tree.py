@@ -9,7 +9,7 @@ from .rg_node import PartitionNode, RegionNode
 # TODO: add routine for add regions->part->reg structure
 
 
-def merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
+def _merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
     """Make the structure to connect 2 children.
 
     Args:
@@ -33,7 +33,7 @@ def merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
 
 
 # pylint: disable-next=too-many-locals
-def merge_4_regions_mixed(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
+def _merge_4_regions_mixed(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
     """Make the structure to connect 4 children with mixed partitions.
 
     Args:
@@ -95,7 +95,7 @@ def merge_4_regions_mixed(regions: List[RegionNode], graph: nx.DiGraph) -> Regio
     return whole_region
 
 
-def merge_4_regions_struct_decomp(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
+def _merge_4_regions_struct_decomp(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
     """Make the structure to connect 4 children with structured-decomposability \
         (horizontal then vertical).
 
@@ -134,7 +134,7 @@ def merge_4_regions_struct_decomp(regions: List[RegionNode], graph: nx.DiGraph) 
     return whole_region
 
 
-def square_from_buffer(buffer: List[List[RegionNode]], i: int, j: int) -> List[RegionNode]:
+def _square_from_buffer(buffer: List[List[RegionNode]], i: int, j: int) -> List[RegionNode]:
     """Get the children of the current position from the buffer.
 
     Args:
@@ -205,15 +205,15 @@ class QuadTree(RegionGraph):
 
             for i in range(buffer_width):
                 for j in range(buffer_height):
-                    regions = square_from_buffer(old_buffer, 2 * i + lr_choice, 2 * j + td_choice)
+                    regions = _square_from_buffer(old_buffer, 2 * i + lr_choice, 2 * j + td_choice)
                     buffer[i].append(
                         regions[0]
                         if len(regions) == 1
-                        else merge_2_regions(regions, self._graph)
+                        else _merge_2_regions(regions, self._graph)
                         if len(regions) == 2
-                        else merge_4_regions_struct_decomp(regions, self._graph)
+                        else _merge_4_regions_struct_decomp(regions, self._graph)
                         if struct_decomp
-                        else merge_4_regions_mixed(regions, self._graph)
+                        else _merge_4_regions_mixed(regions, self._graph)
                     )
 
             old_buffer = buffer
