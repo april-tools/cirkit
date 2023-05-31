@@ -3,7 +3,7 @@ from typing import Dict
 import numpy as np
 import torch
 
-from cirkit.einet.Layer import Layer
+from cirkit.einet._Layer import Layer
 
 
 class FactorizedLeafLayer(Layer):

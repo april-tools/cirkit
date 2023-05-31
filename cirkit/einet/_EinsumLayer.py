@@ -7,10 +7,10 @@ import numpy as np
 import torch
 import torch.nn
 import torch.nn.functional as F
-from cirkit.einet.Layer import Layer
+from cirkit.einet._Layer import Layer
 from tensorly import set_backend
 from torch.nn.functional import softmax
-from utils import sample_matrix_categorical
+from cirkit.einet._utils import sample_matrix_categorical
 
 
 def deprecated(func):

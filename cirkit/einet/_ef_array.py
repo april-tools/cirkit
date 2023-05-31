@@ -1,5 +1,5 @@
 import torch
-from utils import one_hot
+from cirkit.einet._utils import one_hot
 
 
 class ExponentialFamilyArray(torch.nn.Module):

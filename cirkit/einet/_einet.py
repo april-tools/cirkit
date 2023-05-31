@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 import torch
 
-from cirkit.einet.EinsumLayer import (
+from cirkit.einet._EinsumLayer import (
     CPEinsumLayer,
     CPSharedEinsumLayer,
     EinsumMixingLayer,
@@ -13,7 +13,7 @@ from cirkit.einet.EinsumLayer import (
     HCPTSharedEinsumLayer,
     RescalEinsumLayer,
 )
-from cirkit.einet.leaf_layer import FactorizedLeafLayer
+from cirkit.einet._leaf_layer import FactorizedLeafLayer
 from cirkit.region_graph import graph as Graph
 
 LAYER_TYPES = ["hcpt-lolo-shared", "hcpt-lolo", "rescal", "cp-shared", "hcpt", "hcpt-shared", "cp"]
