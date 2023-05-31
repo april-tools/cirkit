@@ -1,5 +1,18 @@
 import json
-from typing import Any, Dict, List, Set, TypedDict, Union
+from typing import (
+    Any,
+    Collection,
+    Dict,
+    Iterable,
+    List,
+    Set,
+    Tuple,
+    TypedDict,
+    Union,
+    cast,
+    overload,
+)
+from typing_extensions import Self  # TODO: in typing from 3.11
 
 import networkx as nx
 
@@ -17,38 +30,95 @@ class _RGJson(TypedDict):
     graph: List[Dict[str, int]]
 
 
-def _get_sums(graph: nx.DiGraph) -> List[RegionNode]:
-    return [  # type: ignore[misc]
-        n
-        for n, d in graph.out_degree()  # type: ignore[misc]
-        if d > 0 and isinstance(n, RegionNode)  # type: ignore[misc]
-    ]
-
-
-def _get_products(graph: nx.DiGraph) -> List[PartitionNode]:
-    return [n for n in graph.nodes() if isinstance(n, PartitionNode)]  # type: ignore[misc]
-
-
-def _get_region_nodes(graph: nx.DiGraph) -> List[RegionNode]:
-    return [n for n in graph.nodes() if isinstance(n, RegionNode)]  # type: ignore[misc]
-
-
-# def _get_roots(graph: nx.DiGraph) -> List[RegionNode]:
-#     return [n for n, d in graph.in_degree() if not d]  # type: ignore[misc]
-
-
-def _get_leaves(graph: nx.DiGraph) -> List[RegionNode]:
-    return [n for n, d in graph.out_degree() if not d]  # type: ignore[misc]
-
-
 class RegionGraph:
     """The base class for region graphs."""
 
     # TODO: is it a good practice to allow any args? what about for inherit?
-    def __init__(self, *_: Any, **__: Any) -> None:  # type: ignore[misc]
-        """Init shared attrs."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[misc]
+        """Init graph with any args/kwargs given."""
+        # TODO: careful with this way to pass args when multi-inherit then it's a must
         super().__init__()
-        self._graph = nx.DiGraph()
+        self._graph = nx.DiGraph(*args, **kwargs)  # type: ignore[misc]
+
+    # TODO: do we need a class for node view?
+    # TODO: do we return a generic container or concrete class?
+    @property
+    def nodes(self) -> Collection[RGNode]:
+        """Get all the nodes in the graph."""
+        nodes: Collection[RGNode] = self._graph.nodes  # DiGraph.nodes is both set and dict
+        return nodes
+
+    @property
+    def region_nodes(self) -> Collection[RegionNode]:
+        """Get region nodes in the graph."""
+        return [node for node in self.nodes if isinstance(node, RegionNode)]
+
+    @property
+    def partition_nodes(self) -> Collection[PartitionNode]:
+        """Get partition nodes in the graph."""
+        return [node for node in self.nodes if isinstance(node, PartitionNode)]
+
+    @property
+    def input_nodes(self) -> Collection[RegionNode]:
+        """Get input nodes of the graph, which are regions."""
+        node_indegs: Iterable[Tuple[RGNode, int]] = self._graph.in_degree
+        # enforce type because we know they're regions
+        return [cast(RegionNode, node) for node, deg in node_indegs if not deg]
+
+    @property
+    def output_nodes(self) -> Collection[RegionNode]:
+        """Get output nodes of the graph, which are regions."""
+        node_outdegs: Iterable[Tuple[RGNode, int]] = self._graph.out_degree
+        # enforce type because we know they're regions
+        return [cast(RegionNode, node) for node, deg in node_outdegs if not deg]
+
+    @property
+    def inner_region_nodes(self) -> Collection[RegionNode]:
+        """Get inner (non-input) region nodes in the graph."""
+        node_indegs: Iterable[Tuple[RGNode, int]] = self._graph.in_degree
+        return [node for node, deg in node_indegs if isinstance(node, RegionNode) and deg]
+
+    @overload
+    def get_node_input(self, node: PartitionNode) -> Iterable[RegionNode]:
+        ...
+
+    @overload
+    def get_node_input(self, node: RegionNode) -> Iterable[PartitionNode]:
+        ...
+
+    # TODO: return list or iter? predecessors itself returns an iterator
+    def get_node_input(self, node: RGNode) -> Iterable[RGNode]:
+        """Get input nodes of a node.
+
+        Args:
+            node (RGNode): The node queried.
+
+        Returns:
+            Iterable[RGNode]: The inputs to the node.
+        """
+        inputs: Iterable[RGNode] = self._graph.predecessors(node)
+        return inputs
+
+    @overload
+    def get_node_output(self, node: PartitionNode) -> Iterable[RegionNode]:
+        ...
+
+    @overload
+    def get_node_output(self, node: RegionNode) -> Iterable[PartitionNode]:
+        ...
+
+    # TODO: return list or iter?
+    def get_node_output(self, node: RGNode) -> Iterable[RGNode]:
+        """Get output nodes of a node.
+
+        Args:
+            node (RGNode): The node queried.
+
+        Returns:
+            Iterable[RGNode]: The outputs to the node.
+        """
+        outputs: Iterable[RGNode] = self._graph.successors(node)
+        return outputs
 
     def save(self, filename: str) -> None:
         """Save the region graph to json file.
@@ -56,25 +126,24 @@ class RegionGraph:
         Args:
             filename (str): The file name to save.
         """
+        # TODO: doc the format?
         graph_json: _RGJson = {"regions": {}, "graph": []}
 
-        regions = _get_region_nodes(self._graph)
-        regions_dict = {node: n for n, node in enumerate(regions)}
-        graph_json["regions"] = {str(n): list(node.scope) for node, n in regions_dict.items()}
+        # TODO: give each node an id as attr? they do have one defined. but what about load?
+        region_ids = {node: n for n, node in enumerate(self.region_nodes)}
+        graph_json["regions"] = {str(n): list(node.scope) for node, n in region_ids.items()}
 
-        products = _get_products(self._graph)
-
-        for product in products:
-            children: List[RegionNode] = list(self._graph.successors(product))  # type: ignore[misc]
-            parent: List[RegionNode] = list(self._graph.predecessors(product))  # type: ignore[misc]
-            assert len(children) == 2
-            assert len(parent) == 1
+        for partition_node in self.partition_nodes:
+            part_input = list(self.get_node_input(partition_node))
+            assert len(part_input) == 2
+            part_output = list(self.get_node_output(partition_node))
+            assert len(part_output) == 1
 
             graph_json["graph"].append(
                 {
-                    "p": regions_dict[parent[0]],
-                    "l": regions_dict[children[0]],
-                    "r": regions_dict[children[1]],
+                    "p": region_ids[part_output[0]],
+                    "l": region_ids[part_input[0]],
+                    "r": region_ids[part_input[1]],
                 }
             )
 
@@ -82,45 +151,50 @@ class RegionGraph:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(graph_json, f)
 
-    @staticmethod
-    def load(filename: str) -> "RegionGraph":
+    @classmethod
+    def load(cls, filename: str) -> Self:
         """Load a region graph from json file.
 
         Args:
             filename (str): The file name to load.
 
+        Raises:
+            NotImplementedError: It is not implemented for children classes.
+
         Returns:
             RegionGraph: The loaded region graph.
         """
+        # TODO: is this a bug of mypy? caused by __init__ include Any
+        if cls is not RegionGraph:  # type: ignore[misc]
+            raise NotImplementedError(
+                "Must be called as `RegionGraph.load()` instead of from child class."
+            )
+
         with open(filename, "r", encoding="utf-8") as f:
             graph_json: _RGJson = json.load(f)
-        regions = graph_json["regions"]
-        region_nodes: Dict[str, RegionNode] = {
-            idx: RegionNode(scope) for idx, scope in regions.items()
-        }
+
+        ids_region = {int(idx): RegionNode(scope) for idx, scope in graph_json["regions"].items()}
 
         graph = nx.DiGraph()
 
         for partition in graph_json["graph"]:
-            parent_node = region_nodes[str(partition["p"])]
-            left_child_node = region_nodes[str(partition["l"])]
-            right_child_node = region_nodes[str(partition["r"])]
+            part_output = ids_region[partition["p"]]
+            part_input_left = ids_region[partition["l"]]
+            part_input_right = ids_region[partition["r"]]
 
-            product_node = PartitionNode(parent_node.scope)
+            partition_node = PartitionNode(part_output.scope)
 
-            graph.add_edge(product_node, parent_node)
-            graph.add_edge(left_child_node, product_node)
-            graph.add_edge(right_child_node, product_node)
+            graph.add_edge(partition_node, part_output)
+            graph.add_edge(part_input_left, partition_node)
+            graph.add_edge(part_input_right, partition_node)
 
-        # TODO: need to set?
+        # TODO: need to set? but this is wrong for random bin tree
         # for node in get_leaves(graph):
         #     node.einet_address.replica_idx = 0
 
-        rg = RegionGraph()
-        rg._graph = graph  # pylint: disable=protected-access
-        # TODO: how to fix this warning?
-        return rg
+        return cls(graph)
 
+    # TODO: do we have it here or decouple from RG? also how to properly name "layer"?
     def topological_layers(
         self, bottom_up: bool
     ) -> List[Union[List[RegionNode], List[PartitionNode]]]:
@@ -141,6 +215,9 @@ class RegionGraph:
             else self._topological_layers_top_down()
         )
 
+    # TODO: the 4 `pylint disable not-an-iterable` is due to a bug in astroid in 2021
+    # check the progress here https://github.com/pylint-dev/astroid/issues/1015
+
     def _topological_layers_bottom_up(self) -> List[Union[List[RegionNode], List[PartitionNode]]]:
         """Layerize in the bottom-up manner.
 
@@ -148,36 +225,38 @@ class RegionGraph:
             List[Union[List[RegionNode], List[PartitionNode]]]: \
                 Nodes in each layer from input to output.
         """
-        sums = list(sorted(_get_sums(self._graph)))  # TODO: why sort?
-        products = list(sorted(_get_products(self._graph)))
-        leaves = list(sorted(_get_leaves(self._graph)))
+        inner_region_nodes = sorted(self.inner_region_nodes)  # TODO: why sort?
+        partition_nodes = sorted(self.partition_nodes)
+        input_nodes = sorted(self.input_nodes)
 
-        visited_nodes: Set[RGNode] = set(leaves)
+        visited_nodes: Set[RGNode] = set(input_nodes)
         # TODO: list variance issues
-        layers: List[Union[List[RegionNode], List[PartitionNode]]] = [leaves]
+        layers: List[Union[List[RegionNode], List[PartitionNode]]] = [input_nodes]
 
-        num_nodes = len(leaves) + len(sums) + len(products)
+        num_nodes = len(input_nodes) + len(inner_region_nodes) + len(partition_nodes)
 
         while len(visited_nodes) != num_nodes:  # pylint: disable=while-used
-            product_layer = [
-                p
-                for p in products
-                if p not in visited_nodes
-                and all(s in visited_nodes for s in self._graph.successors(p))  # type: ignore[misc]
+            partition_layer = [
+                partition
+                for partition in partition_nodes
+                if partition not in visited_nodes
+                # pylint: disable-next=not-an-iterable
+                and all(region in visited_nodes for region in self.get_node_output(partition))
             ]
-            product_layer = sorted(product_layer)
-            layers.append(product_layer)
-            visited_nodes.update(product_layer)
+            partition_layer = sorted(partition_layer)
+            layers.append(partition_layer)
+            visited_nodes.update(partition_layer)
 
-            sum_layer = [
-                s
-                for s in sums
-                if s not in visited_nodes
-                and all(p in visited_nodes for p in self._graph.successors(s))  # type: ignore[misc]
+            region_layer = [
+                region
+                for region in inner_region_nodes
+                if region not in visited_nodes
+                # pylint: disable-next=not-an-iterable
+                and all(partition in visited_nodes for partition in self.get_node_output(region))
             ]
-            sum_layer = sorted(sum_layer)
-            layers.append(sum_layer)
-            visited_nodes.update(sum_layer)
+            region_layer = sorted(region_layer)
+            layers.append(region_layer)
+            visited_nodes.update(region_layer)
 
         return layers
 
@@ -188,41 +267,39 @@ class RegionGraph:
             List[Union[List[RegionNode], List[PartitionNode]]]: \
                 Nodes in each layer from input to output.
         """
-        sums = list(sorted(_get_sums(self._graph)))  # TODO: why sort?
-        products = list(sorted(_get_products(self._graph)))
-        leaves = list(sorted(_get_leaves(self._graph)))
+        inner_region_nodes = sorted(self.inner_region_nodes)  # TODO: why sort?
+        partition_nodes = sorted(self.partition_nodes)
+        input_nodes = sorted(self.input_nodes)
 
         visited_nodes: Set[RGNode] = set()
         # TODO: list variance issues
-        layers: List[Union[List[RegionNode], List[PartitionNode]]] = []
+        layers_inv: List[Union[List[RegionNode], List[PartitionNode]]] = []
 
-        num_internal_nodes = len(sums) + len(products)
+        num_inner_nodes = len(inner_region_nodes) + len(partition_nodes)
 
-        while len(visited_nodes) != num_internal_nodes:  # pylint: disable=while-used
-            # TODO: repeated conditions
-            sum_layer = [
-                s
-                for s in sums
-                if s not in visited_nodes
-                and all(  # type: ignore[misc]
-                    p in visited_nodes for p in self._graph.predecessors(s)  # type: ignore[misc]
-                )
+        while len(visited_nodes) != num_inner_nodes:  # pylint: disable=while-used
+            # TODO: repeated conditions. can we fuse the layer for reg and part?
+            region_layer = [
+                region
+                for region in inner_region_nodes
+                if region not in visited_nodes
+                # pylint: disable-next=not-an-iterable
+                and all(partition in visited_nodes for partition in self.get_node_input(region))
             ]
-            sum_layer = sorted(sum_layer)
-            layers.insert(0, sum_layer)
-            visited_nodes.update(sum_layer)
+            region_layer = sorted(region_layer)
+            layers_inv.append(region_layer)
+            visited_nodes.update(region_layer)
 
-            product_layer = [
-                p
-                for p in products
-                if p not in visited_nodes
-                and all(  # type: ignore[misc]
-                    s in visited_nodes for s in self._graph.predecessors(p)  # type: ignore[misc]
-                )
+            partition_layer = [
+                partition
+                for partition in partition_nodes
+                if partition not in visited_nodes
+                # pylint: disable-next=not-an-iterable
+                and all(region in visited_nodes for region in self.get_node_input(partition))
             ]
-            product_layer = sorted(product_layer)
-            layers.insert(0, product_layer)
-            visited_nodes.update(product_layer)
+            partition_layer = sorted(partition_layer)
+            layers_inv.append(partition_layer)
+            visited_nodes.update(partition_layer)
 
-        layers.insert(0, leaves)
-        return layers
+        layers_inv.append(input_nodes)
+        return list(reversed(layers_inv))
