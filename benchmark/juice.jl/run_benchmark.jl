@@ -265,7 +265,7 @@ function main()
         end
     end
 
-    open("pcs-jl-" * model_name * "-" * "-trials.json", "w") do f 
+    open("pcs-jl-" * model_name * "-trials.json", "w") do f 
         JSON.print(f, results, 4)
     end
 end
