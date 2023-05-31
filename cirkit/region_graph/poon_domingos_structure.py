@@ -219,6 +219,8 @@ class PoonDomingosStructure(RegionGraph):
     each axis and split it on all cutting points corresponding to the coarsest delta.
     """
 
+    # TODO: refactor
+    # pylint: disable-next=too-complex,too-many-locals,too-many-branches
     def __init__(
         self,
         shape: Sequence[int],
@@ -240,6 +242,8 @@ class PoonDomingosStructure(RegionGraph):
                     Can be None, in which case all axes are subject to cutting.
         :param max_split_depth: maximal depth for the recursive split process (int)
         """
+        super().__init__()
+
         if axes is None:
             axes = tuple(range(len(shape)))
         if max_split_depth is None:
@@ -248,14 +252,7 @@ class PoonDomingosStructure(RegionGraph):
         if isinstance(delta, float):
             delta = [delta]
         delta = [[deltai] * len(axes) if isinstance(deltai, float) else deltai for deltai in delta]
-        super().__init__(shape, delta, axes, max_split_depth)
 
-    @staticmethod
-    # TODO: refactor
-    # pylint: disable-next=arguments-differ,too-complex,too-many-locals,too-many-branches
-    def _construct_graph(
-        shape: Sequence[int], delta: List[List[float]], axes: Sequence[int], max_split_depth: int
-    ) -> nx.DiGraph:
         for deltai in delta:
             assert len(deltai) == len(
                 axes
@@ -278,9 +275,8 @@ class PoonDomingosStructure(RegionGraph):
         hypercube = ((0,) * len(shape), tuple(shape))  # TODO: fit param type
         hypercube_scope = hypercube_to_scope(hypercube, shape)
 
-        graph = nx.DiGraph()
         root = RegionNode(hypercube_scope)
-        graph.add_node(root)
+        self._graph.add_node(root)
 
         queue: List[HyperCube] = [hypercube]
         depth_dict = {tuple(hypercube_scope): 0}
@@ -293,7 +289,7 @@ class PoonDomingosStructure(RegionGraph):
             if (depth := depth_dict[tuple(hypercube_scope)]) >= max_split_depth:
                 continue
 
-            node = _get_region_nodes_by_scope(graph, hypercube_scope)[0]
+            node = _get_region_nodes_by_scope(self._graph, hypercube_scope)[0]
 
             found_cut_on_level = False
             for cur_global_cut_points in global_cut_points:
@@ -311,21 +307,19 @@ class PoonDomingosStructure(RegionGraph):
                         child_nodes: List[RegionNode] = []
                         for c_cube in child_hypercubes:
                             c_scope = hypercube_to_scope(c_cube, shape)
-                            if not (c_node := _get_region_nodes_by_scope(graph, c_scope)):
+                            if not (c_node := _get_region_nodes_by_scope(self._graph, c_scope)):
                                 c_node.append(RegionNode(c_scope))
                                 depth_dict[tuple(c_scope)] = depth + 1
                                 queue.append(c_cube)
                             child_nodes.append(c_node[0])
 
                         partition = PartitionNode(node.scope)
-                        graph.add_edge(partition, node)
+                        self._graph.add_edge(partition, node)
                         for ch_node in child_nodes:
-                            graph.add_edge(ch_node, partition)
+                            self._graph.add_edge(ch_node, partition)
                 if found_cut_on_level:
                     break
 
         # TODO: do we need this? already defaults to 0
         # for node in get_leaves(graph):
         #     node.einet_address.replica_idx = 0
-
-        return graph

@@ -76,26 +76,19 @@ class RandomBinaryTree(RegionGraph):
         :param num_repetitions: number of repetitions (int)
         :return: generated graph (DiGraph)
         """
-        super().__init__(num_vars, depth, num_repetitions)
+        super().__init__()
 
-    @staticmethod
-    # TODO: the best way to inherit?
-    # pylint: disable-next=arguments-differ
-    def _construct_graph(num_vars: int, depth: int, num_repetitions: int) -> nx.DiGraph:
-        graph = nx.DiGraph()
         root = RegionNode(range(num_vars))
-        graph.add_node(root)
+        self._graph.add_node(root)
 
         for repetition in range(num_repetitions):
             nodes = [root]
             for _ in range(depth):
                 nodes = list(
                     itertools.chain.from_iterable(
-                        _partition_node_randomly(graph, node, num_parts=2) for node in nodes
+                        _partition_node_randomly(self._graph, node, num_parts=2) for node in nodes
                     )
                 )
             for node in nodes:
                 # TODO: confirm: only replica idx for leaf?
                 node.einet_address.replica_idx = repetition
-
-        return graph

@@ -159,6 +159,7 @@ def square_from_buffer(buffer: List[List[RegionNode]], i: int, j: int) -> List[R
 class QuadTree(RegionGraph):
     """Some docstring."""
 
+    # pylint: disable-next=too-many-locals
     def __init__(self, width: int, height: int, struct_decomp: bool = False) -> None:
         """Init class.
 
@@ -168,13 +169,10 @@ class QuadTree(RegionGraph):
             struct_decomp (bool, optional): Whether structured-decomposability \
                 is required. Defaults to False.
         """
-        assert width == height and width > 0  # TODO: then we don't need two
-        super().__init__(width, height, struct_decomp)
+        super().__init__()
 
-    @staticmethod
-    # pylint: disable-next=arguments-differ,too-many-locals
-    def _construct_graph(width: int, height: int, struct_decomp: bool = False) -> nx.DiGraph:
-        graph = nx.DiGraph()
+        assert width == height and width > 0  # TODO: then we don't need two
+
         shape = (width, height)
 
         hypercube_to_scope = _HypercubeToScopeCache()
@@ -188,7 +186,7 @@ class QuadTree(RegionGraph):
 
                 c_scope = hypercube_to_scope(hypercube, shape)
                 c_node = RegionNode(c_scope)
-                graph.add_node(c_node)
+                self._graph.add_node(c_node)
                 buffer[i].append(c_node)
 
         lr_choice = 0  # left right # TODO: or choose from 0 and 1?
@@ -211,11 +209,11 @@ class QuadTree(RegionGraph):
                     buffer[i].append(
                         regions[0]
                         if len(regions) == 1
-                        else merge_2_regions(regions, graph)
+                        else merge_2_regions(regions, self._graph)
                         if len(regions) == 2
-                        else merge_4_regions_struct_decomp(regions, graph)
+                        else merge_4_regions_struct_decomp(regions, self._graph)
                         if struct_decomp
-                        else merge_4_regions_mixed(regions, graph)
+                        else merge_4_regions_mixed(regions, self._graph)
                     )
 
             old_buffer = buffer
@@ -225,5 +223,3 @@ class QuadTree(RegionGraph):
         # TODO: do we need this? already defaults to 0
         # for node in get_leaves(graph):
         #     node.einet_address.replica_idx = 0
-
-        return graph

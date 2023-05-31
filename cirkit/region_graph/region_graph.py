@@ -44,14 +44,11 @@ def _get_leaves(graph: nx.DiGraph) -> List[RegionNode]:
 class RegionGraph:
     """The base class for region graphs."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[misc]
+    # TODO: is it a good practice to allow any args? what about for inherit?
+    def __init__(self, *_: Any, **__: Any) -> None:  # type: ignore[misc]
         """Init shared attrs."""
         super().__init__()
-        self._graph = self._construct_graph(*args, **kwargs)  # type: ignore[misc]
-
-    @staticmethod
-    def _construct_graph(*args: Any, **kwargs: Any) -> nx.DiGraph:  # type: ignore[misc]
-        raise NotImplementedError  # TODO: how to make it work with load?
+        self._graph = nx.DiGraph()
 
     def save(self, filename: str) -> None:
         """Save the region graph to json file.
