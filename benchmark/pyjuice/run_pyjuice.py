@@ -36,7 +36,7 @@ def seed_all(seed: int) -> None:
     Args:
         seed (int): The seed shared by all RNGs.
     """
-    seed = seed % 2**32  # some only accept 32bit seed
+    seed %= 2**32  # some only accept 32bit seed
     assert os.environ.get("PYTHONHASHSEED", "") == str(
         seed
     ), "Must set PYTHONHASHSEED to the same seed before starting python."
