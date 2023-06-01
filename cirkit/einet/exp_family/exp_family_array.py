@@ -241,6 +241,17 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
 
         assert not torch.isnan(self.params).any()
 
+    def __call__(self, x: Tensor) -> Tensor:
+        """Invoke the forward.
+
+        Args:
+            x (Tensor): The input.
+
+        Returns:
+            Tensor: The output.
+        """
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
     def forward(self, x: Tensor) -> Tensor:
         """Evaluate the exponential family, in log-domain.
 

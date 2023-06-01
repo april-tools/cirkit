@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Any, Dict, Optional
 
-from torch import nn
+from torch import Tensor, nn
 
 
 # TODO: name it layer?
@@ -16,7 +16,7 @@ class Layer(nn.Module, ABC):
         """
         super().__init__()  # TODO: do we need multi-inherit init?
         self._use_em = use_em
-        self.prob = None  # TODO: type?
+        self.prob: Optional[Tensor] = None  # TODO: why None?
 
         # TODO: type and init for the following?
         self._online_em_counter = 0
@@ -24,14 +24,14 @@ class Layer(nn.Module, ABC):
         self.online_em_stepsize = 0
 
     @abstractmethod
-    def default_initializer(self):  # TODO: return type?
+    def default_initializer(self) -> Tensor:
         """Produce suitable initial parameters for the layer.
 
         :return: initial parameters
         """
 
     @abstractmethod
-    def initialize(self, initializer=None) -> None:  # TODO: type?
+    def initialize(self, initializer: Optional[Tensor] = None) -> None:
         """Initialize the layer, e.g. with return value from default_initializer(self).
 
         :param initializer: 'default', or custom (typically a Tensor)
@@ -42,8 +42,17 @@ class Layer(nn.Module, ABC):
         :return: None
         """
 
+    def __call__(self, x: Optional[Tensor] = None) -> None:
+        """Invoke the forward.
+
+        Args:
+            x (Optional[Tensor], optional): The input. Defaults to None.
+        """
+        super().__call__(x)
+
+    # TODO: it's not good to return None
     @abstractmethod
-    def forward(self, x=None):  # TODO: type?
+    def forward(self, x: Optional[Tensor] = None) -> None:
         """Compute the layer. The result is always a tensor of \
             log-densities of shape (batch_size, num_dist, num_nodes), \
         where num_dist is the vector length (K in the paper) and num_nodes is \
@@ -62,7 +71,7 @@ class Layer(nn.Module, ABC):
         """
 
     @abstractmethod
-    def backtrack(self, *args, **kwargs):  # TODO: type?
+    def backtrack(self, *args: Any, **kwargs: Any) -> Tensor:
         """Define routines for backtracking in EiNets, for sampling and MPE approximation.
 
         :param args:
@@ -71,8 +80,8 @@ class Layer(nn.Module, ABC):
         """
 
     def em_set_hyperparams(
-        self, online_em_frequency, online_em_stepsize, purge: bool = True
-    ) -> None:  # TODO: type?
+        self, online_em_frequency: int, online_em_stepsize: float, purge: bool = True
+    ) -> None:
         """Set new setting for online EM.
 
         :param online_em_frequency: How often, i.e. after how many calls to \
@@ -97,19 +106,19 @@ class Layer(nn.Module, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def em_process_batch(self):  # TODO: type?
+    def em_process_batch(self) -> None:
         """Process the current batch. This should be called after backwards() on the whole model."""
 
     @abstractmethod
-    def em_update(self):  # TODO: type?
+    def em_update(self) -> None:
         """Perform an EM update step."""
 
     @abstractmethod
-    def project_params(self, params):  # TODO: type?
+    def project_params(self, params: Tensor) -> None:
         """Project paramters onto feasible set."""
 
     @abstractmethod
-    def reparam_function(self):  # TODO: type?
+    def reparam_function(self) -> Tensor:
         """Return a function which transforms a tensor of unconstrained values \
             into feasible parameters."""
 
