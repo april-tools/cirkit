@@ -11,7 +11,7 @@ from .normal_array import _shift_last_axis_to
 @torch.no_grad()
 def _one_hot(x: Tensor, k: int, dtype: torch.dtype = torch.float32) -> Tensor:
     """One hot encoding."""
-    ind = torch.zeros(x.shape + (k,), dtype=dtype, device=x.device)
+    ind = torch.zeros(*x.shape, k, dtype=dtype, device=x.device)
     ind.scatter_(dim=-1, index=x.unsqueeze(-1), value=1)
     return ind
 
@@ -128,8 +128,8 @@ class CategoricalArray(ExponentialFamilyArray):
     ) -> Tensor:
         with torch.no_grad():
             dist = params.reshape(self.num_var, *self.array_shape, self.num_dims, self.k)
-            cum_sum = torch.cumsum(dist[..., 0:-1], dim=-1)  # TODO: why slice to -1?
-            rand = torch.rand((num_samples,) + cum_sum.shape[0:-1] + (1,), device=cum_sum.device)
+            cum_sum = torch.cumsum(dist[..., :-1], dim=-1)  # TODO: why slice to -1?
+            rand = torch.rand(num_samples, *cum_sum.shape[:-1], 1, device=cum_sum.device)
             samples = torch.sum(rand > cum_sum, dim=-1).to(dtype)
             return _shift_last_axis_to(samples, 2)
 

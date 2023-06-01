@@ -48,10 +48,10 @@ class NormalArray(ExponentialFamilyArray):
             Tensor: The default init.
         """
         phi = torch.empty(self.num_var, *self.array_shape, 2 * self.num_dims)
-        phi[..., 0 : self.num_dims] = torch.randn(self.num_var, *self.array_shape, self.num_dims)
-        # TODO: is this a mypy bug? phi[..., 0 : self.num_dims] ** 2 is Any
-        # but phi[..., 0 : self.num_dims] is Tensor
-        phi[..., self.num_dims :] = 1 + phi[..., 0 : self.num_dims] ** 2  # type: ignore[misc]
+        phi[..., : self.num_dims] = torch.randn(self.num_var, *self.array_shape, self.num_dims)
+        # TODO: is this a mypy bug? phi[..., : self.num_dims] ** 2 is Any
+        # but phi[..., : self.num_dims] is Tensor
+        phi[..., self.num_dims :] = 1 + phi[..., : self.num_dims] ** 2  # type: ignore[misc]
         return phi
 
     def project_params(self, params: Tensor) -> Tensor:
@@ -65,7 +65,7 @@ class NormalArray(ExponentialFamilyArray):
         """
         params_project = params.clone()
         # TODO: redundant annotation is this a mypy bug? same as above
-        mu2: Tensor = params_project[..., 0 : self.num_dims] ** 2
+        mu2: Tensor = params_project[..., : self.num_dims] ** 2
         params_project[..., self.num_dims :] = torch.clamp(
             params_project[..., self.num_dims :], mu2 + self.min_var, mu2 + self.max_var
         )
@@ -86,7 +86,7 @@ class NormalArray(ExponentialFamilyArray):
         Returns:
             Tensor: Re-params.
         """
-        mu = params[..., 0 : self.num_dims]
+        mu = params[..., : self.num_dims]
         var = (
             torch.sigmoid(params[..., self.num_dims :]) * (self.max_var - self.min_var)
             + self.min_var
@@ -119,9 +119,9 @@ class NormalArray(ExponentialFamilyArray):
             Tensor: The expectation.
         """
         # TODO: is this a mypy bug?
-        var: Tensor = phi[..., 0 : self.num_dims] ** 2
+        var: Tensor = phi[..., : self.num_dims] ** 2
         var = phi[..., self.num_dims :] - var
-        theta1 = phi[..., 0 : self.num_dims] / var
+        theta1 = phi[..., : self.num_dims] / var
         # TODO: another mypy bug? 2*var is ok, but -1/() is Any
         theta2: Tensor = -1 / (2 * var)
         return torch.cat((theta1, theta2), dim=-1)
@@ -136,7 +136,7 @@ class NormalArray(ExponentialFamilyArray):
             Tensor: The normalizer.
         """
         # TODO: is this a mypy bug?
-        log_normalizer: Tensor = theta[..., 0 : self.num_dims] ** 2 / (  # type: ignore[misc]
+        log_normalizer: Tensor = theta[..., : self.num_dims] ** 2 / (  # type: ignore[misc]
             -4 * theta[..., self.num_dims :]
         ) - 0.5 * torch.log(-2 * theta[..., self.num_dims :])
         log_normalizer = torch.sum(log_normalizer, dim=-1)
@@ -159,18 +159,17 @@ class NormalArray(ExponentialFamilyArray):
     ) -> Tensor:
         # TODO: no_grad on decorator?
         with torch.no_grad():
-            mu = params[..., 0 : self.num_dims]
+            mu = params[..., : self.num_dims]
             # TODO: is this a mypy bug?
             std = torch.sqrt(params[..., self.num_dims :] - mu**2)  # type: ignore[misc]
-            shape = (num_samples,) + mu.shape
             # TODO: same dtype device idiom?
             samples = mu.unsqueeze(0) + std_correction * std.unsqueeze(0) * torch.randn(
-                shape, dtype=mu.dtype, device=mu.device
+                num_samples, *mu.shape, dtype=mu.dtype, device=mu.device
             )
             return _shift_last_axis_to(samples, 2)
 
     # TODO: do we allow explicit any?
     def _argmax(self, params: Tensor, **_: Any) -> Tensor:  # type: ignore[misc]
         with torch.no_grad():
-            mu = params[..., 0 : self.num_dims]
+            mu = params[..., : self.num_dims]
             return _shift_last_axis_to(mu, 1)

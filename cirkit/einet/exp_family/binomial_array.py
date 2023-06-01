@@ -114,7 +114,7 @@ class BinomialArray(ExponentialFamilyArray):
             - torch.lgamma(self.n + 1 - x)  # type: ignore[misc]
         )
         if len(x.shape) == 3:
-            log_h = log_h.sum(-1)
+            log_h = log_h.sum(dim=-1)
         return log_h
 
     def _sample(  # type: ignore[misc]
@@ -129,14 +129,12 @@ class BinomialArray(ExponentialFamilyArray):
         with torch.no_grad():
             params = params / self.n  # pylint: disable=consider-using-augmented-assign
             if memory_efficient_binomial_sampling:
-                samples = torch.zeros(
-                    (num_samples,) + params.shape, dtype=dtype, device=params.device
-                )
+                samples = torch.zeros(num_samples, *params.shape, dtype=dtype, device=params.device)
                 for __ in range(self.n):
-                    rand = torch.rand((num_samples,) + params.shape, device=params.device)
+                    rand = torch.rand(num_samples, *params.shape, device=params.device)
                     samples += (rand < params).to(dtype)
             else:
-                rand = torch.rand((num_samples,) + params.shape + (self.n,), device=params.device)
+                rand = torch.rand(num_samples, *params.shape, self.n, device=params.device)
                 samples = torch.sum(rand < params.unsqueeze(-1), dim=-1).to(dtype)
             return _shift_last_axis_to(samples, 2)
 

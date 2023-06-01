@@ -288,7 +288,7 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         if len(log_h.shape) > 0:
             # reshape for broadcasting
             # TODO: this line is definitely not written in a good way
-            log_h = log_h.reshape(log_h.shape[0:2] + (1,) * len(self.array_shape))
+            log_h = log_h.reshape(log_h.shape[:2] + (1,) * len(self.array_shape))
 
         # compute the exponential family tensor
         # (batch_size, self.num_var, *self.array_shape)
@@ -419,7 +419,7 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
             # weighted_stats = (p.unsqueeze(-1) * self.suff_stats).sum(0)
             # antonio_mari --> correction
             weighted_stats = torch.einsum("bxod,bxs->xods", p, self.suff_stats)
-            p = p.sum(0)
+            p = p.sum(dim=0)
 
             if self._p_acc is None:
                 self._p_acc = torch.zeros_like(p)
