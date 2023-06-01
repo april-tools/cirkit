@@ -80,6 +80,11 @@ add_ignore = "D100,D104"
 [tool.pylint.main]
 jobs = 0
 py-version = "3.8"
+evaluation = """
+  10 - 10 * min(
+    1, fatal + (5 * error + warning + refactor + convention + 0.1 * info) / statement
+  )
+"""  # take into account `info`
 load-plugins = [
   "pylint.extensions.bad_builtin",
   "pylint.extensions.broad_try_clause",
@@ -109,6 +114,14 @@ load-plugins = [
   "pylint.extensions.while_used"
 ]
 [tool.pylint."messages control"]
+enable= [
+  "bad-inline-option",
+  "useless-suppression",
+  "deprecated-pragma",
+  "use-symbolic-message-instead",
+  "consider-using-augmented-assign",
+  # "prefer-typing-namedtuple"  # to be updated in the future pylint
+]
 disable = [
   "missing-module-docstring",
   "no-member",
