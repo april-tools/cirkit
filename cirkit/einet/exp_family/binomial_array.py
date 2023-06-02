@@ -43,7 +43,7 @@ class BinomialArray(ExponentialFamilyArray):
         Returns:
             Tensor: Projected params.
         """
-        return torch.clamp(params, 0.0, self.n)
+        return torch.clamp(params, 0, self.n)
 
     def reparam_function(self, params: Tensor) -> Tensor:
         """Do reparam.
@@ -143,5 +143,5 @@ class BinomialArray(ExponentialFamilyArray):
     ) -> Tensor:
         with torch.no_grad():
             params = params / self.n  # pylint: disable=consider-using-augmented-assign
-            mode = torch.clamp(torch.floor((self.n + 1) * params), 0.0, self.n).to(dtype)
+            mode = torch.clamp(torch.floor((self.n + 1) * params), 0, self.n).to(dtype)
             return _shift_last_axis_to(mode, 1)

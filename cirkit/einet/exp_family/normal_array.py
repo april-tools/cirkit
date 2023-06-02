@@ -33,7 +33,7 @@ class NormalArray(ExponentialFamilyArray):
             num_dims (int): Number of dims.
             array_shape (Sequence[int]): Shape of array.
             min_var (float, optional): Min var. Defaults to 0.0001.
-            max_var (float, optional): Max var. Defaults to 10..
+            max_var (float, optional): Max var. Defaults to 10.0.
             use_em (bool, optional): Whether to use EM. Defaults to True.
         """
         super().__init__(num_var, num_dims, array_shape, num_stats=2 * num_dims, use_em=use_em)

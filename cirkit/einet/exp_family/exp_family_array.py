@@ -342,7 +342,7 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
                 self.marginalization_mask = torch.ones(
                     self.num_var, dtype=self.ll.dtype, device=self.ll.device
                 )
-                self.marginalization_mask[self.marginalization_idx] = 0.0
+                self.marginalization_mask[self.marginalization_idx] = 0
                 # TODO: find another way to reshape
                 shape = (1, self.num_var) + (1,) * len(self.array_shape)
                 self.marginalization_mask = self.marginalization_mask.reshape(shape)
