@@ -79,7 +79,7 @@ class SumLayer(Layer):
         use_evidence: bool = False,
         mode: Literal["sample", "argmax"] = "sample",
         **kwargs: Any,
-    ) -> Tensor:
+    ) -> Any:
         """Is a helper routine to implement EiNet backtracking, for sampling or MPE approximation.
 
         dist_idx, node_idx, sample_idx are lists of indices, all of the same length.

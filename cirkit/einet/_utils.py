@@ -43,12 +43,3 @@ def save_image_stack(samples, num_rows, num_columns, filename, margin=5, margin_
     if not os.path.exists(os.path.dirname(filename)):
         os.makedirs(os.path.dirname(filename))
     img.save(filename)
-
-
-def sample_matrix_categorical(p):
-    """Sample many Categorical distributions represented as rows in a matrix."""
-    with torch.no_grad():
-        cp = torch.cumsum(p[:, 0:-1], -1)
-        rand = torch.rand((cp.shape[0], 1), device=cp.device)
-        rand_idx = torch.sum(rand > cp, -1).long()
-        return rand_idx

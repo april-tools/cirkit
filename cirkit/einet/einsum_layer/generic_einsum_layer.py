@@ -7,8 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from cirkit.region_graph import PartitionNode, RegionGraph
-from cirkit.region_graph.rg_node import RegionNode
+from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
 from ..layer import Layer
 from ..sum_layer import SumLayer
