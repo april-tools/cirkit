@@ -1,6 +1,6 @@
-import functools
+import math
 from abc import abstractmethod
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, List, Literal, Optional, Tuple
 
 from torch import Tensor
 from torch.nn import functional as F
@@ -28,6 +28,9 @@ class SumLayer(Layer):
         # """
         super().__init__()
         self.frozen = False
+
+        # TODO: this is used but originally not assigned
+        self.normalization_dims: Tuple[int, ...] = ()
 
     def freeze(self, freeze: bool = True) -> None:
         """Freeze all params from bw.
@@ -70,11 +73,12 @@ class SumLayer(Layer):
         """
 
     @abstractmethod
-    def _backtrack(
+    # pylint: disable=too-many-arguments
+    def _backtrack(  # type: ignore[misc]
         self,
-        dist_idx,  # TODO: types
-        node_idx,
-        sample_idx,
+        dist_idx: List[int],
+        node_idx: List[int],
+        sample_idx: List[int],
         params: Tensor,
         use_evidence: bool = False,
         mode: Literal["sample", "argmax"] = "sample",
@@ -98,7 +102,8 @@ class SumLayer(Layer):
         :return: depends on particular implementation.
         """
 
-    def forward(self, x: Optional[Tensor] = None) -> Tensor:
+    # TODO: the forward() return type is a mess
+    def forward(self, x: Optional[Tensor] = None) -> Tensor:  # type: ignore[override]
         """Evaluate this SumLayer.
 
         :param x: unused
@@ -114,18 +119,19 @@ class SumLayer(Layer):
         #     reparam = self.reparam(self.params)
         #     params = reparam
         # params = self.params
-        self._forward()
+        return self._forward()
 
     @abstractmethod
-    def backtrack(
+    # pylint: disable-next=arguments-differ
+    def backtrack(  # type: ignore[misc]
         self,
-        dist_idx,
-        node_idx,
-        sample_idx,
-        *_: Any,
+        dist_idx: List[int],
+        node_idx: List[int],
+        sample_idx: List[int],
+        *args: Any,
         use_evidence: bool = False,
         mode: Literal["sample", "argmax"] = "sample",
-        **kwargs,
+        **kwargs: Any,
     ) -> Tensor:
         """Is helper routine for backtracking in EiNets, see _sample(...) for details.
 
@@ -135,6 +141,8 @@ class SumLayer(Layer):
             sample_idx (_type_): Some indices.
             use_evidence (bool, optional): Whether to use evidence. Defaults to False.
             mode (Literal["sample", "argmax"], optional): The mode.. Defaults to "sample".
+            args: Any.
+            kwargs: Any.
 
         Returns:
             Tensor: The return.
@@ -164,7 +172,8 @@ class SumLayer(Layer):
         """
         raise NotImplementedError
 
-    def reparam_function(self) -> Callable:
+    # TODO: I don't what's expected to return from reparam_function because it's inconsistent
+    def reparam_function(self) -> Callable:  # type: ignore[override,type-arg]
         """Reparametrize function, transforming unconstrained parameters \
             into valid sum-weight (non-negative, normalized).
 
@@ -172,7 +181,7 @@ class SumLayer(Layer):
             Callable: The function.
         """
 
-        def reparam(params_in: Tensor) -> Tensor:
+        def _reparam(params_in: Tensor) -> Tensor:
             other_dims = tuple(
                 i for i in range(len(params_in.shape)) if i not in self.normalization_dims
             )
@@ -182,9 +191,7 @@ class SumLayer(Layer):
                 c for i in range(len(permutation)) for c, j in enumerate(permutation) if j == i
             )
 
-            numel = functools.reduce(
-                lambda x, y: x * y, [params_in.shape[i] for i in self.normalization_dims]
-            )
+            numel = math.prod(params_in.shape[i] for i in self.normalization_dims)
 
             other_shape = tuple(params_in.shape[i] for i in other_dims)
             params_in = params_in.permute(permutation)
@@ -194,7 +201,7 @@ class SumLayer(Layer):
             out = out.reshape(orig_shape).permute(unpermutation)
             return out
 
-        return reparam
+        return _reparam
 
     # TODO: deprecated
     def project_params(self, params: Tensor) -> None:

@@ -18,10 +18,9 @@ class Layer(nn.Module, ABC):
         self._use_em = use_em
         self.prob: Optional[Tensor] = None  # TODO: why None?
 
-        # TODO: type and init for the following?
         self._online_em_counter = 0
         self.online_em_frequency = 0
-        self.online_em_stepsize = 0
+        self.online_em_stepsize: float = 0  # TODO: check this. really need? how to better type?
 
     @abstractmethod
     def default_initializer(self) -> Tensor:
@@ -71,7 +70,7 @@ class Layer(nn.Module, ABC):
         """
 
     @abstractmethod
-    def backtrack(self, *args: Any, **kwargs: Any) -> Tensor:
+    def backtrack(self, *args: Any, **kwargs: Any) -> Tensor:  # type: ignore[misc]
         """Define routines for backtracking in EiNets, for sampling and MPE approximation.
 
         :param args:
@@ -115,7 +114,11 @@ class Layer(nn.Module, ABC):
 
     @abstractmethod
     def project_params(self, params: Tensor) -> None:
-        """Project paramters onto feasible set."""
+        """Project paramters onto feasible set.
+
+        Args:
+            params (Tensor): The params.
+        """
 
     @abstractmethod
     def reparam_function(self) -> Tensor:
