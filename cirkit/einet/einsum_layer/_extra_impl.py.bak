@@ -14,6 +14,17 @@ from cirkit.einet._utils import sample_matrix_categorical
 
 set_backend('pytorch')
 
+# We need to disambiguate
+# a) Linear Layer / Mixture Layer / Non Negative Linear Layer
+# b) Element-wise product Layer
+# c) Cross-product layer
+# d) Tucker Layer
+# e) KCP layer/kCP layer
+# f) f-Tucker layer
+# g) f-KCP Layer/f-kCP layer
+# f-: folded
+# k-/K-: rank-k
+
 
 class CPSharedEinsumLayer(GenericEinsumLayer): # TODO edit this because of numerical stability
     def __init__(self, graph, products, layers, k: int, prod_exp=False, r=1):
@@ -76,6 +87,7 @@ class CPSharedEinsumLayer(GenericEinsumLayer): # TODO edit this because of numer
         return log_prob
 
 
+# Hidden CP Tree (from HCLT and CP)
 class HCPTEinsumLayer(GenericEinsumLayer):
     def __init__(self, graph, products, layers, k: int, prod_exp=False):
         super(HCPTEinsumLayer, self).__init__(graph, products, layers, prod_exp, k=k)
@@ -176,6 +188,7 @@ class HCPTSharedEinsumLayer(GenericEinsumLayer):
         return log_prob
 
 
+# Low rank
 class HCPTLoLoEinsumLayer(GenericEinsumLayer):
     def __init__(self, graph, products, layers, k: int, prod_exp=False, r=1):
         self.r = r
@@ -306,6 +319,7 @@ class HCPTLoLoSharedEinsumLayer(GenericEinsumLayer): # TODO: same thing for nume
 #        self.r = r
 
 
+# Also called Tucker
 class RescalEinsumLayer(GenericEinsumLayer):
     def __init__(self, graph, products, layers, k: int):
         super(RescalEinsumLayer, self).__init__(graph, products, layers, prod_exp=False, k=k)
