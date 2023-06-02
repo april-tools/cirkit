@@ -28,7 +28,7 @@ class _EiNetAddress:
     """
 
     # TODO: this is for einet. why in RG?
-    layer: int = 0  # TODO: correct type? initial 0? -1? None?
+    layer: object = 0  # TODO: this is of course not good
     idx: int = 0
     replica_idx: int = 0
 
@@ -71,7 +71,7 @@ class RegionNode(RGNode):  # pylint: disable=too-few-public-methods
     def __init__(self, scope: Iterable[int]) -> None:
         """Is a docstring."""  # TODO: how to avoid rewrite docstring?
         super().__init__(scope)
-        self.num_dist = None  # TODO: what type? for what?
+        self.num_dist: int = 0  # TODO: number of distributions???
         self.einet_address = _EiNetAddress()
 
     def __lt__(self, other: RGNode) -> bool:

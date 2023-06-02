@@ -258,7 +258,7 @@ class PoonDomingosStructure(RegionGraph):
                 axes
             ), "Each delta must either be list of length len(axes), or numeric."
             for deltaij in deltai:
-                assert deltaij >= 1.0, "Any delta must be >= 1.0."
+                assert deltaij >= 1, "Any delta must be >= 1."
 
         shape_to_cut = tuple(shp for ax, shp in enumerate(shape) if ax in axes)
 
