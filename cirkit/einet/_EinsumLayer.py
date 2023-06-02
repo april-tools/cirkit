@@ -234,62 +234,6 @@ class EinsumMixingLayer(SumLayer):
         return dist_idx_out, node_idx_out, layers_out
 
 
-class CPEinsumLayer(GenericEinsumLayer):
-    def __init__(self, graph, products, layers, k: int, prod_exp=False, r=1):
-        self.r = r
-        super(CPEinsumLayer, self).__init__(graph, products, layers, prod_exp, k=k)
-
-    def build_params(self) -> (Dict[str, Union[None, torch.nn.Parameter]], Dict[str, Tuple[int, ...]]):
-        """
-        Create params dict for the layer (the parameters are uninitialized)
-        :return: dict {params_name, params}
-        """
-        params_dict = {"cp_a": None, "cp_b": None, "cp_c": None}
-        shapes_dict = {"cp_a": (self.num_input_dist, self.r, len(self.products)),
-                       "cp_b": (self.num_input_dist, self.r, len(self.products)),
-                       "cp_c": (self.num_sums, self.r, len(self.products))}
-        return params_dict, shapes_dict
-
-    @property
-    def clamp_value(self) -> float:
-        par_tensor = list(self.params_dict.items())[0][1]
-        smallest_normal = torch.finfo(par_tensor.dtype).smallest_normal
-
-        if self.prod_exp:
-            return torch.pow(torch.Tensor([smallest_normal]), 1/3).item()
-        else:
-            return torch.sqrt(torch.Tensor([smallest_normal])).item()
-
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
-        left_max = torch.max(self.left_child_log_prob, 1, keepdim=True)[0]
-        left_prob = torch.exp(self.left_child_log_prob - left_max)
-        right_max = torch.max(self.right_child_log_prob, 1, keepdim=True)[0]
-        right_prob = torch.exp(self.right_child_log_prob - right_max)
-
-        pa = self.params_dict["cp_a"]
-        pb = self.params_dict["cp_b"]
-        pc = self.params_dict["cp_c"]
-
-        left_hidden = torch.einsum('bip,irp->brp', left_prob, pa)
-        right_hidden = torch.einsum('bjp,jrp->brp', right_prob, pb)
-
-        if self.prod_exp:
-            hidden = left_hidden * right_hidden
-            prob = torch.einsum('brp,orp->bop', hidden, pc)
-            log_prob = torch.log(prob) + left_max + right_max
-        else:
-            log_left_hidden = torch.log(left_hidden) + left_max
-            log_right_hidden = torch.log(right_hidden) + right_max
-            log_hidden = log_left_hidden + log_right_hidden
-
-            hidden_max = torch.max(log_hidden, 1, keepdim=True)[0]
-            hidden = torch.exp(log_hidden - hidden_max)
-            prob = torch.einsum('brp,orp->bop', hidden, pc)
-            log_prob = torch.log(prob) + hidden_max
-
-        return log_prob
-
-
 class CPSharedEinsumLayer(GenericEinsumLayer): # TODO edit this because of numerical stability
     def __init__(self, graph, products, layers, k: int, prod_exp=False, r=1):
         self.r = r
