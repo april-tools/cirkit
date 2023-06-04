@@ -49,7 +49,7 @@ class RGNode:
         self.scope = set(scope)
 
         node_id = next(RGNode._id_counter)
-        self._sort_key = (tuple(self.scope), node_id)
+        self._sort_key = (tuple(sorted(list(self.scope))), node_id)
 
     def __repr__(self) -> str:
         """Generate the `repr` string of the node."""
