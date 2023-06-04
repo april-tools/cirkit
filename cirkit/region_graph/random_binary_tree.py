@@ -5,9 +5,9 @@ import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
+from ..utils.random import RandomState, check_random_state
 from .region_graph import RegionGraph
 from .rg_node import PartitionNode, RegionNode
-from ..utils.random import RandomState, check_random_state
 
 
 def _partition_node_randomly(
@@ -15,7 +15,7 @@ def _partition_node_randomly(
     node: RegionNode,
     random_state: np.random.RandomState,
     num_parts: Optional[int] = None,
-    proportions: Optional[Sequence[float]] = None
+    proportions: Optional[Sequence[float]] = None,
 ) -> List[RegionNode]:
     """Call partition_on_node with a random partition -- used for random binary trees (RAT-SPNs).
 
