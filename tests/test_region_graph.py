@@ -1,4 +1,5 @@
 # pylint: disable=missing-function-docstring
+# type: ignore
 
 import itertools
 import tempfile
@@ -15,11 +16,11 @@ from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 
 def check_smoothness_decomposability(rg: RegionGraph):
     for r in rg.inner_region_nodes:
-        iscopes: Set[Tuple] = set(tuple(n.scope) for n in rg.get_node_input(r))
+        iscopes: Set[Tuple[int]] = set(tuple(n.scope) for n in rg.get_node_input(r))
         assert len(iscopes) == 1, "Smoothness is not satisfied"
         assert set(list(iscopes)[0]) == r.scope, "Inconsistent scopes"
     for p in rg.partition_nodes:
-        iscopes: List[Set] = list(n.scope for n in rg.get_node_input(p))
+        iscopes: List[Set[int]] = list(n.scope for n in rg.get_node_input(p))
         for i, j in itertools.combinations(range(len(iscopes)), 2):
             assert not (iscopes[i] & iscopes[j]), "Decomposability is not satisfied"
             assert iscopes[i].issubset(p.scope), "Inconsistent scopes"
@@ -63,10 +64,10 @@ def check_equivalent_region_graphs(rg1: RegionGraph, rg2: RegionGraph):
         assert (
             n.__class__ == m.__class__
         ), "Region graphs have nodes with different types at the same locations"
-        assert (
-            n.scope == m.scope
-        ), f"Region graphs have nodes with different scopes at the same locations:" \
-           f" {n.scope} and {m.scope}"
+        assert n.scope == m.scope, (
+            f"Region graphs have nodes with different scopes at the same locations:"
+            f" {n.scope} and {m.scope}"
+        )
 
 
 def check_region_graph_save_load(rg: RegionGraph):
@@ -116,10 +117,8 @@ def test_rg_quad_tree(size: Tuple[int, int], struct_decomp: bool):
 
 @pytest.mark.parametrize(
     "shape,delta",
-    list(itertools.product(
-        [(1, 1), (3, 3), (8, 8)],
-        [1.0, [1.0, 2.0], [[1.0, 3.0], [2.0, 4.0]]]
-    )))
+    list(itertools.product([(1, 1), (3, 3), (8, 8)], [1.0, [1.0, 2.0], [[1.0, 3.0], [2.0, 4.0]]])),
+)
 def test_rg_poon_domingos(
     shape: Tuple[int, int], delta: Union[float, List[float], List[List[float]]]
 ):
