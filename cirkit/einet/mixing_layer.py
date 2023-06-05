@@ -246,3 +246,12 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
             layers_out = [self.layers[0]] * len(node_idx)
 
         return dist_idx, node_idx_out, layers_out
+
+    # pylint: disable=missing-param-doc
+    def backtrack(self, *_: Any, **__: Any) -> Tensor:  # type: ignore[misc]
+        """Do nothing.
+
+        Returns:
+            Tensor: Nothing.
+        """
+        return Tensor()

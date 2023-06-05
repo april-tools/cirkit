@@ -241,7 +241,7 @@ class RegionGraph:
                 for partition in partition_nodes
                 if partition not in visited_nodes
                 # pylint: disable-next=not-an-iterable
-                and all(region in visited_nodes for region in self.get_node_output(partition))
+                and all(region in visited_nodes for region in self.get_node_input(partition))
             ]
             partition_layer = sorted(partition_layer)
             layers.append(partition_layer)
@@ -252,7 +252,7 @@ class RegionGraph:
                 for region in inner_region_nodes
                 if region not in visited_nodes
                 # pylint: disable-next=not-an-iterable
-                and all(partition in visited_nodes for partition in self.get_node_output(region))
+                and all(partition in visited_nodes for partition in self.get_node_input(region))
             ]
             region_layer = sorted(region_layer)
             layers.append(region_layer)
@@ -284,7 +284,7 @@ class RegionGraph:
                 for region in inner_region_nodes
                 if region not in visited_nodes
                 # pylint: disable-next=not-an-iterable
-                and all(partition in visited_nodes for partition in self.get_node_input(region))
+                and all(partition in visited_nodes for partition in self.get_node_output(region))
             ]
             region_layer = sorted(region_layer)
             layers_inv.append(region_layer)
@@ -295,7 +295,7 @@ class RegionGraph:
                 for partition in partition_nodes
                 if partition not in visited_nodes
                 # pylint: disable-next=not-an-iterable
-                and all(region in visited_nodes for region in self.get_node_input(partition))
+                and all(region in visited_nodes for region in self.get_node_output(partition))
             ]
             partition_layer = sorted(partition_layer)
             layers_inv.append(partition_layer)

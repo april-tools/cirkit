@@ -35,7 +35,6 @@ class _Args:
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
-        rg_structure: str,
         layer_type: Type[GenericEinsumLayer],
         num_var: int,
         num_sums: int,
@@ -50,7 +49,6 @@ class _Args:
         """Init class.
 
         Args:
-            rg_structure (str): I don't know.
             layer_type (Type[GenericEinsumLayer]): I don't know.
             num_var (int): I don't know.
             num_sums (int): I don't know.
@@ -71,7 +69,6 @@ class _Args:
         self.exponential_family = exponential_family
         self.exponential_family_args = exponential_family_args  # type: ignore[misc]
         self.prod_exp = prod_exp
-        self.rg_structure = rg_structure
         self.pd_num_pieces = pd_num_pieces
         self.shrink = shrink
         self.layer_type = layer_type
@@ -153,9 +150,7 @@ class LowRankEiNet(nn.Module):
                 # TODO: return list?
                 if multi_sums := [n for n in layer if len(list(graph.get_node_input(n))) > 1]:
                     einet_layers.append(
-                        # TODO: abstract method "backtrack", "get_shape_dict"
-                        # pylint: disable-next=abstract-class-instantiated
-                        EinsumMixingLayer(  # type: ignore[abstract]
+                        EinsumMixingLayer(
                             graph, multi_sums, cast(GenericEinsumLayer, einet_layers[-1])
                         )  # TODO: good type?
                     )
@@ -165,10 +160,10 @@ class LowRankEiNet(nn.Module):
                 layer = cast(List[PartitionNode], layer)  # pylint: disable=redefined-loop-name
                 num_sums = set(n.num_dist for p in layer for n in graph.get_node_output(p))
                 assert len(num_sums) == 1, f"For internal {c} there are {len(num_sums)} nums sums"
-                num_sum = num_sums.pop()
+                # num_sum = num_sums.pop()
 
                 # TODO: this can be a wrong layer, refer to back up code
-                assert num_sum > 1
+                # assert num_sum > 1
                 einet_layers.append(
                     args.layer_type(
                         self.graph,
@@ -195,8 +190,7 @@ class LowRankEiNet(nn.Module):
             torch.device: the device.
         """
         # TODO: ModuleList is not generic type
-        # TODO: but -1 is not necessary a mixing layer
-        return cast(EinsumMixingLayer, self.einet_layers[-1]).params.device
+        return cast(FactorizedInputLayer, self.einet_layers[0]).ef_array.params.device
 
     def initialize(
         self,
@@ -256,7 +250,7 @@ class LowRankEiNet(nn.Module):
             Tensor: The output.
         """
         old_marg_idx = self.get_marginalization_idx()
-        assert old_marg_idx is not None  # TODO: then why return None?
+        # assert old_marg_idx is not None  # TODO: then why return None?
         self.set_marginalization_idx(torch.arange(self.args.num_var))
 
         if x is not None:
@@ -264,14 +258,24 @@ class LowRankEiNet(nn.Module):
         else:
             # TODO: check this, size=(1, self.args.num_var, self.args.num_dims) is appropriate
             # TODO: above is original, but size is not stated?
-            fake_data = torch.ones(
-                (1, self.args.num_var),  # TODO: use tuple here? or everywhere?
-                device=cast(EinsumMixingLayer, self.einet_layers[-1]).params.device,
-            )  # TODO: cast might not be safe
+            # TODO: use tuple as shape because of line folding? or everywhere?
+            fake_data = torch.ones((1, self.args.num_var), device=self.get_device())
             z = self.forward(fake_data)  # TODO: why call forward but not __call__
 
-        self.set_marginalization_idx(old_marg_idx)
+        # TODO: can indeed be None
+        self.set_marginalization_idx(old_marg_idx)  # type: ignore[arg-type]
         return z
+
+    def __call__(self, x: Tensor) -> Tensor:
+        """Invoke the forward.
+
+        Args:
+            x (Tensor): The input.
+
+        Returns:
+            Tensor: The output.
+        """
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     # TODO: originally there's a plot_dict. REMOVED assuming not ploting.
     def forward(self, x: Tensor) -> Tensor:
