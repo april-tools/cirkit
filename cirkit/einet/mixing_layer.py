@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from cirkit.einet.einsum_layer import GenericEinsumLayer
 from cirkit.region_graph import RegionGraph, RegionNode
@@ -134,7 +133,6 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         ############## END
 
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
-        self.softmax: bool = False  # TODO: originally None, but why?
 
     def num_of_param(self) -> int:
         """Return the total number of parameters of the layer.
@@ -168,9 +166,6 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
     def initialize(self) -> None:
         """Initialize the parameters for this SumLayer."""
         # TODO: is it good to do so? or use value assign, e.g. copy_?
-        if self.softmax:
-            # params = torch.rand(self.params_shape)
-            raise NotImplementedError
 
         # TODO: we should extract this as a shared util
         params = 0.01 + 0.98 * torch.rand(self.params_shape)
@@ -181,8 +176,7 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
             if self.params_mask is not None:
                 params *= self.params_mask
 
-            if not self.softmax:
-                params /= params.sum(self.normalization_dims, keepdim=True)
+            params /= params.sum(self.normalization_dims, keepdim=True)
 
         # assert torch.all(params >= 0)
         self.params = torch.nn.Parameter(params)
@@ -209,12 +203,10 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         max_p: Tensor = torch.max(self.child_log_prob, 3, keepdim=True)[0]
         prob = torch.exp(self.child_log_prob - max_p)
 
-        params = F.softmax(self.params, -1) if self.softmax else self.params
-
-        # TODO: use a myl or gather?
+        # TODO: use a mul or gather?
         assert (self.params * self.params_mask == self.params).all()
 
-        output = torch.einsum("bonc,onc->bon", prob, params)
+        output = torch.einsum("bonc,onc->bon", prob, self.params)
         self.prob = torch.log(output) + max_p[:, :, :, 0]
 
         assert not torch.isnan(self.prob).any()
