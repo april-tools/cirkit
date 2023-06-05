@@ -1,30 +1,42 @@
 import itertools
+from typing import Dict, List, Type, Union
 
-import numpy as np
 import pytest
 import torch
+from torch import Tensor
 
 from cirkit.einet.einet import LowRankEiNet, _Args
 from cirkit.einet.einsum_layer.cp_einsum_layer import CPEinsumLayer
 from cirkit.einet.exp_family import CategoricalArray
+from cirkit.region_graph import RegionGraph
+from cirkit.region_graph.poon_domingos_structure import PoonDomingosStructure
 from cirkit.region_graph.quad_tree import QuadTree
 from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 
 
-@pytest.mark.parametrize("rg", ["random_rg", "quad_tree_stdec"], indirect=True)
-def test_einet_partition_function(rg: str) -> None:
-    """Tests the creation of an einet."""
+@pytest.mark.parametrize(
+    "rg_cls,kwargs",
+    [
+        (PoonDomingosStructure, {"shape": [4, 4], "delta": 2}),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}),
+        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}),
+    ],
+)
+def test_einet_partition_function(
+    rg_cls: Type[RegionGraph], kwargs: Dict[str, Union[int, bool, List[int]]]
+) -> None:
+    """Tests the creation and partition of an einet.
+
+    Args:
+        rg_cls (Type[RegionGraph]): The class of RG to test.
+        kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
+    """
+    # TODO: type of kwargs should be refined
     device = "cpu"
 
-    if rg == "random_rg":
-        graph = RandomBinaryTree(num_vars=16, depth=3, num_repetitions=2)
-    elif rg == "quad_tree_stdec":
-        graph = QuadTree(4, 4, struct_decomp=True)
-    else:
-        raise AssertionError("Unknown rg")
+    graph = rg_cls(**kwargs)
 
     args = _Args(
-        rg_structure="quad_tree_stdec",
         layer_type=CPEinsumLayer,
         exponential_family=CategoricalArray,
         exponential_family_args={"k": 2},  # type: ignore[misc]
@@ -44,10 +56,10 @@ def test_einet_partition_function(rg: str) -> None:
     all_lists = list(itertools.product(possible_values, repeat=16))
 
     # compute outputs
-    out = einet(torch.tensor(np.array(all_lists)))
+    out = einet(torch.tensor(all_lists))
 
     # log sum exp on outputs to compute their sum
-    out_max = torch.max(out, dim=0, keepdim=True)[0]
+    out_max: Tensor = torch.max(out, dim=0, keepdim=True)[0]  # TODO: max typing issue in pytorch
     probs = torch.exp(out - out_max)
     total_prob = probs.sum(0)
     log_prob = torch.log(total_prob) + out_max
