@@ -35,7 +35,6 @@ class _Args:
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
-        rg_structure: str,
         layer_type: Type[GenericEinsumLayer],
         num_var: int,
         num_sums: int,
@@ -50,7 +49,6 @@ class _Args:
         """Init class.
 
         Args:
-            rg_structure (str): I don't know.
             layer_type (Type[GenericEinsumLayer]): I don't know.
             num_var (int): I don't know.
             num_sums (int): I don't know.
@@ -71,7 +69,6 @@ class _Args:
         self.exponential_family = exponential_family
         self.exponential_family_args = exponential_family_args  # type: ignore[misc]
         self.prod_exp = prod_exp
-        self.rg_structure = rg_structure
         self.pd_num_pieces = pd_num_pieces
         self.shrink = shrink
         self.layer_type = layer_type
@@ -193,7 +190,6 @@ class LowRankEiNet(nn.Module):
             torch.device: the device.
         """
         # TODO: ModuleList is not generic type
-        # TODO: but -1 is not necessary a mixing layer
         return cast(FactorizedInputLayer, self.einet_layers[0]).ef_array.params.device
 
     def initialize(
@@ -262,14 +258,24 @@ class LowRankEiNet(nn.Module):
         else:
             # TODO: check this, size=(1, self.args.num_var, self.args.num_dims) is appropriate
             # TODO: above is original, but size is not stated?
-            fake_data = torch.ones(
-                (1, self.args.num_var),  # TODO: use tuple here? or everywhere?
-                device=self.get_device(),
-            )  # TODO: cast might not be safe
+            # TODO: use tuple as shape because of line folding? or everywhere?
+            fake_data = torch.ones((1, self.args.num_var), device=self.get_device())
             z = self.forward(fake_data)  # TODO: why call forward but not __call__
 
-        self.set_marginalization_idx(old_marg_idx)
+        # TODO: can indeed be None
+        self.set_marginalization_idx(old_marg_idx)  # type: ignore[arg-type]
         return z
+
+    def __call__(self, x: Tensor) -> Tensor:
+        """Invoke the forward.
+
+        Args:
+            x (Tensor): The input.
+
+        Returns:
+            Tensor: The output.
+        """
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     # TODO: originally there's a plot_dict. REMOVED assuming not ploting.
     def forward(self, x: Tensor) -> Tensor:

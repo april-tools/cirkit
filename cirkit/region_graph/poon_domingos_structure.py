@@ -249,9 +249,12 @@ class PoonDomingosStructure(RegionGraph):
         if max_split_depth is None:
             # TODO: is is correct: depth will not be larger than this
             max_split_depth = sum(shape) + 1
-        if isinstance(delta, float):
+        if isinstance(delta, (float, int)):
             delta = [delta]
-        delta = [[deltai] * len(axes) if isinstance(deltai, float) else deltai for deltai in delta]
+        # TODO: how to better handle possible int?
+        delta = [
+            [deltai] * len(axes) if isinstance(deltai, (float, int)) else deltai for deltai in delta
+        ]
 
         for deltai in delta:
             assert len(deltai) == len(
