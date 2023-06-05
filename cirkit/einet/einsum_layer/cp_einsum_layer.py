@@ -32,8 +32,9 @@ class CPEinsumLayer(GenericEinsumLayer):
             prod_exp (bool): I don't know.
             r (int, optional): The rank? Maybe. Defaults to 1.
         """
-        super().__init__(graph, products, layers, prod_exp, k)
+        # TODO: init order?
         self.r = r
+        super().__init__(graph, products, layers, prod_exp, k)
 
     def build_params(self) -> Tuple[Dict[str, nn.Parameter], Dict[str, Tuple[int, ...]]]:
         """Create params dict for the layer (the parameters are uninitialized).

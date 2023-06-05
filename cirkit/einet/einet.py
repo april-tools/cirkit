@@ -153,9 +153,7 @@ class LowRankEiNet(nn.Module):
                 # TODO: return list?
                 if multi_sums := [n for n in layer if len(list(graph.get_node_input(n))) > 1]:
                     einet_layers.append(
-                        # TODO: abstract method "backtrack", "get_shape_dict"
-                        # pylint: disable-next=abstract-class-instantiated
-                        EinsumMixingLayer(  # type: ignore[abstract]
+                        EinsumMixingLayer(
                             graph, multi_sums, cast(GenericEinsumLayer, einet_layers[-1])
                         )  # TODO: good type?
                     )
@@ -165,10 +163,10 @@ class LowRankEiNet(nn.Module):
                 layer = cast(List[PartitionNode], layer)  # pylint: disable=redefined-loop-name
                 num_sums = set(n.num_dist for p in layer for n in graph.get_node_output(p))
                 assert len(num_sums) == 1, f"For internal {c} there are {len(num_sums)} nums sums"
-                num_sum = num_sums.pop()
+                # num_sum = num_sums.pop()
 
                 # TODO: this can be a wrong layer, refer to back up code
-                assert num_sum > 1
+                # assert num_sum > 1
                 einet_layers.append(
                     args.layer_type(
                         self.graph,

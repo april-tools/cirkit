@@ -1,7 +1,7 @@
 import math
 from abc import abstractmethod
 from itertools import count
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -76,9 +76,9 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         )
         self.num_input_dist = num_input_dist.pop()
 
-        # TODO: this is related to get_node_input() signature
+        # TODO: what type get_node_input() should return
         assert all(
-            len(graph.get_node_input(p)) == 2 for p in self.products  # type: ignore[arg-type]
+            len(list(graph.get_node_input(p))) == 2 for p in self.products
         ), "Only 2-partitions are currently supported."
 
         # # # # # # # # #
@@ -325,3 +325,20 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
             log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
 
         self.prob = log_prob
+
+    # pylint: disable=missing-param-doc
+    def backtrack(self, *_: Any, **__: Any) -> Tensor:  # type: ignore[misc]
+        """Do nothing.
+
+        Returns:
+            Tensor: Nothing.
+        """
+        return Tensor()
+
+    def _backtrack(self, *_: Any, **__: Any) -> Tensor:  # type: ignore[misc]
+        """Do nothing.
+
+        Returns:
+            Tensor: Nothing.
+        """
+        return Tensor()
