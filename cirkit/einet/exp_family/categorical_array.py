@@ -19,9 +19,7 @@ def _one_hot(x: Tensor, k: int, dtype: torch.dtype = torch.float32) -> Tensor:
 class CategoricalArray(ExponentialFamilyArray):
     """Implementation of Categorical distribution."""
 
-    def __init__(  # pylint: disable=too-many-arguments
-        self, num_var: int, num_dims: int, array_shape: Sequence[int], k: int, use_em: bool = True
-    ):
+    def __init__(self, num_var: int, num_dims: int, array_shape: Sequence[int], k: int):
         """Init class.
 
         Args:
@@ -29,9 +27,8 @@ class CategoricalArray(ExponentialFamilyArray):
             num_dims (int): Number of dims.
             array_shape (Sequence[int]): Shape of array.
             k (int): k for category.
-            use_em (bool, optional): Whether to use EM. Defaults to True.
         """
-        super().__init__(num_var, num_dims, array_shape, num_stats=num_dims * k, use_em=use_em)
+        super().__init__(num_var, num_dims, array_shape, num_stats=num_dims * k)
         self.k = k
 
     def default_initializer(self) -> Tensor:

@@ -37,9 +37,6 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         own parameters. Here, num_var is the number \
         of random variables, i.e. the size of the set (boldface) X in the paper.
 
-    The boolean use_em indicates if we want to use the on-board EM algorithm \
-        (alternatives would be SGD, Adam,...).
-
     After the ExponentialFamilyArray has been generated, we need to initialize \
         it. There are several options for \
         initialization (see also method initialize(...) below):
@@ -61,10 +58,7 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
     Please see docstrings of these functions below, for further details.
     """
 
-    # pylint: disable-next=too-many-arguments
-    def __init__(
-        self, num_var: int, num_dims: int, array_shape: Sequence[int], num_stats: int, use_em: bool
-    ):
+    def __init__(self, num_var: int, num_dims: int, array_shape: Sequence[int], num_stats: int):
         """Init class.
 
         :param num_var: number of random variables (int)
@@ -73,7 +67,6 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
                             log-probability tensor will be of shape \
                                 (batch_size, num_var,) + array_shape
         :param num_stats: number of sufficient statistics of exponential family (int)
-        :param use_em: use internal EM algorithm? (bool)
         """
         super().__init__()  # TODO: multi-inherit init?
 
@@ -91,20 +84,14 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         self.marginalization_idx: Optional[Tensor] = None  # TODO: should this be Tensor?
         self.marginalization_mask: Optional[Tensor] = None
 
-        self._use_em = use_em
         # TODO: types of all `None`s?
         # TODO: why allow None but not directly init?
         self._p_acc: Optional[Tensor] = None
         self._stats_acc: Optional[Tensor] = None
-        self._online_em_frequency: Optional[int] = None
-        self._online_em_stepsize: Optional[float] = None
-        self._online_em_counter: int = 0
 
         # if em is switched off, we re-parametrize the expectation parameters
         # self.reparam holds the function object for this task
-        self.reparam = None
-        if not self._use_em:
-            self.reparam = self.reparam_function
+        self.reparam = self.reparam_function
 
     @abstractmethod
     def sufficient_statistics(self, x: Tensor) -> Tensor:
@@ -229,10 +216,7 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         if initializer == "default":
             # default initializer; when em is switched off, we reparametrize
             # and use Gaussian noise as init values.
-            if self._use_em:
-                self.params = nn.Parameter(self.default_initializer())
-            else:
-                self.params = nn.Parameter(torch.randn(self.params_shape))
+            self.params = nn.Parameter(torch.randn(self.params_shape))
         else:
             # provided initializer
             assert isinstance(initializer, Tensor)  # type: ignore[misc]  # TODO: dummy for str
@@ -270,20 +254,16 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         :return: log-densities of implemented exponential family (Tensor).
                  Will be of shape (batch_size, self.num_var, *self.array_shape)
         """
-        if self.reparam is None:
-            with torch.no_grad():
-                theta = self.expectation_to_natural(self.params)
-        else:
-            # TODO: no_grad?
-            phi = self.reparam(self.params)
+        # TODO: no_grad? the deleted self.reparam==None branch have no_grad
+        phi = self.reparam(self.params)
 
-            # assert not torch.isnan(self.params).any()
-            # assert not torch.isnan(phi).any()
+        # assert not torch.isnan(self.params).any()
+        # assert not torch.isnan(phi).any()
 
-            theta = self.expectation_to_natural(phi)
+        theta = self.expectation_to_natural(phi)
 
-            # assert not torch.isnan(theta).any()
-            # assert not torch.isinf(theta).any()
+        # assert not torch.isnan(theta).any()
+        # assert not torch.isinf(theta).any()
 
         # suff_stats: (batch_size, self.num_var, self.num_stats)
         self.suff_stats = self.sufficient_statistics(x)
@@ -327,10 +307,6 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         # TODO: does ll have grad now?
         self.ll = log_h + crucial_quantity_einsum - log_normalizer
 
-        if self._use_em:
-            # EM needs the gradient with respect to self.ll
-            self.ll.requires_grad_()
-
         # Marginalization in PCs works by simply setting leaves corresponding to
         # marginalized variables to 1 (0 in
         # (log-domain). We achieve this by a simple multiplicative 0-1 mask, generated here.
@@ -365,12 +341,9 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         Returns:
             Tensor: The sample.
         """
-        if self.reparam is None:
-            params: Tensor = self.params
-        else:
-            # TODO: maybe the function should be no_grad?
-            with torch.no_grad():
-                params = self.reparam(self.params)
+        # TODO: maybe the function should be no_grad?
+        with torch.no_grad():
+            params = self.reparam(self.params)
         return self._sample(num_samples, params, **kwargs)  # type: ignore[misc]
 
     def argmax(self, **kwargs: Any) -> Tensor:  # type: ignore[misc]
@@ -382,100 +355,9 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         Returns:
             Tensor: The argmax.
         """
-        if self.reparam is None:
-            params: Tensor = self.params
-        else:
-            with torch.no_grad():
-                params = self.reparam(self.params)
+        with torch.no_grad():
+            params = self.reparam(self.params)
         return self._argmax(params, **kwargs)  # type: ignore[misc]
-
-    # TODO: types
-    def em_set_hyperparams(
-        self, online_em_frequency: int, online_em_stepsize: float, purge: bool = True
-    ) -> None:
-        """Set new setting for online EM.
-
-        Args:
-            online_em_frequency (int): I don't know.
-            online_em_stepsize (float): I don't know.
-            purge (bool, optional): Whether to purge. Defaults to True.
-        """
-        if purge:
-            self.em_purge()
-            self._online_em_counter = 0
-        self._online_em_frequency = online_em_frequency
-        self._online_em_stepsize = online_em_stepsize
-
-    def em_purge(self) -> None:
-        """Discard em statistics."""
-        if self.ll.grad is not None:
-            self.ll.grad.zero_()
-        self._p_acc = None
-        self._stats_acc = None
-
-    def em_process_batch(self) -> None:
-        """Accumulate EM statistics of current batch.
-
-        This should typically be called via EinsumNetwork.em_process_batch().
-        """
-        assert self._use_em, "em_process_batch called while _use_em==False."
-        # TODO: do we allow it's None? if so, we need to guard it every time using it.
-        # if self.params is None:
-        #     return
-
-        with torch.no_grad():
-            # TODO: is grad None?
-            assert self.ll.grad is not None
-            p = self.ll.grad
-            # weighted_stats = (p.unsqueeze(-1) * self.suff_stats).sum(0)
-            # antonio_mari --> correction
-            weighted_stats = torch.einsum("bxod,bxs->xods", p, self.suff_stats)
-            p = p.sum(dim=0)
-
-            if self._p_acc is None:
-                self._p_acc = torch.zeros_like(p)
-            self._p_acc += p
-
-            if self._stats_acc is None:
-                self._stats_acc = torch.zeros_like(weighted_stats)
-            self._stats_acc += weighted_stats
-
-            self.ll.grad.zero_()
-
-            if self._online_em_frequency is not None:
-                self._online_em_counter += 1
-                if self._online_em_counter == self._online_em_frequency:
-                    self.em_update(True)
-                    self._online_em_counter = 0
-
-    def em_update(self, _triggered: bool = False) -> None:
-        """Do an EM update.
-        
-        If the setting is online EM (online_em_stepsize is not None), \
-            then this function does nothing, \
-            since updates are triggered automatically. (Thus, leave the private \
-            parameter _triggered alone)
-
-        TODO: pylint is not happy with this _triggered: for internal use, don't set
-        """
-        assert self._use_em, "em_update called while _use_em==False."
-        if self._online_em_stepsize is not None and not _triggered:
-            return
-
-        with torch.no_grad():
-            # TODO: can we guarantee this?
-            assert self._p_acc is not None and self._stats_acc is not None
-            if self._online_em_stepsize is None:
-                self.params[:] = self._stats_acc / (self._p_acc.unsqueeze(-1) + 1e-12)
-            else:
-                s = self._online_em_stepsize
-                self.params[:] = (1 - s) * self.params + s * (
-                    self._stats_acc / (self._p_acc.unsqueeze(-1) + 1e-12)
-                )
-            self.params[:] = self.project_params(self.params)
-
-        self._p_acc = None
-        self._stats_acc = None
 
     # TODO: why we need this for public attr?
     def set_marginalization_idx(self, idx: Tensor) -> None:

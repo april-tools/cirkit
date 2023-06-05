@@ -11,9 +11,7 @@ from .normal_array import _shift_last_axis_to
 class BinomialArray(ExponentialFamilyArray):
     """Implementation of Binomial distribution."""
 
-    def __init__(  # pylint: disable=too-many-arguments
-        self, num_var: int, num_dims: int, array_shape: Sequence[int], n: int, use_em: bool = True
-    ):
+    def __init__(self, num_var: int, num_dims: int, array_shape: Sequence[int], n: int):
         """Init class.
 
         Args:
@@ -21,9 +19,8 @@ class BinomialArray(ExponentialFamilyArray):
             num_dims (int): Number of dims.
             array_shape (Sequence[int]): Shape of array.
             n (int): n for binomial.
-            use_em (bool, optional): whether to use EM. Defaults to True.
         """
-        super().__init__(num_var, num_dims, array_shape, num_stats=num_dims, use_em=use_em)
+        super().__init__(num_var, num_dims, array_shape, num_stats=num_dims)
         self.n = n
 
     def default_initializer(self) -> Tensor:

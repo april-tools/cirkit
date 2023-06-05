@@ -8,19 +8,10 @@ from torch import Tensor, nn
 class Layer(nn.Module, ABC):
     """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""
 
-    def __init__(self, use_em: bool = True) -> None:
-        """Init class.
-
-        Args:
-            use_em (bool, optional): Whether to use EM. Defaults to True.
-        """
+    def __init__(self) -> None:
+        """Init class."""
         super().__init__()  # TODO: do we need multi-inherit init?
-        self._use_em = use_em
         self.prob: Optional[Tensor] = None  # TODO: why None?
-
-        self._online_em_counter = 0
-        self.online_em_frequency = 0
-        self.online_em_stepsize: float = 0  # TODO: check this. really need? how to better type?
 
     @abstractmethod
     def default_initializer(self) -> Tensor:
@@ -77,40 +68,6 @@ class Layer(nn.Module, ABC):
         :param kwargs:
         :return:
         """
-
-    def em_set_hyperparams(
-        self, online_em_frequency: int, online_em_stepsize: float, purge: bool = True
-    ) -> None:
-        """Set new setting for online EM.
-
-        :param online_em_frequency: How often, i.e. after how many calls to \
-            em_process_batch(self), shall em_update(self) be called?
-        :param online_em_stepsize: step size of online em.
-        :param purge: discard current learn statistics?
-        """
-        if purge:
-            self.em_purge()
-            self._online_em_counter = 0
-        self.online_em_frequency = online_em_frequency
-        self.online_em_stepsize = online_em_stepsize
-
-    # TODO: this is not used? and em_set_params undefined
-    # def em_set_batch(self):
-    #     """Set batch mode EM."""
-    #     self.em_set_params(None, None)
-
-    @abstractmethod
-    def em_purge(self) -> None:
-        """Discard accumulated EM statistics."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def em_process_batch(self) -> None:
-        """Process the current batch. This should be called after backwards() on the whole model."""
-
-    @abstractmethod
-    def em_update(self) -> None:
-        """Perform an EM update step."""
 
     @abstractmethod
     def project_params(self, params: Tensor) -> None:

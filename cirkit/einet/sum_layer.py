@@ -22,7 +22,6 @@ class SumLayer(Layer):
         # :param normalization_dims: the dimensions (axes) of the sum-weights
         #                   which shall be normalized
         #                            (int of tuple of ints)
-        # :param use_em: use the on-board EM algorithm?
         # :param params_mask: binary mask for masking out certain parameters
         #                   (tensor of shape params_shape).
         # """
@@ -112,13 +111,6 @@ class SumLayer(Layer):
                     (K in the paper), and num_nodes is the
                  number of sum nodes in this layer.
         """
-        # TODO the distinction em or not has not to be done here
-        # if self._use_em:
-        #     params = self.params
-        # else:
-        #     reparam = self.reparam(self.params)
-        #     params = reparam
-        # params = self.params
         return self._forward()
 
     @abstractmethod
@@ -147,30 +139,6 @@ class SumLayer(Layer):
         Returns:
             Tensor: The return.
         """
-
-    # TODO: deprecated
-    def em_purge(self) -> None:
-        """Discard em statistics."""
-        raise NotImplementedError
-
-    # TODO: deprecated
-    def em_process_batch(self) -> None:
-        """Accumulate EM statistics of current batch. This should be called after \
-            call to backwards() on the output of the EiNet."""
-        raise NotImplementedError
-
-    # TODO: deprecated
-    def em_update(self, _triggered: bool = False) -> None:
-        """Do an EM update.
-        
-        If the setting is online EM (online_em_stepsize is not None), \
-            then this function does nothing, \
-            since updates are triggered automatically. Thus, leave the private \
-            parameter _triggered alone.
-
-        pylint not happy param _triggered for internal use, don't set.
-        """
-        raise NotImplementedError
 
     # TODO: I don't what's expected to return from reparam_function because it's inconsistent
     def reparam_function(self) -> Callable:  # type: ignore[override,type-arg]

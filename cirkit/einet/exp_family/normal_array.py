@@ -24,7 +24,6 @@ class NormalArray(ExponentialFamilyArray):
         array_shape: Sequence[int],
         min_var: float = 0.0001,
         max_var: float = 10.0,
-        use_em: bool = True,
     ):
         """Init class.
 
@@ -34,9 +33,8 @@ class NormalArray(ExponentialFamilyArray):
             array_shape (Sequence[int]): Shape of array.
             min_var (float, optional): Min var. Defaults to 0.0001.
             max_var (float, optional): Max var. Defaults to 10.0.
-            use_em (bool, optional): Whether to use EM. Defaults to True.
         """
-        super().__init__(num_var, num_dims, array_shape, num_stats=2 * num_dims, use_em=use_em)
+        super().__init__(num_var, num_dims, array_shape, num_stats=2 * num_dims)
         self.min_var = min_var
         self.max_var = max_var
         self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_dims)
