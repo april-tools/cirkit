@@ -1,9 +1,7 @@
-import math
 from abc import abstractmethod
-from typing import Any, Callable, List, Literal, Optional, Tuple
+from typing import Any, List, Literal, Optional, Tuple
 
 from torch import Tensor
-from torch.nn import functional as F
 
 from .layer import Layer
 
@@ -22,7 +20,6 @@ class SumLayer(Layer):
         # :param normalization_dims: the dimensions (axes) of the sum-weights
         #                   which shall be normalized
         #                            (int of tuple of ints)
-        # :param use_em: use the on-board EM algorithm?
         # :param params_mask: binary mask for masking out certain parameters
         #                   (tensor of shape params_shape).
         # """
@@ -112,13 +109,6 @@ class SumLayer(Layer):
                     (K in the paper), and num_nodes is the
                  number of sum nodes in this layer.
         """
-        # TODO the distinction em or not has not to be done here
-        # if self._use_em:
-        #     params = self.params
-        # else:
-        #     reparam = self.reparam(self.params)
-        #     params = reparam
-        # params = self.params
         return self._forward()
 
     @abstractmethod
@@ -147,67 +137,3 @@ class SumLayer(Layer):
         Returns:
             Tensor: The return.
         """
-
-    # TODO: deprecated
-    def em_purge(self) -> None:
-        """Discard em statistics."""
-        raise NotImplementedError
-
-    # TODO: deprecated
-    def em_process_batch(self) -> None:
-        """Accumulate EM statistics of current batch. This should be called after \
-            call to backwards() on the output of the EiNet."""
-        raise NotImplementedError
-
-    # TODO: deprecated
-    def em_update(self, _triggered: bool = False) -> None:
-        """Do an EM update.
-        
-        If the setting is online EM (online_em_stepsize is not None), \
-            then this function does nothing, \
-            since updates are triggered automatically. Thus, leave the private \
-            parameter _triggered alone.
-
-        pylint not happy param _triggered for internal use, don't set.
-        """
-        raise NotImplementedError
-
-    # TODO: I don't what's expected to return from reparam_function because it's inconsistent
-    def reparam_function(self) -> Callable:  # type: ignore[override,type-arg]
-        """Reparametrize function, transforming unconstrained parameters \
-            into valid sum-weight (non-negative, normalized).
-
-        Returns:
-            Callable: The function.
-        """
-
-        def _reparam(params_in: Tensor) -> Tensor:
-            other_dims = tuple(
-                i for i in range(len(params_in.shape)) if i not in self.normalization_dims
-            )
-
-            permutation = other_dims + self.normalization_dims
-            unpermutation = tuple(
-                c for i in range(len(permutation)) for c, j in enumerate(permutation) if j == i
-            )
-
-            numel = math.prod(params_in.shape[i] for i in self.normalization_dims)
-
-            other_shape = tuple(params_in.shape[i] for i in other_dims)
-            params_in = params_in.permute(permutation)
-            orig_shape = params_in.shape
-            params_in = params_in.reshape(other_shape + (numel,))
-            out = F.softmax(params_in, -1)
-            out = out.reshape(orig_shape).permute(unpermutation)
-            return out
-
-        return _reparam
-
-    # TODO: deprecated
-    def project_params(self, params: Tensor) -> None:
-        """Is currently not required.
-
-        Args:
-            params (Tensor): Not used.
-        """
-        raise NotImplementedError

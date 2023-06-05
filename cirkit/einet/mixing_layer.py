@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from cirkit.einet.einsum_layer import GenericEinsumLayer
 from cirkit.region_graph import RegionGraph, RegionNode
@@ -134,7 +133,6 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         ############## END
 
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
-        self.softmax: bool = False  # TODO: originally None, but why?
 
     def num_of_param(self) -> int:
         """Return the total number of parameters of the layer.
@@ -142,11 +140,6 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         :return: the total number of parameters of the layer.
         """
         return math.prod(self.params_shape)
-
-    # TODO: then why have this???
-    def project_params(self, _: Tensor) -> None:
-        """Raise error when called."""
-        raise NotImplementedError
 
     # TODO: why in both children but not base class
     @property
@@ -170,18 +163,9 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         if clamp_all or self.params.requires_grad:
             self.params.data.clamp_(min=self.clamp_value)
 
-    def default_initializer(self) -> Tensor:
-        """Is a simple initializer for normalized sum-weights.
-
-        Raises:
-            NotImplementedError: When softmax.
-
-        Returns:
-            Tensor: initial parameters.
-        """
-        if self.softmax:
-            # params = torch.rand(self.params_shape)
-            raise NotImplementedError
+    def initialize(self) -> None:
+        """Initialize the parameters for this SumLayer."""
+        # TODO: is it good to do so? or use value assign, e.g. copy_?
 
         # TODO: we should extract this as a shared util
         params = 0.01 + 0.98 * torch.rand(self.params_shape)
@@ -192,25 +176,10 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
             if self.params_mask is not None:
                 params *= self.params_mask
 
-            if not self.softmax:
-                params /= params.sum(self.normalization_dims, keepdim=True)
+            params /= params.sum(self.normalization_dims, keepdim=True)
 
         # assert torch.all(params >= 0)
-        return params
-
-    def initialize(self, initializer: Optional[Tensor] = None) -> None:
-        """Initialize the parameters for this SumLayer.
-
-        :param initializer: denotes the initialization method.
-               If 'default' (str): use the default initialization, and store the parameters locally.
-               If Tensor: provide custom initial parameters.
-        """
-        # TODO: is it good to do so? or use value assign, e.g. copy_?
-        if initializer is None:
-            self.params = torch.nn.Parameter(self.default_initializer())
-        else:
-            assert initializer.shape == self.params_shape, "Incorrect parameter shape."
-            self.params = torch.nn.Parameter(initializer)
+        self.params = torch.nn.Parameter(params)
 
     # TODO: there's a get_parameter in nn.Module?
     # TODO: why can be a dict
@@ -234,12 +203,10 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         max_p: Tensor = torch.max(self.child_log_prob, 3, keepdim=True)[0]
         prob = torch.exp(self.child_log_prob - max_p)
 
-        params = F.softmax(self.params, -1) if self.softmax else self.params
-
-        # TODO: use a myl or gather?
+        # TODO: use a mul or gather?
         assert (self.params * self.params_mask == self.params).all()
 
-        output = torch.einsum("bonc,onc->bon", prob, params)
+        output = torch.einsum("bonc,onc->bon", prob, self.params)
         self.prob = torch.log(output) + max_p[:, :, :, 0]
 
         assert not torch.isnan(self.prob).any()

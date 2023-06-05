@@ -24,7 +24,6 @@ class NormalArray(ExponentialFamilyArray):
         array_shape: Sequence[int],
         min_var: float = 0.0001,
         max_var: float = 10.0,
-        use_em: bool = True,
     ):
         """Init class.
 
@@ -34,48 +33,11 @@ class NormalArray(ExponentialFamilyArray):
             array_shape (Sequence[int]): Shape of array.
             min_var (float, optional): Min var. Defaults to 0.0001.
             max_var (float, optional): Max var. Defaults to 10.0.
-            use_em (bool, optional): Whether to use EM. Defaults to True.
         """
-        super().__init__(num_var, num_dims, array_shape, num_stats=2 * num_dims, use_em=use_em)
+        super().__init__(num_var, num_dims, array_shape, num_stats=2 * num_dims)
         self.min_var = min_var
         self.max_var = max_var
         self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_dims)
-
-    def default_initializer(self) -> Tensor:
-        """Init by default.
-
-        Returns:
-            Tensor: The default init.
-        """
-        phi = torch.empty(self.num_var, *self.array_shape, 2 * self.num_dims)
-        phi[..., : self.num_dims] = torch.randn(self.num_var, *self.array_shape, self.num_dims)
-        # TODO: is this a mypy bug? phi[..., : self.num_dims] ** 2 is Any
-        # but phi[..., : self.num_dims] is Tensor
-        phi[..., self.num_dims :] = 1 + phi[..., : self.num_dims] ** 2  # type: ignore[misc]
-        return phi
-
-    def project_params(self, params: Tensor) -> Tensor:
-        """Project params.
-
-        Args:
-            params (Tensor): Params to project.
-
-        Returns:
-            Tensor: Projected params.
-        """
-        params_project = params.clone()
-        # TODO: redundant annotation is this a mypy bug? same as above
-        mu2: Tensor = params_project[..., : self.num_dims] ** 2
-        params_project[..., self.num_dims :] = torch.clamp(
-            params_project[..., self.num_dims :], mu2 + self.min_var, mu2 + self.max_var
-        )
-        # TODO: which one is better?
-        # params_project[..., self.num_dims :] -= mu2
-        # params_project[..., self.num_dims :] = torch.clamp(
-        #     params_project[..., self.num_dims :], self.min_var, self.max_var
-        # )
-        # params_project[..., self.num_dims :] += mu2
-        return params_project
 
     def reparam_function(self, params: Tensor) -> Tensor:
         """Get reparamed params.

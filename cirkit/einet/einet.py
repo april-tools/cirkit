@@ -30,11 +30,6 @@ class _Args:
     num_classes: number of outputs of the PC.
     exponential_family: which exponential family to use; (sub-class ExponentialFamilyTensor).
     exponential_family_args: arguments for the exponential family, e.g. trial-number N for Binomial.
-    use_em: determines if the internal em algorithm shall be used; otherwise you might use e.g. SGD.
-    online_em_frequency: how often shall online be triggered in terms, of \
-        batches? 1 means after each batch, None means batch EM. In the latter \
-            case, EM updates must be triggered manually after each epoch.
-    online_em_stepsize: stepsize for inline EM. Only relevant if online_em_frequency not is None.
     """
 
     # pylint: disable-next=too-many-arguments
@@ -75,9 +70,6 @@ class _Args:
         self.num_classes = 1
         self.exponential_family = exponential_family
         self.exponential_family_args = exponential_family_args  # type: ignore[misc]
-        self.use_em = False
-        self.online_em_frequency = 1  # TODO: unused ?
-        self.online_em_stepsize = 0.05  # TODO: unused ?
         self.prod_exp = prod_exp
         self.rg_structure = rg_structure
         self.pd_num_pieces = pd_num_pieces
@@ -132,7 +124,6 @@ class LowRankEiNet(nn.Module):
                 args.num_dims,
                 args.exponential_family,
                 args.exponential_family_args,  # type: ignore[misc]
-                use_em=False,
             )
         ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
 
@@ -236,7 +227,7 @@ class LowRankEiNet(nn.Module):
             }
         # TODO: I really don't know how to avoid force cast
         for layer in cast(List[Layer], self.einet_layers):
-            layer.initialize(init_dict.get(layer))
+            layer.initialize()
 
     # TODO: this get/set is not good
     def set_marginalization_idx(self, idx: Tensor) -> None:

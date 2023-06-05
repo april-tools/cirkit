@@ -46,7 +46,6 @@ class FactorizedInputLayer(Layer):
         num_dims: int,
         exponential_family: Type[ExponentialFamilyArray],
         ef_args: Dict[str, Any],
-        use_em: bool = True,
     ):
         """Init class.
 
@@ -55,9 +54,8 @@ class FactorizedInputLayer(Layer):
         :param num_dims: dimensionality of RVs (int)
         :param exponential_family: type of exponential family (derived from ExponentialFamilyArray)
         :param ef_args: arguments of exponential_family
-        :param use_em: use on-board EM algorithm? (boolean)
         """
-        super().__init__(use_em=use_em)
+        super().__init__()
 
         self.nodes = nodes
         self.num_var = num_var
@@ -77,11 +75,7 @@ class FactorizedInputLayer(Layer):
         # exponential family densities
         # see ExponentialFamilyArray
         self.ef_array = exponential_family(
-            num_var,
-            num_dims,
-            (num_dist, num_replica),
-            use_em=use_em,
-            **ef_args,  # type: ignore[misc]
+            num_var, num_dims, (num_dist, num_replica), **ef_args  # type: ignore[misc]
         )
 
         # self.scope_tensor indicates which densities in self.ef_array belongs to which leaf.
@@ -124,33 +118,9 @@ class FactorizedInputLayer(Layer):
         """
         return self.frozen
 
-    def get_shape_dict(self) -> Dict[str, int]:
-        """Get the shape dict.
-
-        Returns:
-            Dict[str, int]: The shape dict.
-        """
-        return dict(
-            zip(("num_var", "num_dist", "num_replica", "num_stats"), self.ef_array.params_shape)
-        )
-
-    def default_initializer(self) -> Tensor:
-        """Init by default.
-
-        Returns:
-            Tensor: The default.
-        """
-        return self.ef_array.default_initializer()
-
-    def initialize(self, initializer: Optional[Tensor] = None) -> None:
-        """Init by given.
-
-        Args:
-            initializer (Optional[Tensor], optional): Given init. Defaults to None.
-        """
-        self.ef_array.initialize(
-            initializer if isinstance(initializer, Tensor) else "default"  # type: ignore[misc]
-        )
+    def initialize(self) -> None:
+        """Init by given."""
+        self.ef_array.initialize()
 
     def forward(self, x: Optional[Tensor] = None) -> None:
         """Compute the factorized leaf densities. We are doing the computation \
@@ -233,63 +203,6 @@ class FactorizedInputLayer(Layer):
                 values[n, :, :] = cur_value  # TODO: directly slice this
 
             return values
-
-    # TODO: do we really need a layer of wrapper?
-    def em_set_hyperparams(
-        self, online_em_frequency: int, online_em_stepsize: float, purge: bool = True
-    ) -> None:
-        """Set new setting for online EM.
-
-        Args:
-            online_em_frequency (int): I don't know.
-            online_em_stepsize (float): I don't know.
-            purge (bool, optional): Whether to purge. Defaults to True.
-        """
-        self.ef_array.em_set_hyperparams(online_em_frequency, online_em_stepsize, purge)
-
-    def em_purge(self) -> None:
-        """Discard em statistics."""
-        self.ef_array.em_purge()
-
-    def em_process_batch(self) -> None:
-        """Accumulate EM statistics of current batch.
-
-        This should typically be called via EinsumNetwork.em_process_batch().
-        """
-        self.ef_array.em_process_batch()
-
-    def em_update(self) -> None:
-        """Do an EM update."""
-        self.ef_array.em_update()
-
-    def project_params(self, params: Tensor) -> None:
-        """Project onto parameters' constraint set.
-
-        Exponential families are usually defined on a constrained domain, e.g. \
-            the second parameter of a Gaussian needs \
-            to be non-negative. The EM algorithm takes the parameters sometimes \
-            out of their domain. This function projects \
-            them back onto their domain.
-
-        :param params: the current parameters, same shape as self.params.
-        """
-        # TODO: why discard return?
-        self.ef_array.project_params(params)
-
-    def reparam_function(self) -> Tensor:
-        """Re-parameterize parameters, in order that they stay in their constrained domain.
-
-        When we are not using the EM, we need to transform unconstrained \
-            (real-valued) parameters to the constrained set \
-            of the expectation parameter. This function should return such a \
-            function (i.e. the return value should not be \
-            a projection, but a function which does the projection).
-
-        :return: function object f which takes as input unconstrained parameters (Tensor) \
-            and returns re-parametrized parameters.
-        """
-        # TODO: where is the params?
-        return self.ef_array.reparam_function(torch.Tensor())
 
     def set_marginalization_idx(self, idx: Tensor) -> None:
         """Set indicices of marginalized variables.

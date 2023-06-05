@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from torch import Tensor, nn
 
@@ -8,38 +8,14 @@ from torch import Tensor, nn
 class Layer(nn.Module, ABC):
     """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""
 
-    def __init__(self, use_em: bool = True) -> None:
-        """Init class.
-
-        Args:
-            use_em (bool, optional): Whether to use EM. Defaults to True.
-        """
+    def __init__(self) -> None:
+        """Init class."""
         super().__init__()  # TODO: do we need multi-inherit init?
-        self._use_em = use_em
         self.prob: Optional[Tensor] = None  # TODO: why None?
 
-        self._online_em_counter = 0
-        self.online_em_frequency = 0
-        self.online_em_stepsize: float = 0  # TODO: check this. really need? how to better type?
-
     @abstractmethod
-    def default_initializer(self) -> Tensor:
-        """Produce suitable initial parameters for the layer.
-
-        :return: initial parameters
-        """
-
-    @abstractmethod
-    def initialize(self, initializer: Optional[Tensor] = None) -> None:
-        """Initialize the layer, e.g. with return value from default_initializer(self).
-
-        :param initializer: 'default', or custom (typically a Tensor)
-                            'default' means that the layer simply calls its own \
-                                default_initializer(self), in stores
-                            the parameters internally.
-                            custom (typically a Tensor) means that you pass your own initializer.
-        :return: None
-        """
+    def initialize(self) -> None:
+        """Initialize the layer with default rand params."""
 
     def __call__(self, x: Optional[Tensor] = None) -> None:
         """Invoke the forward.
@@ -77,54 +53,3 @@ class Layer(nn.Module, ABC):
         :param kwargs:
         :return:
         """
-
-    def em_set_hyperparams(
-        self, online_em_frequency: int, online_em_stepsize: float, purge: bool = True
-    ) -> None:
-        """Set new setting for online EM.
-
-        :param online_em_frequency: How often, i.e. after how many calls to \
-            em_process_batch(self), shall em_update(self) be called?
-        :param online_em_stepsize: step size of online em.
-        :param purge: discard current learn statistics?
-        """
-        if purge:
-            self.em_purge()
-            self._online_em_counter = 0
-        self.online_em_frequency = online_em_frequency
-        self.online_em_stepsize = online_em_stepsize
-
-    # TODO: this is not used? and em_set_params undefined
-    # def em_set_batch(self):
-    #     """Set batch mode EM."""
-    #     self.em_set_params(None, None)
-
-    @abstractmethod
-    def em_purge(self) -> None:
-        """Discard accumulated EM statistics."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def em_process_batch(self) -> None:
-        """Process the current batch. This should be called after backwards() on the whole model."""
-
-    @abstractmethod
-    def em_update(self) -> None:
-        """Perform an EM update step."""
-
-    @abstractmethod
-    def project_params(self, params: Tensor) -> None:
-        """Project paramters onto feasible set.
-
-        Args:
-            params (Tensor): The params.
-        """
-
-    @abstractmethod
-    def reparam_function(self) -> Tensor:
-        """Return a function which transforms a tensor of unconstrained values \
-            into feasible parameters."""
-
-    @abstractmethod
-    def get_shape_dict(self) -> Dict[str, int]:
-        """Return param shape of the layer with description."""
