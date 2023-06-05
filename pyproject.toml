@@ -35,7 +35,8 @@ lint = [
   "black~=23.0",
   "pylint",
   "mypy",
-  "pydocstyle[toml]"
+  "pydocstyle[toml]",
+  "pytest"  # this is required to lint the test files
 ]
 test = [
   "pytest",
