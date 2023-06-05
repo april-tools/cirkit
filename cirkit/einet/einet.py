@@ -194,7 +194,7 @@ class LowRankEiNet(nn.Module):
         """
         # TODO: ModuleList is not generic type
         # TODO: but -1 is not necessary a mixing layer
-        return cast(EinsumMixingLayer, self.einet_layers[-1]).params.device
+        return cast(FactorizedInputLayer, self.einet_layers[0]).ef_array.params.device
 
     def initialize(
         self,
@@ -254,7 +254,7 @@ class LowRankEiNet(nn.Module):
             Tensor: The output.
         """
         old_marg_idx = self.get_marginalization_idx()
-        assert old_marg_idx is not None  # TODO: then why return None?
+        # assert old_marg_idx is not None  # TODO: then why return None?
         self.set_marginalization_idx(torch.arange(self.args.num_var))
 
         if x is not None:
@@ -264,7 +264,7 @@ class LowRankEiNet(nn.Module):
             # TODO: above is original, but size is not stated?
             fake_data = torch.ones(
                 (1, self.args.num_var),  # TODO: use tuple here? or everywhere?
-                device=cast(EinsumMixingLayer, self.einet_layers[-1]).params.device,
+                device=self.get_device(),
             )  # TODO: cast might not be safe
             z = self.forward(fake_data)  # TODO: why call forward but not __call__
 
