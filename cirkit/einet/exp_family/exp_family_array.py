@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Literal, Optional, Sequence, Union
+from typing import Any, Optional, Sequence
 
 import torch
 from torch import Tensor, nn
@@ -142,14 +142,6 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         """
 
     @abstractmethod
-    def default_initializer(self) -> Tensor:
-        """Get default initializer for params.
-
-        :return: initial parameters for the implemented exponential family (Tensor).
-                 Must be of shape (self.num_var, *self.array_shape, self.num_stats)
-        """
-
-    @abstractmethod
     def reparam_function(self, params: Tensor) -> Tensor:
         """Re-parameterize parameters, in order that they stay in their constrained domain.
 
@@ -192,24 +184,11 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         """
 
     # TODO: don't use str, use None instead
-    def initialize(self, initializer: Union[Literal["default"], Tensor] = "default") -> None:
-        """Initialize the parameters for this ExponentialFamilyArray.
-
-        :param initializer: denotes the initialization method.
-               If 'default' (str): use the default initialization, and store the parameters locally.
-               If Tensor: provide custom initial parameters.
-        """
-        if initializer == "default":
-            # default initializer; when em is switched off, we reparametrize
-            # and use Gaussian noise as init values.
-            self.params = nn.Parameter(torch.randn(self.params_shape))
-        else:
-            # provided initializer
-            assert isinstance(initializer, Tensor)  # type: ignore[misc]  # TODO: dummy for str
-            assert initializer.shape == self.params_shape, "Incorrect parameter shape."
-            self.params = nn.Parameter(initializer)
-
-        assert not torch.isnan(self.params).any()
+    def initialize(self) -> None:
+        """Initialize the parameters for this ExponentialFamilyArray."""
+        # default initializer; when em is switched off, we reparametrize
+        # and use Gaussian noise as init values.
+        self.params = nn.Parameter(torch.randn(self.params_shape))
 
     def __call__(self, x: Tensor) -> Tensor:
         """Invoke the forward.

@@ -31,15 +31,6 @@ class CategoricalArray(ExponentialFamilyArray):
         super().__init__(num_var, num_dims, array_shape, num_stats=num_dims * k)
         self.k = k
 
-    def default_initializer(self) -> Tensor:
-        """Init by default.
-
-        Returns:
-            Tensor: The init.
-        """
-        # TODO: this shape is highly repeated. save it?
-        return 0.01 + 0.98 * torch.rand(self.num_var, *self.array_shape, self.num_dims * self.k)
-
     def reparam_function(self, params: Tensor) -> Tensor:
         """Do reparam.
 

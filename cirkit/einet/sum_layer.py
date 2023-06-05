@@ -1,9 +1,7 @@
-import math
 from abc import abstractmethod
-from typing import Any, Callable, List, Literal, Optional, Tuple
+from typing import Any, List, Literal, Optional, Tuple
 
 from torch import Tensor
-from torch.nn import functional as F
 
 from .layer import Layer
 
@@ -139,34 +137,3 @@ class SumLayer(Layer):
         Returns:
             Tensor: The return.
         """
-
-    # TODO: I don't what's expected to return from reparam_function because it's inconsistent
-    def reparam_function(self) -> Callable:  # type: ignore[override,type-arg]
-        """Reparametrize function, transforming unconstrained parameters \
-            into valid sum-weight (non-negative, normalized).
-
-        Returns:
-            Callable: The function.
-        """
-
-        def _reparam(params_in: Tensor) -> Tensor:
-            other_dims = tuple(
-                i for i in range(len(params_in.shape)) if i not in self.normalization_dims
-            )
-
-            permutation = other_dims + self.normalization_dims
-            unpermutation = tuple(
-                c for i in range(len(permutation)) for c, j in enumerate(permutation) if j == i
-            )
-
-            numel = math.prod(params_in.shape[i] for i in self.normalization_dims)
-
-            other_shape = tuple(params_in.shape[i] for i in other_dims)
-            params_in = params_in.permute(permutation)
-            orig_shape = params_in.shape
-            params_in = params_in.reshape(other_shape + (numel,))
-            out = F.softmax(params_in, -1)
-            out = out.reshape(orig_shape).permute(unpermutation)
-            return out
-
-        return _reparam

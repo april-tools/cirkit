@@ -227,7 +227,7 @@ class LowRankEiNet(nn.Module):
             }
         # TODO: I really don't know how to avoid force cast
         for layer in cast(List[Layer], self.einet_layers):
-            layer.initialize(init_dict.get(layer))
+            layer.initialize()
 
     # TODO: this get/set is not good
     def set_marginalization_idx(self, idx: Tensor) -> None:

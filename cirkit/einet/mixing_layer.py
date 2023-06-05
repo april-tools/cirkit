@@ -165,15 +165,9 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         if clamp_all or self.params.requires_grad:
             self.params.data.clamp_(min=self.clamp_value)
 
-    def default_initializer(self) -> Tensor:
-        """Is a simple initializer for normalized sum-weights.
-
-        Raises:
-            NotImplementedError: When softmax.
-
-        Returns:
-            Tensor: initial parameters.
-        """
+    def initialize(self) -> None:
+        """Initialize the parameters for this SumLayer."""
+        # TODO: is it good to do so? or use value assign, e.g. copy_?
         if self.softmax:
             # params = torch.rand(self.params_shape)
             raise NotImplementedError
@@ -191,21 +185,7 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
                 params /= params.sum(self.normalization_dims, keepdim=True)
 
         # assert torch.all(params >= 0)
-        return params
-
-    def initialize(self, initializer: Optional[Tensor] = None) -> None:
-        """Initialize the parameters for this SumLayer.
-
-        :param initializer: denotes the initialization method.
-               If 'default' (str): use the default initialization, and store the parameters locally.
-               If Tensor: provide custom initial parameters.
-        """
-        # TODO: is it good to do so? or use value assign, e.g. copy_?
-        if initializer is None:
-            self.params = torch.nn.Parameter(self.default_initializer())
-        else:
-            assert initializer.shape == self.params_shape, "Incorrect parameter shape."
-            self.params = torch.nn.Parameter(initializer)
+        self.params = torch.nn.Parameter(params)
 
     # TODO: there's a get_parameter in nn.Module?
     # TODO: why can be a dict

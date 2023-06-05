@@ -118,33 +118,9 @@ class FactorizedInputLayer(Layer):
         """
         return self.frozen
 
-    def get_shape_dict(self) -> Dict[str, int]:
-        """Get the shape dict.
-
-        Returns:
-            Dict[str, int]: The shape dict.
-        """
-        return dict(
-            zip(("num_var", "num_dist", "num_replica", "num_stats"), self.ef_array.params_shape)
-        )
-
-    def default_initializer(self) -> Tensor:
-        """Init by default.
-
-        Returns:
-            Tensor: The default.
-        """
-        return self.ef_array.default_initializer()
-
-    def initialize(self, initializer: Optional[Tensor] = None) -> None:
-        """Init by given.
-
-        Args:
-            initializer (Optional[Tensor], optional): Given init. Defaults to None.
-        """
-        self.ef_array.initialize(
-            initializer if isinstance(initializer, Tensor) else "default"  # type: ignore[misc]
-        )
+    def initialize(self) -> None:
+        """Init by given."""
+        self.ef_array.initialize()
 
     def forward(self, x: Optional[Tensor] = None) -> None:
         """Compute the factorized leaf densities. We are doing the computation \
@@ -227,21 +203,6 @@ class FactorizedInputLayer(Layer):
                 values[n, :, :] = cur_value  # TODO: directly slice this
 
             return values
-
-    def reparam_function(self) -> Tensor:
-        """Re-parameterize parameters, in order that they stay in their constrained domain.
-
-        When we are not using the EM, we need to transform unconstrained \
-            (real-valued) parameters to the constrained set \
-            of the expectation parameter. This function should return such a \
-            function (i.e. the return value should not be \
-            a projection, but a function which does the projection).
-
-        :return: function object f which takes as input unconstrained parameters (Tensor) \
-            and returns re-parametrized parameters.
-        """
-        # TODO: where is the params?
-        return self.ef_array.reparam_function(torch.Tensor())
 
     def set_marginalization_idx(self, idx: Tensor) -> None:
         """Set indicices of marginalized variables.

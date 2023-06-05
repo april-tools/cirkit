@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from torch import Tensor, nn
 
@@ -14,23 +14,8 @@ class Layer(nn.Module, ABC):
         self.prob: Optional[Tensor] = None  # TODO: why None?
 
     @abstractmethod
-    def default_initializer(self) -> Tensor:
-        """Produce suitable initial parameters for the layer.
-
-        :return: initial parameters
-        """
-
-    @abstractmethod
-    def initialize(self, initializer: Optional[Tensor] = None) -> None:
-        """Initialize the layer, e.g. with return value from default_initializer(self).
-
-        :param initializer: 'default', or custom (typically a Tensor)
-                            'default' means that the layer simply calls its own \
-                                default_initializer(self), in stores
-                            the parameters internally.
-                            custom (typically a Tensor) means that you pass your own initializer.
-        :return: None
-        """
+    def initialize(self) -> None:
+        """Initialize the layer with default rand params."""
 
     def __call__(self, x: Optional[Tensor] = None) -> None:
         """Invoke the forward.
@@ -68,12 +53,3 @@ class Layer(nn.Module, ABC):
         :param kwargs:
         :return:
         """
-
-    @abstractmethod
-    def reparam_function(self) -> Tensor:
-        """Return a function which transforms a tensor of unconstrained values \
-            into feasible parameters."""
-
-    @abstractmethod
-    def get_shape_dict(self) -> Dict[str, int]:
-        """Return param shape of the layer with description."""

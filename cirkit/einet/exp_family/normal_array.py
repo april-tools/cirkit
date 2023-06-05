@@ -39,19 +39,6 @@ class NormalArray(ExponentialFamilyArray):
         self.max_var = max_var
         self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_dims)
 
-    def default_initializer(self) -> Tensor:
-        """Init by default.
-
-        Returns:
-            Tensor: The default init.
-        """
-        phi = torch.empty(self.num_var, *self.array_shape, 2 * self.num_dims)
-        phi[..., : self.num_dims] = torch.randn(self.num_var, *self.array_shape, self.num_dims)
-        # TODO: is this a mypy bug? phi[..., : self.num_dims] ** 2 is Any
-        # but phi[..., : self.num_dims] is Tensor
-        phi[..., self.num_dims :] = 1 + phi[..., : self.num_dims] ** 2  # type: ignore[misc]
-        return phi
-
     def reparam_function(self, params: Tensor) -> Tensor:
         """Get reparamed params.
 

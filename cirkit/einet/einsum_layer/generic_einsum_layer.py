@@ -213,11 +213,8 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         assert self.params_dict is not None
         return self.params_dict
 
-    def initialize(self, initializer: Optional[Tensor] = None) -> None:
-        """Initialize the layer parameters.
-
-        :param initializer: Unused?
-        """
+    def initialize(self) -> None:
+        """Initialize the layer parameters."""
         # TODO: but it's positive. also must it be tuple?
 
         def _random_nonneg_tensor(shape: Tuple[int, ...]) -> Tensor:
