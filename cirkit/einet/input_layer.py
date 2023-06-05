@@ -228,20 +228,6 @@ class FactorizedInputLayer(Layer):
 
             return values
 
-    def project_params(self, params: Tensor) -> None:
-        """Project onto parameters' constraint set.
-
-        Exponential families are usually defined on a constrained domain, e.g. \
-            the second parameter of a Gaussian needs \
-            to be non-negative. The EM algorithm takes the parameters sometimes \
-            out of their domain. This function projects \
-            them back onto their domain.
-
-        :param params: the current parameters, same shape as self.params.
-        """
-        # TODO: why discard return?
-        self.ef_array.project_params(params)
-
     def reparam_function(self) -> Tensor:
         """Re-parameterize parameters, in order that they stay in their constrained domain.
 

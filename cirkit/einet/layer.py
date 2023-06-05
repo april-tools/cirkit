@@ -70,14 +70,6 @@ class Layer(nn.Module, ABC):
         """
 
     @abstractmethod
-    def project_params(self, params: Tensor) -> None:
-        """Project paramters onto feasible set.
-
-        Args:
-            params (Tensor): The params.
-        """
-
-    @abstractmethod
     def reparam_function(self) -> Tensor:
         """Return a function which transforms a tensor of unconstrained values \
             into feasible parameters."""

@@ -143,11 +143,6 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         """
         return math.prod(self.params_shape)
 
-    # TODO: then why have this???
-    def project_params(self, _: Tensor) -> None:
-        """Raise error when called."""
-        raise NotImplementedError
-
     # TODO: why in both children but not base class
     @property
     def clamp_value(self) -> float:

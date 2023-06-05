@@ -150,20 +150,6 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         """
 
     @abstractmethod
-    def project_params(self, params: Tensor) -> Tensor:
-        """Project onto parameters' constraint set.
-
-        Exponential families are usually defined on a constrained domain, e.g. \
-            the second parameter of a Gaussian needs \
-            to be non-negative. The EM algorithm takes the parameters sometimes \
-            out of their domain. This function projects \
-            them back onto their domain.
-
-        :param params: the current parameters, same shape as self.params.
-        :return: projected parameters, same shape as self.params.
-        """
-
-    @abstractmethod
     def reparam_function(self, params: Tensor) -> Tensor:
         """Re-parameterize parameters, in order that they stay in their constrained domain.
 

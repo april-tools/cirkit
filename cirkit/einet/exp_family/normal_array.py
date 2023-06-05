@@ -52,29 +52,6 @@ class NormalArray(ExponentialFamilyArray):
         phi[..., self.num_dims :] = 1 + phi[..., : self.num_dims] ** 2  # type: ignore[misc]
         return phi
 
-    def project_params(self, params: Tensor) -> Tensor:
-        """Project params.
-
-        Args:
-            params (Tensor): Params to project.
-
-        Returns:
-            Tensor: Projected params.
-        """
-        params_project = params.clone()
-        # TODO: redundant annotation is this a mypy bug? same as above
-        mu2: Tensor = params_project[..., : self.num_dims] ** 2
-        params_project[..., self.num_dims :] = torch.clamp(
-            params_project[..., self.num_dims :], mu2 + self.min_var, mu2 + self.max_var
-        )
-        # TODO: which one is better?
-        # params_project[..., self.num_dims :] -= mu2
-        # params_project[..., self.num_dims :] = torch.clamp(
-        #     params_project[..., self.num_dims :], self.min_var, self.max_var
-        # )
-        # params_project[..., self.num_dims :] += mu2
-        return params_project
-
     def reparam_function(self, params: Tensor) -> Tensor:
         """Get reparamed params.
 

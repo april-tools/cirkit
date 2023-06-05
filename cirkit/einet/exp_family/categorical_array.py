@@ -40,22 +40,6 @@ class CategoricalArray(ExponentialFamilyArray):
         # TODO: this shape is highly repeated. save it?
         return 0.01 + 0.98 * torch.rand(self.num_var, *self.array_shape, self.num_dims * self.k)
 
-    def project_params(self, params: Tensor) -> Tensor:
-        """Project params.
-
-        Note that this is not actually l2-projection. For simplicity, we simply renormalize.
-
-        Args:
-            params (Tensor): The params.
-
-        Returns:
-            Tensor: Projected params.
-        """
-        params = params.reshape(self.num_var, *self.array_shape, self.num_dims, self.k)
-        params = torch.clamp(params, min=1e-12)
-        params = params / torch.sum(params, dim=-1, keepdim=True)
-        return params.reshape(self.num_var, *self.array_shape, self.num_dims * self.k)
-
     def reparam_function(self, params: Tensor) -> Tensor:
         """Do reparam.
 

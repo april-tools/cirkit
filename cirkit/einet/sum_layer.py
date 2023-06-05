@@ -170,12 +170,3 @@ class SumLayer(Layer):
             return out
 
         return _reparam
-
-    # TODO: deprecated
-    def project_params(self, params: Tensor) -> None:
-        """Is currently not required.
-
-        Args:
-            params (Tensor): Not used.
-        """
-        raise NotImplementedError

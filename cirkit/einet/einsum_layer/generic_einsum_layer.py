@@ -213,15 +213,6 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         assert self.params_dict is not None
         return self.params_dict
 
-    # TODO: deprecated but abstract, maybe remove?
-    @abstractmethod
-    def project_params(self, params: Tensor) -> None:  # TODO: check is needed?
-        """Do something.
-
-        Args:
-            params (Tensor): The params.
-        """
-
     def initialize(self, initializer: Optional[Tensor] = None) -> None:
         """Initialize the layer parameters.
 

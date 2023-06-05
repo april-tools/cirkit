@@ -31,17 +31,6 @@ class BinomialArray(ExponentialFamilyArray):
         """
         return (0.01 + 0.98 * torch.rand(self.num_var, *self.array_shape, self.num_dims)) * self.N
 
-    def project_params(self, params: Tensor) -> Tensor:
-        """Project params.
-
-        Args:
-            params (Tensor): The params.
-
-        Returns:
-            Tensor: Projected params.
-        """
-        return torch.clamp(params, 0, self.n)
-
     def reparam_function(self, params: Tensor) -> Tensor:
         """Do reparam.
 
