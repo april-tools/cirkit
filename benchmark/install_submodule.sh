@@ -17,7 +17,7 @@ fi
 
 if [[ "$@" == *"pyjuice"* || "$@" == *"all"* ]]; then
   echo "Installing submodule for pyjuice: "$(dirname $0)/pyjuice/pyjuice-april""
-  pip install --no-deps -e "$(dirname $0)/pyjuice/pyjuice-april"
+  pip install -e "$(dirname $0)/pyjuice/pyjuice-april"
 fi
 
 if [[ "$@" == *"einet"* || "$@" == *"all"* ]]; then

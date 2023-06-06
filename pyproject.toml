@@ -42,9 +42,6 @@ test = [
   "pytest",
   "pytest-cov"
 ]
-benchmark = [
-  "numba>=0.57.0rc1"
-]
 
 [project.urls]
 "Homepage" = "https://github.com/april-tools/cirkit"
