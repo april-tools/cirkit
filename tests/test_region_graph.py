@@ -74,7 +74,8 @@ def check_region_graph_save_load(rg: RegionGraph) -> None:
     with tempfile.NamedTemporaryFile("r+") as f:
         rg.save(f.name)
         f.seek(0)
-        loaded_rg = RegionGraph.load(f.name)
+        # TODO: mypy bug? "Expression type contains Any"
+        loaded_rg = RegionGraph.load(f.name)  # type: ignore[misc]
         check_equivalent_region_graphs(rg, loaded_rg)
 
 
