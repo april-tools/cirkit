@@ -7,10 +7,9 @@ First, remember to initiate the submodule if you haven't. We use submodule for a
 git submodule update --init ./pyjuice-april
 ```
 
-Then, install the dependencies for benchmark and the submodule. We use a separate dependency list because `pyjuice`'s is outdated.
+Then, install the submodule with dependencies. We use a script to manage all benchmarks collectively.
 
 ```shell
-pip install -e ../..[benchmark]  # ../.. is repo root
 ../install_submodule.sh pyjuice
 ```
 
