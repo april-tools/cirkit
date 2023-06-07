@@ -141,7 +141,7 @@ default-docstring-type = "google"
 # type checking
 [tool.mypy]
 python_version = 3.8
-mypy_path = "$HOME/python-type-stubs/stubs"
+mypy_path = "3rd-party-stubs"
 follow_imports = "silent"
 follow_imports_for_stubs = true
 check_untyped_defs = true

@@ -4,3 +4,6 @@
 [submodule "benchmark/juice.jl/ProbabilisticCircuits.jl"]
 	path = benchmark/juice.jl/ProbabilisticCircuits.jl
 	url = https://github.com/Juice-jl/ProbabilisticCircuits.jl
+[submodule "3rd-party-stubs"]
+	path = 3rd-party-stubs
+	url = https://github.com/april-tools/python-type-stubs.git
