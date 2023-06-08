@@ -177,6 +177,9 @@ class RegionGraph:
 
         graph = nx.DiGraph()
 
+        if not graph_json["graph"]:  # Only the root region is present
+            graph.add_node(ids_region[0])
+
         for partition in graph_json["graph"]:
             part_output = ids_region[partition["p"]]
             part_input_left = ids_region[partition["l"]]
