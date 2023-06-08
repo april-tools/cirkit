@@ -1,0 +1,25 @@
+name: Unit Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+          cache: 'pip'
+          cache-dependency-path: pyproject.toml
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[test]
+      - name: Run PyTest
+        run: pytest --cov "cirkit/" --cov-report=xml
