@@ -92,8 +92,7 @@ def test_rg_random_binary_tree(num_vars: int, depth: int, num_repetitions: int) 
     rg = RandomBinaryTree(num_vars, depth, num_repetitions, random_state=42)
     check_smoothness_decomposability(rg)
     check_region_partition_layers(rg, bottom_up=True)
-    # This does not terminate
-    # check_region_partition_layers(rg, bottom_up=False)
+    check_region_partition_layers(rg, bottom_up=False)
     check_region_graph_save_load(rg)
 
 
@@ -111,8 +110,7 @@ def test_rg_quad_tree(size: Tuple[int, int], struct_decomp: bool) -> None:
             with pytest.raises(AssertionError):
                 check_strong_structured_decomposability(rg)
     check_region_partition_layers(rg, bottom_up=True)
-    # This does not terminate
-    # check_region_partition_layers(rg, bottom_up=False)
+    check_region_partition_layers(rg, bottom_up=False)
     check_region_graph_save_load(rg)
 
 
@@ -126,6 +124,5 @@ def test_rg_poon_domingos(
     rg = PoonDomingosStructure(shape, delta)
     check_smoothness_decomposability(rg)
     check_region_partition_layers(rg, bottom_up=True)
-    # This does not terminate
-    # check_region_partition_layers(rg, bottom_up=False)
+    check_region_partition_layers(rg, bottom_up=False)
     check_region_graph_save_load(rg)
