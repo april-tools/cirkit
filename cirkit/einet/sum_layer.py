@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, List, Literal, Optional, Tuple
+from typing import Any, List, Literal, Optional
 
 from torch import Tensor
 
@@ -14,41 +14,19 @@ class SumLayer(Layer):
     EinsumLayer and MixingLayer are derived from SumLayer.
     """
 
-    # TODO: the best way to allow generic signature?
-    def __init__(self) -> None:  # TODO: restore params mask ", params_mask=None):"
-        """Init class."""
-        # """
-        # :param params_shape: shape of tensor containing all sum weights (tuple of ints).
-        # :param normalization_dims: the dimensions (axes) of the sum-weights
-        #                   which shall be normalized
-        #                            (int of tuple of ints)
-        # :param params_mask: binary mask for masking out certain parameters
-        #                   (tensor of shape params_shape).
-        # """
-        super().__init__()
-        self.frozen = False
-
-        # TODO: this is used but originally not assigned
-        self.normalization_dims: Tuple[int, ...] = ()
-
-    def freeze(self, freeze: bool = True) -> None:
-        """Freeze all params from bw.
-
-        Args:
-            freeze (bool, optional): Whether to freeze or unfreeze. Defaults to True.
-        """
-        for param in self.parameters():
-            param.requires_grad = not freeze
-        self.frozen = freeze
-
-    # TODO: do we need this? or use a property?
-    def is_frozen(self) -> bool:
-        """Test if is frozen.
-
-        Returns:
-            bool: Whether is frozen.
-        """
-        return self.frozen
+    # TODO: this __init__ is useless
+    # # TODO: the best way to allow generic signature?
+    # def __init__(self) -> None:  # TODO: restore params mask ", params_mask=None):"
+    #     """Init class."""
+    #     # """
+    #     # :param params_shape: shape of tensor containing all sum weights (tuple of ints).
+    #     # :param normalization_dims: the dimensions (axes) of the sum-weights
+    #     #                   which shall be normalized
+    #     #                            (int of tuple of ints)
+    #     # :param params_mask: binary mask for masking out certain parameters
+    #     #                   (tensor of shape params_shape).
+    #     # """
+    #     super().__init__()
 
     @abstractmethod
     def num_of_param(self) -> int:

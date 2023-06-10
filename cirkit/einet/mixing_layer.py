@@ -130,7 +130,6 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         ####### CODE ORIGINALLY FROM SUMLAYER
         self.params_shape = param_shape
         self.params = nn.Parameter(torch.empty(self.params_shape))
-        self.normalization_dims = (2,)
         self.register_buffer("params_mask", params_mask)
         ############## END
 
@@ -176,9 +175,7 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
                 # TODO: assume mypy bug with __mul__ and __div__
                 self.params *= self.params_mask  # type: ignore[misc]
 
-            self.params /= self.params.sum(  # type: ignore[misc]
-                self.normalization_dims, keepdim=True
-            )
+            self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
     # TODO: there's a get_parameter in nn.Module?
     # TODO: why can be a dict

@@ -91,8 +91,6 @@ class FactorizedInputLayer(Layer):
             node.einet_address.layer = self
             node.einet_address.idx = i
 
-        self.frozen = False  # TODO: this is default right?
-
         # TODO: ef_array inits itself, no need here
 
     def num_of_param(self) -> int:
@@ -102,25 +100,6 @@ class FactorizedInputLayer(Layer):
             int: The number of params.
         """
         return math.prod(self.ef_array.params_shape)
-
-    def freeze(self, freeze: bool = True) -> None:
-        """Freeze all params from bw.
-
-        Args:
-            freeze (bool, optional): Whether to freeze or unfreeze. Defaults to True.
-        """
-        for param in self.ef_array.parameters():
-            param.requires_grad = not freeze
-        self.frozen = freeze
-
-    # TODO: do we need this? or use a property?
-    def is_frozen(self) -> bool:
-        """Test if is frozen.
-
-        Returns:
-            bool: Whether is frozen.
-        """
-        return self.frozen
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization."""
