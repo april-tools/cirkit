@@ -129,12 +129,14 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         # TODO: so should put where?
         ####### CODE ORIGINALLY FROM SUMLAYER
         self.params_shape = param_shape
-        self.params: nn.Parameter = None  # type: ignore[assignment]
+        self.params = nn.Parameter(torch.empty(self.params_shape))
         self.normalization_dims = (2,)
         self.register_buffer("params_mask", params_mask)
         ############## END
 
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
+
+        self.reset_parameters()
 
     def num_of_param(self) -> int:
         """Return the total number of parameters of the layer.
@@ -165,23 +167,18 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         if clamp_all or self.params.requires_grad:
             self.params.data.clamp_(min=self.clamp_value)
 
-    def initialize(self) -> None:
-        """Initialize the parameters for this SumLayer."""
-        # TODO: is it good to do so? or use value assign, e.g. copy_?
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
+        nn.init.uniform_(self.params, 0.01, 0.99)
 
-        # TODO: we should extract this as a shared util
-        params = 0.01 + 0.98 * torch.rand(self.params_shape)
-        # assert torch.all(params >= 0)
-
-        # TODO: really any grad here?
         with torch.no_grad():
             if self.params_mask is not None:
-                params *= self.params_mask
+                # TODO: assume mypy bug with __mul__ and __div__
+                self.params *= self.params_mask  # type: ignore[misc]
 
-            params /= params.sum(self.normalization_dims, keepdim=True)
-
-        # assert torch.all(params >= 0)
-        self.params = torch.nn.Parameter(params)
+            self.params /= self.params.sum(  # type: ignore[misc]
+                self.normalization_dims, keepdim=True
+            )
 
     # TODO: there's a get_parameter in nn.Module?
     # TODO: why can be a dict

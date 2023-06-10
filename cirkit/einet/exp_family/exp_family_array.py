@@ -77,8 +77,8 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         self.num_stats = num_stats
         self.params_shape = (num_var, *array_shape, num_stats)
 
+        self.params = nn.Parameter(torch.empty(self.params_shape))
         # TODO: is this a good init? (originally None)
-        self.params: nn.Parameter = nn.Parameter()
         self.ll: Tensor = torch.Tensor()
         self.suff_stats: Tensor = torch.Tensor()
 
@@ -93,6 +93,8 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         # if em is switched off, we re-parametrize the expectation parameters
         # self.reparam holds the function object for this task
         self.reparam = self.reparam_function
+
+        self.reset_parameters()
 
     @abstractmethod
     def sufficient_statistics(self, x: Tensor) -> Tensor:
@@ -185,11 +187,9 @@ class ExponentialFamilyArray(nn.Module, ABC):  # pylint: disable=too-many-instan
         """
 
     # TODO: don't use str, use None instead
-    def initialize(self) -> None:
-        """Initialize the parameters for this ExponentialFamilyArray."""
-        # default initializer; when em is switched off, we reparametrize
-        # and use Gaussian noise as init values.
-        self.params = nn.Parameter(torch.randn(self.params_shape))
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization: N(0, 1)."""
+        nn.init.normal_(self.params)
 
     def __call__(self, x: Tensor) -> Tensor:
         """Invoke the forward.

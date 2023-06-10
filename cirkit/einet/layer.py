@@ -7,6 +7,7 @@ from torch import Tensor, nn
 
 
 # TODO: name it layer?
+# TODO: what interface do we need in this very generic class?
 class Layer(nn.Module, ABC):
     """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""
 
@@ -16,8 +17,8 @@ class Layer(nn.Module, ABC):
         self.prob: Optional[Tensor] = None  # TODO: why None?
 
     @abstractmethod
-    def initialize(self) -> None:
-        """Initialize the layer with default rand params."""
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization."""
 
     def __call__(self, x: Optional[Tensor] = None) -> None:
         """Invoke the forward.

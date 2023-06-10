@@ -195,34 +195,22 @@ class LowRankEiNet(nn.Module):
 
     def initialize(
         self,
-        init_dict: Optional[Dict[object, Tensor]] = None,  # TODO: definitely should not be object
         exp_reparam: bool = False,
         mixing_softmax: bool = False,
     ) -> None:
         """Initialize layers.
 
-        :param init_dict: None; or
-                          dictionary int->initializer; mapping layer index to initializers; or
-                          dictionary layer->initializer;
-                          the init_dict does not need to have an initializer for all layers
         :param exp_reparam: I don't know
         :param mixing_softmax: I don't know
         """
+        # TODO: do we need this function? because each layer inits itself in __init__
         self.exp_reparam = exp_reparam
         assert not mixing_softmax  # TODO: then why have this?
         assert not exp_reparam  # TODO: then why have this?
-        if init_dict is None:
-            init_dict = {}
-        # TODO: I don't know what's the best to do here.
-        # but WHY so many possibilities for the dict in the first palce???
-        if all(isinstance(k, int) for k in init_dict.keys()):
-            init_dict = {
-                self.einet_layers[cast(int, k)]: v  # type: ignore[misc]
-                for k, v in init_dict.items()
-            }
+
         # TODO: I really don't know how to avoid force cast
         for layer in cast(List[Layer], self.einet_layers):
-            layer.initialize()
+            layer.reset_parameters()
 
     # TODO: this get/set is not good
     def set_marginalization_idx(self, idx: Tensor) -> None:

@@ -1,4 +1,3 @@
-import math
 from abc import abstractmethod
 from itertools import count
 from typing import Any, Dict, List, Optional, Tuple
@@ -88,8 +87,6 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         # TODO: should we do it here?
         # super(GenericEinsumLayer, self).__init__()
 
-        # MAKE PARAMETERS
-        self.params_dict, self.shape_dict = self.build_params()
         self.params_mask = None  # TODO: check usage for this, and type?
 
         # get pairs of nodes which are input to the products (list of lists)
@@ -174,12 +171,7 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         self.left_child_log_prob = torch.empty(())
         self.right_child_log_prob = torch.empty(())
 
-    @abstractmethod
-    def build_params(self) -> Tuple[Dict[str, nn.Parameter], Dict[str, Tuple[int, ...]]]:
-        """Create params dict for the layer (the parameters are uninitialized).
-
-        :return: dict {params_name, params}
-        """
+        self.reset_parameters()
 
     @property
     @abstractmethod
@@ -198,36 +190,15 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         Args:
             clamp_all (bool, optional): Whether to clamp all. Defaults to False.
         """
-        for _, par in self.get_params_dict().items():
-            if clamp_all or par.requires_grad:
+        for param in self.parameters():
+            if clamp_all or param.requires_grad:
                 # TODO: don't use .data but what about grad of nn.Param?
-                par.data.clamp_(min=self.clamp_value)
+                param.data.clamp_(min=self.clamp_value)
 
-    def get_params_dict(self) -> Dict[str, nn.Parameter]:
-        """Return the params dict.
-
-        Returns:
-            Dict[str, nn.Parameter]: The params dict.
-        """
-        # TODO: why do we need this?
-        # TODO: also, why params_dict but not named_parameters()
-        assert self.params_dict is not None
-        return self.params_dict
-
-    def initialize(self) -> None:
-        """Initialize the layer parameters."""
-        # TODO: but it's positive. also must it be tuple?
-
-        def _random_nonneg_tensor(shape: Tuple[int, ...]) -> Tensor:
-            return 0.01 + 0.98 * torch.rand(shape)
-
-        for key in self.params_dict:
-            # TODO: not a good thing. at least use setarrt(obj,name,attr)? but nn.Module hook?
-            # TODO: also register param?
-            # pylint: disable-next=unnecessary-dunder-call
-            self.__setattr__(key, nn.Parameter(_random_nonneg_tensor(self.shape_dict[key])))
-            # TODO: how to avoid getattr?
-            self.params_dict[key] = getattr(self, key)  # type: ignore[misc]
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization: U(0.01, 0.99)."""
+        for param in self.parameters():
+            nn.init.uniform_(param, 0.01, 0.99)
 
     @property
     def params_shape(self) -> List[Tuple[int, ...]]:
@@ -236,10 +207,7 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         Returns:
             List[Tuple[int, ...]]: All shapes.
         """
-        whole_shape: List[Tuple[int, ...]] = []
-        for _, value in self.shape_dict.items():
-            whole_shape.append(value)
-        return whole_shape
+        return [param.shape for param in self.parameters()]
 
     # TODO: why not property
     def num_of_param(self) -> int:
@@ -247,11 +215,7 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
 
         :return: the total number of parameters of the layer.
         """
-        param_acc = 0
-        for _, value in self.shape_dict.items():
-            param_acc += math.prod(value)
-
-        return param_acc
+        return sum(param.numel() for param in self.parameters())
 
     @abstractmethod
     def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:

@@ -93,6 +93,8 @@ class FactorizedInputLayer(Layer):
 
         self.frozen = False  # TODO: this is default right?
 
+        # TODO: ef_array inits itself, no need here
+
     def num_of_param(self) -> int:
         """Get number of params.
 
@@ -120,9 +122,9 @@ class FactorizedInputLayer(Layer):
         """
         return self.frozen
 
-    def initialize(self) -> None:
-        """Init by given."""
-        self.ef_array.initialize()
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization."""
+        self.ef_array.reset_parameters()
 
     def forward(self, x: Optional[Tensor] = None) -> None:
         """Compute the factorized leaf densities. We are doing the computation \
