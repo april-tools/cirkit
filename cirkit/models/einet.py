@@ -6,10 +6,10 @@ from torch import Tensor, nn
 
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
-from .einsum_layer import GenericEinsumLayer
-from .exp_family import ExpFamilyInputLayer
-from .layer import Layer
-from .mixing_layer import EinsumMixingLayer
+from ..layers.einsum_layer import GenericEinsumLayer
+from ..layers.exp_family_input_layer import ExpFamilyInputLayer
+from ..layers.layer import Layer
+from ..layers.mixing_layer import EinsumMixingLayer
 
 # TODO: should be split this file from the "layer" folder?
 # TODO: check all type casts. There should not be any without a good reason

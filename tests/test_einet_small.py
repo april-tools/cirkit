@@ -9,9 +9,9 @@ import networkx as nx
 import torch
 from torch import Tensor
 
-from cirkit.einet.einet import LowRankEiNet, _Args
-from cirkit.einet.einsum_layer.cp_einsum_layer import CPEinsumLayer
-from cirkit.einet.exp_family import CategoricalInputLayer
+from cirkit.layers.einsum_layer.cp_einsum_layer import CPEinsumLayer
+from cirkit.layers.exp_family_input_layer import CategoricalInputLayer
+from cirkit.models.einet import LowRankEiNet, _Args
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
 

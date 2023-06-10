@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 
-from cirkit.einet.einsum_layer import GenericEinsumLayer
+from cirkit.layers.einsum_layer import GenericEinsumLayer
 from cirkit.region_graph import RegionGraph, RegionNode
 
 from .layer import Layer
