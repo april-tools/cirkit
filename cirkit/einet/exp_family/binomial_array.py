@@ -7,6 +7,8 @@ from torch.nn import functional as F
 from .exp_family_array import ExponentialFamilyArray
 from .normal_array import _shift_last_axis_to
 
+# TODO: rework docstrings
+
 
 class BinomialArray(ExponentialFamilyArray):
     """Implementation of Binomial distribution."""

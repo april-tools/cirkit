@@ -14,6 +14,7 @@ from .mixing_layer import EinsumMixingLayer
 
 # TODO: should be split this file from the "layer" folder?
 # TODO: check all type casts. There should not be any without a good reason
+# TODO: rework docstrings
 
 
 # TODO: might be a good idea. but how to design better

@@ -6,6 +6,8 @@ from torch import Tensor
 
 from .exp_family_array import ExponentialFamilyArray
 
+# TODO: rework docstrings
+
 
 # TODO: better way to permute?
 def _shift_last_axis_to(x: Tensor, i: int) -> Tensor:

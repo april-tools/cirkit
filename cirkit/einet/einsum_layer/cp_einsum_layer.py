@@ -8,6 +8,8 @@ from cirkit.region_graph import PartitionNode, RegionGraph
 
 from .generic_einsum_layer import GenericEinsumLayer
 
+# TODO: rework docstrings
+
 
 class CPEinsumLayer(GenericEinsumLayer):
     """Candecomp Parafac (decomposition) layer."""

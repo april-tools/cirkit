@@ -9,6 +9,8 @@ from cirkit.region_graph.rg_node import RegionNode
 from .exp_family import ExponentialFamilyArray
 from .layer import Layer
 
+# TODO: rework docstrings
+
 
 # TODO: but we don't have a non-factorized one
 class FactorizedInputLayer(Layer):

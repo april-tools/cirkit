@@ -9,6 +9,8 @@ from cirkit.region_graph import RegionGraph, RegionNode
 
 from .sum_layer import SumLayer
 
+# TODO: rework docstrings
+
 
 @torch.no_grad()
 def _sample_matrix_categorical(p: Tensor) -> Tensor:

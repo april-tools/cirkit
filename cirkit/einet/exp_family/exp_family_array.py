@@ -5,6 +5,7 @@ import torch
 from torch import Tensor, nn
 
 # TODO: find a good way to doc tensor shape
+# TODO: rework docstrings
 
 
 # TODO: why this inherits Module separately? but not Layer?

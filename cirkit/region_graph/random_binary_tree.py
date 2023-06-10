@@ -9,6 +9,8 @@ from ..utils.random import RandomState, check_random_state
 from .region_graph import RegionGraph
 from .rg_node import PartitionNode, RegionNode
 
+# TODO: rework docstrings
+
 
 def _partition_node_randomly(
     graph: nx.DiGraph,

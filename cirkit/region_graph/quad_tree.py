@@ -7,6 +7,7 @@ from .region_graph import RegionGraph
 from .rg_node import PartitionNode, RegionNode
 
 # TODO: add routine for add regions->part->reg structure
+# TODO: rework docstrings
 
 
 def _merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:

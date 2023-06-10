@@ -10,6 +10,8 @@ from .rg_node import PartitionNode, RegionNode
 
 HyperCube = Tuple[Tuple[int, ...], Tuple[int, ...]]
 
+# TODO: rework docstrings
+
 
 def _cut_hypercube(hypercube: HyperCube, axis: int, pos: int) -> Tuple[HyperCube, HyperCube]:
     """Cuts a discrete hypercube into two sub-hypercubes.

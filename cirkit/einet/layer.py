@@ -3,6 +3,8 @@ from typing import Any, Optional
 
 from torch import Tensor, nn
 
+# TODO: rework docstrings
+
 
 # TODO: name it layer?
 class Layer(nn.Module, ABC):

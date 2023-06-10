@@ -5,6 +5,8 @@ from torch import Tensor
 
 from .layer import Layer
 
+# TODO: rework docstrings
+
 
 class SumLayer(Layer):
     """Implements an abstract SumLayer class. Takes care of parameters and EM.

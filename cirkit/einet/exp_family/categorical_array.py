@@ -7,6 +7,8 @@ from torch.nn import functional as F
 from .exp_family_array import ExponentialFamilyArray
 from .normal_array import _shift_last_axis_to
 
+# TODO: rework docstrings
+
 
 @torch.no_grad()
 def _one_hot(x: Tensor, k: int, dtype: torch.dtype = torch.float32) -> Tensor:

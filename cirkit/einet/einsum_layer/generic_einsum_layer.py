@@ -13,6 +13,7 @@ from ..layer import Layer
 from ..sum_layer import SumLayer
 
 # TODO: relative import or absolute
+# TODO: rework docstrings
 
 
 class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attributes
