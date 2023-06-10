@@ -48,7 +48,8 @@ class Layer(nn.Module, ABC):
                  (K in the paper) and num_nodes is the number of PC nodes in the layer.
         """
 
-    @abstractmethod
+    # TODO: need to implement relevant things
+    # TODO: should be abstract but for now NO to prevent blocking downstream
     def backtrack(self, *args: Any, **kwargs: Any) -> Tensor:  # type: ignore[misc]
         """Define routines for backtracking in EiNets, for sampling and MPE approximation.
 
@@ -56,3 +57,4 @@ class Layer(nn.Module, ABC):
         :param kwargs:
         :return:
         """
+        raise NotImplementedError

@@ -187,8 +187,13 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         """
         return self.params
 
-    # TODO: make forward return something. and maybe it's not good to have an extra _forward
-    def _forward(self, params: Optional[Tensor] = None) -> None:  # type: ignore[override]
+    # TODO: make forward return something
+    def forward(self, x: Optional[Tensor] = None) -> None:
+        """Do the forward.
+
+        Args:
+            x (Optional[Tensor], optional): Not used. Defaults to None.
+        """
         assert self.layers[0].prob is not None  # TODO: why need this?
         self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
         self.child_log_prob = self.child_log_prob.reshape(
@@ -208,6 +213,7 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         assert not torch.isnan(self.prob).any()
         assert not torch.isinf(self.prob).any()
 
+    # TODO: how is this useful?
     # pylint: disable=too-many-arguments
     def _backtrack(  # type: ignore[misc]
         self,
@@ -242,12 +248,3 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
             layers_out = [self.layers[0]] * len(node_idx)
 
         return dist_idx, node_idx_out, layers_out
-
-    # pylint: disable=missing-param-doc
-    def backtrack(self, *_: Any, **__: Any) -> Tensor:  # type: ignore[misc]
-        """Do nothing.
-
-        Returns:
-            Tensor: Nothing.
-        """
-        return Tensor()

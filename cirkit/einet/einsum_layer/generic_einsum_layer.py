@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from itertools import count
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -227,7 +227,7 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         """
 
     # TODO: input not used? also no return?
-    def _forward(self, _: Optional[Tensor] = None) -> None:  # type: ignore[override]
+    def forward(self, _: Optional[Tensor] = None) -> None:
         """Do EinsumLayer forward pass.
 
         We assume that all parameters are in the correct range (no checks done).
@@ -290,20 +290,3 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
             log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
 
         self.prob = log_prob
-
-    # pylint: disable=missing-param-doc
-    def backtrack(self, *_: Any, **__: Any) -> Tensor:  # type: ignore[misc]
-        """Do nothing.
-
-        Returns:
-            Tensor: Nothing.
-        """
-        return Tensor()
-
-    def _backtrack(self, *_: Any, **__: Any) -> Tensor:  # type: ignore[misc]
-        """Do nothing.
-
-        Returns:
-            Tensor: Nothing.
-        """
-        return Tensor()
