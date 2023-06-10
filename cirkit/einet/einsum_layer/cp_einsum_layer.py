@@ -87,6 +87,7 @@ class CPEinsumLayer(GenericEinsumLayer):
         right_hidden = torch.einsum("bjp,jrp->brp", right_prob, pb)
 
         if self.prod_exp:
+            # TODO: extract log sum exp as routine?
             hidden = left_hidden * right_hidden
             prob = torch.einsum("brp,orp->bop", hidden, pc)
             log_prob = torch.log(prob) + left_max + right_max

@@ -64,4 +64,4 @@ def test_einet_partition_function(
     total_prob = probs.sum(0)
     log_prob = torch.log(total_prob) + out_max
 
-    assert torch.isclose(einet.partition_function(), log_prob, rtol=1e-5, atol=1e-15)
+    assert torch.isclose(einet.partition_function(), log_prob, rtol=1e-6, atol=0)
