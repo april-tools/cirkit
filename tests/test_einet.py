@@ -5,9 +5,9 @@ import pytest
 import torch
 from torch import Tensor
 
-from cirkit.einet.einet import LowRankEiNet, _Args
-from cirkit.einet.einsum_layer.cp_einsum_layer import CPEinsumLayer
-from cirkit.einet.exp_family import CategoricalArray
+from cirkit.layers.einsum_layer.cp_einsum_layer import CPEinsumLayer
+from cirkit.layers.exp_family_input_layer import CategoricalInputLayer
+from cirkit.models.einet import LowRankEiNet, _Args
 from cirkit.region_graph import RegionGraph
 from cirkit.region_graph.poon_domingos_structure import PoonDomingosStructure
 from cirkit.region_graph.quad_tree import QuadTree
@@ -38,7 +38,7 @@ def test_einet_partition_function(
 
     args = _Args(
         layer_type=CPEinsumLayer,
-        exponential_family=CategoricalArray,
+        exponential_family=CategoricalInputLayer,
         exponential_family_args={"k": 2},  # type: ignore[misc]
         num_sums=16,
         num_input=16,

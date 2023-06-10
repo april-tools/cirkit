@@ -1,26 +1,31 @@
-from typing import Any, Sequence
+from typing import Any, List
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from .exp_family_array import ExponentialFamilyArray
-from .normal_array import _shift_last_axis_to
+from cirkit.region_graph import RegionNode
+
+from .exp_family_input_layer import ExpFamilyInputLayer
+from .normal_input_layer import _shift_last_axis_to
+
+# TODO: rework docstrings
 
 
-class BinomialArray(ExponentialFamilyArray):
+class BinomialInputLayer(ExpFamilyInputLayer):
     """Implementation of Binomial distribution."""
 
-    def __init__(self, num_var: int, num_dims: int, array_shape: Sequence[int], n: int):
+    def __init__(self, nodes: List[RegionNode], num_var: int, num_dims: int, n: int):
         """Init class.
 
         Args:
+            nodes (List[RegionNode]): Passed to super.
             num_var (int): Number of vars.
             num_dims (int): Number of dims.
             array_shape (Sequence[int]): Shape of array.
             n (int): n for binomial.
         """
-        super().__init__(num_var, num_dims, array_shape, num_stats=num_dims)
+        super().__init__(nodes, num_var, num_dims, num_stats=num_dims)
         self.n = n
 
     def reparam_function(self, params: Tensor) -> Tensor:

@@ -9,9 +9,9 @@ import networkx as nx
 import torch
 from torch import Tensor
 
-from cirkit.einet.einet import LowRankEiNet, _Args
-from cirkit.einet.einsum_layer.cp_einsum_layer import CPEinsumLayer
-from cirkit.einet.exp_family import CategoricalArray
+from cirkit.layers.einsum_layer.cp_einsum_layer import CPEinsumLayer
+from cirkit.layers.exp_family_input_layer import CategoricalInputLayer
+from cirkit.models.einet import LowRankEiNet, _Args
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
 
@@ -68,7 +68,7 @@ def _get_einet() -> LowRankEiNet:
 
     args = _Args(
         layer_type=CPEinsumLayer,
-        exponential_family=CategoricalArray,
+        exponential_family=CategoricalInputLayer,
         exponential_family_args={"k": 2},  # type: ignore[misc]
         num_sums=1,
         num_input=1,
@@ -85,7 +85,7 @@ def _get_einet() -> LowRankEiNet:
 
 def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
     return {
-        "einet_layers.0.ef_array.params": (4, 1, 1, 2),
+        "einet_layers.0.params": (4, 1, 1, 2),
         "einet_layers.1.cp_a": (1, 1, 4),
         "einet_layers.1.cp_b": (1, 1, 4),
         "einet_layers.1.cp_c": (1, 1, 4),
@@ -100,7 +100,7 @@ def _set_params(einet: LowRankEiNet) -> None:
     state_dict = einet.state_dict()  # type: ignore[misc]
     state_dict.update(  # type: ignore[misc]
         {  # type: ignore[misc]
-            "einet_layers.0.ef_array.params": torch.tensor(
+            "einet_layers.0.params": torch.tensor(
                 # TODO: source of Any not identified
                 [  # type: ignore[misc]
                     [0, 0],  # type: ignore[misc]  # 1/2, 1/2

@@ -1,13 +1,14 @@
-import math
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.einet.einsum_layer import GenericEinsumLayer
+from cirkit.layers.einsum_layer import GenericEinsumLayer
 from cirkit.region_graph import RegionGraph, RegionNode
 
-from .sum_layer import SumLayer
+from .layer import Layer
+
+# TODO: rework docstrings
 
 
 @torch.no_grad()
@@ -26,7 +27,7 @@ def _sample_matrix_categorical(p: Tensor) -> Tensor:
     return rand_idx
 
 
-class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attributes
+class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
     # TODO: how we fold line here?
     r"""Implement the Mixing Layer, in order to handle sum nodes with multiple children.
 
@@ -127,19 +128,21 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         # TODO: so should put where?
         ####### CODE ORIGINALLY FROM SUMLAYER
         self.params_shape = param_shape
-        self.params: nn.Parameter = None  # type: ignore[assignment]
-        self.normalization_dims = (2,)
+        self.params = nn.Parameter(torch.empty(self.params_shape))
         self.register_buffer("params_mask", params_mask)
         ############## END
 
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
 
-    def num_of_param(self) -> int:
+        self.reset_parameters()
+
+    @property
+    def num_params(self) -> int:
         """Return the total number of parameters of the layer.
 
         :return: the total number of parameters of the layer.
         """
-        return math.prod(self.params_shape)
+        return self.params.numel()
 
     # TODO: why in both children but not base class
     @property
@@ -163,23 +166,16 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         if clamp_all or self.params.requires_grad:
             self.params.data.clamp_(min=self.clamp_value)
 
-    def initialize(self) -> None:
-        """Initialize the parameters for this SumLayer."""
-        # TODO: is it good to do so? or use value assign, e.g. copy_?
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
+        nn.init.uniform_(self.params, 0.01, 0.99)
 
-        # TODO: we should extract this as a shared util
-        params = 0.01 + 0.98 * torch.rand(self.params_shape)
-        # assert torch.all(params >= 0)
-
-        # TODO: really any grad here?
         with torch.no_grad():
             if self.params_mask is not None:
-                params *= self.params_mask
+                # TODO: assume mypy bug with __mul__ and __div__
+                self.params *= self.params_mask  # type: ignore[misc]
 
-            params /= params.sum(self.normalization_dims, keepdim=True)
-
-        # assert torch.all(params >= 0)
-        self.params = torch.nn.Parameter(params)
+            self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
     # TODO: there's a get_parameter in nn.Module?
     # TODO: why can be a dict
@@ -191,8 +187,13 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         """
         return self.params
 
-    # TODO: make forward return something. and maybe it's not good to have an extra _forward
-    def _forward(self, params: Optional[Tensor] = None) -> None:  # type: ignore[override]
+    # TODO: make forward return something
+    def forward(self, x: Optional[Tensor] = None) -> None:
+        """Do the forward.
+
+        Args:
+            x (Optional[Tensor], optional): Not used. Defaults to None.
+        """
         assert self.layers[0].prob is not None  # TODO: why need this?
         self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
         self.child_log_prob = self.child_log_prob.reshape(
@@ -212,6 +213,7 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
         assert not torch.isnan(self.prob).any()
         assert not torch.isinf(self.prob).any()
 
+    # TODO: how is this useful?
     # pylint: disable=too-many-arguments
     def _backtrack(  # type: ignore[misc]
         self,
@@ -246,12 +248,3 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
             layers_out = [self.layers[0]] * len(node_idx)
 
         return dist_idx, node_idx_out, layers_out
-
-    # pylint: disable=missing-param-doc
-    def backtrack(self, *_: Any, **__: Any) -> Tensor:  # type: ignore[misc]
-        """Do nothing.
-
-        Returns:
-            Tensor: Nothing.
-        """
-        return Tensor()

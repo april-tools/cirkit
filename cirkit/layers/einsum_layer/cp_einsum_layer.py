@@ -1,12 +1,14 @@
-from typing import Dict, List, Tuple
+from typing import List
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.einet.layer import Layer
+from cirkit.layers.layer import Layer
 from cirkit.region_graph import PartitionNode, RegionGraph
 
 from .generic_einsum_layer import GenericEinsumLayer
+
+# TODO: rework docstrings
 
 
 class CPEinsumLayer(GenericEinsumLayer):
@@ -32,24 +34,10 @@ class CPEinsumLayer(GenericEinsumLayer):
             prod_exp (bool): I don't know.
             r (int, optional): The rank? Maybe. Defaults to 1.
         """
-        # TODO: init order?
-        self.r = r
         super().__init__(graph, products, layers, prod_exp, k)
-
-    def build_params(self) -> Tuple[Dict[str, nn.Parameter], Dict[str, Tuple[int, ...]]]:
-        """Create params dict for the layer (the parameters are uninitialized).
-
-        :return: dict {params_name, params}
-        """
-        # TODO: I don't know what's the meaning of this function w/o actually building the params
-        params_dict = {"cp_a": nn.Parameter(), "cp_b": nn.Parameter(), "cp_c": nn.Parameter()}
-        shapes_dict = {
-            "cp_a": (self.num_input_dist, self.r, len(self.products)),
-            "cp_b": (self.num_input_dist, self.r, len(self.products)),
-            "cp_c": (self.num_sums, self.r, len(self.products)),
-        }
-        # TODO: [int, ...] and [int, int, int] not compatible, only by mypy
-        return params_dict, shapes_dict  # type: ignore[return-value]
+        self.cp_a = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
+        self.cp_b = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
+        self.cp_c = nn.Parameter(torch.empty(self.num_sums, r, len(products)))
 
     @property
     def clamp_value(self) -> float:
@@ -57,15 +45,12 @@ class CPEinsumLayer(GenericEinsumLayer):
 
         :return: value for parameters clamping.
         """
-        # TODO: not sure what does this mean. why not self.params_dict["cp_a"]
-        par_tensor = list(self.params_dict.items())[0][1]
-        smallest_normal = torch.finfo(par_tensor.dtype).smallest_normal
+        smallest_normal = torch.finfo(self.cp_a.dtype).smallest_normal
         # TODO: seems mypy cannot understand **
         return smallest_normal ** (  # type: ignore[no-any-return,misc]
             1 / 3 if self.prod_exp else 1 / 2
         )
 
-    # pylint: disable-next=too-many-locals
     def central_einsum(self, left_prob: Tensor, right_prob: Tensor) -> Tensor:
         """Compute the main Einsum operation of the layer.
 
@@ -79,17 +64,13 @@ class CPEinsumLayer(GenericEinsumLayer):
         right_max: Tensor = torch.max(self.right_child_log_prob, dim=1, keepdim=True)[0]
         right_prob = torch.exp(self.right_child_log_prob - right_max)
 
-        pa = self.params_dict["cp_a"]
-        pb = self.params_dict["cp_b"]
-        pc = self.params_dict["cp_c"]
-
-        left_hidden = torch.einsum("bip,irp->brp", left_prob, pa)
-        right_hidden = torch.einsum("bjp,jrp->brp", right_prob, pb)
+        left_hidden = torch.einsum("bip,irp->brp", left_prob, self.cp_a)
+        right_hidden = torch.einsum("bjp,jrp->brp", right_prob, self.cp_b)
 
         if self.prod_exp:
             # TODO: extract log sum exp as routine?
             hidden = left_hidden * right_hidden
-            prob = torch.einsum("brp,orp->bop", hidden, pc)
+            prob = torch.einsum("brp,orp->bop", hidden, self.cp_c)
             log_prob = torch.log(prob) + left_max + right_max
         else:
             log_left_hidden = torch.log(left_hidden) + left_max
@@ -99,7 +80,7 @@ class CPEinsumLayer(GenericEinsumLayer):
             # TODO: same as above
             hidden_max: Tensor = torch.max(log_hidden, 1, keepdim=True)[0]
             hidden = torch.exp(log_hidden - hidden_max)
-            prob = torch.einsum("brp,orp->bop", hidden, pc)
+            prob = torch.einsum("brp,orp->bop", hidden, self.cp_c)
             log_prob = torch.log(prob) + hidden_max
 
         return log_prob

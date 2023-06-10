@@ -6,14 +6,14 @@ from torch import Tensor, nn
 
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
-from .einsum_layer import GenericEinsumLayer
-from .exp_family import ExponentialFamilyArray
-from .input_layer import FactorizedInputLayer
-from .layer import Layer
-from .mixing_layer import EinsumMixingLayer
+from ..layers.einsum_layer import GenericEinsumLayer
+from ..layers.exp_family_input_layer import ExpFamilyInputLayer
+from ..layers.layer import Layer
+from ..layers.mixing_layer import EinsumMixingLayer
 
 # TODO: should be split this file from the "layer" folder?
 # TODO: check all type casts. There should not be any without a good reason
+# TODO: rework docstrings
 
 
 # TODO: might be a good idea. but how to design better
@@ -39,7 +39,7 @@ class _Args:
         num_var: int,
         num_sums: int,
         num_input: int,
-        exponential_family: Type[ExponentialFamilyArray],
+        exponential_family: Type[ExpFamilyInputLayer],
         exponential_family_args: Dict[str, Any],
         r: int = 1,
         prod_exp: bool = False,
@@ -115,12 +115,11 @@ class LowRankEiNet(nn.Module):
         # input layer
         # TODO: a better way to represent the interleaved layers
         einet_layers: List[Layer] = [
-            FactorizedInputLayer(
+            args.exponential_family(
                 cast(List[RegionNode], self.graph_layers[0]),
                 args.num_var,
                 args.num_dims,
-                args.exponential_family,
-                args.exponential_family_args,  # type: ignore[misc]
+                **args.exponential_family_args,  # type: ignore[misc]
             )
         ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
 
@@ -190,38 +189,26 @@ class LowRankEiNet(nn.Module):
             torch.device: the device.
         """
         # TODO: ModuleList is not generic type
-        return cast(FactorizedInputLayer, self.einet_layers[0]).ef_array.params.device
+        return cast(ExpFamilyInputLayer, self.einet_layers[0]).params.device
 
     def initialize(
         self,
-        init_dict: Optional[Dict[object, Tensor]] = None,  # TODO: definitely should not be object
         exp_reparam: bool = False,
         mixing_softmax: bool = False,
     ) -> None:
         """Initialize layers.
 
-        :param init_dict: None; or
-                          dictionary int->initializer; mapping layer index to initializers; or
-                          dictionary layer->initializer;
-                          the init_dict does not need to have an initializer for all layers
         :param exp_reparam: I don't know
         :param mixing_softmax: I don't know
         """
+        # TODO: do we need this function? because each layer inits itself in __init__
         self.exp_reparam = exp_reparam
         assert not mixing_softmax  # TODO: then why have this?
         assert not exp_reparam  # TODO: then why have this?
-        if init_dict is None:
-            init_dict = {}
-        # TODO: I don't know what's the best to do here.
-        # but WHY so many possibilities for the dict in the first palce???
-        if all(isinstance(k, int) for k in init_dict.keys()):
-            init_dict = {
-                self.einet_layers[cast(int, k)]: v  # type: ignore[misc]
-                for k, v in init_dict.items()
-            }
+
         # TODO: I really don't know how to avoid force cast
         for layer in cast(List[Layer], self.einet_layers):
-            layer.initialize()
+            layer.reset_parameters()
 
     # TODO: this get/set is not good
     def set_marginalization_idx(self, idx: Tensor) -> None:
@@ -230,7 +217,7 @@ class LowRankEiNet(nn.Module):
         Args:
             idx (Tensor): The indices.
         """
-        cast(FactorizedInputLayer, self.einet_layers[0]).set_marginalization_idx(idx)
+        cast(ExpFamilyInputLayer, self.einet_layers[0]).set_marginalization_idx(idx)
 
     def get_marginalization_idx(self) -> Optional[Tensor]:
         """Get indicices of marginalized variables.
@@ -238,7 +225,7 @@ class LowRankEiNet(nn.Module):
         Returns:
             Tensor: The indices.
         """
-        return cast(FactorizedInputLayer, self.einet_layers[0]).get_marginalization_idx()
+        return cast(ExpFamilyInputLayer, self.einet_layers[0]).get_marginalization_idx()
 
     def partition_function(self, x: Optional[Tensor] = None) -> Tensor:
         """Do something that I don't know.
