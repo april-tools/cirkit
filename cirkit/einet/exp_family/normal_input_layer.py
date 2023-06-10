@@ -1,10 +1,12 @@
 import math
-from typing import Any, Sequence
+from typing import Any, List
 
 import torch
 from torch import Tensor
 
-from .exp_family_array import ExponentialFamilyArray
+from cirkit.region_graph import RegionNode
+
+from .exp_family_input_layer import ExpFamilyInputLayer
 
 # TODO: rework docstrings
 
@@ -16,27 +18,27 @@ def _shift_last_axis_to(x: Tensor, i: int) -> Tensor:
     return x.permute(tuple(range(i)) + (num_axes - 1,) + tuple(range(i, num_axes - 1)))
 
 
-class NormalArray(ExponentialFamilyArray):
+class NormalInputLayer(ExpFamilyInputLayer):
     """Implementation of Normal distribution."""
 
     def __init__(  # TODO: pylint: disable=too-many-arguments
         self,
+        nodes: List[RegionNode],
         num_var: int,
         num_dims: int,
-        array_shape: Sequence[int],
         min_var: float = 0.0001,
         max_var: float = 10.0,
     ):
         """Init class.
 
         Args:
+            nodes (List[RegionNode]): Passed to super.
             num_var (int): Number of vars.
             num_dims (int): Number of dims.
-            array_shape (Sequence[int]): Shape of array.
             min_var (float, optional): Min var. Defaults to 0.0001.
             max_var (float, optional): Max var. Defaults to 10.0.
         """
-        super().__init__(num_var, num_dims, array_shape, num_stats=2 * num_dims)
+        super().__init__(nodes, num_var, num_dims, num_stats=2 * num_dims)
         self.min_var = min_var
         self.max_var = max_var
         self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_dims)

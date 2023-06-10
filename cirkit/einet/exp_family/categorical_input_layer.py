@@ -1,11 +1,13 @@
-from typing import Any, Sequence
+from typing import Any, List
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from .exp_family_array import ExponentialFamilyArray
-from .normal_array import _shift_last_axis_to
+from cirkit.region_graph import RegionNode
+
+from .exp_family_input_layer import ExpFamilyInputLayer
+from .normal_input_layer import _shift_last_axis_to
 
 # TODO: rework docstrings
 
@@ -18,19 +20,19 @@ def _one_hot(x: Tensor, k: int, dtype: torch.dtype = torch.float32) -> Tensor:
     return ind
 
 
-class CategoricalArray(ExponentialFamilyArray):
+class CategoricalInputLayer(ExpFamilyInputLayer):
     """Implementation of Categorical distribution."""
 
-    def __init__(self, num_var: int, num_dims: int, array_shape: Sequence[int], k: int):
+    def __init__(self, nodes: List[RegionNode], num_var: int, num_dims: int, k: int):
         """Init class.
 
         Args:
+            nodes (List[RegionNode]): Passed to super.
             num_var (int): Number of vars.
             num_dims (int): Number of dims.
-            array_shape (Sequence[int]): Shape of array.
             k (int): k for category.
         """
-        super().__init__(num_var, num_dims, array_shape, num_stats=num_dims * k)
+        super().__init__(nodes, num_var, num_dims, num_stats=num_dims * k)
         self.k = k
 
     def reparam_function(self, params: Tensor) -> Tensor:
@@ -68,10 +70,12 @@ class CategoricalArray(ExponentialFamilyArray):
         Returns:
             Tensor: The expectation.
         """
+        # TODO: how to save the shape
+        array_shape = self.params_shape[1:3]
         theta = torch.clamp(phi, 1e-12, 1)
-        theta = theta.reshape(self.num_var, *self.array_shape, self.num_dims, self.k)
+        theta = theta.reshape(self.num_var, *array_shape, self.num_dims, self.k)
         theta /= theta.sum(dim=-1, keepdim=True)
-        theta = theta.reshape(self.num_var, *self.array_shape, self.num_dims * self.k)
+        theta = theta.reshape(self.num_var, *array_shape, self.num_dims * self.k)
         theta = torch.log(theta)
         return theta
 
@@ -101,7 +105,9 @@ class CategoricalArray(ExponentialFamilyArray):
         self, num_samples: int, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
     ) -> Tensor:
         with torch.no_grad():
-            dist = params.reshape(self.num_var, *self.array_shape, self.num_dims, self.k)
+            # TODO: save shape
+            array_shape = self.params_shape[1:3]
+            dist = params.reshape(self.num_var, *array_shape, self.num_dims, self.k)
             cum_sum = torch.cumsum(dist[..., :-1], dim=-1)  # TODO: why slice to -1?
             rand = torch.rand(num_samples, *cum_sum.shape[:-1], 1, device=cum_sum.device)
             samples = torch.sum(rand > cum_sum, dim=-1).to(dtype)
@@ -112,6 +118,8 @@ class CategoricalArray(ExponentialFamilyArray):
         self, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
     ) -> Tensor:
         with torch.no_grad():
-            dist = params.reshape(self.num_var, *self.array_shape, self.num_dims, self.k)
+            # TODO: save shape
+            array_shape = self.params_shape[1:3]
+            dist = params.reshape(self.num_var, *array_shape, self.num_dims, self.k)
             mode = torch.argmax(dist, dim=-1).to(dtype)
             return _shift_last_axis_to(mode, 1)

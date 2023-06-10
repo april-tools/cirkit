@@ -1,4 +1,4 @@
-from .binomial_array import BinomialArray as BinomialArray
-from .categorical_array import CategoricalArray as CategoricalArray
-from .exp_family_array import ExponentialFamilyArray as ExponentialFamilyArray
-from .normal_array import NormalArray as NormalArray
+from .binomial_input_layer import BinomialInputLayer as BinomialInputLayer
+from .categorical_input_layer import CategoricalInputLayer as CategoricalInputLayer
+from .exp_family_input_layer import ExpFamilyInputLayer as ExpFamilyInputLayer
+from .normal_input_layer import NormalInputLayer as NormalInputLayer
