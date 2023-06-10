@@ -1,4 +1,3 @@
-import math
 from typing import Any, Dict, List, Literal, Optional, Sequence, Type
 
 import torch
@@ -93,13 +92,14 @@ class FactorizedInputLayer(Layer):
 
         # TODO: ef_array inits itself, no need here
 
-    def num_of_param(self) -> int:
+    @property
+    def num_params(self) -> int:
         """Get number of params.
 
         Returns:
             int: The number of params.
         """
-        return math.prod(self.ef_array.params_shape)
+        return self.ef_array.params.numel()
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization."""

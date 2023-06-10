@@ -9,13 +9,12 @@ from torch.nn import functional as F
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
 from ..layer import Layer
-from ..sum_layer import SumLayer
 
 # TODO: relative import or absolute
 # TODO: rework docstrings
 
 
-class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attributes
+class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
     """Base for all einsums."""
 
     # TODO: is product a good name here? should split
@@ -209,8 +208,8 @@ class GenericEinsumLayer(SumLayer):  # pylint: disable=too-many-instance-attribu
         """
         return [param.shape for param in self.parameters()]
 
-    # TODO: why not property
-    def num_of_param(self) -> int:
+    @property
+    def num_params(self) -> int:
         """Return the total number of parameters of the layer.
 
         :return: the total number of parameters of the layer.

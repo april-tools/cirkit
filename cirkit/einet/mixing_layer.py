@@ -1,4 +1,3 @@
-import math
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import torch
@@ -7,7 +6,7 @@ from torch import Tensor, nn
 from cirkit.einet.einsum_layer import GenericEinsumLayer
 from cirkit.region_graph import RegionGraph, RegionNode
 
-from .sum_layer import SumLayer
+from .layer import Layer
 
 # TODO: rework docstrings
 
@@ -28,7 +27,7 @@ def _sample_matrix_categorical(p: Tensor) -> Tensor:
     return rand_idx
 
 
-class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attributes
+class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
     # TODO: how we fold line here?
     r"""Implement the Mixing Layer, in order to handle sum nodes with multiple children.
 
@@ -137,12 +136,13 @@ class EinsumMixingLayer(SumLayer):  # pylint: disable=too-many-instance-attribut
 
         self.reset_parameters()
 
-    def num_of_param(self) -> int:
+    @property
+    def num_params(self) -> int:
         """Return the total number of parameters of the layer.
 
         :return: the total number of parameters of the layer.
         """
-        return math.prod(self.params_shape)
+        return self.params.numel()
 
     # TODO: why in both children but not base class
     @property
