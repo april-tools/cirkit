@@ -13,6 +13,7 @@ from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.region_graph.poon_domingos_structure import PoonDomingosStructure
 from cirkit.region_graph.quad_tree import QuadTree
 from cirkit.region_graph.random_binary_tree import RandomBinaryTree
+from cirkit.utils import RandomCtx
 
 
 def check_smoothness_decomposability(rg: RegionGraph) -> None:
@@ -84,12 +85,14 @@ def check_region_graph_save_load(rg: RegionGraph) -> None:
 )
 def test_rg_random_binary_tree(num_vars: int, depth: int, num_repetitions: int) -> None:
     # Not enough variables for splitting at a certain depth
+    # TODO: why set 42 without checking specific value?
     if num_vars < math.pow(2, depth):
-        with pytest.raises(AssertionError):
-            RandomBinaryTree(num_vars, depth, num_repetitions, random_state=42)
+        with pytest.raises(AssertionError), RandomCtx(42):
+            RandomBinaryTree(num_vars, depth, num_repetitions)
         return
 
-    rg = RandomBinaryTree(num_vars, depth, num_repetitions, random_state=42)
+    with RandomCtx(42):
+        rg = RandomBinaryTree(num_vars, depth, num_repetitions)
     check_smoothness_decomposability(rg)
     check_region_partition_layers(rg, bottom_up=True)
     check_region_partition_layers(rg, bottom_up=False)

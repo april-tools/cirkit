@@ -1,11 +1,11 @@
 import itertools
+import random
 from typing import List, Optional, Sequence
 
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
-from ..utils.random import RandomState, check_random_state
 from .region_graph import RegionGraph
 from .rg_node import PartitionNode, RegionNode
 
@@ -13,7 +13,6 @@ from .rg_node import PartitionNode, RegionNode
 def _partition_node_randomly(
     graph: nx.DiGraph,
     node: RegionNode,
-    random_state: np.random.RandomState,
     num_parts: Optional[int] = None,
     proportions: Optional[Sequence[float]] = None,
 ) -> List[RegionNode]:
@@ -26,13 +25,14 @@ def _partition_node_randomly(
     :return: a list of partitioned region nodes
     """  # TODO: rework docstring
     scope = list(node.scope)
-    random_state.shuffle(scope)
+    random.shuffle(scope)
 
     split: NDArray[np.float64]
     if proportions is None:
         assert num_parts, "Must provide at least one of num_parts and proportions."
         split = np.ones(num_parts) / num_parts
     else:
+        num_parts = num_parts if num_parts is not None else len(proportions)
         split = np.array(proportions, dtype=np.float64)
         split /= split.sum()  # type: ignore[misc]
 
@@ -68,9 +68,7 @@ class RandomBinaryTree(RegionGraph):
         UAI 2019
     """
 
-    def __init__(
-        self, num_vars: int, depth: int, num_repetitions: int, random_state: RandomState = 42
-    ) -> None:
+    def __init__(self, num_vars: int, depth: int, num_repetitions: int) -> None:
         """Init class.
 
         :param num_vars: number of random variables (int)
@@ -83,14 +81,12 @@ class RandomBinaryTree(RegionGraph):
         root = RegionNode(range(num_vars))
         self._graph.add_node(root)
 
-        random_state = check_random_state(random_state)
         for repetition in range(num_repetitions):
             nodes = [root]
             for _ in range(depth):
                 nodes = list(
                     itertools.chain.from_iterable(
-                        _partition_node_randomly(self._graph, node, random_state, num_parts=2)
-                        for node in nodes
+                        _partition_node_randomly(self._graph, node, num_parts=2) for node in nodes
                     )
                 )
             for node in nodes:
