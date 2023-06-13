@@ -22,4 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[test]
       - name: Run PyTest
-        run: pytest --cov "cirkit/" --cov-report=xml
+        run: |
+          coverage run --source=cirkit -m pytest
+          coverage xml
+          coverage report -m
