@@ -61,7 +61,7 @@ class RGNode(ABC):
 
     def __repr__(self) -> str:
         """Generate the `repr` string of the node."""
-        return self.__class__.__name__ + ": " + repr(self.scope)
+        return self.__class__.__name__ + ": " + repr(set(self.scope))
 
     def __lt__(self, other: "RGNode") -> bool:  # we don't use Self as it can compare to RGNode
         """Compare the node with the other, for sorting."""
