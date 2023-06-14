@@ -48,13 +48,15 @@ class RGNode(ABC):
         Args:
             scope (Iterable[int]): The scope of this node.
         """
-        self.scope = set(scope)
+        self.scope = frozenset(scope)
+
         # cannot mark as List[RGNode] because of variance issue
+        # they're empty at construction, will be populated when adding edges
         self.inputs: List[Any] = []  # type: ignore[misc]
         self.outputs: List[Any] = []  # type: ignore[misc]
 
         node_id = next(RGNode._id_counter)
-        self._sort_key = (tuple(sorted(list(self.scope))), node_id)
+        self._sort_key = (tuple(sorted(self.scope)), node_id)
 
     def __repr__(self) -> str:
         """Generate the `repr` string of the node."""

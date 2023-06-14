@@ -2,9 +2,8 @@
 # TODO: disable checking for docstrings for every test file in tests/
 
 import itertools
-import math
 import tempfile
-from typing import List, Set, Tuple, Union
+from typing import Dict, FrozenSet, List, Set, Tuple, Union
 
 import numpy as np
 import pytest
@@ -18,11 +17,11 @@ from cirkit.utils import RandomCtx
 
 def check_smoothness_decomposability(rg: RegionGraph) -> None:
     for r in rg.inner_region_nodes:
-        rscopes: Set[Tuple[int, ...]] = set(tuple(n.scope) for n in r.inputs)
+        rscopes = set(n.scope for n in r.inputs)
         assert len(rscopes) == 1, "Smoothness is not satisfied"
-        assert set(list(rscopes)[0]) == r.scope, "Inconsistent scopes"
+        assert rscopes.pop() == r.scope, "Inconsistent scopes"
     for p in rg.partition_nodes:
-        pscopes: List[Set[int]] = list(n.scope for n in p.inputs)
+        pscopes = list(n.scope for n in p.inputs)
         for i, j in itertools.combinations(range(len(pscopes)), 2):
             assert not (pscopes[i] & pscopes[j]), "Decomposability is not satisfied"
             assert pscopes[i].issubset(p.scope), "Inconsistent scopes"
@@ -30,16 +29,13 @@ def check_smoothness_decomposability(rg: RegionGraph) -> None:
 
 def check_strong_structured_decomposability(rg: RegionGraph) -> None:
     check_smoothness_decomposability(rg)
-    decomps = {}
+    decomps: Dict[FrozenSet[int], Set[FrozenSet[int]]] = {}
     for p in rg.partition_nodes:
-        scope = tuple(sorted(list(p.scope)))
-        iscopes: List[Set[int]] = list(n.scope for n in p.inputs)
+        scope = p.scope
+        iscopes = set(n.scope for n in p.inputs)
         if scope not in decomps:
             decomps[scope] = iscopes
-            continue
-        oth_iscopes = set(tuple(s) for s in iscopes)
-        cur_iscopes = set(tuple(s) for s in decomps[scope])
-        assert oth_iscopes == cur_iscopes, "Strong structured-decomposability is not satisfied"
+        assert iscopes == decomps[scope], "Strong structured-decomposability is not satisfied"
 
 
 def check_region_partition_layers(rg: RegionGraph, bottom_up: bool) -> None:
@@ -85,7 +81,8 @@ def check_region_graph_save_load(rg: RegionGraph) -> None:
 def test_rg_random_binary_tree(num_vars: int, depth: int, num_repetitions: int) -> None:
     # Not enough variables for splitting at a certain depth
     # TODO: why set 42 without checking specific value?
-    if num_vars < math.pow(2, depth):
+    # TODO: ** issue: see typeshed
+    if num_vars < 2**depth:  # type: ignore[misc]
         with pytest.raises(AssertionError), RandomCtx(42):
             RandomBinaryTree(num_vars, depth, num_repetitions)
         return

@@ -7,7 +7,6 @@ import networkx as nx
 from .rg_node import PartitionNode, RegionNode, RGNode
 
 # TODO: unify what names to use: sum/region, product/partition, leaf/input
-# TODO: confirm the direction of edges
 # TODO: directly subclass the DiGraph?
 # TODO: rework docstrings??
 
