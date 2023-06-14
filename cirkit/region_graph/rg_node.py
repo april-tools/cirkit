@@ -49,6 +49,7 @@ class RGNode(ABC):
             scope (Iterable[int]): The scope of this node.
         """
         self.scope = frozenset(scope)
+        assert self.scope, "The scope of a node must be non-empty"
 
         # cannot mark as List[RGNode] because of variance issue
         # they're empty at construction, will be populated when adding edges

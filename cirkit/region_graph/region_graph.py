@@ -1,6 +1,7 @@
+import itertools
 import json
-from typing import Collection, Dict, Iterable, List, Set, Tuple, TypedDict, Union, cast, final
-from typing_extensions import Self  # TODO: in typing from 3.11
+from functools import cached_property
+from typing import Dict, FrozenSet, Iterable, List, Set, TypedDict, Union, final
 
 import networkx as nx
 
@@ -11,11 +12,19 @@ from .rg_node import PartitionNode, RegionNode, RGNode
 # TODO: rework docstrings??
 
 
+class _PartitionJson(TypedDict):
+    """The struction of a partitioning in the json file."""
+
+    p: int
+    l: int
+    r: int
+
+
 class _RGJson(TypedDict):
     """The structure of region graph json file."""
 
     regions: Dict[str, List[int]]
-    graph: List[Dict[str, int]]
+    graph: List[_PartitionJson]
 
 
 @final
@@ -30,43 +39,84 @@ class RegionGraph:
             node.inputs.extend(graph.predecessors(node))  # type: ignore[misc]
             node.outputs.extend(graph.successors(node))  # type: ignore[misc]
 
-    # TODO: do we need a class for node view?
-    # TODO: do we return a generic container or concrete class?
+    ###############################    Node views    ###############################
+
+    # For efficiency, all these node views return an iterable (implemented as a generator).
+    # Downstream code can wrap them in containers based on the needs. Keep in mind there's no
+    # guarantee on the iteration order.
+
     @property
-    def nodes(self) -> Collection[RGNode]:
+    def nodes(self) -> Iterable[RGNode]:
         """Get all the nodes in the graph."""
-        nodes: Collection[RGNode] = self._graph.nodes  # DiGraph.nodes is both set and dict
-        return nodes
+        return iter(self._graph.nodes)  # type: ignore[no-any-return,misc]
 
     @property
-    def region_nodes(self) -> Collection[RegionNode]:
+    def region_nodes(self) -> Iterable[RegionNode]:
         """Get region nodes in the graph."""
-        return [node for node in self.nodes if isinstance(node, RegionNode)]
+        return (node for node in self.nodes if isinstance(node, RegionNode))
 
     @property
-    def partition_nodes(self) -> Collection[PartitionNode]:
+    def partition_nodes(self) -> Iterable[PartitionNode]:
         """Get partition nodes in the graph."""
-        return [node for node in self.nodes if isinstance(node, PartitionNode)]
+        return (node for node in self.nodes if isinstance(node, PartitionNode))
 
     @property
-    def input_nodes(self) -> Collection[RegionNode]:
-        """Get input nodes of the graph, which are regions."""
-        node_indegs: Iterable[Tuple[RGNode, int]] = self._graph.in_degree
-        # enforce type because we know they're regions
-        return [cast(RegionNode, node) for node, deg in node_indegs if not deg]
+    def input_nodes(self) -> Iterable[RegionNode]:
+        """Get input nodes of the graph, which are guaranteed to be regions."""
+        return (node for node in self.region_nodes if not node.inputs)
 
     @property
-    def output_nodes(self) -> Collection[RegionNode]:
-        """Get output nodes of the graph, which are regions."""
-        node_outdegs: Iterable[Tuple[RGNode, int]] = self._graph.out_degree
-        # enforce type because we know they're regions
-        return [cast(RegionNode, node) for node, deg in node_outdegs if not deg]
+    def output_nodes(self) -> Iterable[RegionNode]:
+        """Get output nodes of the graph, which are guaranteed to be regions."""
+        return (node for node in self.region_nodes if not node.outputs)
 
     @property
-    def inner_region_nodes(self) -> Collection[RegionNode]:
+    def inner_region_nodes(self) -> Iterable[RegionNode]:
         """Get inner (non-input) region nodes in the graph."""
-        node_indegs: Iterable[Tuple[RGNode, int]] = self._graph.in_degree
-        return [node for node, deg in node_indegs if isinstance(node, RegionNode) and deg]
+        return (node for node in self.region_nodes if node.inputs)
+
+    ##########################    Structural properties    #########################
+
+    # The RG is expected to be immutable after construction. Also, each of these properties is
+    # simply a bool, which is cheap to save. Therefore, we use cached_property to save computation.
+
+    @cached_property
+    def is_smooth(self) -> bool:
+        """Test smoothness."""
+        return all(
+            all(partition.scope == region.scope for partition in region.inputs)
+            for region in self.inner_region_nodes
+        )
+
+    @cached_property
+    def is_decomposable(self) -> bool:
+        """Test decomposability."""
+        return all(
+            not any(
+                reg1.scope & reg2.scope
+                for reg1, reg2 in itertools.combinations(partition.inputs, 2)
+            )
+            and set().union(*(region.scope for region in partition.inputs)) == partition.scope
+            for partition in self.partition_nodes
+        )
+
+    @cached_property
+    def is_structured_decomposable(self) -> bool:
+        """Test structured-decomposability."""
+        if not (self.is_smooth and self.is_decomposable):
+            return False
+        decompositions: Dict[FrozenSet[int], Set[FrozenSet[int]]] = {}
+        for partition in self.partition_nodes:
+            decomp = set(region.scope for region in partition.inputs)
+            if partition.scope not in decompositions:
+                decompositions[partition.scope] = decomp
+            if decomp != decompositions[partition.scope]:
+                return False
+        return True
+
+    ##############################    Serialization    #############################
+
+    # TODO: we can only deal with two children here
 
     def save(self, filename: str) -> None:
         """Save the region graph to json file.
@@ -78,13 +128,13 @@ class RegionGraph:
         graph_json: _RGJson = {"regions": {}, "graph": []}
 
         # TODO: give each node an id as attr? they do have one defined. but what about load?
-        region_ids = {node: n for n, node in enumerate(self.region_nodes)}
-        graph_json["regions"] = {str(n): list(node.scope) for node, n in region_ids.items()}
+        region_ids = {node: idx for idx, node in enumerate(self.region_nodes)}
+        graph_json["regions"] = {str(idx): list(node.scope) for node, idx in region_ids.items()}
 
-        for partition_node in self.partition_nodes:
-            part_input = partition_node.inputs
+        for partition in self.partition_nodes:
+            part_input = partition.inputs
             assert len(part_input) == 2
-            part_output = partition_node.outputs
+            part_output = partition.outputs
             assert len(part_output) == 1
 
             graph_json["graph"].append(
@@ -99,24 +149,16 @@ class RegionGraph:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(graph_json, f)
 
-    @classmethod
-    def load(cls, filename: str) -> Self:
+    @staticmethod
+    def load(filename: str) -> "RegionGraph":
         """Load a region graph from json file.
 
         Args:
             filename (str): The file name to load.
 
-        Raises:
-            NotImplementedError: It is not implemented for children classes.
-
         Returns:
             RegionGraph: The loaded region graph.
         """
-        if cls is not RegionGraph:
-            raise NotImplementedError(
-                "Must be called as `RegionGraph.load()` instead of from child class."
-            )
-
         with open(filename, "r", encoding="utf-8") as f:
             graph_json: _RGJson = json.load(f)
 
@@ -124,7 +166,8 @@ class RegionGraph:
 
         graph = nx.DiGraph()
 
-        if not graph_json["graph"]:  # Only the root region is present
+        if not graph_json["graph"]:  # No edges in graph, meaning only one region node
+            assert len(ids_region) == 1
             graph.add_node(ids_region[0])
 
         for partition in graph_json["graph"]:
@@ -142,7 +185,9 @@ class RegionGraph:
         # for node in get_leaves(graph):
         #     node.einet_address.replica_idx = 0
 
-        return cls(graph)
+        return RegionGraph(graph)
+
+    ##############################    Layerization    ##############################
 
     # TODO: do we have it here or decouple from RG? also how to properly name "layer"?
     def topological_layers(

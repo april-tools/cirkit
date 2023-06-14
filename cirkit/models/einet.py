@@ -93,7 +93,7 @@ class LowRankEiNet(nn.Module):
         self.args = args
 
         assert (
-            len(graph.output_nodes) == 1
+            len(list(graph.output_nodes)) == 1
         ), "Currently only EinNets with single root node supported."
 
         # TODO: return a list instead?
