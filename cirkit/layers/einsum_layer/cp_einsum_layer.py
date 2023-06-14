@@ -4,7 +4,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
-from cirkit.region_graph import PartitionNode, RegionGraph
+from cirkit.region_graph import PartitionNode
 
 from .generic_einsum_layer import GenericEinsumLayer
 
@@ -17,7 +17,6 @@ class CPEinsumLayer(GenericEinsumLayer):
     # TODO: original code changed args order. Not sure what impact
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        graph: RegionGraph,
         products: List[PartitionNode],
         layers: List[Layer],
         k: int,
@@ -27,14 +26,13 @@ class CPEinsumLayer(GenericEinsumLayer):
         """Init class.
 
         Args:
-            graph (RegionGraph): The region graph.
             products (List[PartitionNode]): The current product layer.
             layers (List[Layer]): All the layers currently.
             k (int): I don't know.
             prod_exp (bool): I don't know.
             r (int, optional): The rank? Maybe. Defaults to 1.
         """
-        super().__init__(graph, products, layers, prod_exp, k)
+        super().__init__(products, layers, prod_exp, k)
         self.cp_a = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
         self.cp_b = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
         self.cp_c = nn.Parameter(torch.empty(self.num_sums, r, len(products)))

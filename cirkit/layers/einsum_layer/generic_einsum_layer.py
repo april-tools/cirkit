@@ -6,7 +6,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
+from cirkit.region_graph import PartitionNode, RegionNode
 
 from ..layer import Layer
 
@@ -20,9 +20,8 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
     # TODO: is product a good name here? should split
     # TODO: input can be more generic than List
     # we have to provide operation for input, operation for product and operation after product
-    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
+    def __init__(
         self,
-        graph: RegionGraph,
         products: List[PartitionNode],
         layers: List[Layer],
         prod_exp: bool,
@@ -31,7 +30,6 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """Init class.
 
         Args:
-            graph (RegionGraph): The region graph.
             products (List[PartitionNode]): The current product layer.
             layers (List[Layer]): All the layers currently.
             prod_exp (bool): I don't know.
@@ -52,7 +50,7 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # # # # # # # # #
 
         # TODO: check all constructions that can use comprehension
-        set_num_sums = set(n.num_dist for p in products for n in graph.get_node_output(p))
+        set_num_sums = set(n.num_dist for p in products for n in p.outputs)
         assert (
             len(set_num_sums) == 1
         ), "Number of distributions must be the same for all parent nodes in one layer."
@@ -62,22 +60,21 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
             self.num_sums = k
             # set num_sums in the graph
             # TODO: find another name for this
-            successors = set(n for p in products for n in graph.get_node_input(p))
+            successors = set(n for p in products for n in p.inputs)
             for n in successors:
                 n.num_dist = k
         else:
             self.num_sums = num_sums_from_graph
 
-        num_input_dist = set(n.num_dist for p in products for n in graph.get_node_input(p))
+        num_input_dist = set(n.num_dist for p in products for n in p.inputs)
         assert len(num_input_dist) == 1, (
             "Number of input distributions must be the same for all child nodes in one layer. "
             f"{num_input_dist}"
         )
         self.num_input_dist = num_input_dist.pop()
 
-        # TODO: what type get_node_input() should return
         assert all(
-            len(list(graph.get_node_input(p))) == 2 for p in self.products
+            len(p.inputs) == 2 for p in self.products
         ), "Only 2-partitions are currently supported."
 
         # # # # # # # # #
@@ -91,7 +88,7 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # get pairs of nodes which are input to the products (list of lists)
         # length of the outer list is same as self.products, length of inner lists is 2
         # "left child" has index 0, "right child" has index 1
-        self.inputs = [sorted(graph.get_node_input(p)) for p in self.products]
+        self.inputs = [sorted(p.inputs) for p in self.products]
         # TODO: again, why do we need sorting
 
         # collect all layers which contain left/right children
@@ -152,12 +149,11 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         for c, product in enumerate(self.products):
             # each product must have exactly 1 parent (sum node)
-            # TODO: do we return a list?
-            nodes = list(graph.get_node_output(product))
+            nodes = product.outputs
             assert len(nodes) == 1
             node = nodes[0]
 
-            if len(list(graph.get_node_input(node))) == 1:
+            if len(node.inputs) == 1:
                 node.einet_address.layer = self
                 node.einet_address.idx = c
             else:  # case followed by EinsumMixingLayer

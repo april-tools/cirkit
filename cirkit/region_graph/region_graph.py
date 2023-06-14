@@ -1,17 +1,5 @@
 import json
-from typing import (
-    Collection,
-    Dict,
-    Iterable,
-    List,
-    Set,
-    Tuple,
-    TypedDict,
-    Union,
-    cast,
-    final,
-    overload,
-)
+from typing import Collection, Dict, Iterable, List, Set, Tuple, TypedDict, Union, cast, final
 from typing_extensions import Self  # TODO: in typing from 3.11
 
 import networkx as nx
@@ -39,6 +27,9 @@ class RegionGraph:
         """Init graph with an nx.DiGraph given."""
         super().__init__()
         self._graph = graph
+        for node in self.nodes:
+            node.inputs.extend(graph.predecessors(node))  # type: ignore[misc]
+            node.outputs.extend(graph.successors(node))  # type: ignore[misc]
 
     # TODO: do we need a class for node view?
     # TODO: do we return a generic container or concrete class?
@@ -78,48 +69,6 @@ class RegionGraph:
         node_indegs: Iterable[Tuple[RGNode, int]] = self._graph.in_degree
         return [node for node, deg in node_indegs if isinstance(node, RegionNode) and deg]
 
-    @overload
-    def get_node_input(self, node: PartitionNode) -> Iterable[RegionNode]:
-        ...
-
-    @overload
-    def get_node_input(self, node: RegionNode) -> Iterable[PartitionNode]:
-        ...
-
-    # TODO: return list or iter? predecessors itself returns an iterator
-    def get_node_input(self, node: RGNode) -> Iterable[RGNode]:
-        """Get input nodes of a node.
-
-        Args:
-            node (RGNode): The node queried.
-
-        Returns:
-            Iterable[RGNode]: The inputs to the node.
-        """
-        inputs: Iterable[RGNode] = self._graph.predecessors(node)
-        return inputs
-
-    @overload
-    def get_node_output(self, node: PartitionNode) -> Iterable[RegionNode]:
-        ...
-
-    @overload
-    def get_node_output(self, node: RegionNode) -> Iterable[PartitionNode]:
-        ...
-
-    # TODO: return list or iter?
-    def get_node_output(self, node: RGNode) -> Iterable[RGNode]:
-        """Get output nodes of a node.
-
-        Args:
-            node (RGNode): The node queried.
-
-        Returns:
-            Iterable[RGNode]: The outputs to the node.
-        """
-        outputs: Iterable[RGNode] = self._graph.successors(node)
-        return outputs
-
     def save(self, filename: str) -> None:
         """Save the region graph to json file.
 
@@ -134,9 +83,9 @@ class RegionGraph:
         graph_json["regions"] = {str(n): list(node.scope) for node, n in region_ids.items()}
 
         for partition_node in self.partition_nodes:
-            part_input = list(self.get_node_input(partition_node))
+            part_input = partition_node.inputs
             assert len(part_input) == 2
-            part_output = list(self.get_node_output(partition_node))
+            part_output = partition_node.outputs
             assert len(part_output) == 1
 
             graph_json["graph"].append(
@@ -217,9 +166,6 @@ class RegionGraph:
             else self._topological_layers_top_down()
         )
 
-    # TODO: the 4 `pylint disable not-an-iterable` is due to a bug in astroid in 2021
-    # check the progress here https://github.com/pylint-dev/astroid/issues/1015
-
     def _topological_layers_bottom_up(self) -> List[Union[List[RegionNode], List[PartitionNode]]]:
         """Layerize in the bottom-up manner.
 
@@ -242,8 +188,7 @@ class RegionGraph:
                 partition
                 for partition in partition_nodes
                 if partition not in visited_nodes
-                # pylint: disable-next=not-an-iterable
-                and all(region in visited_nodes for region in self.get_node_input(partition))
+                and all(region in visited_nodes for region in partition.inputs)
             ]
             partition_layer = sorted(partition_layer)
             layers.append(partition_layer)
@@ -253,8 +198,7 @@ class RegionGraph:
                 region
                 for region in inner_region_nodes
                 if region not in visited_nodes
-                # pylint: disable-next=not-an-iterable
-                and all(partition in visited_nodes for partition in self.get_node_input(region))
+                and all(partition in visited_nodes for partition in region.inputs)
             ]
             region_layer = sorted(region_layer)
             layers.append(region_layer)
@@ -285,8 +229,7 @@ class RegionGraph:
                 region
                 for region in inner_region_nodes
                 if region not in visited_nodes
-                # pylint: disable-next=not-an-iterable
-                and all(partition in visited_nodes for partition in self.get_node_output(region))
+                and all(partition in visited_nodes for partition in region.outputs)
             ]
             region_layer = sorted(region_layer)
             layers_inv.append(region_layer)
@@ -296,8 +239,7 @@ class RegionGraph:
                 partition
                 for partition in partition_nodes
                 if partition not in visited_nodes
-                # pylint: disable-next=not-an-iterable
-                and all(region in visited_nodes for region in self.get_node_output(partition))
+                and all(region in visited_nodes for region in partition.outputs)
             ]
             partition_layer = sorted(partition_layer)
             layers_inv.append(partition_layer)

@@ -18,11 +18,11 @@ from cirkit.utils import RandomCtx
 
 def check_smoothness_decomposability(rg: RegionGraph) -> None:
     for r in rg.inner_region_nodes:
-        rscopes: Set[Tuple[int, ...]] = set(tuple(n.scope) for n in rg.get_node_input(r))
+        rscopes: Set[Tuple[int, ...]] = set(tuple(n.scope) for n in r.inputs)
         assert len(rscopes) == 1, "Smoothness is not satisfied"
         assert set(list(rscopes)[0]) == r.scope, "Inconsistent scopes"
     for p in rg.partition_nodes:
-        pscopes: List[Set[int]] = list(n.scope for n in rg.get_node_input(p))
+        pscopes: List[Set[int]] = list(n.scope for n in p.inputs)
         for i, j in itertools.combinations(range(len(pscopes)), 2):
             assert not (pscopes[i] & pscopes[j]), "Decomposability is not satisfied"
             assert pscopes[i].issubset(p.scope), "Inconsistent scopes"
@@ -33,7 +33,7 @@ def check_strong_structured_decomposability(rg: RegionGraph) -> None:
     decomps = {}
     for p in rg.partition_nodes:
         scope = tuple(sorted(list(p.scope)))
-        iscopes: List[Set[int]] = list(n.scope for n in rg.get_node_input(p))
+        iscopes: List[Set[int]] = list(n.scope for n in p.inputs)
         if scope not in decomps:
             decomps[scope] = iscopes
             continue

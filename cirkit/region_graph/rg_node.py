@@ -1,6 +1,7 @@
 import itertools
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable, List
 
 # TODO: rework docstrings
 
@@ -33,13 +34,14 @@ class _EiNetAddress:
     replica_idx: int = 0
 
 
-class RGNode:
+class RGNode(ABC):
     """The base class for nodes in region graphs."""
 
     # TODO: id for base class or children? only used for sort? really need?
     _id_counter = itertools.count(0)
     """we assign each object a unique id."""
 
+    @abstractmethod
     def __init__(self, scope: Iterable[int]) -> None:
         """Construct the node.
 
@@ -47,6 +49,9 @@ class RGNode:
             scope (Iterable[int]): The scope of this node.
         """
         self.scope = set(scope)
+        # cannot mark as List[RGNode] because of variance issue
+        self.inputs: List[Any] = []  # type: ignore[misc]
+        self.outputs: List[Any] = []  # type: ignore[misc]
 
         node_id = next(RGNode._id_counter)
         self._sort_key = (tuple(sorted(list(self.scope))), node_id)
@@ -68,6 +73,9 @@ class RegionNode(RGNode):  # pylint: disable=too-few-public-methods
     To construct a PC, we simply use the DiGraph (directed graph) class of networkx.
     """
 
+    inputs: List["PartitionNode"]
+    outputs: List["PartitionNode"]
+
     def __init__(self, scope: Iterable[int]) -> None:
         """Is a docstring."""  # TODO: how to avoid rewrite docstring?
         super().__init__(scope)
@@ -84,6 +92,17 @@ class PartitionNode(RGNode):  # pylint: disable=too-few-public-methods
 
     To construct a PC, we simply use the DiGraph (directed graph) class of networkx.
     """
+
+    inputs: List[RegionNode]
+    outputs: List[RegionNode]
+
+    def __init__(self, scope: Iterable[int]) -> None:  # pylint: disable=useless-parent-delegation
+        """Is a dummy init to override abstract.
+
+        Args:
+            scope (Iterable[int]): the scope.
+        """
+        super().__init__(scope)
 
     def __lt__(self, other: RGNode) -> bool:
         """Compare the node with the other. A partition is always larger."""
