@@ -1,7 +1,7 @@
 import itertools
 import json
 from functools import cached_property
-from typing import Dict, FrozenSet, Iterable, List, Set, TypedDict, Union, final
+from typing import Dict, FrozenSet, Iterable, List, Set, TypedDict, Union, final, overload
 
 import networkx as nx
 
@@ -31,13 +31,37 @@ class _RGJson(TypedDict):
 class RegionGraph:
     """The base class for region graphs."""
 
-    def __init__(self, graph: nx.DiGraph) -> None:
-        """Init graph with an nx.DiGraph given."""
+    def __init__(self) -> None:
+        """Init graph empty."""
         super().__init__()
-        self._graph = graph
-        for node in self.nodes:
-            node.inputs.extend(graph.predecessors(node))  # type: ignore[misc]
-            node.outputs.extend(graph.successors(node))  # type: ignore[misc]
+        self._graph = nx.DiGraph()
+
+    def add_node(self, node: RGNode) -> None:
+        """Add a node to the graph.
+
+        Args:
+            node (RGNode): Node to add.
+        """
+        self._graph.add_node(node)
+
+    @overload
+    def add_edge(self, tail: RegionNode, head: PartitionNode) -> None:
+        ...
+
+    @overload
+    def add_edge(self, tail: PartitionNode, head: RegionNode) -> None:
+        ...
+
+    def add_edge(self, tail: RGNode, head: RGNode) -> None:
+        """Add an edge to the graph. Nodes are automatically added.
+
+        Args:
+            tail (RGNode): The tail of the edge (from).
+            head (RGNode): The head of the edge (to).
+        """
+        self._graph.add_edge(tail, head)
+        tail.outputs.append(head)  # type: ignore[misc]
+        head.inputs.append(tail)  # type: ignore[misc]
 
     ###############################    Node views    ###############################
 
@@ -164,7 +188,7 @@ class RegionGraph:
 
         ids_region = {int(idx): RegionNode(scope) for idx, scope in graph_json["regions"].items()}
 
-        graph = nx.DiGraph()
+        graph = RegionGraph()
 
         if not graph_json["graph"]:  # No edges in graph, meaning only one region node
             assert len(ids_region) == 1
@@ -185,7 +209,7 @@ class RegionGraph:
         # for node in get_leaves(graph):
         #     node.einet_address.replica_idx = 0
 
-        return RegionGraph(graph)
+        return graph
 
     ##############################    Layerization    ##############################
 

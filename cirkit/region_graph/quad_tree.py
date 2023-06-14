@@ -1,7 +1,5 @@
 from typing import List
 
-import networkx as nx
-
 from .poon_domingos_structure import _HypercubeToScopeCache  # TODO: make util?
 from .region_graph import RegionGraph
 from .rg_node import PartitionNode, RegionNode
@@ -10,7 +8,7 @@ from .rg_node import PartitionNode, RegionNode
 # TODO: rework docstrings
 
 
-def _merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
+def _merge_2_regions(regions: List[RegionNode], graph: RegionGraph) -> RegionNode:
     """Make the structure to connect 2 children.
 
     Args:
@@ -34,7 +32,7 @@ def _merge_2_regions(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode
 
 
 # pylint: disable-next=too-many-locals
-def _merge_4_regions_mixed(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
+def _merge_4_regions_mixed(regions: List[RegionNode], graph: RegionGraph) -> RegionNode:
     """Make the structure to connect 4 children with mixed partitions.
 
     Args:
@@ -96,7 +94,7 @@ def _merge_4_regions_mixed(regions: List[RegionNode], graph: nx.DiGraph) -> Regi
     return whole_region
 
 
-def _merge_4_regions_struct_decomp(regions: List[RegionNode], graph: nx.DiGraph) -> RegionNode:
+def _merge_4_regions_struct_decomp(regions: List[RegionNode], graph: RegionGraph) -> RegionNode:
     """Make the structure to connect 4 children with structured-decomposability \
         (horizontal then vertical).
 
@@ -178,7 +176,7 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
 
     buffer: List[List[RegionNode]] = [[] for _ in range(width)]
 
-    graph = nx.DiGraph()
+    graph = RegionGraph()
 
     # Add Leaves
     for i in range(width):
@@ -225,4 +223,4 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
     # for node in get_leaves(graph):
     #     node.einet_address.replica_idx = 0
 
-    return RegionGraph(graph)
+    return graph

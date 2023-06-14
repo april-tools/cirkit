@@ -1,5 +1,5 @@
 import itertools
-from typing import Dict, List, Type, Union
+from typing import Callable, Dict, List, Union
 
 import pytest
 import torch
@@ -15,7 +15,7 @@ from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 from cirkit.utils import RandomCtx
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs,log_answer",
     [
         (PoonDomingosStructure, {"shape": [4, 4], "delta": 2}, 9.79221248626709),
@@ -25,7 +25,9 @@ from cirkit.utils import RandomCtx
 )
 @RandomCtx(42)
 def test_einet_partition_function(
-    rg_cls: Type[RegionGraph], kwargs: Dict[str, Union[int, bool, List[int]]], log_answer: float
+    rg_cls: Callable[..., RegionGraph],
+    kwargs: Dict[str, Union[int, bool, List[int]]],
+    log_answer: float,
 ) -> None:
     """Tests the creation and partition of an einet.
 
@@ -38,7 +40,7 @@ def test_einet_partition_function(
     # TODO: type of kwargs should be refined
     device = "cpu"
 
-    graph = rg_cls(**kwargs)  # type: ignore[arg-type]
+    graph = rg_cls(**kwargs)
 
     args = _Args(
         layer_type=CPEinsumLayer,

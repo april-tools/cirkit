@@ -5,7 +5,6 @@ import itertools
 import math
 from typing import Dict, Tuple
 
-import networkx as nx
 import torch
 from torch import Tensor
 
@@ -36,7 +35,7 @@ def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
 
     reg0123 = RegionNode({0, 1, 2, 3})
 
-    graph = nx.DiGraph()
+    graph = RegionGraph()
 
     graph.add_edge(reg0, part01)
     graph.add_edge(reg0, part02)
@@ -60,7 +59,7 @@ def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
     graph.add_edge(part01_23, reg0123)
     graph.add_edge(part02_13, reg0123)
 
-    return RegionGraph(graph)
+    return graph
 
 
 def _get_einet() -> LowRankEiNet:

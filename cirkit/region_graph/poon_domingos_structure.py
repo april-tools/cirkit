@@ -1,7 +1,6 @@
 from math import ceil, floor
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
-import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
@@ -107,7 +106,7 @@ class _HypercubeToScopeCache:  # pylint: disable=too-few-public-methods
         return scope_
 
 
-def _get_region_nodes_by_scope(graph: nx.DiGraph, scope: Iterable[int]) -> List[RegionNode]:
+def _get_region_nodes_by_scope(graph: RegionGraph, scope: Iterable[int]) -> List[RegionNode]:
     """Get `RegionNode`s with a specific scope.
 
     Args:
@@ -118,12 +117,7 @@ def _get_region_nodes_by_scope(graph: nx.DiGraph, scope: Iterable[int]) -> List[
         List[RegionNode]: The `RegionNode`s found with the scope
     """
     scope = set(scope)
-    # TODO: digraph typing
-    return [  # type: ignore[misc]
-        n
-        for n in graph.nodes
-        if isinstance(n, RegionNode) and n.scope == scope  # type: ignore[misc]
-    ]
+    return [n for n in graph.region_nodes if n.scope == scope]
 
 
 # TODO: refactor
@@ -277,7 +271,7 @@ def PoonDomingosStructure(
     hypercube_scope = hypercube_to_scope(hypercube, shape)
 
     root = RegionNode(hypercube_scope)
-    graph = nx.DiGraph()
+    graph = RegionGraph()
     graph.add_node(root)
 
     queue: List[HyperCube] = [hypercube]
@@ -326,4 +320,4 @@ def PoonDomingosStructure(
     # for node in get_leaves(graph):
     #     node.einet_address.replica_idx = 0
 
-    return RegionGraph(graph)
+    return graph

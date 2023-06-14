@@ -2,7 +2,6 @@ import itertools
 import random
 from typing import List, Optional, Sequence
 
-import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
@@ -13,7 +12,7 @@ from .rg_node import PartitionNode, RegionNode
 
 
 def _partition_node_randomly(
-    graph: nx.DiGraph,
+    graph: RegionGraph,
     node: RegionNode,
     num_parts: Optional[int] = None,
     proportions: Optional[Sequence[float]] = None,
@@ -78,7 +77,7 @@ def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionG
     :return: generated graph (DiGraph)
     """
     root = RegionNode(range(num_vars))
-    graph = nx.DiGraph()
+    graph = RegionGraph()
     graph.add_node(root)
 
     for repetition in range(num_repetitions):
@@ -93,4 +92,4 @@ def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionG
             # TODO: confirm: only replica idx for leaf?
             node.einet_address.replica_idx = repetition
 
-    return RegionGraph(graph)
+    return graph
