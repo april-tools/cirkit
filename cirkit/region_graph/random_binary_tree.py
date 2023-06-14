@@ -60,7 +60,9 @@ def _partition_node_randomly(
     return region_nodes
 
 
-class RandomBinaryTree(RegionGraph):
+# TODO: do we need to warn invalid name here?
+# pylint: disable-next=invalid-name
+def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionGraph:
     """Generate a PC graph via several random binary trees -- RAT-SPNs.
 
     See
@@ -68,30 +70,27 @@ class RandomBinaryTree(RegionGraph):
         Robert Peharz, Antonio Vergari, Karl Stelzner, Alejandro Molina, Xiaoting Shao,
         Martin Trapp, Kristian Kersting, Zoubin Ghahramani
         UAI 2019
+
+
+    :param num_vars: number of random variables (int)
+    :param depth: splitting depth (int)
+    :param num_repetitions: number of repetitions (int)
+    :return: generated graph (DiGraph)
     """
+    root = RegionNode(range(num_vars))
+    graph = nx.DiGraph()
+    graph.add_node(root)
 
-    def __init__(self, num_vars: int, depth: int, num_repetitions: int) -> None:
-        """Init class.
-
-        :param num_vars: number of random variables (int)
-        :param depth: splitting depth (int)
-        :param num_repetitions: number of repetitions (int)
-        :return: generated graph (DiGraph)
-        """
-        root = RegionNode(range(num_vars))
-        graph = nx.DiGraph()
-        graph.add_node(root)
-
-        for repetition in range(num_repetitions):
-            nodes = [root]
-            for _ in range(depth):
-                nodes = list(
-                    itertools.chain.from_iterable(
-                        _partition_node_randomly(graph, node, num_parts=2) for node in nodes
-                    )
+    for repetition in range(num_repetitions):
+        nodes = [root]
+        for _ in range(depth):
+            nodes = list(
+                itertools.chain.from_iterable(
+                    _partition_node_randomly(graph, node, num_parts=2) for node in nodes
                 )
-            for node in nodes:
-                # TODO: confirm: only replica idx for leaf?
-                node.einet_address.replica_idx = repetition
+            )
+        for node in nodes:
+            # TODO: confirm: only replica idx for leaf?
+            node.einet_address.replica_idx = repetition
 
-        super().__init__(graph)
+    return RegionGraph(graph)

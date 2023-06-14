@@ -9,6 +9,7 @@ from typing import (
     TypedDict,
     Union,
     cast,
+    final,
     overload,
 )
 from typing_extensions import Self  # TODO: in typing from 3.11
@@ -30,6 +31,7 @@ class _RGJson(TypedDict):
     graph: List[Dict[str, int]]
 
 
+@final
 class RegionGraph:
     """The base class for region graphs."""
 
