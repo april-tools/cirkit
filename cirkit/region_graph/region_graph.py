@@ -3,8 +3,6 @@ import json
 from functools import cached_property
 from typing import Dict, FrozenSet, Iterable, List, Set, TypedDict, Union, final, overload
 
-import networkx as nx
-
 from .rg_node import PartitionNode, RegionNode, RGNode
 
 # TODO: unify what names to use: sum/region, product/partition, leaf/input
@@ -34,7 +32,8 @@ class RegionGraph:
     def __init__(self) -> None:
         """Init graph empty."""
         super().__init__()
-        self._graph = nx.DiGraph()
+        self._nodes: Set[RGNode] = set()
+        # TODO: check graph is valid
 
     def add_node(self, node: RGNode) -> None:
         """Add a node to the graph.
@@ -42,7 +41,7 @@ class RegionGraph:
         Args:
             node (RGNode): Node to add.
         """
-        self._graph.add_node(node)
+        self._nodes.add(node)
 
     @overload
     def add_edge(self, tail: RegionNode, head: PartitionNode) -> None:
@@ -59,7 +58,8 @@ class RegionGraph:
             tail (RGNode): The tail of the edge (from).
             head (RGNode): The head of the edge (to).
         """
-        self._graph.add_edge(tail, head)
+        self._nodes.add(tail)
+        self._nodes.add(head)
         tail.outputs.append(head)  # type: ignore[misc]
         head.inputs.append(tail)  # type: ignore[misc]
 
@@ -72,7 +72,7 @@ class RegionGraph:
     @property
     def nodes(self) -> Iterable[RGNode]:
         """Get all the nodes in the graph."""
-        return iter(self._graph.nodes)  # type: ignore[no-any-return,misc]
+        return iter(self._nodes)
 
     @property
     def region_nodes(self) -> Iterable[RegionNode]:
