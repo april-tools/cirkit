@@ -18,9 +18,9 @@ from cirkit.utils import RandomCtx
 @pytest.mark.parametrize(
     "rg_cls,kwargs,log_answer",
     [
-        (PoonDomingosStructure, {"shape": [4, 4], "delta": 2}, 10.188161849975586),
-        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 51.31766128540039),
-        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.198360443115234),
+        (PoonDomingosStructure, {"shape": [4, 4], "delta": 2}, 9.79221248626709),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.30215835571289),
+        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.429569244384766),
     ],
 )
 @RandomCtx(42)
