@@ -1,6 +1,5 @@
 import json
 from typing import (
-    Any,
     Collection,
     Dict,
     Iterable,
@@ -34,12 +33,10 @@ class _RGJson(TypedDict):
 class RegionGraph:
     """The base class for region graphs."""
 
-    # TODO: is it a good practice to allow any args? what about for inherit?
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[misc]
-        """Init graph with any args/kwargs given."""
-        # TODO: careful with this way to pass args when multi-inherit then it's a must
+    def __init__(self, graph: nx.DiGraph) -> None:
+        """Init graph with an nx.DiGraph given."""
         super().__init__()
-        self._graph = nx.DiGraph(*args, **kwargs)  # type: ignore[misc]
+        self._graph = graph
 
     # TODO: do we need a class for node view?
     # TODO: do we return a generic container or concrete class?
@@ -165,8 +162,7 @@ class RegionGraph:
         Returns:
             RegionGraph: The loaded region graph.
         """
-        # TODO: is this a bug of mypy? caused by __init__ include Any
-        if cls is not RegionGraph:  # type: ignore[misc]
+        if cls is not RegionGraph:
             raise NotImplementedError(
                 "Must be called as `RegionGraph.load()` instead of from child class."
             )

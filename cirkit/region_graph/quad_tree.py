@@ -170,8 +170,6 @@ class QuadTree(RegionGraph):
             struct_decomp (bool, optional): Whether structured-decomposability \
                 is required. Defaults to False.
         """
-        super().__init__()
-
         assert width == height and width > 0  # TODO: then we don't need two
 
         shape = (width, height)
@@ -180,6 +178,8 @@ class QuadTree(RegionGraph):
 
         buffer: List[List[RegionNode]] = [[] for _ in range(width)]
 
+        graph = nx.DiGraph()
+
         # Add Leaves
         for i in range(width):
             for j in range(height):
@@ -187,7 +187,7 @@ class QuadTree(RegionGraph):
 
                 c_scope = hypercube_to_scope(hypercube, shape)
                 c_node = RegionNode(c_scope)
-                self._graph.add_node(c_node)
+                graph.add_node(c_node)
                 buffer[i].append(c_node)
 
         lr_choice = 0  # left right # TODO: or choose from 0 and 1?
@@ -210,11 +210,11 @@ class QuadTree(RegionGraph):
                     buffer[i].append(
                         regions[0]
                         if len(regions) == 1
-                        else _merge_2_regions(regions, self._graph)
+                        else _merge_2_regions(regions, graph)
                         if len(regions) == 2
-                        else _merge_4_regions_struct_decomp(regions, self._graph)
+                        else _merge_4_regions_struct_decomp(regions, graph)
                         if struct_decomp
-                        else _merge_4_regions_mixed(regions, self._graph)
+                        else _merge_4_regions_mixed(regions, graph)
                     )
 
             old_buffer = buffer
@@ -224,3 +224,5 @@ class QuadTree(RegionGraph):
         # TODO: do we need this? already defaults to 0
         # for node in get_leaves(graph):
         #     node.einet_address.replica_idx = 0
+
+        super().__init__(graph)

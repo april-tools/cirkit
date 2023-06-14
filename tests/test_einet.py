@@ -38,7 +38,7 @@ def test_einet_partition_function(
     # TODO: type of kwargs should be refined
     device = "cpu"
 
-    graph = rg_cls(**kwargs)
+    graph = rg_cls(**kwargs)  # type: ignore[arg-type]
 
     args = _Args(
         layer_type=CPEinsumLayer,
