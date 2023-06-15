@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Iterable, List
 
+from cirkit.layers.layer import Layer
+
 # TODO: rework docstrings
 
 
@@ -29,7 +31,7 @@ class _EiNetAddress:
     """
 
     # TODO: this is for einet. why in RG?
-    layer: object = 0  # TODO: this is of course not good
+    layer: Layer = None  # type: ignore[assignment]  # TODO: this is of course not good
     idx: int = 0
     replica_idx: int = 0
 

@@ -3,7 +3,6 @@ from typing import List, cast
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers.layer import Layer
 from cirkit.region_graph import PartitionNode
 
 from .generic_einsum_layer import GenericEinsumLayer
@@ -15,24 +14,16 @@ class CPEinsumLayer(GenericEinsumLayer):
     """Candecomp Parafac (decomposition) layer."""
 
     # TODO: original code changed args order. Not sure what impact
-    def __init__(  # pylint: disable=too-many-arguments
-        self,
-        products: List[PartitionNode],
-        layers: List[Layer],
-        k: int,
-        prod_exp: bool,
-        r: int = 1,
-    ) -> None:
+    def __init__(self, products: List[PartitionNode], k: int, prod_exp: bool, r: int = 1) -> None:
         """Init class.
 
         Args:
             products (List[PartitionNode]): The current product layer.
-            layers (List[Layer]): All the layers currently.
             k (int): I don't know.
             prod_exp (bool): whether product is in exp-space.
             r (int, optional): The rank? Maybe. Defaults to 1.
         """
-        super().__init__(products, layers, k)
+        super().__init__(products, k)
         self.prod_exp = prod_exp
         self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(products)))
         self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(products)))

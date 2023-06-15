@@ -165,7 +165,6 @@ class LowRankEiNet(nn.Module):
                 einet_layers.append(
                     args.layer_type(
                         layer,
-                        einet_layers,
                         r=args.r,
                         prod_exp=args.prod_exp,
                         k=next(k),
