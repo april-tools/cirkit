@@ -60,7 +60,7 @@ class ExpFamilyInputLayer(Layer):  # pylint: disable=too-many-instance-attribute
         self.num_var = num_var
         self.num_dims = num_dims
 
-        num_dists = set(n.num_dist for n in self.nodes)
+        num_dists = set(n.k for n in self.nodes)
         assert len(num_dists) == 1, "All leaves must have the same number of distributions."
         num_dist = num_dists.pop()
 

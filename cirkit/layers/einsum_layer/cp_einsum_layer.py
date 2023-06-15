@@ -1,9 +1,8 @@
-from typing import List
+from typing import List, cast
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers.layer import Layer
 from cirkit.region_graph import PartitionNode
 
 from .generic_einsum_layer import GenericEinsumLayer
@@ -15,27 +14,20 @@ class CPEinsumLayer(GenericEinsumLayer):
     """Candecomp Parafac (decomposition) layer."""
 
     # TODO: original code changed args order. Not sure what impact
-    def __init__(  # pylint: disable=too-many-arguments
-        self,
-        products: List[PartitionNode],
-        layers: List[Layer],
-        k: int,
-        prod_exp: bool,
-        r: int = 1,
-    ) -> None:
+    def __init__(self, products: List[PartitionNode], k: int, prod_exp: bool, r: int = 1) -> None:
         """Init class.
 
         Args:
             products (List[PartitionNode]): The current product layer.
-            layers (List[Layer]): All the layers currently.
             k (int): I don't know.
-            prod_exp (bool): I don't know.
+            prod_exp (bool): whether product is in exp-space.
             r (int, optional): The rank? Maybe. Defaults to 1.
         """
-        super().__init__(products, layers, prod_exp, k)
-        self.cp_a = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
-        self.cp_b = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
-        self.cp_c = nn.Parameter(torch.empty(self.num_sums, r, len(products)))
+        super().__init__(products, k)
+        self.prod_exp = prod_exp
+        self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(products)))
+        self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(products)))
+        self.cp_c = nn.Parameter(torch.empty(self.out_k, r, len(products)))
 
     @property
     def clamp_value(self) -> float:
@@ -44,10 +36,8 @@ class CPEinsumLayer(GenericEinsumLayer):
         :return: value for parameters clamping.
         """
         smallest_normal = torch.finfo(self.cp_a.dtype).smallest_normal
-        # TODO: seems mypy cannot understand **
-        return smallest_normal ** (  # type: ignore[no-any-return,misc]
-            1 / 3 if self.prod_exp else 1 / 2
-        )
+        # (float ** float) is not guaranteed to be float, but here we know it is
+        return cast(float, smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2))
 
     def central_einsum(self, left_prob: Tensor, right_prob: Tensor) -> Tensor:
         """Compute the main Einsum operation of the layer.

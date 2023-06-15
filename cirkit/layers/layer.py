@@ -14,7 +14,7 @@ class Layer(nn.Module, ABC):
     def __init__(self) -> None:
         """Init class."""
         super().__init__()  # TODO: do we need multi-inherit init?
-        self.prob: Optional[Tensor] = None  # TODO: why None?
+        self.prob: Tensor = None  # type: ignore[assignment]  # TODO: why None?
 
     @abstractmethod
     def reset_parameters(self) -> None:

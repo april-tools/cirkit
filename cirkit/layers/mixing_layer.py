@@ -83,7 +83,7 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         self.nodes = nodes
 
-        num_sums = set(n.num_dist for n in nodes)
+        num_sums = set(n.k for n in nodes)
         assert (
             len(num_sums) == 1
         ), "Number of distributions must be the same for all regions in one layer."
@@ -190,7 +190,6 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         Args:
             x (Optional[Tensor], optional): Not used. Defaults to None.
         """
-        assert self.layers[0].prob is not None  # TODO: why need this?
         self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
         self.child_log_prob = self.child_log_prob.reshape(
             *self.child_log_prob.shape[:2], len(self.nodes), self.max_components
