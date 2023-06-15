@@ -182,18 +182,11 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """
         # TODO: we should use dim=2, check all code
         self.left_child_log_prob = torch.stack(
-            [
-                addr.layer.prob[:, :, addr.idx]  # type: ignore[index,misc]
-                for addr in self.left_addr
-            ],
+            [addr.layer.prob[:, :, addr.idx] for addr in self.left_addr],
             dim=2,
         )
         self.right_child_log_prob = torch.stack(
-            [
-                # TODO: why allow prob to be None?
-                addr.layer.prob[:, :, addr.idx]  # type: ignore[index,misc]
-                for addr in self.right_addr
-            ],
+            [addr.layer.prob[:, :, addr.idx] for addr in self.right_addr],
             dim=2,
         )
 

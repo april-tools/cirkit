@@ -190,7 +190,6 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         Args:
             x (Optional[Tensor], optional): Not used. Defaults to None.
         """
-        assert self.layers[0].prob is not None  # TODO: why need this?
         self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
         self.child_log_prob = self.child_log_prob.reshape(
             *self.child_log_prob.shape[:2], len(self.nodes), self.max_components

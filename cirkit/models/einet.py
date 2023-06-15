@@ -278,8 +278,7 @@ class LowRankEiNet(nn.Module):
             einsum_layer()
 
         # TODO: why use prob but not directly return?
-        # TODO: why prob can be None? but not matter, should use return
-        return cast(Tensor, cast(EinsumMixingLayer, self.einet_layers[-1]).prob)[:, :, 0]
+        return cast(EinsumMixingLayer, self.einet_layers[-1]).prob[:, :, 0]
 
     # TODO: why not directly access?
     def get_layers(self) -> nn.ModuleList:
