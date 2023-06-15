@@ -4,7 +4,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers.einsum_layer import GenericEinsumLayer
-from cirkit.region_graph import RegionGraph, RegionNode
+from cirkit.region_graph import RegionNode
 
 from .layer import Layer
 
@@ -72,12 +72,9 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
     padded_idx: Tensor
 
     # TODO: generic container to accept?
-    def __init__(
-        self, graph: RegionGraph, nodes: List[RegionNode], einsum_layer: GenericEinsumLayer
-    ):
+    def __init__(self, nodes: List[RegionNode], einsum_layer: GenericEinsumLayer):
         """Init class.
 
-        :param graph: the PC graph (see Graph.py)
         :param nodes: the nodes of the current layer (see constructor of \
             EinsumNetwork), which have multiple children
         :param einsum_layer:
@@ -92,8 +89,7 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         ), "Number of distributions must be the same for all regions in one layer."
         self.num_sums = num_sums.pop()
 
-        # TODO: directly return a list?
-        self.max_components = max(len(list(graph.get_node_input(n))) for n in nodes)
+        self.max_components = max(len(n.inputs) for n in nodes)
 
         # einsum_layer is actually the only layer which gives input to EinsumMixingLayer
         # we keep it in a list, since otherwise it gets registered as a torch sub-module

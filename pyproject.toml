@@ -27,7 +27,7 @@ classifiers = [
 ]
 dependencies = [
   "torch>=2.0.0",
-  "numpy>=1.24.0"
+  "numpy>=1.24.0",
 ]
 
 [project.optional-dependencies]
@@ -36,11 +36,11 @@ lint = [
   "pylint",
   "mypy",
   "pydocstyle[toml]",
-  "pytest"  # this is required to lint the test files
+  "pytest",  # this is required to lint the test files
 ]
 test = [
   "pytest",
-  "pytest-cov"
+  "pytest-cov",
 ]
 
 [project.urls]
@@ -49,6 +49,12 @@ test = [
 [tool.pytest.ini_options]
 pythonpath = "."
 testpaths = ["tests"]
+
+[tool.coverage.report]
+# regex for exclusion
+exclude_also = [
+  '@overload',
+]
 
 # Following are configs for code quality checks. Any change should be put into
 # a separate PR and merge with care. Rules can only be modified after discussion.
@@ -65,7 +71,7 @@ py_version = 39
 profile = "black"
 line_length = 100
 extra_standard_library = [  # we treat these as stdlib
-  "typing_extensions"
+  "typing_extensions",
 ]
 
 # doc style
@@ -109,7 +115,7 @@ load-plugins = [
   "pylint.extensions.redefined_variable_type",
   "pylint.extensions.set_membership",
   "pylint.extensions.typing",
-  "pylint.extensions.while_used"
+  "pylint.extensions.while_used",
 ]
 [tool.pylint."messages control"]
 enable= [
@@ -118,12 +124,12 @@ enable= [
   "deprecated-pragma",
   "use-symbolic-message-instead",
   "consider-using-augmented-assign",
-  # "prefer-typing-namedtuple"  # to be updated in the future pylint
+  # "prefer-typing-namedtuple",  # to be updated in the future pylint
 ]
 disable = [
   "missing-module-docstring",
   "no-member",
-  "fixme"
+  "fixme",
 ]
 [tool.pylint.basic]
 argument-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
@@ -167,5 +173,5 @@ enable_error_code = [
   "redundant-expr",
   "redundant-self",
   "truthy-bool",
-  "truthy-iterable"
+  "truthy-iterable",
 ]

@@ -1,7 +1,6 @@
 from math import ceil, floor
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
-import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
@@ -107,7 +106,7 @@ class _HypercubeToScopeCache:  # pylint: disable=too-few-public-methods
         return scope_
 
 
-def _get_region_nodes_by_scope(graph: nx.DiGraph, scope: Iterable[int]) -> List[RegionNode]:
+def _get_region_nodes_by_scope(graph: RegionGraph, scope: Iterable[int]) -> List[RegionNode]:
     """Get `RegionNode`s with a specific scope.
 
     Args:
@@ -118,16 +117,20 @@ def _get_region_nodes_by_scope(graph: nx.DiGraph, scope: Iterable[int]) -> List[
         List[RegionNode]: The `RegionNode`s found with the scope
     """
     scope = set(scope)
-    # TODO: digraph typing
-    return [  # type: ignore[misc]
-        n
-        for n in graph.nodes
-        if isinstance(n, RegionNode) and n.scope == scope  # type: ignore[misc]
-    ]
+    return [n for n in graph.region_nodes if n.scope == scope]
 
 
-class PoonDomingosStructure(RegionGraph):
-    """The PD structure generates a PC structure for random variables which can \
+# TODO: refactor
+# pylint: disable-next=too-complex,too-many-locals,too-many-branches,invalid-name
+def PoonDomingosStructure(
+    shape: Sequence[int],
+    delta: Union[float, List[float], List[List[float]]],
+    axes: Optional[Sequence[int]] = None,
+    max_split_depth: Optional[int] = None,
+) -> RegionGraph:
+    """Get a RG in PD.
+
+    The PD structure generates a PC structure for random variables which can \
         be naturally arranged on discrete grids, like images.
 
     Ref:
@@ -219,112 +222,102 @@ class PoonDomingosStructure(RegionGraph):
     We first compute all cutting points on the overall hypercube, for each specified delta and
     each axis. When we encounter a hypercube in the recursive splitting process, we consider
     each axis and split it on all cutting points corresponding to the coarsest delta.
+
+    :param shape: shape of the overall hypercube (tuple of ints)
+    :param delta: determines the displacement of cutting points.
+                numerical: a single displacement value, applied to all axes.
+                list of numerical: several displacement values, applied to all axes.
+                list of list of numerical: several displacement values, specified for each
+                individual axis. In this case, the outer list must be of same length as axes.
+    :param axes: which axes are subject to cutting? (tuple of ints)
+                For example, if shape = (5, 5) (2DGrid), then axes = (0,) means that we only cut
+                along the first axis.
+                Can be None, in which case all axes are subject to cutting.
+    :param max_split_depth: maximal depth for the recursive split process (int)
+    :return: the RG.
     """
+    if axes is None:
+        axes = tuple(range(len(shape)))
+    if max_split_depth is None:
+        # TODO: is is correct: depth will not be larger than this
+        max_split_depth = sum(shape) + 1
+    if isinstance(delta, (float, int)):
+        delta = [delta]
+    # TODO: how to better handle possible int?
+    delta = [
+        [deltai] * len(axes) if isinstance(deltai, (float, int)) else deltai for deltai in delta
+    ]
 
-    # TODO: refactor
-    # pylint: disable-next=too-complex,too-many-locals,too-many-branches
-    def __init__(
-        self,
-        shape: Sequence[int],
-        delta: Union[float, List[float], List[List[float]]],
-        axes: Optional[Sequence[int]] = None,
-        max_split_depth: Optional[int] = None,
-    ) -> None:
-        """Init class.
+    for deltai in delta:
+        assert len(deltai) == len(
+            axes
+        ), "Each delta must either be list of length len(axes), or numeric."
+        for deltaij in deltai:
+            assert deltaij >= 1, "Any delta must be >= 1."
 
-        :param shape: shape of the overall hypercube (tuple of ints)
-        :param delta: determines the displacement of cutting points.
-                    numerical: a single displacement value, applied to all axes.
-                    list of numerical: several displacement values, applied to all axes.
-                    list of list of numerical: several displacement values, specified for each
-                    individual axis. In this case, the outer list must be of same length as axes.
-        :param axes: which axes are subject to cutting? (tuple of ints)
-                    For example, if shape = (5, 5) (2DGrid), then axes = (0,) means that we only cut
-                    along the first axis.
-                    Can be None, in which case all axes are subject to cutting.
-        :param max_split_depth: maximal depth for the recursive split process (int)
-        """
-        super().__init__()
+    shape_to_cut = tuple(shp for ax, shp in enumerate(shape) if ax in axes)
 
-        if axes is None:
-            axes = tuple(range(len(shape)))
-        if max_split_depth is None:
-            # TODO: is is correct: depth will not be larger than this
-            max_split_depth = sum(shape) + 1
-        if isinstance(delta, (float, int)):
-            delta = [delta]
-        # TODO: how to better handle possible int?
-        delta = [
-            [deltai] * len(axes) if isinstance(deltai, (float, int)) else deltai for deltai in delta
-        ]
+    global_cut_points: List[List[List[int]]] = []
+    for deltai in delta:
+        cur_global_cur_points: List[List[int]] = []
+        for shp, deltaij in zip(shape_to_cut, deltai):
+            num_cuts = floor((shp - 1) / deltaij)
+            cps = [ceil((i + 1) * deltaij) for i in range(num_cuts)]
+            cur_global_cur_points.append(cps)
+        global_cut_points.append(cur_global_cur_points)
 
-        for deltai in delta:
-            assert len(deltai) == len(
-                axes
-            ), "Each delta must either be list of length len(axes), or numeric."
-            for deltaij in deltai:
-                assert deltaij >= 1, "Any delta must be >= 1."
+    hypercube_to_scope = _HypercubeToScopeCache()
+    hypercube = ((0,) * len(shape), tuple(shape))  # TODO: fit param type
+    hypercube_scope = hypercube_to_scope(hypercube, shape)
 
-        shape_to_cut = tuple(shp for ax, shp in enumerate(shape) if ax in axes)
+    root = RegionNode(hypercube_scope)
+    graph = RegionGraph()
+    graph.add_node(root)
 
-        global_cut_points: List[List[List[int]]] = []
-        for deltai in delta:
-            cur_global_cur_points: List[List[int]] = []
-            for shp, deltaij in zip(shape_to_cut, deltai):
-                num_cuts = floor((shp - 1) / deltaij)
-                cps = [ceil((i + 1) * deltaij) for i in range(num_cuts)]
-                cur_global_cur_points.append(cps)
-            global_cut_points.append(cur_global_cur_points)
+    queue: List[HyperCube] = [hypercube]
+    depth_dict = {tuple(hypercube_scope): 0}
 
-        hypercube_to_scope = _HypercubeToScopeCache()
-        hypercube = ((0,) * len(shape), tuple(shape))  # TODO: fit param type
+    # TODO: refactor for nest block
+    while queue:  # pylint: disable=while-used,too-many-nested-blocks
+        hypercube = queue.pop(0)
         hypercube_scope = hypercube_to_scope(hypercube, shape)
+        # TODO: redundant cast to tuple
+        if (depth := depth_dict[tuple(hypercube_scope)]) >= max_split_depth:
+            continue
 
-        root = RegionNode(hypercube_scope)
-        self._graph.add_node(root)
+        node = _get_region_nodes_by_scope(graph, hypercube_scope)[0]
 
-        queue: List[HyperCube] = [hypercube]
-        depth_dict = {tuple(hypercube_scope): 0}
+        found_cut_on_level = False
+        for cur_global_cut_points in global_cut_points:
+            for ax_id, axis in enumerate(axes):
+                cut_points = [
+                    c
+                    for c in cur_global_cut_points[ax_id]
+                    if hypercube[0][axis] < c < hypercube[1][axis]
+                ]
+                if len(cut_points) > 0:
+                    found_cut_on_level = True
 
-        # TODO: refactor for nest block
-        while queue:  # pylint: disable=while-used,too-many-nested-blocks
-            hypercube = queue.pop(0)
-            hypercube_scope = hypercube_to_scope(hypercube, shape)
-            # TODO: redundant cast to tuple
-            if (depth := depth_dict[tuple(hypercube_scope)]) >= max_split_depth:
-                continue
+                for idx in cut_points:
+                    child_hypercubes = _cut_hypercube(hypercube, axis, idx)
+                    child_nodes: List[RegionNode] = []
+                    for c_cube in child_hypercubes:
+                        c_scope = hypercube_to_scope(c_cube, shape)
+                        if not (c_node := _get_region_nodes_by_scope(graph, c_scope)):
+                            c_node.append(RegionNode(c_scope))
+                            depth_dict[tuple(c_scope)] = depth + 1
+                            queue.append(c_cube)
+                        child_nodes.append(c_node[0])
 
-            node = _get_region_nodes_by_scope(self._graph, hypercube_scope)[0]
+                    partition = PartitionNode(node.scope)
+                    graph.add_edge(partition, node)
+                    for ch_node in child_nodes:
+                        graph.add_edge(ch_node, partition)
+            if found_cut_on_level:
+                break
 
-            found_cut_on_level = False
-            for cur_global_cut_points in global_cut_points:
-                for ax_id, axis in enumerate(axes):
-                    cut_points = [
-                        c
-                        for c in cur_global_cut_points[ax_id]
-                        if hypercube[0][axis] < c < hypercube[1][axis]
-                    ]
-                    if len(cut_points) > 0:
-                        found_cut_on_level = True
+    # TODO: do we need this? already defaults to 0
+    # for node in get_leaves(graph):
+    #     node.einet_address.replica_idx = 0
 
-                    for idx in cut_points:
-                        child_hypercubes = _cut_hypercube(hypercube, axis, idx)
-                        child_nodes: List[RegionNode] = []
-                        for c_cube in child_hypercubes:
-                            c_scope = hypercube_to_scope(c_cube, shape)
-                            if not (c_node := _get_region_nodes_by_scope(self._graph, c_scope)):
-                                c_node.append(RegionNode(c_scope))
-                                depth_dict[tuple(c_scope)] = depth + 1
-                                queue.append(c_cube)
-                            child_nodes.append(c_node[0])
-
-                        partition = PartitionNode(node.scope)
-                        self._graph.add_edge(partition, node)
-                        for ch_node in child_nodes:
-                            self._graph.add_edge(ch_node, partition)
-                if found_cut_on_level:
-                    break
-
-        # TODO: do we need this? already defaults to 0
-        # for node in get_leaves(graph):
-        #     node.einet_address.replica_idx = 0
+    return graph
