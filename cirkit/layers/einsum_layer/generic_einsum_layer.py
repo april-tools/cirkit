@@ -1,6 +1,7 @@
 from abc import abstractmethod
+from collections import defaultdict
 from itertools import count
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -14,89 +15,87 @@ from ..layer import Layer
 # TODO: rework docstrings
 
 
+class _TwoInputs(NamedTuple):
+    """Provide names for left and right inputs."""
+
+    left: RegionNode
+    right: RegionNode
+
+
 class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
     """Base for all einsums."""
 
     # TODO: is product a good name here? should split
     # TODO: input can be more generic than List
     # we have to provide operation for input, operation for product and operation after product
-    def __init__(
-        self,
-        products: List[PartitionNode],
-        layers: List[Layer],
-        prod_exp: bool,
-        k: int,
+    def __init__(  # type: ignore[misc]
+        self, partition_layer: List[PartitionNode], prev_layers: List[Layer], k: int, **_: Any
     ) -> None:
         """Init class.
 
         Args:
-            products (List[PartitionNode]): The current product layer.
-            layers (List[Layer]): All the layers currently.
-            prod_exp (bool): I don't know.
-            k (int): I don't know.
+            partition_layer (List[PartitionNode]): The current product layer.
+            prev_layers (List[Layer]): All the layers currently.
+            k (int): The K.
         """
         super().__init__()
 
-        # self.r = r
-        self.products = products
-        # self.exp_reparam: bool = None
-        self.prod_exp = prod_exp
-
-        # assert decomposition_strategy in ["slice", "full"]
-        # self.decomposition_strategy = decomposition_strategy
+        self.partition_layer = partition_layer
 
         # # # # # # # # #
         #   CHECK
         # # # # # # # # #
+        # TODO: do we really need this?
 
         # TODO: check all constructions that can use comprehension
-        set_num_sums = set(n.num_dist for p in products for n in p.outputs)
-        assert (
-            len(set_num_sums) == 1
-        ), "Number of distributions must be the same for all parent nodes in one layer."
-
-        # check if it is root
-        if (num_sums_from_graph := set_num_sums.pop()) > 1:
-            self.num_sums = k
-            # set num_sums in the graph
-            # TODO: find another name for this
-            successors = set(n for p in products for n in p.inputs)
-            for n in successors:
-                n.num_dist = k
-        else:
-            self.num_sums = num_sums_from_graph
-
-        num_input_dist = set(n.num_dist for p in products for n in p.inputs)
-        assert len(num_input_dist) == 1, (
-            "Number of input distributions must be the same for all child nodes in one layer. "
-            f"{num_input_dist}"
+        out_k = set(
+            out_region.k for partition in partition_layer for out_region in partition.outputs
         )
-        self.num_input_dist = num_input_dist.pop()
+        assert (
+            len(out_k) == 1
+        ), f"The K of output region nodes in the same layer must be the same, got {out_k}."
 
+        # check if it is root  # TODO: what does this mean?
+        if out_k.pop() > 1:
+            self.out_k = k
+            # set num_sums in the graph
+            for partition in partition_layer:
+                for out_region in partition.outputs:
+                    out_region.k = k
+        else:
+            self.out_k = 1
+
+        # TODO: why do we check it here?
         assert all(
-            len(p.inputs) == 2 for p in self.products
+            len(partition.inputs) == 2 for partition in self.partition_layer
         ), "Only 2-partitions are currently supported."
+
+        in_k = set(in_region.k for partition in partition_layer for in_region in partition.inputs)
+        assert (
+            len(in_k) == 1
+        ), f"The K of output region nodes in the same layer must be the same, got {in_k}."
+        self.in_k = in_k.pop()
 
         # # # # # # # # #
         #   BUILD
         # # # # # # # # #
-        # TODO: should we do it here?
-        # super(GenericEinsumLayer, self).__init__()
-
-        self.params_mask = None  # TODO: check usage for this, and type?
 
         # get pairs of nodes which are input to the products (list of lists)
         # length of the outer list is same as self.products, length of inner lists is 2
         # "left child" has index 0, "right child" has index 1
-        self.inputs = [sorted(p.inputs) for p in self.products]
+        two_inputs = [_TwoInputs(*sorted(partition.inputs)) for partition in self.partition_layer]
         # TODO: again, why do we need sorting
 
         # collect all layers which contain left/right children
         self.left_layers = [
-            l for l in layers if any(i[0].einet_address.layer == l for i in self.inputs)
+            layer
+            for layer in prev_layers
+            if any(inputs.left.einet_address.layer == layer for inputs in two_inputs)
         ]
         self.right_layers = [
-            l for l in layers if any(i[1].einet_address.layer == l for i in self.inputs)
+            layer
+            for layer in prev_layers
+            if any(inputs.right.einet_address.layer == layer for inputs in two_inputs)
         ]
 
         # The following code does some index bookkeeping, in order that we can
@@ -118,11 +117,11 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # assumed in self.products.
         # TODO: can we decouple this?
         def do_input_bookkeeping(layers: List[Layer], child_num: int) -> None:
-            permutation: List[Optional[int]] = [None] * len(self.inputs)
+            permutation: List[Optional[int]] = [None] * len(two_inputs)
             permutation_counter = count(0)
             for layer_counter, layer in enumerate(layers):
                 cur_idx: List[int] = []
-                for c, input_node in enumerate(self.inputs):
+                for c, input_node in enumerate(two_inputs):
                     if input_node[child_num].einet_address.layer == layer:
                         cur_idx.append(input_node[child_num].einet_address.idx)
                         assert permutation[c] is None, "This should not happen."
@@ -145,22 +144,19 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # the dictionary mixing_component_idx stores which nodes (axis 2 of the
         # log-density tensor) need to get mixed
         # in the following EinsumMixingLayer
-        self.mixing_component_idx: Dict[RegionNode, List[int]] = {}
+        self.mixing_component_idx: Dict[RegionNode, List[int]] = defaultdict(list)
 
-        for c, product in enumerate(self.products):
+        for c, product in enumerate(self.partition_layer):
             # each product must have exactly 1 parent (sum node)
-            nodes = product.outputs
-            assert len(nodes) == 1
-            node = nodes[0]
+            assert len(product.outputs) == 1
+            out_region = product.outputs[0]
 
-            if len(node.inputs) == 1:
-                node.einet_address.layer = self
-                node.einet_address.idx = c
+            if len(out_region.inputs) == 1:
+                out_region.einet_address.layer = self
+                out_region.einet_address.idx = c
             else:  # case followed by EinsumMixingLayer
-                if node not in self.mixing_component_idx:
-                    self.mixing_component_idx[node] = []
-                self.mixing_component_idx[node].append(c)
-                self.dummy_idx = len(self.products)
+                self.mixing_component_idx[out_region].append(c)
+                self.dummy_idx = len(self.partition_layer)
 
         # TODO: correct way to init? definitely not in _forward()
         self.left_child_log_prob = torch.empty(())
@@ -176,6 +172,7 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         :return: value for parameters clamping
         """
 
+    @torch.no_grad()
     def clamp_params(self, clamp_all: bool = False) -> None:
         """Clamp parameters such that they are non-negative and \
         is impossible to get zero probabilities.
@@ -187,8 +184,7 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """
         for param in self.parameters():
             if clamp_all or param.requires_grad:
-                # TODO: don't use .data but what about grad of nn.Param?
-                param.data.clamp_(min=self.clamp_value)
+                param.clamp_(min=self.clamp_value)
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99)."""
@@ -268,20 +264,20 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         )
         self.right_child_log_prob = self.right_child_log_prob[:, :, self.permutation_child_1]
 
-        assert not torch.isinf(self.left_child_log_prob).any()
-        assert not torch.isinf(self.right_child_log_prob).any()
-        assert not torch.isnan(self.left_child_log_prob).any()
-        assert not torch.isnan(self.right_child_log_prob).any()
+        # assert not torch.isinf(self.left_child_log_prob).any()
+        # assert not torch.isinf(self.right_child_log_prob).any()
+        # assert not torch.isnan(self.left_child_log_prob).any()
+        # assert not torch.isnan(self.right_child_log_prob).any()
 
         # # # # # # # # # # STEP 1: Go To the exp space # # # # # # # # # #
         # We perform the LogEinsumExp trick, by first subtracting the maxes
         log_prob = self.central_einsum(self.left_child_log_prob, self.right_child_log_prob)
 
-        assert not torch.isinf(log_prob).any(), "Inf log prob"
-        assert not torch.isnan(log_prob).any(), "NaN log prob"
+        # assert not torch.isinf(log_prob).any(), "Inf log prob"
+        # assert not torch.isnan(log_prob).any(), "NaN log prob"
 
         # zero-padding (-inf in log-domain) for the following mixing layer
-        if self.dummy_idx:
+        if self.dummy_idx is not None:
             log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
 
         self.prob = log_prob

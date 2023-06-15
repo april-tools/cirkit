@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, cast
 
 import torch
 from torch import Tensor, nn
@@ -29,13 +29,14 @@ class CPEinsumLayer(GenericEinsumLayer):
             products (List[PartitionNode]): The current product layer.
             layers (List[Layer]): All the layers currently.
             k (int): I don't know.
-            prod_exp (bool): I don't know.
+            prod_exp (bool): whether product is in exp-space.
             r (int, optional): The rank? Maybe. Defaults to 1.
         """
-        super().__init__(products, layers, prod_exp, k)
-        self.cp_a = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
-        self.cp_b = nn.Parameter(torch.empty(self.num_input_dist, r, len(products)))
-        self.cp_c = nn.Parameter(torch.empty(self.num_sums, r, len(products)))
+        super().__init__(products, layers, k)
+        self.prod_exp = prod_exp
+        self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(products)))
+        self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(products)))
+        self.cp_c = nn.Parameter(torch.empty(self.out_k, r, len(products)))
 
     @property
     def clamp_value(self) -> float:
@@ -44,10 +45,8 @@ class CPEinsumLayer(GenericEinsumLayer):
         :return: value for parameters clamping.
         """
         smallest_normal = torch.finfo(self.cp_a.dtype).smallest_normal
-        # TODO: seems mypy cannot understand **
-        return smallest_normal ** (  # type: ignore[no-any-return,misc]
-            1 / 3 if self.prod_exp else 1 / 2
-        )
+        # (float ** float) is not guaranteed to be float, but here we know it is
+        return cast(float, smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2))
 
     def central_einsum(self, left_prob: Tensor, right_prob: Tensor) -> Tensor:
         """Compute the main Einsum operation of the layer.

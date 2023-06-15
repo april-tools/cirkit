@@ -104,10 +104,10 @@ class LowRankEiNet(nn.Module):
 
         # TODO: don't bind it to RG
         for node in graph.input_nodes:
-            node.num_dist = args.num_input_distributions
+            node.k = args.num_input_distributions
 
         for node in graph.inner_region_nodes:
-            node.num_dist = args.num_sums if node is not output_node else args.num_classes
+            node.k = args.num_sums if node is not output_node else args.num_classes
 
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
         self.graph_layers = graph.topological_layers(bottom_up=False)
@@ -156,7 +156,7 @@ class LowRankEiNet(nn.Module):
                 # product layer, that's a partition layer in the graph
                 # TODO: find a better way to interleave
                 layer = cast(List[PartitionNode], layer)  # pylint: disable=redefined-loop-name
-                num_sums = set(n.num_dist for p in layer for n in p.outputs)
+                num_sums = set(n.k for p in layer for n in p.outputs)
                 assert len(num_sums) == 1, f"For internal {c} there are {len(num_sums)} nums sums"
                 # num_sum = num_sums.pop()
 
@@ -166,7 +166,7 @@ class LowRankEiNet(nn.Module):
                     args.layer_type(
                         layer,
                         einet_layers,
-                        # r=args.r,  # TODO: how to put this in generic __init__
+                        r=args.r,
                         prod_exp=args.prod_exp,
                         k=next(k),
                     )

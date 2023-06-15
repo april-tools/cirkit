@@ -83,7 +83,7 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         self.nodes = nodes
 
-        num_sums = set(n.num_dist for n in nodes)
+        num_sums = set(n.k for n in nodes)
         assert (
             len(num_sums) == 1
         ), "Number of distributions must be the same for all regions in one layer."
