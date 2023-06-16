@@ -1,4 +1,4 @@
-from .binomial import BinomialLayer
-from .categorical import CategoricalLayer
-from .exp_family import ExpFamilyLayer
-from .normal import NormalLayer
+from .binomial import BinomialLayer as BinomialLayer
+from .categorical import CategoricalLayer as CategoricalLayer
+from .exp_family import ExpFamilyLayer as ExpFamilyLayer
+from .normal import NormalLayer as NormalLayer

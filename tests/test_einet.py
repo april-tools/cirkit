@@ -13,9 +13,9 @@ from cirkit.layers.einsum.cp import CPLayer
 from cirkit.layers.exp_family import CategoricalLayer
 from cirkit.models.einet import LowRankEiNet, _Args
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
-from cirkit.region_graph.poon_domingos import poon_domingos
-from cirkit.region_graph.quad_tree import quad_tree
-from cirkit.region_graph.random_binary_tree import random_binary_tree
+from cirkit.region_graph.poon_domingos import PoonDomingos
+from cirkit.region_graph.quad_tree import QuadTree
+from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 from cirkit.utils import RandomCtx
 
 
@@ -163,12 +163,12 @@ def test_einet_partition_func() -> None:
 @pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs,log_answer",
     [
-        (poon_domingos, {"shape": [4, 4], "delta": 2}, 9.79221248626709),
-        (quad_tree, {"width": 4, "height": 4, "struct_decomp": False}, 52.30215835571289),
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 9.79221248626709),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.30215835571289),
         (
-            random_binary_tree,
-            {"num_vars": 16, "depth": 3, "num_repetitions": 2},
-            24.429569244384766,
+                RandomBinaryTree,
+                {"num_vars": 16, "depth": 3, "num_repetitions": 2},
+                24.429569244384766,
         ),
     ],
 )

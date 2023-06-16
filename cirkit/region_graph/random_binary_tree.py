@@ -59,7 +59,8 @@ def _partition_node_randomly(
     return region_nodes
 
 
-def random_binary_tree(num_vars: int, depth: int, num_repetitions: int) -> RegionGraph:
+# pylint: disable-next=invalid-name
+def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionGraph:
     """Generate a PC graph via several random binary trees -- RAT-SPNs.
 
     See

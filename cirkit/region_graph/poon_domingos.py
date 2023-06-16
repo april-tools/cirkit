@@ -54,8 +54,8 @@ def _get_region_nodes_by_scope(graph: RegionGraph, scope: Iterable[int]) -> List
     return [n for n in graph.region_nodes if n.scope == scope]
 
 
-# pylint: disable-next=too-complex,too-many-locals,too-many-branches
-def poon_domingos(
+# pylint: disable-next=too-complex,too-many-locals,too-many-branches,invalid-name
+def PoonDomingos(
     shape: Sequence[int],
     delta: Union[Union[float, int], List[Union[float, int]], List[List[Union[float, int]]]],
     axes: Optional[Sequence[int]] = None,
@@ -214,8 +214,7 @@ def poon_domingos(
     while queue:  # pylint: disable=while-used,too-many-nested-blocks
         hypercube = queue.pop(0)
         hypercube_scope = hypercube_to_scope(hypercube, shape)
-        depth = depth_dict[tuple(hypercube_scope)]
-        if depth >= max_split_depth:
+        if (depth := depth_dict[tuple(hypercube_scope)]) >= max_split_depth:
             continue
 
         node = _get_region_nodes_by_scope(graph, hypercube_scope)[0]

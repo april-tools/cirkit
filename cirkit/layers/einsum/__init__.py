@@ -1,1 +1,1 @@
-from .einsum import EinsumLayer
+from .einsum import EinsumLayer as EinsumLayer

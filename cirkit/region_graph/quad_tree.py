@@ -155,8 +155,8 @@ def _square_from_buffer(buffer: List[List[RegionNode]], i: int, j: int) -> List[
     return children
 
 
-# pylint: disable-next=too-many-locals
-def quad_tree(width: int, height: int, struct_decomp: bool = False) -> RegionGraph:
+# pylint: disable-next=too-many-locals,invalid-name
+def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGraph:
     """Get quad RG.
 
         Args:

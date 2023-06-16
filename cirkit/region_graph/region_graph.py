@@ -6,7 +6,6 @@ from typing import Dict, FrozenSet, Iterable, List, Set, TypedDict, Union, final
 from .rg_node import PartitionNode, RegionNode, RGNode
 
 # TODO: unify what names to use: sum/region, product/partition, leaf/input
-# TODO: directly subclass the DiGraph?
 # TODO: rework docstrings??
 
 
@@ -204,10 +203,6 @@ class RegionGraph:
             graph.add_edge(partition_node, part_output)
             graph.add_edge(part_input_left, partition_node)
             graph.add_edge(part_input_right, partition_node)
-
-        # TODO: need to set? but this is wrong for random bin tree
-        # for node in get_leaves(graph):
-        #     node.einet_address.replica_idx = 0
 
         return graph
 

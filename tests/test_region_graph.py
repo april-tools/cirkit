@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
-from cirkit.region_graph.poon_domingos import poon_domingos
-from cirkit.region_graph.quad_tree import quad_tree
-from cirkit.region_graph.random_binary_tree import random_binary_tree
+from cirkit.region_graph.poon_domingos import PoonDomingos
+from cirkit.region_graph.quad_tree import QuadTree
+from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 from cirkit.utils import RandomCtx
 
 
@@ -158,11 +158,11 @@ def test_rg_random_binary_tree(num_vars: int, depth: int, num_repetitions: int) 
     # TODO: ** issue: see typeshed
     if num_vars < 2**depth:  # type: ignore[misc]
         with pytest.raises(AssertionError), RandomCtx(42):
-            random_binary_tree(num_vars, depth, num_repetitions)
+            RandomBinaryTree(num_vars, depth, num_repetitions)
         return
 
     with RandomCtx(42):
-        rg = random_binary_tree(num_vars, depth, num_repetitions)
+        rg = RandomBinaryTree(num_vars, depth, num_repetitions)
     check_smoothness_decomposability(rg)
     check_region_partition_layers(rg, bottom_up=True)
     check_region_partition_layers(rg, bottom_up=False)
@@ -174,7 +174,7 @@ def test_rg_random_binary_tree(num_vars: int, depth: int, num_repetitions: int) 
 )
 def test_rg_quad_tree(size: Tuple[int, int], struct_decomp: bool) -> None:
     width, height = size
-    rg = quad_tree(width, height, struct_decomp=struct_decomp)
+    rg = QuadTree(width, height, struct_decomp=struct_decomp)
     if struct_decomp:
         check_strong_structured_decomposability(rg)
     else:
@@ -194,7 +194,7 @@ def test_rg_quad_tree(size: Tuple[int, int], struct_decomp: bool) -> None:
 def test_rg_poon_domingos(
     shape: Tuple[int, int], delta: Union[float, List[float], List[List[float]]]
 ) -> None:
-    rg = poon_domingos(shape, delta)
+    rg = PoonDomingos(shape, delta)
     check_smoothness_decomposability(rg)
     check_region_partition_layers(rg, bottom_up=True)
     check_region_partition_layers(rg, bottom_up=False)

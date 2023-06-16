@@ -1,1 +1,1 @@
-from .einet import LowRankEiNet
+from .einet import LowRankEiNet as LowRankEiNet
