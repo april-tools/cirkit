@@ -57,7 +57,7 @@ def _get_region_nodes_by_scope(graph: RegionGraph, scope: Iterable[int]) -> List
 # pylint: disable-next=too-complex,too-many-locals,too-many-branches,invalid-name
 def PoonDomingos(
     shape: Sequence[int],
-    delta: Union[Union[float, int], List[Union[float, int]], List[List[Union[float, int]]]],
+    delta: Union[float, int, List[Union[float, int]], List[List[Union[float, int]]]],
     axes: Optional[Sequence[int]] = None,
     max_split_depth: Optional[int] = None,
 ) -> RegionGraph:

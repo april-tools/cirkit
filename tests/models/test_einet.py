@@ -166,9 +166,9 @@ def test_einet_partition_func() -> None:
         (PoonDomingos, {"shape": [4, 4], "delta": 2}, 9.79221248626709),
         (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.30215835571289),
         (
-                RandomBinaryTree,
-                {"num_vars": 16, "depth": 3, "num_repetitions": 2},
-                24.429569244384766,
+            RandomBinaryTree,
+            {"num_vars": 16, "depth": 3, "num_repetitions": 2},
+            24.429569244384766,
         ),
     ],
 )
