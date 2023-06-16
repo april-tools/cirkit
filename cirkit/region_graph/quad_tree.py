@@ -168,17 +168,19 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
     Returns:
         RegionGraph: The RG.
     """
-    shape = (height, width)
+    assert width == height and width > 0  # TODO: then we don't need two
+
+    shape = (width, height)
 
     hypercube_to_scope = HypercubeScopeCache()
 
-    buffer: List[List[RegionNode]] = [[] for _ in range(height)]
+    buffer: List[List[RegionNode]] = [[] for _ in range(width)]
 
     graph = RegionGraph()
 
     # Add Leaves
-    for i in range(height):
-        for j in range(width):
+    for i in range(width):
+        for j in range(height):
             hypercube = ((i, j), (i + 1, j + 1))
 
             c_scope = hypercube_to_scope(hypercube, shape)
@@ -197,11 +199,11 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
         buffer_height = (old_buffer_height + 1) // 2
         buffer_width = (old_buffer_width + 1) // 2
 
-        buffer = [[] for _ in range(buffer_height)]
+        buffer = [[] for _ in range(buffer_width)]
 
-        for i in range(buffer_height):
-            for j in range(buffer_width):
-                regions = _square_from_buffer(old_buffer, 2 * i + td_choice, 2 * j + lr_choice)
+        for i in range(buffer_width):
+            for j in range(buffer_height):
+                regions = _square_from_buffer(old_buffer, 2 * i + lr_choice, 2 * j + td_choice)
                 if len(regions) == 1:
                     buf = regions[0]
                 elif len(regions) == 2:
