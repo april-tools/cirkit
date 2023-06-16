@@ -3,10 +3,9 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers.einsum_layer import GenericEinsumLayer
+from cirkit.layers.einsum import EinsumLayer
+from cirkit.layers.layer import Layer
 from cirkit.region_graph import RegionNode
-
-from .layer import Layer
 
 # TODO: rework docstrings
 
@@ -72,7 +71,7 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
     padded_idx: Tensor
 
     # TODO: generic container to accept?
-    def __init__(self, nodes: List[RegionNode], einsum_layer: GenericEinsumLayer):
+    def __init__(self, nodes: List[RegionNode], einsum_layer: EinsumLayer):
         """Init class.
 
         :param nodes: the nodes of the current layer (see constructor of \
@@ -91,7 +90,7 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         self.max_components = max(len(n.inputs) for n in nodes)
 
-        # einsum_layer is actually the only layer which gives input to EinsumMixingLayer
+        # einsum is actually the only layer which gives input to EinsumMixingLayer
         # we keep it in a list, since otherwise it gets registered as a torch sub-module
         self.layers = [einsum_layer]
         self.mixing_component_idx = einsum_layer.mixing_component_idx
@@ -219,7 +218,7 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         use_evidence: bool = False,
         mode: Literal["sample", "argmax"] = "sample",
         **_: Any,
-    ) -> Tuple[List[int], List[int], List[GenericEinsumLayer]]:
+    ) -> Tuple[List[int], List[int], List[EinsumLayer]]:
         """Is helper routine for backtracking in EiNets."""
         # TODO: why not at module level
         with torch.no_grad():

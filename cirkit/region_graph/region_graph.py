@@ -6,7 +6,6 @@ from typing import Dict, FrozenSet, Iterable, List, Set, TypedDict, Union, final
 from .rg_node import PartitionNode, RegionNode, RGNode
 
 # TODO: unify what names to use: sum/region, product/partition, leaf/input
-# TODO: directly subclass the DiGraph?
 # TODO: rework docstrings??
 
 
@@ -18,7 +17,7 @@ class _PartitionJson(TypedDict):
     r: int
 
 
-class _RGJson(TypedDict):
+class _RegionGraphJson(TypedDict):
     """The structure of region graph json file."""
 
     regions: Dict[str, List[int]]
@@ -149,7 +148,7 @@ class RegionGraph:
             filename (str): The file name to save.
         """
         # TODO: doc the format?
-        graph_json: _RGJson = {"regions": {}, "graph": []}
+        graph_json: _RegionGraphJson = {"regions": {}, "graph": []}
 
         # TODO: give each node an id as attr? they do have one defined. but what about load?
         region_ids = {node: idx for idx, node in enumerate(self.region_nodes)}
@@ -184,7 +183,7 @@ class RegionGraph:
             RegionGraph: The loaded region graph.
         """
         with open(filename, "r", encoding="utf-8") as f:
-            graph_json: _RGJson = json.load(f)
+            graph_json: _RegionGraphJson = json.load(f)
 
         ids_region = {int(idx): RegionNode(scope) for idx, scope in graph_json["regions"].items()}
 
@@ -204,10 +203,6 @@ class RegionGraph:
             graph.add_edge(partition_node, part_output)
             graph.add_edge(part_input_left, partition_node)
             graph.add_edge(part_input_right, partition_node)
-
-        # TODO: need to set? but this is wrong for random bin tree
-        # for node in get_leaves(graph):
-        #     node.einet_address.replica_idx = 0
 
         return graph
 

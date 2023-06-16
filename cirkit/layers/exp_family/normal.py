@@ -6,7 +6,7 @@ from torch import Tensor
 
 from cirkit.region_graph import RegionNode
 
-from .exp_family_input_layer import ExpFamilyInputLayer
+from .exp_family import ExpFamilyLayer
 
 # TODO: rework docstrings
 
@@ -18,7 +18,7 @@ def _shift_last_axis_to(x: Tensor, i: int) -> Tensor:
     return x.permute(tuple(range(i)) + (num_axes - 1,) + tuple(range(i, num_axes - 1)))
 
 
-class NormalInputLayer(ExpFamilyInputLayer):
+class NormalLayer(ExpFamilyLayer):
     """Implementation of Normal distribution."""
 
     def __init__(  # TODO: pylint: disable=too-many-arguments

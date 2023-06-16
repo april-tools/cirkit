@@ -26,7 +26,7 @@ set_backend('pytorch')
 # k-/K-: rank-k
 
 
-class CPSharedEinsumLayer(GenericEinsumLayer): # TODO edit this because of numerical stability
+class CPSharedEinsumLayer(EinsumLayer): # TODO edit this because of numerical stability
     def __init__(self, graph, products, layers, k: int, prod_exp=False, r=1):
         self.r = r
         super(CPSharedEinsumLayer, self).__init__(graph, products, layers, prod_exp, k=k)
@@ -54,7 +54,7 @@ class CPSharedEinsumLayer(GenericEinsumLayer): # TODO edit this because of numer
         else:
             return torch.sqrt(torch.Tensor([smallest_normal])).item()
 
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
         left_max = torch.max(self.left_child_log_prob, 1, keepdim=True)[0]
         left_prob = torch.exp(self.left_child_log_prob - left_max)
         right_max = torch.max(self.right_child_log_prob, 1, keepdim=True)[0]
@@ -88,7 +88,7 @@ class CPSharedEinsumLayer(GenericEinsumLayer): # TODO edit this because of numer
 
 
 # Hidden CP Tree (from HCLT and CP)
-class HCPTEinsumLayer(GenericEinsumLayer):
+class HCPTEinsumLayer(EinsumLayer):
     def __init__(self, graph, products, layers, k: int, prod_exp=False):
         super(HCPTEinsumLayer, self).__init__(graph, products, layers, prod_exp, k=k)
 
@@ -113,7 +113,7 @@ class HCPTEinsumLayer(GenericEinsumLayer):
         else:
             return torch.sqrt(torch.Tensor([smallest_normal])).item()# smallest_normal
 
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
         left_max = torch.max(self.left_child_log_prob, 1, keepdim=True)[0]
         left_prob = torch.exp(self.left_child_log_prob - left_max)
         right_max = torch.max(self.right_child_log_prob, 1, keepdim=True)[0]
@@ -136,7 +136,7 @@ class HCPTEinsumLayer(GenericEinsumLayer):
         return log_prob
 
 
-class HCPTSharedEinsumLayer(GenericEinsumLayer):
+class HCPTSharedEinsumLayer(EinsumLayer):
     def __init__(self, graph, products, layers, k: int, prod_exp=False):
         super(HCPTSharedEinsumLayer, self).__init__(graph, products, layers, prod_exp, k=k)
 
@@ -162,7 +162,7 @@ class HCPTSharedEinsumLayer(GenericEinsumLayer):
         else:
             return torch.sqrt(torch.Tensor([smallest_normal])).item()
 
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
         left_max = torch.max(self.left_child_log_prob, 1, keepdim=True)[0]
         left_prob = torch.exp(self.left_child_log_prob - left_max)
         right_max = torch.max(self.right_child_log_prob, 1, keepdim=True)[0]
@@ -189,7 +189,7 @@ class HCPTSharedEinsumLayer(GenericEinsumLayer):
 
 
 # Low rank
-class HCPTLoLoEinsumLayer(GenericEinsumLayer):
+class HCPTLoLoEinsumLayer(EinsumLayer):
     def __init__(self, graph, products, layers, k: int, prod_exp=False, r=1):
         self.r = r
         super(HCPTLoLoEinsumLayer, self).__init__(graph, products, layers, prod_exp, k=k)
@@ -217,7 +217,7 @@ class HCPTLoLoEinsumLayer(GenericEinsumLayer):
         else:
             return torch.sqrt(torch.Tensor([smallest_normal])).item()
 
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
         left_max = torch.max(self.left_child_log_prob, 1, keepdim=True)[0]
         left_prob = torch.exp(self.left_child_log_prob - left_max)
         right_max = torch.max(self.right_child_log_prob, 1, keepdim=True)[0]
@@ -245,7 +245,7 @@ class HCPTLoLoEinsumLayer(GenericEinsumLayer):
         return log_prob
 
 
-class HCPTLoLoSharedEinsumLayer(GenericEinsumLayer): # TODO: same thing for numerical stability
+class HCPTLoLoSharedEinsumLayer(EinsumLayer): # TODO: same thing for numerical stability
     def __init__(self, graph, products, layers, k: int, prod_exp=False, r=1):
         self.r = r
         super(HCPTLoLoSharedEinsumLayer, self).__init__(graph, products, layers, prod_exp=prod_exp, k=k)
@@ -275,7 +275,7 @@ class HCPTLoLoSharedEinsumLayer(GenericEinsumLayer): # TODO: same thing for nume
         else:
             return torch.pow(torch.Tensor([smallest_normal]), 1/3).item()
 
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
         left_max = torch.max(self.left_child_log_prob, 1, keepdim=True)[0]
         left_prob = torch.exp(self.left_child_log_prob - left_max)
         right_max = torch.max(self.right_child_log_prob, 1, keepdim=True)[0]
@@ -312,7 +312,7 @@ class HCPTLoLoSharedEinsumLayer(GenericEinsumLayer): # TODO: same thing for nume
 
         return log_prob
 
-#class HCPTSharedLoLoEinsumLayer(GenericEinsumLayer):
+#class HCPTSharedLoLoEinsumLayer(EinsumLayer):
 #    def __init__(self, graph, products, layers, decomposition_strategy="slice", prod_exp=False, r=1):
 #        super(HCPTSharedLoLoEinsumLayer, self).__init__(graph, products, layers, decomposition_strategy, prod_exp, r)
 #        self.prod_exp = prod_exp
@@ -320,7 +320,7 @@ class HCPTLoLoSharedEinsumLayer(GenericEinsumLayer): # TODO: same thing for nume
 
 
 # Also called Tucker
-class RescalEinsumLayer(GenericEinsumLayer):
+class RescalEinsumLayer(EinsumLayer):
     def __init__(self, graph, products, layers, k: int):
         super(RescalEinsumLayer, self).__init__(graph, products, layers, prod_exp=False, k=k)
 
@@ -341,7 +341,7 @@ class RescalEinsumLayer(GenericEinsumLayer):
 
         return torch.sqrt(torch.Tensor([smallest_normal])).item()
 
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
         left_max = torch.max(self.left_child_log_prob, 1, keepdim=True)[0]
         left_prob = torch.exp(self.left_child_log_prob - left_max)
         right_max = torch.max(self.right_child_log_prob, 1, keepdim=True)[0]

@@ -3,15 +3,20 @@
 
 import itertools
 import math
-from typing import Dict, Tuple
+from typing import Callable, Dict, List, Tuple, Union
 
+import pytest
 import torch
 from torch import Tensor
 
-from cirkit.layers.einsum_layer.cp_einsum_layer import CPEinsumLayer
-from cirkit.layers.exp_family_input_layer import CategoricalInputLayer
+from cirkit.layers.einsum.cp import CPLayer
+from cirkit.layers.exp_family import CategoricalLayer
 from cirkit.models.einet import LowRankEiNet, _Args
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
+from cirkit.region_graph.poon_domingos import PoonDomingos
+from cirkit.region_graph.quad_tree import QuadTree
+from cirkit.region_graph.random_binary_tree import RandomBinaryTree
+from cirkit.utils import RandomCtx
 
 
 def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
@@ -66,8 +71,8 @@ def _get_einet() -> LowRankEiNet:
     rg = _gen_rg_2x2()
 
     args = _Args(
-        layer_type=CPEinsumLayer,
-        exponential_family=CategoricalInputLayer,
+        layer_type=CPLayer,
+        exponential_family=CategoricalLayer,
         exponential_family_args={"k": 2},  # type: ignore[misc]
         num_sums=1,
         num_input=1,
@@ -153,3 +158,66 @@ def test_einet_partition_func() -> None:
     _set_params(einet)
     # part_func should be 1, log is 0
     assert torch.allclose(einet.partition_function(), torch.zeros(()), atol=0, rtol=0)
+
+
+@pytest.mark.parametrize(  # type: ignore[misc]
+    "rg_cls,kwargs,log_answer",
+    [
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 9.79221248626709),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.30215835571289),
+        (
+            RandomBinaryTree,
+            {"num_vars": 16, "depth": 3, "num_repetitions": 2},
+            24.429569244384766,
+        ),
+    ],
+)
+@RandomCtx(42)
+def test_einet_partition_function(
+    rg_cls: Callable[..., RegionGraph],
+    kwargs: Dict[str, Union[int, bool, List[int]]],
+    log_answer: float,
+) -> None:
+    """Tests the creation and partition of an einet.
+
+    Args:
+        rg_cls (Type[RegionGraph]): The class of RG to test.
+        kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
+        log_answer (float): The answer of partition func. NOTE: we don't know if it's correct, but \
+            it guarantees reproducibility.
+    """
+    # TODO: type of kwargs should be refined
+    device = "cpu"
+
+    graph = rg_cls(**kwargs)
+
+    args = _Args(
+        layer_type=CPLayer,
+        exponential_family=CategoricalLayer,
+        exponential_family_args={"k": 2},  # type: ignore[misc]
+        num_sums=16,
+        num_input=16,
+        num_var=16,
+        prod_exp=True,
+        r=1,
+    )
+
+    einet = LowRankEiNet(graph, args)
+    einet.initialize(exp_reparam=False, mixing_softmax=False)
+    einet.to(device)
+
+    # Generate all possible combinations of 16 integers from the list of possible values
+    possible_values = [0, 1]
+    all_lists = list(itertools.product(possible_values, repeat=16))
+
+    # compute outputs
+    out = einet(torch.tensor(all_lists))
+
+    # log sum exp on outputs to compute their sum
+    out_max: Tensor = torch.max(out, dim=0, keepdim=True)[0]  # TODO: max typing issue in pytorch
+    probs = torch.exp(out - out_max)
+    total_prob = probs.sum(0)
+    log_prob = torch.log(total_prob) + out_max
+
+    assert torch.isclose(log_prob, torch.tensor(log_answer), rtol=1e-6, atol=0)
+    assert torch.isclose(einet.partition_function(), log_prob, rtol=1e-6, atol=0)
