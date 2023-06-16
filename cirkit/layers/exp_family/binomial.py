@@ -6,13 +6,13 @@ from torch.nn import functional as F
 
 from cirkit.region_graph import RegionNode
 
-from .exp_family_input_layer import ExpFamilyInputLayer
-from .normal_input_layer import _shift_last_axis_to
+from .exp_family import ExpFamilyLayer
+from .normal import _shift_last_axis_to
 
 # TODO: rework docstrings
 
 
-class BinomialInputLayer(ExpFamilyInputLayer):
+class BinomialLayer(ExpFamilyLayer):
     """Implementation of Binomial distribution."""
 
     def __init__(self, nodes: List[RegionNode], num_var: int, num_dims: int, n: int):

@@ -1,8 +1,8 @@
 from typing import List
 
-from .poon_domingos_structure import _HypercubeToScopeCache  # TODO: make util?
 from .region_graph import RegionGraph
 from .rg_node import PartitionNode, RegionNode
+from .utils import HypercubeScopeCache
 
 # TODO: add routine for add regions->part->reg structure
 # TODO: rework docstrings
@@ -106,7 +106,7 @@ def _merge_4_regions_struct_decomp(regions: List[RegionNode], graph: RegionGraph
         RegionNode: The merged region node.
     """
     assert len(regions) == 4
-    # Horizontal and then vertical
+    # Vertical and then horizontal
     top_scope = regions[0].scope.union(regions[1].scope)
     bottom_scope = regions[2].scope.union(regions[3].scope)
     top_partition = PartitionNode(top_scope)
@@ -155,8 +155,8 @@ def _square_from_buffer(buffer: List[List[RegionNode]], i: int, j: int) -> List[
     return children
 
 
-# pylint: disable-next=too-many-locals,invalid-name
-def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGraph:
+# pylint: disable-next=too-many-locals
+def quad_tree(width: int, height: int, struct_decomp: bool = False) -> RegionGraph:
     """Get quad RG.
 
         Args:
@@ -168,19 +168,17 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
     Returns:
         RegionGraph: The RG.
     """
-    assert width == height and width > 0  # TODO: then we don't need two
+    shape = (height, width)
 
-    shape = (width, height)
+    hypercube_to_scope = HypercubeScopeCache()
 
-    hypercube_to_scope = _HypercubeToScopeCache()
-
-    buffer: List[List[RegionNode]] = [[] for _ in range(width)]
+    buffer: List[List[RegionNode]] = [[] for _ in range(height)]
 
     graph = RegionGraph()
 
     # Add Leaves
-    for i in range(width):
-        for j in range(height):
+    for i in range(height):
+        for j in range(width):
             hypercube = ((i, j), (i + 1, j + 1))
 
             c_scope = hypercube_to_scope(hypercube, shape)
@@ -191,36 +189,31 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
     lr_choice = 0  # left right # TODO: or choose from 0 and 1?
     td_choice = 0  # top down
 
-    old_buffer_width = width
     old_buffer_height = height
+    old_buffer_width = width
     old_buffer = buffer
 
-    # TODO: also no need to have two for h/w
-    while old_buffer_width != 1 and old_buffer_height != 1:  # pylint: disable=while-used
-        buffer_width = (old_buffer_width + 1) // 2
+    while old_buffer_width > 1 and old_buffer_height > 1:  # pylint: disable=while-used
         buffer_height = (old_buffer_height + 1) // 2
+        buffer_width = (old_buffer_width + 1) // 2
 
-        buffer = [[] for _ in range(buffer_width)]
+        buffer = [[] for _ in range(buffer_height)]
 
-        for i in range(buffer_width):
-            for j in range(buffer_height):
-                regions = _square_from_buffer(old_buffer, 2 * i + lr_choice, 2 * j + td_choice)
-                buffer[i].append(
-                    regions[0]
-                    if len(regions) == 1
-                    else _merge_2_regions(regions, graph)
-                    if len(regions) == 2
-                    else _merge_4_regions_struct_decomp(regions, graph)
-                    if struct_decomp
-                    else _merge_4_regions_mixed(regions, graph)
-                )
+        for i in range(buffer_height):
+            for j in range(buffer_width):
+                regions = _square_from_buffer(old_buffer, 2 * i + td_choice, 2 * j + lr_choice)
+                if len(regions) == 1:
+                    buf = regions[0]
+                elif len(regions) == 2:
+                    buf = _merge_2_regions(regions, graph)
+                elif struct_decomp:
+                    buf = _merge_4_regions_struct_decomp(regions, graph)
+                else:
+                    buf = _merge_4_regions_mixed(regions, graph)
+                buffer[i].append(buf)
 
         old_buffer = buffer
-        old_buffer_width = buffer_width
         old_buffer_height = buffer_height
-
-    # TODO: do we need this? already defaults to 0
-    # for node in get_leaves(graph):
-    #     node.einet_address.replica_idx = 0
+        old_buffer_width = buffer_width
 
     return graph

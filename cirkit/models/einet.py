@@ -4,12 +4,12 @@ from typing import Any, Dict, Generator, List, Optional, Type, cast
 import torch
 from torch import Tensor, nn
 
+from cirkit.layers.einsum.mixing import EinsumMixingLayer
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
-from ..layers.einsum_layer import GenericEinsumLayer
-from ..layers.exp_family_input_layer import ExpFamilyInputLayer
+from ..layers.einsum import EinsumLayer
+from ..layers.exp_family import ExpFamilyLayer
 from ..layers.layer import Layer
-from ..layers.mixing_layer import EinsumMixingLayer
 
 # TODO: should be split this file from the "layer" folder?
 # TODO: check all type casts. There should not be any without a good reason
@@ -35,11 +35,11 @@ class _Args:
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
-        layer_type: Type[GenericEinsumLayer],
+        layer_type: Type[EinsumLayer],
         num_var: int,
         num_sums: int,
         num_input: int,
-        exponential_family: Type[ExpFamilyInputLayer],
+        exponential_family: Type[ExpFamilyLayer],
         exponential_family_args: Dict[str, Any],
         r: int = 1,
         prod_exp: bool = False,
@@ -49,7 +49,7 @@ class _Args:
         """Init class.
 
         Args:
-            layer_type (Type[GenericEinsumLayer]): I don't know.
+            layer_type (Type[EinsumLayer]): I don't know.
             num_var (int): I don't know.
             num_sums (int): I don't know.
             num_input (int): I don't know.
@@ -149,7 +149,7 @@ class LowRankEiNet(nn.Module):
                 if multi_sums := [n for n in layer if len(n.inputs) > 1]:
                     einet_layers.append(
                         EinsumMixingLayer(
-                            multi_sums, cast(GenericEinsumLayer, einet_layers[-1])
+                            multi_sums, cast(EinsumLayer, einet_layers[-1])
                         )  # TODO: good type?
                     )
             else:
@@ -186,7 +186,7 @@ class LowRankEiNet(nn.Module):
             torch.device: the device.
         """
         # TODO: ModuleList is not generic type
-        return cast(ExpFamilyInputLayer, self.einet_layers[0]).params.device
+        return cast(ExpFamilyLayer, self.einet_layers[0]).params.device
 
     def initialize(
         self,
@@ -214,7 +214,7 @@ class LowRankEiNet(nn.Module):
         Args:
             idx (Tensor): The indices.
         """
-        cast(ExpFamilyInputLayer, self.einet_layers[0]).set_marginalization_idx(idx)
+        cast(ExpFamilyLayer, self.einet_layers[0]).set_marginalization_idx(idx)
 
     def get_marginalization_idx(self) -> Optional[Tensor]:
         """Get indicices of marginalized variables.
@@ -222,7 +222,7 @@ class LowRankEiNet(nn.Module):
         Returns:
             Tensor: The indices.
         """
-        return cast(ExpFamilyInputLayer, self.einet_layers[0]).get_marginalization_idx()
+        return cast(ExpFamilyLayer, self.einet_layers[0]).get_marginalization_idx()
 
     def partition_function(self, x: Optional[Tensor] = None) -> Tensor:
         """Do something that I don't know.

@@ -18,7 +18,7 @@ class _PartitionJson(TypedDict):
     r: int
 
 
-class _RGJson(TypedDict):
+class _RegionGraphJson(TypedDict):
     """The structure of region graph json file."""
 
     regions: Dict[str, List[int]]
@@ -149,7 +149,7 @@ class RegionGraph:
             filename (str): The file name to save.
         """
         # TODO: doc the format?
-        graph_json: _RGJson = {"regions": {}, "graph": []}
+        graph_json: _RegionGraphJson = {"regions": {}, "graph": []}
 
         # TODO: give each node an id as attr? they do have one defined. but what about load?
         region_ids = {node: idx for idx, node in enumerate(self.region_nodes)}
@@ -184,7 +184,7 @@ class RegionGraph:
             RegionGraph: The loaded region graph.
         """
         with open(filename, "r", encoding="utf-8") as f:
-            graph_json: _RGJson = json.load(f)
+            graph_json: _RegionGraphJson = json.load(f)
 
         ids_region = {int(idx): RegionNode(scope) for idx, scope in graph_json["regions"].items()}
 

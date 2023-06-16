@@ -5,12 +5,12 @@ from torch import Tensor, nn
 
 from cirkit.region_graph import PartitionNode
 
-from .generic_einsum_layer import GenericEinsumLayer
+from .einsum import EinsumLayer
 
 # TODO: rework docstrings
 
 
-class CPEinsumLayer(GenericEinsumLayer):
+class CPLayer(EinsumLayer):
     """Candecomp Parafac (decomposition) layer."""
 
     # TODO: original code changed args order. Not sure what impact
@@ -39,7 +39,7 @@ class CPEinsumLayer(GenericEinsumLayer):
         # (float ** float) is not guaranteed to be float, but here we know it is
         return cast(float, smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2))
 
-    def central_einsum(self, left_prob: Tensor, right_prob: Tensor) -> Tensor:
+    def _einsum(self, left_prob: Tensor, right_prob: Tensor) -> Tensor:
         """Compute the main Einsum operation of the layer.
 
         :param left_prob: value in log space for left child.

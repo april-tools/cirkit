@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from cirkit.einet._EinsumLayer import (
-    CPEinsumLayer,
+    CPLayer,
     CPSharedEinsumLayer,
     EinsumMixingLayer,
     HCPTEinsumLayer,
@@ -40,7 +40,7 @@ class LoRaEinNetwork(torch.nn.Module):
                                                               prod_exp=self.args.prod_exp, k=next(k)))
                 elif layer_type == "cp":
                     if num_sums > 1:
-                        einet_layers.append(CPEinsumLayer(self.graph, layer, einet_layers,
+                        einet_layers.append(CPLayer(self.graph, layer, einet_layers,
                                                           r=self.args.r,
                                                           prod_exp=self.args.prod_exp, k=next(k)))
                     else:

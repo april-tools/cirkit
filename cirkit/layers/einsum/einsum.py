@@ -21,7 +21,7 @@ class _TwoInputs(NamedTuple):
     right: RegionNode
 
 
-class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
+class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
     """Base for all einsums."""
 
     # TODO: is product a good name here? should split
@@ -158,7 +158,7 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         return sum(param.numel() for param in self.parameters())
 
     @abstractmethod
-    def central_einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
         """Compute the main Einsum operation of the layer.
 
         :param left_prob: value in log space for left child.
@@ -197,7 +197,7 @@ class GenericEinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         # # # # # # # # # # STEP 1: Go To the exp space # # # # # # # # # #
         # We perform the LogEinsumExp trick, by first subtracting the maxes
-        log_prob = self.central_einsum(self.left_child_log_prob, self.right_child_log_prob)
+        log_prob = self._einsum(self.left_child_log_prob, self.right_child_log_prob)
 
         # assert not torch.isinf(log_prob).any(), "Inf log prob"
         # assert not torch.isnan(log_prob).any(), "NaN log prob"

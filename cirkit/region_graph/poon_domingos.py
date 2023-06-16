@@ -1,13 +1,9 @@
-from math import ceil, floor
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
-
-import numpy as np
-from numpy.typing import NDArray
+import math
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 from .region_graph import RegionGraph
 from .rg_node import PartitionNode, RegionNode
-
-HyperCube = Tuple[Tuple[int, ...], Tuple[int, ...]]
+from .utils import HyperCube, HypercubeScopeCache
 
 # TODO: rework docstrings
 
@@ -44,68 +40,6 @@ def _cut_hypercube(hypercube: HyperCube, axis: int, pos: int) -> Tuple[HyperCube
     return child1, child2
 
 
-class _HypercubeToScopeCache:  # pylint: disable=too-few-public-methods
-    """Helper class for Poon-Domingos (PD) structure. Represents a function cache, \
-        mapping hypercubes to their unrolled scope.
-
-    For example consider the hypercube ((0, 0), (4, 5)), which is a rectangle \
-        with 4 rows and 5 columns. We assign \
-        linear indices to the elements in this rectangle as follows:
-        [[ 0  1  2  3  4]
-         [ 5  6  7  8  9]
-         [10 11 12 13 14]
-         [15 16 17 18 19]]
-    Similarly, we assign linear indices to higher-dimensional hypercubes, \
-        where higher axes toggle faster than lower \
-        axes. The scope of sub-hypercubes are just the unrolled linear indices. \
-        For example, for the rectangle above, \
-        the sub-rectangle ((1, 2), (4, 5)) has scope (7, 8, 9, 12, 13, 14, 17, 18, 19).
-
-    This class just represents a cached mapping from hypercubes to their scopes.
-    """
-
-    def __init__(self) -> None:
-        """Init class."""
-        self._hyper_cube_to_scope: Dict[HyperCube, Set[int]] = {}
-
-    def __call__(self, hypercube: HyperCube, shape: Sequence[int]) -> Set[int]:
-        """Get the scope of a hypercube.
-
-        Args:
-            hypercube (Tuple[Tuple[int,...],Tuple[int,...]]): The hypercube.
-            shape (Sequence[int]): The total shape.
-
-        Returns:
-            Set[int]: Corresponding scope.
-        """
-        # TODO: accept tuple of seq? but must be hashable
-        # TODO: return must be hashable. rewrite?
-        if hypercube in self._hyper_cube_to_scope:
-            return self._hyper_cube_to_scope[hypercube]
-
-        x1 = hypercube[0]
-        x2 = hypercube[1]
-
-        assert len(x1) == len(x2) and len(x1) == len(shape)
-        # TODO: should rewrite, also the following in list comp
-        for i in range(len(shape)):  # pylint: disable=consider-using-enumerate
-            assert x1[i] >= 0 and x2[i] <= shape[i]
-
-        scope: NDArray[np.int64] = np.zeros(
-            tuple(x2[i] - x1[i] for i in range(len(shape))), dtype=np.int64
-        )
-        f = 1
-        for i, c in enumerate(reversed(range(len(shape)))):
-            range_to_add: NDArray[np.int64] = f * np.array(range(x1[c], x2[c]), np.int64)
-            # TODO: find a better way to reshape
-            scope += np.reshape(range_to_add, (len(range_to_add),) + i * (1,))
-            f *= shape[c]
-
-        scope_: Set[int] = set(scope.reshape(-1).tolist())  # type: ignore[misc]
-        self._hyper_cube_to_scope[hypercube] = scope_
-        return scope_
-
-
 def _get_region_nodes_by_scope(graph: RegionGraph, scope: Iterable[int]) -> List[RegionNode]:
     """Get `RegionNode`s with a specific scope.
 
@@ -120,11 +54,10 @@ def _get_region_nodes_by_scope(graph: RegionGraph, scope: Iterable[int]) -> List
     return [n for n in graph.region_nodes if n.scope == scope]
 
 
-# TODO: refactor
-# pylint: disable-next=too-complex,too-many-locals,too-many-branches,invalid-name
-def PoonDomingosStructure(
+# pylint: disable-next=too-complex,too-many-locals,too-many-branches
+def poon_domingos(
     shape: Sequence[int],
-    delta: Union[float, List[float], List[List[float]]],
+    delta: Union[Union[float, int], List[Union[float, int]], List[List[Union[float, int]]]],
     axes: Optional[Sequence[int]] = None,
     max_split_depth: Optional[int] = None,
 ) -> RegionGraph:
@@ -261,12 +194,12 @@ def PoonDomingosStructure(
     for deltai in delta:
         cur_global_cur_points: List[List[int]] = []
         for shp, deltaij in zip(shape_to_cut, deltai):
-            num_cuts = floor((shp - 1) / deltaij)
-            cps = [ceil((i + 1) * deltaij) for i in range(num_cuts)]
+            num_cuts = math.floor((shp - 1) / deltaij)
+            cps = [math.ceil((i + 1) * deltaij) for i in range(num_cuts)]
             cur_global_cur_points.append(cps)
         global_cut_points.append(cur_global_cur_points)
 
-    hypercube_to_scope = _HypercubeToScopeCache()
+    hypercube_to_scope = HypercubeScopeCache()
     hypercube = ((0,) * len(shape), tuple(shape))  # TODO: fit param type
     hypercube_scope = hypercube_to_scope(hypercube, shape)
 
@@ -281,8 +214,8 @@ def PoonDomingosStructure(
     while queue:  # pylint: disable=while-used,too-many-nested-blocks
         hypercube = queue.pop(0)
         hypercube_scope = hypercube_to_scope(hypercube, shape)
-        # TODO: redundant cast to tuple
-        if (depth := depth_dict[tuple(hypercube_scope)]) >= max_split_depth:
+        depth = depth_dict[tuple(hypercube_scope)]
+        if depth >= max_split_depth:
             continue
 
         node = _get_region_nodes_by_scope(graph, hypercube_scope)[0]
@@ -315,9 +248,5 @@ def PoonDomingosStructure(
                         graph.add_edge(ch_node, partition)
             if found_cut_on_level:
                 break
-
-    # TODO: do we need this? already defaults to 0
-    # for node in get_leaves(graph):
-    #     node.einet_address.replica_idx = 0
 
     return graph

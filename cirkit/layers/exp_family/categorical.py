@@ -6,8 +6,8 @@ from torch.nn import functional as F
 
 from cirkit.region_graph import RegionNode
 
-from .exp_family_input_layer import ExpFamilyInputLayer
-from .normal_input_layer import _shift_last_axis_to
+from .exp_family import ExpFamilyLayer
+from .normal import _shift_last_axis_to
 
 # TODO: rework docstrings
 
@@ -20,7 +20,7 @@ def _one_hot(x: Tensor, k: int, dtype: torch.dtype = torch.float32) -> Tensor:
     return ind
 
 
-class CategoricalInputLayer(ExpFamilyInputLayer):
+class CategoricalLayer(ExpFamilyLayer):
     """Implementation of Categorical distribution."""
 
     def __init__(self, nodes: List[RegionNode], num_var: int, num_dims: int, k: int):

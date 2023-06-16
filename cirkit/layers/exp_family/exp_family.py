@@ -13,7 +13,7 @@ from ..layer import Layer
 
 
 # TODO: but we don't have a non-factorized one
-class ExpFamilyInputLayer(Layer):  # pylint: disable=too-many-instance-attributes
+class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
     """Computes all EiNet leaves in parallel, where each leaf is a vector of \
         factorized distributions, where factors are from exponential families.
 
