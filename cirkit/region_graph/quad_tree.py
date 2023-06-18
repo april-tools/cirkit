@@ -195,6 +195,7 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
     old_buffer_width = width
     old_buffer = buffer
 
+    # TODO: also no need to have two for h/w
     while old_buffer_width > 1 and old_buffer_height > 1:  # pylint: disable=while-used
         buffer_height = (old_buffer_height + 1) // 2
         buffer_width = (old_buffer_width + 1) // 2
@@ -217,5 +218,9 @@ def QuadTree(width: int, height: int, struct_decomp: bool = False) -> RegionGrap
         old_buffer = buffer
         old_buffer_height = buffer_height
         old_buffer_width = buffer_width
+
+    # TODO: do we need this? already defaults to 0
+    # for node in get_leaves(graph):
+    #     node.einet_address.replica_idx = 0
 
     return graph

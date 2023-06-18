@@ -49,6 +49,7 @@ class HypercubeScopeCache:  # pylint: disable=too-few-public-methods
         x2 = hypercube[1]
 
         assert len(x1) == len(x2) and len(x1) == len(shape)
+        # TODO: should rewrite, also the following in tuple comp
         assert all(x1[i] >= 0 and x2[i] <= shape[i] for i in range(len(shape)))
 
         scope: NDArray[np.int64] = np.zeros(
