@@ -101,16 +101,16 @@ class EinsumLayer(Layer):
         # in the following EinsumMixingLayer
         self.mixing_component_idx: Dict[RegionNode, List[int]] = defaultdict(list)
 
-        for c, product in enumerate(partition_layer):
+        for part_idx, partition in enumerate(partition_layer):
             # each product must have exactly 1 parent (sum node)
-            assert len(product.outputs) == 1
-            out_region = product.outputs[0]
+            assert len(partition.outputs) == 1
+            out_region = partition.outputs[0]
 
             if len(out_region.inputs) == 1:
                 out_region.einet_address.layer = self
-                out_region.einet_address.idx = c
+                out_region.einet_address.idx = part_idx
             else:  # case followed by EinsumMixingLayer
-                self.mixing_component_idx[out_region].append(c)
+                self.mixing_component_idx[out_region].append(part_idx)
                 self.dummy_idx = len(partition_layer)
 
     def reset_parameters(self) -> None:

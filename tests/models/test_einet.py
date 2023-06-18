@@ -96,7 +96,7 @@ def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
         "einet_layers.2.cp_a": (1, 1, 2),
         "einet_layers.2.cp_b": (1, 1, 2),
         "einet_layers.2.cp_c": (1, 1, 2),
-        "einet_layers.3.params": (1, 1, 2),
+        "einet_layers.3.param": (1, 1, 2),
     }
 
 
@@ -119,7 +119,7 @@ def _set_params(einet: LowRankEiNet) -> None:
             "einet_layers.2.cp_a": torch.ones(1, 1, 2) * 2,
             "einet_layers.2.cp_b": torch.ones(1, 1, 2) / 2,
             "einet_layers.2.cp_c": torch.ones(1, 1, 2),
-            "einet_layers.3.params": torch.tensor(
+            "einet_layers.3.param": torch.tensor(
                 [1 / 3, 2 / 3],  # type: ignore[misc]
             ).reshape(1, 1, 2),
         }
