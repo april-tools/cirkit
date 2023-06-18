@@ -118,29 +118,6 @@ class EinsumLayer(Layer):
         for param in self.parameters():
             nn.init.uniform_(param, 0.01, 0.99)
 
-    # TODO: why use property but not attribute?
-    @property
-    @abstractmethod
-    def param_clamp_min(self) -> float:
-        """Value for parameters clamping to keep all probabilities greater than 0.
-
-        :return: value for parameters clamping
-        """
-
-    @torch.no_grad()
-    def clamp_params(self, clamp_all: bool = False) -> None:
-        """Clamp parameters such that they are non-negative and \
-        is impossible to get zero probabilities.
-
-        This involves using a constant that is specific on the computation.
-
-        Args:
-            clamp_all (bool, optional): Whether to clamp all. Defaults to False.
-        """
-        for param in self.parameters():
-            if clamp_all or param.requires_grad:
-                param.clamp_(min=self.param_clamp_min)
-
     @abstractmethod
     def _forward_einsum(
         self, log_left_prob: torch.Tensor, log_right_prob: torch.Tensor

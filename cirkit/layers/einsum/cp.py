@@ -26,21 +26,19 @@ class CPLayer(EinsumLayer):
         """
         super().__init__(partition_layer, k)
         self.prod_exp = prod_exp
+
         # TODO: cp_a is not a good name
         self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
         self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
         self.cp_c = nn.Parameter(torch.empty(self.out_k, r, len(partition_layer)))
-        self.reset_parameters()
 
-    @property
-    def param_clamp_min(self) -> float:
-        """Value for parameters clamping to keep all probabilities greater than 0.
-
-        :return: value for parameters clamping.
-        """
-        smallest_normal = torch.finfo(self.cp_a.dtype).smallest_normal
         # (float ** float) is not guaranteed to be float, but here we know it is
-        return cast(float, smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2))
+        self.param_clamp_value["min"] = cast(
+            float,
+            torch.finfo(self.cp_a.dtype).smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2),
+        )
+
+        self.reset_parameters()
 
     # pylint: disable=too-many-locals
     def _forward_einsum(self, log_left_prob: Tensor, log_right_prob: Tensor) -> Tensor:

@@ -121,6 +121,8 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         self.register_buffer("params_mask", params_mask)
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
 
+        self.param_clamp_value["min"] = torch.finfo(self.param.dtype).smallest_normal
+
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -133,28 +135,6 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
                 self.param *= self.params_mask  # type: ignore[misc]
 
             self.param /= self.param.sum(dim=2, keepdim=True)  # type: ignore[misc]
-
-    # TODO: why in both children but not base class
-    @property
-    def param_clamp_min(self) -> float:
-        """Value for parameters clamping to keep all probabilities greater than 0.
-
-        :return: value for parameters clamping
-        """
-        return torch.finfo(self.param.dtype).smallest_normal
-
-    @torch.no_grad()
-    def clamp_params(self, clamp_all: bool = False) -> None:
-        """Clamp parameters such that they are non-negative and is impossible to \
-            get zero probabilities.
-
-        This involves using a constant that is specific on the computation.
-
-        Args:
-            clamp_all (bool, optional): Whether to clamp all. Defaults to False.
-        """
-        if clamp_all or self.param.requires_grad:
-            self.param.clamp_(min=self.param_clamp_min)
 
     # TODO: make forward return something
     def forward(self, x: Optional[Tensor] = None) -> None:
