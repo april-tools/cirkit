@@ -26,6 +26,7 @@ class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
     # TODO: is product a good name here? should split
     # TODO: input can be more generic than List
+    # TODO: subclasses should call reset_params -- where params are inited
     # we have to provide operation for input, operation for product and operation after product
     def __init__(  # type: ignore[misc]
         self, partition_layer: List[PartitionNode], k: int, **_: Any
@@ -111,7 +112,10 @@ class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         self.left_child_log_prob = torch.empty(())
         self.right_child_log_prob = torch.empty(())
 
-        self.reset_parameters()
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization: U(0.01, 0.99)."""
+        for param in self.parameters():
+            nn.init.uniform_(param, 0.01, 0.99)
 
     @property
     @abstractmethod
@@ -134,11 +138,6 @@ class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         for param in self.parameters():
             if clamp_all or param.requires_grad:
                 param.clamp_(min=self.clamp_value)
-
-    def reset_parameters(self) -> None:
-        """Reset parameters to default initialization: U(0.01, 0.99)."""
-        for param in self.parameters():
-            nn.init.uniform_(param, 0.01, 0.99)
 
     @property
     def params_shape(self) -> List[Tuple[int, ...]]:

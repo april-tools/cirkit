@@ -28,6 +28,7 @@ class CPLayer(EinsumLayer):
         self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(products)))
         self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(products)))
         self.cp_c = nn.Parameter(torch.empty(self.out_k, r, len(products)))
+        self.reset_parameters()
 
     @property
     def clamp_value(self) -> float:
