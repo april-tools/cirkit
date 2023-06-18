@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import torch
 from torch import Tensor, nn
@@ -138,23 +138,6 @@ class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         for param in self.parameters():
             if clamp_all or param.requires_grad:
                 param.clamp_(min=self.clamp_value)
-
-    @property
-    def params_shape(self) -> List[Tuple[int, ...]]:
-        """Return all param shapes.
-
-        Returns:
-            List[Tuple[int, ...]]: All shapes.
-        """
-        return [param.shape for param in self.parameters()]
-
-    @property
-    def num_params(self) -> int:
-        """Return the total number of parameters of the layer.
-
-        :return: the total number of parameters of the layer.
-        """
-        return sum(param.numel() for param in self.parameters())
 
     @abstractmethod
     def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:

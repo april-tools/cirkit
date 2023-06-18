@@ -21,13 +21,13 @@ class Layer(nn.Module, ABC):
         """Reset parameters to default initialization."""
 
     @property
-    @abstractmethod
     def num_params(self) -> int:
         """Get the number of params.
 
         Returns:
             int: the number of params
         """
+        return sum(param.numel() for param in self.parameters())
 
     def __call__(self, x: Optional[Tensor] = None) -> None:
         """Invoke the forward.

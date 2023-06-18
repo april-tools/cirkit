@@ -131,14 +131,6 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         self.reset_parameters()
 
-    @property
-    def num_params(self) -> int:
-        """Return the total number of parameters of the layer.
-
-        :return: the total number of parameters of the layer.
-        """
-        return self.params.numel()
-
     # TODO: why in both children but not base class
     @property
     def clamp_value(self) -> float:
