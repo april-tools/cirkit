@@ -13,44 +13,46 @@ from .einsum import EinsumLayer
 class CPLayer(EinsumLayer):
     """Candecomp Parafac (decomposition) layer."""
 
-    # TODO: original code changed args order. Not sure what impact
-    def __init__(self, products: List[PartitionNode], k: int, prod_exp: bool, r: int = 1) -> None:
+    def __init__(
+        self, partition_layer: List[PartitionNode], k: int, *, prod_exp: bool, r: int = 1
+    ) -> None:
         """Init class.
 
         Args:
-            products (List[PartitionNode]): The current product layer.
+            partition_layer (List[PartitionNode]): The current product layer.
             k (int): I don't know.
             prod_exp (bool): whether product is in exp-space.
             r (int, optional): The rank? Maybe. Defaults to 1.
         """
-        super().__init__(products, k)
+        super().__init__(partition_layer, k)
         self.prod_exp = prod_exp
-        self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(products)))
-        self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(products)))
-        self.cp_c = nn.Parameter(torch.empty(self.out_k, r, len(products)))
 
-    @property
-    def clamp_value(self) -> float:
-        """Value for parameters clamping to keep all probabilities greater than 0.
+        # TODO: cp_a is not a good name
+        self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
+        self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
+        self.cp_c = nn.Parameter(torch.empty(self.out_k, r, len(partition_layer)))
 
-        :return: value for parameters clamping.
-        """
-        smallest_normal = torch.finfo(self.cp_a.dtype).smallest_normal
         # (float ** float) is not guaranteed to be float, but here we know it is
-        return cast(float, smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2))
+        self.param_clamp_value["min"] = cast(
+            float,
+            torch.finfo(self.cp_a.dtype).smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2),
+        )
 
-    def _einsum(self, left_prob: Tensor, right_prob: Tensor) -> Tensor:
+        self.reset_parameters()
+
+    # pylint: disable=too-many-locals
+    def _forward_einsum(self, log_left_prob: Tensor, log_right_prob: Tensor) -> Tensor:
         """Compute the main Einsum operation of the layer.
 
-        :param left_prob: value in log space for left child.
-        :param right_prob: value in log space for right child.
+        :param log_left_prob: value in log space for left child.
+        :param log_right_prob: value in log space for right child.
         :return: result of the left operations, in log-space.
         """
         # TODO: max return type cannot be analysed (but strangely sum is normal)
-        left_max: Tensor = torch.max(self.left_child_log_prob, dim=1, keepdim=True)[0]
-        left_prob = torch.exp(self.left_child_log_prob - left_max)
-        right_max: Tensor = torch.max(self.right_child_log_prob, dim=1, keepdim=True)[0]
-        right_prob = torch.exp(self.right_child_log_prob - right_max)
+        left_max: Tensor = torch.max(log_left_prob, dim=1, keepdim=True)[0]
+        left_prob = torch.exp(log_left_prob - left_max)
+        right_max: Tensor = torch.max(log_right_prob, dim=1, keepdim=True)[0]
+        right_prob = torch.exp(log_right_prob - right_max)
 
         left_hidden = torch.einsum("bip,irp->brp", left_prob, self.cp_a)
         right_hidden = torch.einsum("bjp,jrp->brp", right_prob, self.cp_b)

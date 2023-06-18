@@ -104,15 +104,6 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         self.reset_parameters()
 
-    @property
-    def num_params(self) -> int:
-        """Get number of params.
-
-        Returns:
-            int: The number of params.
-        """
-        return self.params.numel()
-
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: N(0, 1)."""
         nn.init.normal_(self.params)

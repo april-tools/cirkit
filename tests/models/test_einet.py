@@ -96,7 +96,7 @@ def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
         "einet_layers.2.cp_a": (1, 1, 2),
         "einet_layers.2.cp_b": (1, 1, 2),
         "einet_layers.2.cp_c": (1, 1, 2),
-        "einet_layers.3.params": (1, 1, 2),
+        "einet_layers.3.param": (1, 1, 2),
     }
 
 
@@ -119,7 +119,7 @@ def _set_params(einet: LowRankEiNet) -> None:
             "einet_layers.2.cp_a": torch.ones(1, 1, 2) * 2,
             "einet_layers.2.cp_b": torch.ones(1, 1, 2) / 2,
             "einet_layers.2.cp_c": torch.ones(1, 1, 2),
-            "einet_layers.3.params": torch.tensor(
+            "einet_layers.3.param": torch.tensor(
                 [1 / 3, 2 / 3],  # type: ignore[misc]
             ).reshape(1, 1, 2),
         }
@@ -163,13 +163,9 @@ def test_einet_partition_func() -> None:
 @pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs,log_answer",
     [
-        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 9.79221248626709),
-        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.30215835571289),
-        (
-            RandomBinaryTree,
-            {"num_vars": 16, "depth": 3, "num_repetitions": 2},
-            24.429569244384766,
-        ),
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.94407844543457),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.791404724121094),
+        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 23.796138763427734),
     ],
 )
 @RandomCtx(42)

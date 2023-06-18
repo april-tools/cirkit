@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, List, Literal, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -66,39 +66,37 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
     excerpt.
     """
 
+    # TODO: might be good to doc params and buffers here
     # to be registered as buffer
     params_mask: Tensor
     padded_idx: Tensor
 
-    # TODO: generic container to accept?
-    def __init__(self, nodes: List[RegionNode], einsum_layer: EinsumLayer):
+    def __init__(self, region_layer: List[RegionNode], einsum_layer: EinsumLayer):
         """Init class.
 
-        :param nodes: the nodes of the current layer (see constructor of \
+        :param region_layer: the nodes of the current layer (see constructor of \
             EinsumNetwork), which have multiple children
         :param einsum_layer:
         """
         super().__init__()
 
-        self.nodes = nodes
+        self.region_layer = region_layer
 
-        num_sums = set(n.k for n in nodes)
-        assert (
-            len(num_sums) == 1
-        ), "Number of distributions must be the same for all regions in one layer."
-        self.num_sums = num_sums.pop()
+        k = set(region.k for region in region_layer)
+        assert len(k) == 1, f"The K of region nodes in the same layer must be the same, got {k}."
+        self.k = k.pop()
 
-        self.max_components = max(len(n.inputs) for n in nodes)
+        self.max_components = max(len(region.inputs) for region in region_layer)
 
         # einsum is actually the only layer which gives input to EinsumMixingLayer
         # we keep it in a list, since otherwise it gets registered as a torch sub-module
-        self.layers = [einsum_layer]
+        self.input_layer_as_list = [einsum_layer]
         self.mixing_component_idx = einsum_layer.mixing_component_idx
         assert (
             einsum_layer.dummy_idx is not None
         ), "EinsumLayer has not set a dummy index for padding."
 
-        param_shape = (self.num_sums, len(self.nodes), self.max_components)
+        param_shape = (self.k, len(region_layer), self.max_components)
         # param_shape = (len(self.nodes), self.max_components) for better perf
         # TODO: test best perf?
 
@@ -106,81 +104,37 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # padded_idx indexes into the log-density tensor of the previous
         # EinsumLayer, padded with a dummy input which
         # outputs constantly 0 (-inf in the log-domain), see class EinsumLayer.
-        padded_idx: List[int] = []
+        padded_idx: List[List[int]] = []
         params_mask = torch.ones(param_shape)
-        for c, node in enumerate(self.nodes):
-            num_components = len(self.mixing_component_idx[node])
-            padded_idx += self.mixing_component_idx[node]
-            padded_idx += [einsum_layer.dummy_idx] * (self.max_components - num_components)
+        for reg_idx, region in enumerate(region_layer):
+            num_components = len(self.mixing_component_idx[region])
+            this_idx = self.mixing_component_idx[region] + [einsum_layer.dummy_idx] * (
+                self.max_components - num_components
+            )
+            padded_idx.append(this_idx)
             if self.max_components > num_components:
-                params_mask[:, c, num_components:] = 0.0
-            node.einet_address.layer = self
-            node.einet_address.idx = c
+                params_mask[:, reg_idx, num_components:] = 0.0
+            region.einet_address.layer = self
+            region.einet_address.idx = reg_idx
 
-        # TODO: originally init here? why?
-        # super().__init__()
-
-        # TODO: so should put where?
-        ####### CODE ORIGINALLY FROM SUMLAYER
-        self.params_shape = param_shape
-        self.params = nn.Parameter(torch.empty(self.params_shape))
+        self.param = nn.Parameter(torch.empty(param_shape))
         self.register_buffer("params_mask", params_mask)
-        ############## END
-
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
+
+        self.param_clamp_value["min"] = torch.finfo(self.param.dtype).smallest_normal
 
         self.reset_parameters()
 
-    @property
-    def num_params(self) -> int:
-        """Return the total number of parameters of the layer.
-
-        :return: the total number of parameters of the layer.
-        """
-        return self.params.numel()
-
-    # TODO: why in both children but not base class
-    @property
-    def clamp_value(self) -> float:
-        """Value for parameters clamping to keep all probabilities greater than 0.
-
-        :return: value for parameters clamping
-        """
-        return torch.finfo(self.params.dtype).smallest_normal
-
-    def clamp_params(self, clamp_all: bool = False) -> None:
-        """Clamp parameters such that they are non-negative and is impossible to \
-            get zero probabilities.
-
-        This involves using a constant that is specific on the computation.
-
-        Args:
-            clamp_all (bool, optional): Whether to clamp all. Defaults to False.
-        """
-        # TODO: don't use .data but what about grad of nn.Param?
-        if clamp_all or self.params.requires_grad:
-            self.params.data.clamp_(min=self.clamp_value)
-
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
-        nn.init.uniform_(self.params, 0.01, 0.99)
+        nn.init.uniform_(self.param, 0.01, 0.99)
 
         with torch.no_grad():
             if self.params_mask is not None:
                 # TODO: assume mypy bug with __mul__ and __div__
-                self.params *= self.params_mask  # type: ignore[misc]
+                self.param *= self.params_mask  # type: ignore[misc]
 
-            self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
-
-    # TODO: there's a get_parameter in nn.Module?
-    # TODO: why can be a dict
-    def get_parameters(self) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
-        """Get parameters.
-
-        Returns:
-            Union[torch.Tensor, Dict[str, torch.Tensor]]: The params.
-        """
-        return self.params
+            self.param /= self.param.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
     # TODO: make forward return something
     def forward(self, x: Optional[Tensor] = None) -> None:
@@ -189,25 +143,23 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         Args:
             x (Optional[Tensor], optional): Not used. Defaults to None.
         """
-        self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
-        self.child_log_prob = self.child_log_prob.reshape(
-            *self.child_log_prob.shape[:2], len(self.nodes), self.max_components
-        )
+        # TODO: should define in __init__, or do we need to save?
+        self.log_input_prob = self.input_layer_as_list[0].prob[:, :, self.padded_idx]
 
         # TODO: still the same torch max problem by mypy
-        max_p: Tensor = torch.max(self.child_log_prob, 3, keepdim=True)[0]
-        prob = torch.exp(self.child_log_prob - max_p)
+        input_max: Tensor = torch.max(self.log_input_prob, dim=3, keepdim=True)[0]
+        input_prob = torch.exp(self.log_input_prob - input_max)
 
         # TODO: use a mul or gather?
-        assert (self.params * self.params_mask == self.params).all()
+        assert (self.param * self.params_mask == self.param).all()
 
-        output = torch.einsum("bonc,onc->bon", prob, self.params)
-        self.prob = torch.log(output) + max_p[:, :, :, 0]
+        prob = torch.einsum("bonc,onc->bon", input_prob, self.param)
+        log_prob = torch.log(prob) + input_max[..., 0]
 
-        assert not torch.isnan(self.prob).any()
-        assert not torch.isinf(self.prob).any()
+        self.prob = log_prob
 
     # TODO: how is this useful?
+    # TODO: not refactored
     # pylint: disable=too-many-arguments
     def _backtrack(  # type: ignore[misc]
         self,
@@ -224,7 +176,7 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         with torch.no_grad():
             if use_evidence:
                 log_prior = torch.log(params[dist_idx, node_idx, :])
-                log_posterior = log_prior + self.child_log_prob[sample_idx, dist_idx, node_idx, :]
+                log_posterior = log_prior + self.log_input_prob[sample_idx, dist_idx, node_idx, :]
                 posterior = torch.exp(
                     log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
                 )
@@ -236,9 +188,10 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
             elif mode == "argmax":
                 idx = torch.argmax(posterior, -1)
             node_idx_out = [
-                self.mixing_component_idx[self.nodes[i]][idx[c]] for c, i in enumerate(node_idx)
+                self.mixing_component_idx[self.region_layer[i]][idx[c]]
+                for c, i in enumerate(node_idx)
             ]
             # TODO: make sure it's wanted. it's all copies of the same object
-            layers_out = [self.layers[0]] * len(node_idx)
+            layers_out = [self.input_layer_as_list[0]] * len(node_idx)
 
         return dist_idx, node_idx_out, layers_out

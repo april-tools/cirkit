@@ -1,9 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 
+import torch
 from torch import Tensor, nn
 
 # TODO: rework docstrings
+
+
+class _ClampValue(TypedDict, total=False):
+    """Wraps the kwargs passed to `torch.clamp()`."""
+
+    min: float
+    max: float
 
 
 # TODO: name it layer?
@@ -15,19 +23,34 @@ class Layer(nn.Module, ABC):
         """Init class."""
         super().__init__()  # TODO: do we need multi-inherit init?
         self.prob: Tensor = None  # type: ignore[assignment]  # TODO: why None?
+        self.param_clamp_value: _ClampValue = {}
 
     @abstractmethod
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization."""
 
     @property
-    @abstractmethod
     def num_params(self) -> int:
         """Get the number of params.
 
         Returns:
             int: the number of params
         """
+        return sum(param.numel() for param in self.parameters())
+
+    @torch.no_grad()
+    def clamp_params(self, clamp_all: bool = False) -> None:
+        """Clamp parameters such that they are non-negative and is impossible to \
+            get zero probabilities.
+
+        This involves using a constant that is specific on the computation.
+
+        Args:
+            clamp_all (bool, optional): Whether to clamp all. Defaults to False.
+        """
+        for param in self.parameters():
+            if clamp_all or param.requires_grad:
+                param.clamp_(**self.param_clamp_value)
 
     def __call__(self, x: Optional[Tensor] = None) -> None:
         """Invoke the forward.
