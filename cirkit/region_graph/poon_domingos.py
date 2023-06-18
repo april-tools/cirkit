@@ -54,6 +54,7 @@ def _get_region_nodes_by_scope(graph: RegionGraph, scope: Iterable[int]) -> List
     return [n for n in graph.region_nodes if n.scope == scope]
 
 
+# TODO: refactor
 # pylint: disable-next=too-complex,too-many-locals,too-many-branches,invalid-name
 def PoonDomingos(
     shape: Sequence[int],
@@ -214,6 +215,7 @@ def PoonDomingos(
     while queue:  # pylint: disable=while-used,too-many-nested-blocks
         hypercube = queue.pop(0)
         hypercube_scope = hypercube_to_scope(hypercube, shape)
+        # TODO: redundant cast to tuple
         if (depth := depth_dict[tuple(hypercube_scope)]) >= max_split_depth:
             continue
 
@@ -247,5 +249,9 @@ def PoonDomingos(
                         graph.add_edge(ch_node, partition)
             if found_cut_on_level:
                 break
+
+    # TODO: do we need this? already defaults to 0
+    # for node in get_leaves(graph):
+    #     node.einet_address.replica_idx = 0
 
     return graph
