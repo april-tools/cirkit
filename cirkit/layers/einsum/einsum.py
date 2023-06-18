@@ -21,21 +21,26 @@ class _TwoInputs(NamedTuple):
     right: RegionNode
 
 
-class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
+class EinsumLayer(Layer):
     """Base for all einsums."""
 
     # TODO: is product a good name here? should split
-    # TODO: input can be more generic than List
+    # TODO: kwargs should be public interface instead of `_`. How to supress this warning?
+    #       all subclasses should accept all args as kwargs except for layer and k
     # TODO: subclasses should call reset_params -- where params are inited
     # we have to provide operation for input, operation for product and operation after product
     def __init__(  # type: ignore[misc]
-        self, partition_layer: List[PartitionNode], k: int, **_: Any
+        self,  # pylint: disable=unused-argument
+        partition_layer: List[PartitionNode],
+        k: int,
+        **kwargs: Any,
     ) -> None:
         """Init class.
 
         Args:
             partition_layer (List[PartitionNode]): The current partition layer.
             k (int): The K.
+            kwargs (Any): Passed to subclasses.
         """
         super().__init__()
 
@@ -108,18 +113,15 @@ class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
                 self.mixing_component_idx[out_region].append(c)
                 self.dummy_idx = len(partition_layer)
 
-        # TODO: correct way to init? definitely not in _forward()
-        self.left_child_log_prob = torch.empty(())
-        self.right_child_log_prob = torch.empty(())
-
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99)."""
         for param in self.parameters():
             nn.init.uniform_(param, 0.01, 0.99)
 
+    # TODO: why use property but not attribute?
     @property
     @abstractmethod
-    def clamp_value(self) -> float:
+    def param_clamp_min(self) -> float:
         """Value for parameters clamping to keep all probabilities greater than 0.
 
         :return: value for parameters clamping
@@ -137,14 +139,16 @@ class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """
         for param in self.parameters():
             if clamp_all or param.requires_grad:
-                param.clamp_(min=self.clamp_value)
+                param.clamp_(min=self.param_clamp_min)
 
     @abstractmethod
-    def _einsum(self, left_prob: torch.Tensor, right_prob: torch.Tensor) -> torch.Tensor:
+    def _forward_einsum(
+        self, log_left_prob: torch.Tensor, log_right_prob: torch.Tensor
+    ) -> torch.Tensor:
         """Compute the main Einsum operation of the layer.
 
-        :param left_prob: value in log space for left child.
-        :param right_prob: value in log space for right child.
+        :param log_left_prob: value in log space for left child.
+        :param log_right_prob: value in log space for right child.
         :return: result of the left operations, in log-space.
         """
 
@@ -163,28 +167,15 @@ class EinsumLayer(Layer):  # pylint: disable=too-many-instance-attributes
         5a) do nothing                                      || 5b) back to log space
         """
         # TODO: we should use dim=2, check all code
-        self.left_child_log_prob = torch.stack(
-            [addr.layer.prob[:, :, addr.idx] for addr in self.left_addr],
-            dim=2,
+        log_left_prob = torch.stack(
+            [addr.layer.prob[:, :, addr.idx] for addr in self.left_addr], dim=2
         )
-        self.right_child_log_prob = torch.stack(
-            [addr.layer.prob[:, :, addr.idx] for addr in self.right_addr],
-            dim=2,
+        log_right_prob = torch.stack(
+            [addr.layer.prob[:, :, addr.idx] for addr in self.right_addr], dim=2
         )
 
-        # assert not torch.isinf(self.left_child_log_prob).any()
-        # assert not torch.isinf(self.right_child_log_prob).any()
-        # assert not torch.isnan(self.left_child_log_prob).any()
-        # assert not torch.isnan(self.right_child_log_prob).any()
+        log_prob = self._forward_einsum(log_left_prob, log_right_prob)
 
-        # # # # # # # # # # STEP 1: Go To the exp space # # # # # # # # # #
-        # We perform the LogEinsumExp trick, by first subtracting the maxes
-        log_prob = self._einsum(self.left_child_log_prob, self.right_child_log_prob)
-
-        # assert not torch.isinf(log_prob).any(), "Inf log prob"
-        # assert not torch.isnan(log_prob).any(), "NaN log prob"
-
-        # zero-padding (-inf in log-domain) for the following mixing layer
         if self.dummy_idx is not None:
             log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
 
