@@ -130,6 +130,7 @@ disable = [
   "missing-module-docstring",
   "no-member",
   "fixme",
+  "duplicate-code",
 ]
 [tool.pylint.basic]
 argument-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
