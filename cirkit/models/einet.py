@@ -204,7 +204,8 @@ class LowRankEiNet(nn.Module):
             # the Mixing layer is only for regions which have multiple partitions as children.
             if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
                 assert dummy_idx is not None
-                mixing_layer = EinsumMixingLayer(multi_sums, einsum_layer)
+                max_components = max(len(region.inputs) for region in multi_sums)
+                mixing_layer = EinsumMixingLayer(multi_sums, max_components)
                 einet_layers.append(mixing_layer)
 
                 # The following code does some bookkeeping.
@@ -212,7 +213,6 @@ class LowRankEiNet(nn.Module):
                 # EinsumLayer, padded with a dummy input which
                 # outputs constantly 0 (-inf in the log-domain), see class EinsumLayer.
                 padded_idx: List[List[int]] = []
-                max_components = mixing_layer.param.shape[-1]  # TODO: duplicated
                 for reg_idx, region in enumerate(region_layer):
                     num_components = len(mixing_component_idx[region])
                     this_idx = mixing_component_idx[region] + [dummy_idx] * (

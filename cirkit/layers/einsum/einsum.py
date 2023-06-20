@@ -14,11 +14,9 @@ from ..layer import Layer
 class EinsumLayer(Layer):
     """Base for all einsums."""
 
-    # TODO: is product a good name here? should split
     # TODO: kwargs should be public interface instead of `_`. How to supress this warning?
     #       all subclasses should accept all args as kwargs except for layer and k
     # TODO: subclasses should call reset_params -- where params are inited
-    # we have to provide operation for input, operation for product and operation after product
     def __init__(  # type: ignore[misc]
         self,  # pylint: disable=unused-argument
         partition_layer: List[PartitionNode],
@@ -34,10 +32,8 @@ class EinsumLayer(Layer):
         """
         super().__init__()
 
-        # # # # # # # # #
-        #   CHECK
-        # # # # # # # # #
-        # TODO: do we really need this?
+        # TODO: do we really need these checks?
+        # define in_k and out_k here, for subclass param init
 
         # TODO: check all constructions that can use comprehension
         out_k = set(
@@ -50,7 +46,7 @@ class EinsumLayer(Layer):
         # check if it is root  # TODO: what does this mean?
         if out_k.pop() > 1:
             self.out_k = k
-            # set num_sums in the graph
+            # set num_sums in the graph  # TODO: but should decouple from RG
             for partition in partition_layer:
                 for out_region in partition.outputs:
                     out_region.k = k
