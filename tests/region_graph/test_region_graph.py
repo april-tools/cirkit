@@ -7,15 +7,12 @@ from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 
 def check_region_partition_layers(rg: RegionGraph, bottom_up: bool) -> None:
     layers = rg.topological_layers(bottom_up)
-    if not bottom_up:  # Reverse layers
-        layers = layers[::-1]
-    for i, layer in enumerate(layers):
-        if not i % 2:  # Layer of regions at the inputs
-            for r in layer:
-                assert isinstance(r, RegionNode), "Inconsistent layer of regions"
-        else:
-            for p in layer:
-                assert isinstance(p, PartitionNode), "Inconsistent layer of partitions"
+    assert layers[0][0] == [], "No partition layer should exist before input"
+    for partition_layer, region_layer in layers:
+        for r in region_layer:
+            assert isinstance(r, RegionNode), "Inconsistent layer of regions"
+        for p in partition_layer:
+            assert isinstance(p, PartitionNode), "Inconsistent layer of partitions"
 
 
 def check_equivalent_region_graphs(rg1: RegionGraph, rg2: RegionGraph) -> None:

@@ -1,4 +1,4 @@
-from typing import List, cast
+from typing import Any, List, cast
 
 import torch
 from torch import Tensor, nn
@@ -13,8 +13,9 @@ from .einsum import EinsumLayer
 class CPLayer(EinsumLayer):
     """Candecomp Parafac (decomposition) layer."""
 
-    def __init__(
-        self, partition_layer: List[PartitionNode], k: int, *, prod_exp: bool, r: int = 1
+    # TODO: better way to call init by base class?
+    def __init__(  # type: ignore[misc]
+        self, partition_layer: List[PartitionNode], k: int, *, prod_exp: bool, r: int = 1, **_: Any
     ) -> None:
         """Init class.
 

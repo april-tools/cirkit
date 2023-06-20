@@ -1,7 +1,7 @@
 import itertools
 import json
 from functools import cached_property
-from typing import Dict, FrozenSet, Iterable, List, Set, TypedDict, Union, final, overload
+from typing import Dict, FrozenSet, Iterable, List, Set, Tuple, TypedDict, final, overload
 
 from .rg_node import PartitionNode, RegionNode, RGNode
 
@@ -215,7 +215,7 @@ class RegionGraph:
     # TODO: do we have it here or decouple from RG? also how to properly name "layer"?
     def topological_layers(
         self, bottom_up: bool
-    ) -> List[Union[List[RegionNode], List[PartitionNode]]]:
+    ) -> List[Tuple[List[PartitionNode], List[RegionNode]]]:
         """Get the layerized computational graph.
 
         Arranging the PC graph in topological layers -- see Algorithm 1 in the paper.
@@ -224,7 +224,7 @@ class RegionGraph:
             bottom_up (bool): Whether to build bottom-up or top-down.
 
         Returns:
-            List[Union[List[RegionNode], List[PartitionNode]]]: list of layers, \
+            List[Tuple[List[PartitionNode], List[RegionNode]]]: list of layers, \
                 alternating between  DistributionVector and Product layers (list of lists of nodes).
         """
         return (
@@ -233,11 +233,11 @@ class RegionGraph:
             else self._topological_layers_top_down()
         )
 
-    def _topological_layers_bottom_up(self) -> List[Union[List[RegionNode], List[PartitionNode]]]:
+    def _topological_layers_bottom_up(self) -> List[Tuple[List[PartitionNode], List[RegionNode]]]:
         """Layerize in the bottom-up manner.
 
         Returns:
-            List[Union[List[RegionNode], List[PartitionNode]]]: \
+            List[Tuple[List[PartitionNode], List[RegionNode]]]: \
                 Nodes in each layer from input to output.
         """
         inner_region_nodes = sorted(self.inner_region_nodes)  # TODO: why sort?
@@ -245,8 +245,7 @@ class RegionGraph:
         input_nodes = sorted(self.input_nodes)
 
         visited_nodes: Set[RGNode] = set(input_nodes)
-        # TODO: list variance issues
-        layers: List[Union[List[RegionNode], List[PartitionNode]]] = [input_nodes]
+        layers: List[Tuple[List[PartitionNode], List[RegionNode]]] = [([], input_nodes)]
 
         num_nodes = len(input_nodes) + len(inner_region_nodes) + len(partition_nodes)
 
@@ -257,8 +256,6 @@ class RegionGraph:
                 if partition not in visited_nodes
                 and all(region in visited_nodes for region in partition.inputs)
             ]
-            partition_layer = sorted(partition_layer)
-            layers.append(partition_layer)
             visited_nodes.update(partition_layer)
 
             region_layer = [
@@ -267,17 +264,17 @@ class RegionGraph:
                 if region not in visited_nodes
                 and all(partition in visited_nodes for partition in region.inputs)
             ]
-            region_layer = sorted(region_layer)
-            layers.append(region_layer)
             visited_nodes.update(region_layer)
+
+            layers.append((sorted(partition_layer), sorted(region_layer)))
 
         return layers
 
-    def _topological_layers_top_down(self) -> List[Union[List[RegionNode], List[PartitionNode]]]:
+    def _topological_layers_top_down(self) -> List[Tuple[List[PartitionNode], List[RegionNode]]]:
         """Layerize in the top-down manner.
 
         Returns:
-            List[Union[List[RegionNode], List[PartitionNode]]]: \
+            List[Tuple[List[PartitionNode], List[RegionNode]]]: \
                 Nodes in each layer from input to output.
         """
         inner_region_nodes = sorted(self.inner_region_nodes)  # TODO: why sort?
@@ -285,8 +282,7 @@ class RegionGraph:
         input_nodes = sorted(self.input_nodes)
 
         visited_nodes: Set[RGNode] = set()
-        # TODO: list variance issues
-        layers_inv: List[Union[List[RegionNode], List[PartitionNode]]] = []
+        layers_inv: List[Tuple[List[PartitionNode], List[RegionNode]]] = []
 
         num_inner_nodes = len(inner_region_nodes) + len(partition_nodes)
 
@@ -298,8 +294,6 @@ class RegionGraph:
                 if region not in visited_nodes
                 and all(partition in visited_nodes for partition in region.outputs)
             ]
-            region_layer = sorted(region_layer)
-            layers_inv.append(region_layer)
             visited_nodes.update(region_layer)
 
             partition_layer = [
@@ -308,9 +302,9 @@ class RegionGraph:
                 if partition not in visited_nodes
                 and all(region in visited_nodes for region in partition.outputs)
             ]
-            partition_layer = sorted(partition_layer)
-            layers_inv.append(partition_layer)
             visited_nodes.update(partition_layer)
 
-        layers_inv.append(input_nodes)
+            layers_inv.append((sorted(partition_layer), sorted(region_layer)))
+
+        layers_inv.append(([], input_nodes))
         return list(reversed(layers_inv))

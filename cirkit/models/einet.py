@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers.einsum.mixing import EinsumMixingLayer
-from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
+from cirkit.region_graph import RegionGraph
 
 from ..layers.einsum import EinsumLayer
 from ..layers.exp_family import ExpFamilyLayer
@@ -113,10 +113,9 @@ class LowRankEiNet(nn.Module):
         self.graph_layers = graph.topological_layers(bottom_up=False)
 
         # input layer
-        # TODO: a better way to represent the interleaved layers
         einet_layers: List[Layer] = [
             args.exponential_family(
-                cast(List[RegionNode], self.graph_layers[0]),
+                self.graph_layers[0][1],
                 args.num_var,
                 args.num_dims,
                 **args.exponential_family_args,  # type: ignore[misc]
@@ -139,36 +138,31 @@ class LowRankEiNet(nn.Module):
         k = _k_gen()
 
         # internal layers
-        for c, layer in enumerate(self.graph_layers[1:]):
-            # TODO: is it real that graph_layers[1] is sum?
-            if c % 2:
-                # sum layer, that's a region layer in the graph
-                # the Mixing layer is only for regions which have multiple partitions as children.
-                # TODO: find a better way to interleave
-                layer = cast(List[RegionNode], layer)  # pylint: disable=redefined-loop-name
-                if multi_sums := [n for n in layer if len(n.inputs) > 1]:
-                    einet_layers.append(
-                        EinsumMixingLayer(
-                            multi_sums, cast(EinsumLayer, einet_layers[-1])
-                        )  # TODO: good type?
-                    )
-            else:
-                # product layer, that's a partition layer in the graph
-                # TODO: find a better way to interleave
-                layer = cast(List[PartitionNode], layer)  # pylint: disable=redefined-loop-name
-                num_sums = set(n.k for p in layer for n in p.outputs)
-                assert len(num_sums) == 1, f"For internal {c} there are {len(num_sums)} nums sums"
-                # num_sum = num_sums.pop()
+        for partition_layer, region_layer in self.graph_layers[1:]:
+            # TODO: duplicate check with einet layer, but also useful here?
+            # out_k = set(
+            #     out_region.k for partition in partition_layer for out_region in partition.outputs
+            # )
+            # assert len(out_k) == 1, f"For internal {c} there are {len(out_k)} nums sums"
+            # out_k = out_k.pop()
 
-                # TODO: this can be a wrong layer, refer to back up code
-                # assert num_sum > 1
+            # TODO: this can be a wrong layer, refer to back up code
+            # assert out_k > 1
+            einet_layers.append(
+                args.layer_type(
+                    partition_layer,
+                    k=next(k),
+                    prod_exp=args.prod_exp,
+                    r=args.r,
+                )
+            )
+
+            # the Mixing layer is only for regions which have multiple partitions as children.
+            if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
                 einet_layers.append(
-                    args.layer_type(
-                        layer,
-                        r=args.r,
-                        prod_exp=args.prod_exp,
-                        k=next(k),
-                    )
+                    EinsumMixingLayer(
+                        multi_sums, cast(EinsumLayer, einet_layers[-1])
+                    )  # TODO: good type?
                 )
 
         # TODO: can we annotate a list here?

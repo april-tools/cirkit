@@ -71,7 +71,7 @@ def _get_einet() -> LowRankEiNet:
     rg = _gen_rg_2x2()
 
     args = _Args(
-        layer_type=CPLayer,
+        layer_type=CPLayer,  # type: ignore[misc]
         exponential_family=CategoricalLayer,
         exponential_family_args={"k": 2},  # type: ignore[misc]
         num_sums=1,
@@ -188,7 +188,7 @@ def test_einet_partition_function(
     graph = rg_cls(**kwargs)
 
     args = _Args(
-        layer_type=CPLayer,
+        layer_type=CPLayer,  # type: ignore[misc]
         exponential_family=CategoricalLayer,
         exponential_family_args={"k": 2},  # type: ignore[misc]
         num_sums=16,
