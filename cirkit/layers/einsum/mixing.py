@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Optional, Tuple
+from typing import List
 
 import torch
 from torch import Tensor, nn
@@ -26,7 +26,7 @@ def _sample_matrix_categorical(p: Tensor) -> Tensor:
     return rand_idx
 
 
-class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
+class EinsumMixingLayer(Layer):
     # TODO: how we fold line here?
     r"""Implement the Mixing Layer, in order to handle sum nodes with multiple children.
 
@@ -69,7 +69,6 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
     # TODO: might be good to doc params and buffers here
     # to be registered as buffer
     params_mask: Tensor
-    padded_idx: Tensor
 
     def __init__(self, region_layer: List[RegionNode], einsum_layer: EinsumLayer):
         """Init class.
@@ -91,39 +90,18 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # einsum is actually the only layer which gives input to EinsumMixingLayer
         # we keep it in a list, since otherwise it gets registered as a torch sub-module
         self.input_layer_as_list = [einsum_layer]
-        self.mixing_component_idx = einsum_layer.mixing_component_idx
-        assert (
-            einsum_layer.dummy_idx is not None
-        ), "EinsumLayer has not set a dummy index for padding."
 
         param_shape = (self.k, len(region_layer), self.max_components)
         # param_shape = (len(self.nodes), self.max_components) for better perf
         # TODO: test best perf?
 
-        # The following code does some bookkeeping.
-        # padded_idx indexes into the log-density tensor of the previous
-        # EinsumLayer, padded with a dummy input which
-        # outputs constantly 0 (-inf in the log-domain), see class EinsumLayer.
-        padded_idx: List[List[int]] = []
-        params_mask = torch.ones(param_shape)
-        for reg_idx, region in enumerate(region_layer):
-            num_components = len(self.mixing_component_idx[region])
-            this_idx = self.mixing_component_idx[region] + [einsum_layer.dummy_idx] * (
-                self.max_components - num_components
-            )
-            padded_idx.append(this_idx)
-            if self.max_components > num_components:
-                params_mask[:, reg_idx, num_components:] = 0.0
-            region.einet_address.layer = self
-            region.einet_address.idx = reg_idx
-
         self.param = nn.Parameter(torch.empty(param_shape))
-        self.register_buffer("params_mask", params_mask)
-        self.register_buffer("padded_idx", torch.tensor(padded_idx))
+        # TODO: what's the use of params_mask?
+        self.register_buffer("params_mask", torch.ones_like(self.param))
 
         self.param_clamp_value["min"] = torch.finfo(self.param.dtype).smallest_normal
 
-        self.reset_parameters()
+        # self.reset_parameters()  # TODO: params_mask caused a mess
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
@@ -138,14 +116,18 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
     # TODO: make forward return something
     # pylint: disable=arguments-differ
-    def forward(self, _: Optional[Tensor] = None) -> None:  # type: ignore[override]
-        """Do the forward."""
-        # TODO: should define in __init__, or do we need to save?
-        self.log_input_prob = self.input_layer_as_list[0].prob[:, :, self.padded_idx]
+    def forward(self, log_input_prob: Tensor) -> Tensor:  # type: ignore[override]
+        """Do the forward.
 
+        Args:
+            log_input_prob (Tensor): The input.
+
+        Returns:
+            Tensor: the output.
+        """
         # TODO: still the same torch max problem by mypy
-        input_max: Tensor = torch.max(self.log_input_prob, dim=3, keepdim=True)[0]
-        input_prob = torch.exp(self.log_input_prob - input_max)
+        input_max: Tensor = torch.max(log_input_prob, dim=3, keepdim=True)[0]
+        input_prob = torch.exp(log_input_prob - input_max)
 
         # TODO: use a mul or gather?
         assert (self.param * self.params_mask == self.param).all()
@@ -154,41 +136,43 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
         log_prob = torch.log(prob) + input_max[..., 0]
 
         self.prob = log_prob
+        return self.prob
 
-    # TODO: how is this useful?
-    # TODO: not refactored
-    # pylint: disable=too-many-arguments
-    def _backtrack(  # type: ignore[misc]
-        self,
-        dist_idx: List[int],
-        node_idx: List[int],
-        sample_idx: List[int],
-        params: Tensor,
-        use_evidence: bool = False,
-        mode: Literal["sample", "argmax"] = "sample",
-        **_: Any,
-    ) -> Tuple[List[int], List[int], List[EinsumLayer]]:
-        """Is helper routine for backtracking in EiNets."""
-        # TODO: why not at module level
-        with torch.no_grad():
-            if use_evidence:
-                log_prior = torch.log(params[dist_idx, node_idx, :])
-                log_posterior = log_prior + self.log_input_prob[sample_idx, dist_idx, node_idx, :]
-                posterior = torch.exp(
-                    log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
-                )
-            else:
-                posterior = params[dist_idx, node_idx, :]
+    # # TODO: how is this useful?
+    # # TODO: not refactored
+    # def _backtrack(  # type: ignore[misc]
+    #     self,
+    #     dist_idx: List[int],
+    #     node_idx: List[int],
+    #     sample_idx: List[int],
+    #     params: Tensor,
+    #     use_evidence: bool = False,
+    #     mode: Literal["sample", "argmax"] = "sample",
+    #     **_: Any,
+    # ) -> Tuple[List[int], List[int], List[EinsumLayer]]:
+    #     """Is helper routine for backtracking in EiNets."""
+    #     # TODO: why not at module level
+    #     with torch.no_grad():
+    #         if use_evidence:
+    #             log_prior = torch.log(params[dist_idx, node_idx, :])
+    #             log_posterior = log_prior + self.log_input_prob[sample_idx, dist_idx, node_idx, :]
+    #             # TODO: torch has logsumexp!!!
+    #             posterior = torch.exp(
+    #                 log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
+    #             )
+    #         else:
+    #             posterior = params[dist_idx, node_idx, :]
 
-            if mode == "sample":
-                idx = _sample_matrix_categorical(posterior)
-            elif mode == "argmax":
-                idx = torch.argmax(posterior, -1)
-            node_idx_out = [
-                self.mixing_component_idx[self.region_layer[i]][idx[c]]
-                for c, i in enumerate(node_idx)
-            ]
-            # TODO: make sure it's wanted. it's all copies of the same object
-            layers_out = [self.input_layer_as_list[0]] * len(node_idx)
+    #         # TODO: not pass mode as str, but a callable for selecting idx
+    #         if mode == "sample":
+    #             idx = _sample_matrix_categorical(posterior)
+    #         elif mode == "argmax":
+    #             idx = torch.argmax(posterior, -1)
+    #         node_idx_out = [
+    #             self.mixing_component_idx[self.region_layer[i]][idx[c]]
+    #             for c, i in enumerate(node_idx)
+    #         ]
+    #         # TODO: make sure it's wanted. it's all copies of the same object
+    #         layers_out = [self.input_layer_as_list[0]] * len(node_idx)
 
-        return dist_idx, node_idx_out, layers_out
+    #     return dist_idx, node_idx_out, layers_out

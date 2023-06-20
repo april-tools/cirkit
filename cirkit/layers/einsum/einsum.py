@@ -1,11 +1,10 @@
 from abc import abstractmethod
-from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from cirkit.region_graph import PartitionNode, RegionNode
+from cirkit.region_graph import PartitionNode
 
 from ..layer import Layer
 
@@ -70,31 +69,6 @@ class EinsumLayer(Layer):
         ), f"The K of output region nodes in the same layer must be the same, got {in_k}."
         self.in_k = in_k.pop()
 
-        # # # # # # # # #
-        #   BUILD
-        # # # # # # # # #
-
-        # when the EinsumLayer is followed by a EinsumMixingLayer, we produce a
-        # dummy "node" which outputs 0 (-inf in log-domain) for zero-padding.
-        self.dummy_idx: Optional[int] = None
-
-        # the dictionary mixing_component_idx stores which nodes (axis 2 of the
-        # log-density tensor) need to get mixed
-        # in the following EinsumMixingLayer
-        self.mixing_component_idx: Dict[RegionNode, List[int]] = defaultdict(list)
-
-        for part_idx, partition in enumerate(partition_layer):
-            # each product must have exactly 1 parent (sum node)
-            assert len(partition.outputs) == 1
-            out_region = partition.outputs[0]
-
-            if len(out_region.inputs) == 1:
-                out_region.einet_address.layer = self
-                out_region.einet_address.idx = part_idx
-            else:  # case followed by EinsumMixingLayer
-                self.mixing_component_idx[out_region].append(part_idx)
-                self.dummy_idx = len(partition_layer)
-
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99)."""
         for param in self.parameters():
@@ -132,8 +106,8 @@ class EinsumLayer(Layer):
         """
         log_prob = self._forward_einsum(log_left_prob, log_right_prob)
 
-        if self.dummy_idx is not None:
-            log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
+        # if self.dummy_idx is not None:
+        log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
 
         self.prob = log_prob
         return self.prob

@@ -1,5 +1,6 @@
 import math
-from typing import Any, Dict, Generator, List, NamedTuple, Optional, Tuple, Type, cast
+from collections import defaultdict
+from typing import Any, Dict, Generator, List, NamedTuple, Optional, Tuple, Type, Union, cast
 
 import torch
 from torch import Tensor, nn
@@ -85,6 +86,7 @@ class LowRankEiNet(nn.Module):
     """EiNet with low rank impl."""
 
     # TODO: why graph is not in args?
+    # pylint: disable=too-complex,too-many-locals,too-many-statements
     def __init__(self, graph: RegionGraph, args: _Args) -> None:
         """Make an EinsumNetwork.
 
@@ -128,7 +130,13 @@ class LowRankEiNet(nn.Module):
                 **args.exponential_family_args,  # type: ignore[misc]
             )
         ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
-        self.bookkeeping: List[Tuple[List[_EiNetAddress], List[_EiNetAddress]]] = [([], [])]
+        self.bookkeeping: List[
+            Union[
+                Tuple[List[_EiNetAddress], List[_EiNetAddress]],
+                Tuple[Tensor, Tensor],
+                Tuple[None, None],
+            ]
+        ] = [(None, None)]
 
         def _k_gen() -> Generator[int, None, None]:
             k_list = (
@@ -156,14 +164,10 @@ class LowRankEiNet(nn.Module):
 
             # TODO: this can be a wrong layer, refer to back up code
             # assert out_k > 1
-            einet_layers.append(
-                args.layer_type(
-                    partition_layer,
-                    k=next(k),
-                    prod_exp=args.prod_exp,
-                    r=args.r,
-                )
+            einsum_layer = args.layer_type(
+                partition_layer, k=next(k), prod_exp=args.prod_exp, r=args.r
             )
+            einet_layers.append(einsum_layer)
 
             # get pairs of nodes which are input to the products (list of lists)
             # length of the outer list is same as self.products, length of inner lists is 2
@@ -175,14 +179,51 @@ class LowRankEiNet(nn.Module):
             right_addr = [inputs.right.einet_address for inputs in two_inputs]
             self.bookkeeping.append((left_addr, right_addr))
 
+            # when the EinsumLayer is followed by a EinsumMixingLayer, we produce a
+            # dummy "node" which outputs 0 (-inf in log-domain) for zero-padding.
+            dummy_idx: Optional[int] = None
+
+            # the dictionary mixing_component_idx stores which nodes (axis 2 of the
+            # log-density tensor) need to get mixed
+            # in the following EinsumMixingLayer
+            mixing_component_idx: Dict[RegionNode, List[int]] = defaultdict(list)
+
+            for part_idx, partition in enumerate(partition_layer):
+                # each product must have exactly 1 parent (sum node)
+                assert len(partition.outputs) == 1
+                out_region = partition.outputs[0]
+
+                if len(out_region.inputs) == 1:
+                    out_region.einet_address.layer = einsum_layer
+                    out_region.einet_address.idx = part_idx
+                else:  # case followed by EinsumMixingLayer
+                    mixing_component_idx[out_region].append(part_idx)
+                    dummy_idx = len(partition_layer)
+
             # the Mixing layer is only for regions which have multiple partitions as children.
             if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
-                einet_layers.append(
-                    EinsumMixingLayer(
-                        multi_sums, cast(EinsumLayer, einet_layers[-1])
-                    )  # TODO: good type?
-                )
-                self.bookkeeping.append(([], []))
+                assert dummy_idx is not None
+                mixing_layer = EinsumMixingLayer(multi_sums, einsum_layer)
+                einet_layers.append(mixing_layer)
+
+                # The following code does some bookkeeping.
+                # padded_idx indexes into the log-density tensor of the previous
+                # EinsumLayer, padded with a dummy input which
+                # outputs constantly 0 (-inf in the log-domain), see class EinsumLayer.
+                padded_idx: List[List[int]] = []
+                max_components = mixing_layer.param.shape[-1]  # TODO: duplicated
+                for reg_idx, region in enumerate(region_layer):
+                    num_components = len(mixing_component_idx[region])
+                    this_idx = mixing_component_idx[region] + [dummy_idx] * (
+                        max_components - num_components
+                    )
+                    padded_idx.append(this_idx)
+                    if max_components > num_components:
+                        mixing_layer.params_mask[:, reg_idx, num_components:] = 0.0
+                    region.einet_address.layer = mixing_layer
+                    region.einet_address.idx = reg_idx
+                mixing_layer.reset_parameters()
+                self.bookkeeping.append((mixing_layer.params_mask, torch.tensor(padded_idx)))
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
@@ -291,6 +332,7 @@ class LowRankEiNet(nn.Module):
         for i, einsum_layer in enumerate(self.einet_layers[1:], 1):  # type: ignore[misc]
             if isinstance(einsum_layer, EinsumLayer):  # type: ignore[misc]
                 left_addr, right_addr = self.bookkeeping[i]
+                assert isinstance(left_addr, list) and isinstance(right_addr, list)
                 # TODO: we should use dim=2, check all code
                 log_left_prob = torch.stack(
                     [addr.layer.prob[:, :, addr.idx] for addr in left_addr], dim=2
@@ -299,8 +341,11 @@ class LowRankEiNet(nn.Module):
                     [addr.layer.prob[:, :, addr.idx] for addr in right_addr], dim=2
                 )
                 einsum_layer(log_left_prob, log_right_prob)
-            else:
-                einsum_layer()
+            elif isinstance(einsum_layer, EinsumMixingLayer):  # type: ignore[misc]
+                _, padded_idx = self.bookkeeping[i]
+                assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
+                log_input_prob = einsum_layer.input_layer_as_list[0].prob[:, :, padded_idx]
+                einsum_layer(log_input_prob)
 
         # TODO: why use prob but not directly return?
         return cast(EinsumMixingLayer, self.einet_layers[-1]).prob[:, :, 0]
