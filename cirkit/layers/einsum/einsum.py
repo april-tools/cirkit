@@ -1,8 +1,7 @@
 from abc import abstractmethod
 from collections import defaultdict
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, Optional
 
-import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
@@ -12,13 +11,6 @@ from ..layer import Layer
 
 # TODO: relative import or absolute
 # TODO: rework docstrings
-
-
-class _TwoInputs(NamedTuple):
-    """Provide names for left and right inputs."""
-
-    left: RegionNode
-    right: RegionNode
 
 
 class EinsumLayer(Layer):
@@ -82,16 +74,6 @@ class EinsumLayer(Layer):
         #   BUILD
         # # # # # # # # #
 
-        # get pairs of nodes which are input to the products (list of lists)
-        # length of the outer list is same as self.products, length of inner lists is 2
-        # "left child" has index 0, "right child" has index 1
-        two_inputs = [_TwoInputs(*sorted(partition.inputs)) for partition in partition_layer]
-        # TODO: again, why do we need sorting
-
-        # collect all layers which contain left/right children
-        self.left_addr = [inputs.left.einet_address for inputs in two_inputs]
-        self.right_addr = [inputs.right.einet_address for inputs in two_inputs]
-
         # when the EinsumLayer is followed by a EinsumMixingLayer, we produce a
         # dummy "node" which outputs 0 (-inf in log-domain) for zero-padding.
         self.dummy_idx: Optional[int] = None
@@ -119,9 +101,7 @@ class EinsumLayer(Layer):
             nn.init.uniform_(param, 0.01, 0.99)
 
     @abstractmethod
-    def _forward_einsum(
-        self, log_left_prob: torch.Tensor, log_right_prob: torch.Tensor
-    ) -> torch.Tensor:
+    def _forward_einsum(self, log_left_prob: Tensor, log_right_prob: Tensor) -> Tensor:
         """Compute the main Einsum operation of the layer.
 
         :param log_left_prob: value in log space for left child.
@@ -129,8 +109,11 @@ class EinsumLayer(Layer):
         :return: result of the left operations, in log-space.
         """
 
-    # TODO: input not used? also no return?
-    def forward(self, _: Optional[Tensor] = None) -> None:
+    # TODO: find a better way to do this override
+    # pylint: disable=arguments-differ
+    def forward(  # type: ignore[override]
+        self, log_left_prob: Tensor, log_right_prob: Tensor
+    ) -> Tensor:
         """Do EinsumLayer forward pass.
 
         We assume that all parameters are in the correct range (no checks done).
@@ -142,18 +125,15 @@ class EinsumLayer(Layer):
         3a) do the sum                                      || 3b) do the product
         4a) go to exp space do the einsum and back to log   || 4b) do the einsum operation [OPT]
         5a) do nothing                                      || 5b) back to log space
-        """
-        # TODO: we should use dim=2, check all code
-        log_left_prob = torch.stack(
-            [addr.layer.prob[:, :, addr.idx] for addr in self.left_addr], dim=2
-        )
-        log_right_prob = torch.stack(
-            [addr.layer.prob[:, :, addr.idx] for addr in self.right_addr], dim=2
-        )
 
+        :param log_left_prob: value in log space for left child.
+        :param log_right_prob: value in log space for right child.
+        :return: result of the left operations, in log-space.
+        """
         log_prob = self._forward_einsum(log_left_prob, log_right_prob)
 
         if self.dummy_idx is not None:
             log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
 
         self.prob = log_prob
+        return self.prob

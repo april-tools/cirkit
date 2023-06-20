@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 
 import torch
 from torch import Tensor, nn
@@ -52,32 +52,21 @@ class Layer(nn.Module, ABC):
             if clamp_all or param.requires_grad:
                 param.clamp_(**self.param_clamp_value)
 
-    def __call__(self, x: Optional[Tensor] = None) -> None:
-        """Invoke the forward.
+    def __call__(self, *args: Tensor, **kwargs: Tensor) -> Tensor:
+        """Invoke forward.
 
-        Args:
-            x (Optional[Tensor], optional): The input. Defaults to None.
+        Returns:
+            Tensor: Return of forward.
         """
-        super().__call__(x)
+        return super().__call__(*args, **kwargs)  # type: ignore[no-any-return,misc]
 
-    # TODO: it's not good to return None
     @abstractmethod
-    def forward(self, x: Optional[Tensor] = None) -> None:
-        """Compute the layer. The result is always a tensor of \
-            log-densities of shape (batch_size, num_dist, num_nodes), \
-        where num_dist is the vector length (K in the paper) and num_nodes is \
-            the number of PC nodes in the layer.
+    # pylint: disable=missing-param-doc
+    def forward(self, *args: Tensor, **kwargs: Tensor) -> Tensor:
+        """Implement forward.
 
-        :param x: input data (Tensor).
-                  If self.num_dims == 1, this can be either of shape \
-                    (batch_size, self.num_var, 1) or
-                  (batch_size, self.num_var).
-                  If self.num_dims > 1, this must be of shape (batch_size, \
-                    self.num_var, self.num_dims).
-                  Not all layers use this argument.
-        :return: log-density tensor of shape (batch_size, num_dist, num_nodes), \
-            where num_dist is the vector length
-                 (K in the paper) and num_nodes is the number of PC nodes in the layer.
+        Returns:
+            Tensor: Return of forward.
         """
 
     # TODO: need to implement relevant things

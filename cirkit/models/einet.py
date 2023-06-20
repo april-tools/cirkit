@@ -1,19 +1,26 @@
 import math
-from typing import Any, Dict, Generator, List, Optional, Type, cast
+from typing import Any, Dict, Generator, List, NamedTuple, Optional, Tuple, Type, cast
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.layers.einsum.mixing import EinsumMixingLayer
-from cirkit.region_graph import RegionGraph
+from cirkit.region_graph import RegionGraph, RegionNode
+from cirkit.region_graph.rg_node import _EiNetAddress
 
 from ..layers.einsum import EinsumLayer
 from ..layers.exp_family import ExpFamilyLayer
 from ..layers.layer import Layer
 
-# TODO: should be split this file from the "layer" folder?
 # TODO: check all type casts. There should not be any without a good reason
 # TODO: rework docstrings
+
+
+class _TwoInputs(NamedTuple):
+    """Provide names for left and right inputs."""
+
+    left: RegionNode
+    right: RegionNode
 
 
 # TODO: might be a good idea. but how to design better
@@ -121,6 +128,7 @@ class LowRankEiNet(nn.Module):
                 **args.exponential_family_args,  # type: ignore[misc]
             )
         ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
+        self.bookkeeping: List[Tuple[List[_EiNetAddress], List[_EiNetAddress]]] = [([], [])]
 
         def _k_gen() -> Generator[int, None, None]:
             k_list = (
@@ -157,6 +165,16 @@ class LowRankEiNet(nn.Module):
                 )
             )
 
+            # get pairs of nodes which are input to the products (list of lists)
+            # length of the outer list is same as self.products, length of inner lists is 2
+            # "left child" has index 0, "right child" has index 1
+            two_inputs = [_TwoInputs(*sorted(partition.inputs)) for partition in partition_layer]
+            # TODO: again, why do we need sorting
+            # collect all layers which contain left/right children
+            left_addr = [inputs.left.einet_address for inputs in two_inputs]
+            right_addr = [inputs.right.einet_address for inputs in two_inputs]
+            self.bookkeeping.append((left_addr, right_addr))
+
             # the Mixing layer is only for regions which have multiple partitions as children.
             if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
                 einet_layers.append(
@@ -164,6 +182,7 @@ class LowRankEiNet(nn.Module):
                         multi_sums, cast(EinsumLayer, einet_layers[-1])
                     )  # TODO: good type?
                 )
+                self.bookkeeping.append(([], []))
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
@@ -268,35 +287,23 @@ class LowRankEiNet(nn.Module):
         input_layer = self.einet_layers[0]  # type: ignore[misc]
         input_layer(x)
 
-        for einsum_layer in self.einet_layers[1:]:  # type: ignore[misc]
-            einsum_layer()
+        # TODO: use zip instead
+        for i, einsum_layer in enumerate(self.einet_layers[1:], 1):  # type: ignore[misc]
+            if isinstance(einsum_layer, EinsumLayer):  # type: ignore[misc]
+                left_addr, right_addr = self.bookkeeping[i]
+                # TODO: we should use dim=2, check all code
+                log_left_prob = torch.stack(
+                    [addr.layer.prob[:, :, addr.idx] for addr in left_addr], dim=2
+                )
+                log_right_prob = torch.stack(
+                    [addr.layer.prob[:, :, addr.idx] for addr in right_addr], dim=2
+                )
+                einsum_layer(log_left_prob, log_right_prob)
+            else:
+                einsum_layer()
 
         # TODO: why use prob but not directly return?
         return cast(EinsumMixingLayer, self.einet_layers[-1]).prob[:, :, 0]
-
-    # TODO: why not directly access?
-    def get_layers(self) -> nn.ModuleList:
-        """Get the layers.
-
-        Returns:
-            nn.ModuleList: The layers.
-        """
-        return self.einet_layers
-
-    # TODO: what's the meaning of this?
-    def forward_layer(self, layer: Layer, x: Optional[Tensor] = None) -> None:
-        """Do something that I don't know.
-
-        Args:
-            layer (Layer): The Layer.
-            x (Optional[Tensor], optional): I don't know. Defaults to None.
-        """
-        # TODO: why something is any here
-        if layer is self.einet_layers[0]:  # type: ignore[misc]
-            assert x is not None
-            layer(x)
-        else:
-            layer()
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):

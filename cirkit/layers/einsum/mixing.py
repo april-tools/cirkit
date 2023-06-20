@@ -137,12 +137,9 @@ class EinsumMixingLayer(Layer):  # pylint: disable=too-many-instance-attributes
             self.param /= self.param.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
     # TODO: make forward return something
-    def forward(self, x: Optional[Tensor] = None) -> None:
-        """Do the forward.
-
-        Args:
-            x (Optional[Tensor], optional): Not used. Defaults to None.
-        """
+    # pylint: disable=arguments-differ
+    def forward(self, _: Optional[Tensor] = None) -> None:  # type: ignore[override]
+        """Do the forward."""
         # TODO: should define in __init__, or do we need to save?
         self.log_input_prob = self.input_layer_as_list[0].prob[:, :, self.padded_idx]
 
