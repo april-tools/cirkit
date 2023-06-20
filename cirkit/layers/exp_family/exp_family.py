@@ -108,7 +108,8 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """Reset parameters to default initialization: N(0, 1)."""
         nn.init.normal_(self.params)
 
-    def forward(self, x: Optional[Tensor] = None) -> None:
+    # pylint: disable=arguments-differ
+    def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the factorized leaf densities. We are doing the computation \
             in the log-domain, so this is actually \
             computing sums over densities.
@@ -129,12 +130,10 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
                   (batch_size, self.num_var).
                   If self.num_dims > 1, this must be of shape \
                     (batch_size, self.num_var, self.num_dims).
-        no return: log-density vectors of leaves
+        :return: log-density vectors of leaves
                  Will be of shape (batch_size, num_dist, len(self.nodes))
                  Note: num_dist is K in the paper, len(self.nodes) is the number of PC leaves
         """
-        assert x is not None  # TODO: how we guarantee this?
-
         # TODO: no_grad? the deleted self.reparam==None branch have no_grad
         phi = self.reparam(self.params)
 
@@ -208,13 +207,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
             self.marginalization_mask = None
             output = self.ll
 
-        # assert not torch.isnan(output).any()
-        # assert not torch.isinf(output).any()
-
-        self.prob = torch.einsum("bxir,xro->bio", output, self.scope_tensor)
-
-        # assert not torch.isnan(self.prob).any()
-        # assert not torch.isinf(self.prob).any()
+        return torch.einsum("bxir,xro->bio", output, self.scope_tensor)
 
     # TODO: how to fix?
     # pylint: disable-next=arguments-differ

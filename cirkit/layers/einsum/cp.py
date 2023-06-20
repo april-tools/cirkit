@@ -1,4 +1,4 @@
-from typing import List, cast
+from typing import Any, List, cast
 
 import torch
 from torch import Tensor, nn
@@ -13,8 +13,9 @@ from .einsum import EinsumLayer
 class CPLayer(EinsumLayer):
     """Candecomp Parafac (decomposition) layer."""
 
-    def __init__(
-        self, partition_layer: List[PartitionNode], k: int, *, prod_exp: bool, r: int = 1
+    # TODO: better way to call init by base class?
+    def __init__(  # type: ignore[misc]
+        self, partition_layer: List[PartitionNode], k: int, *, prod_exp: bool, r: int = 1, **_: Any
     ) -> None:
         """Init class.
 
@@ -27,21 +28,23 @@ class CPLayer(EinsumLayer):
         super().__init__(partition_layer, k)
         self.prod_exp = prod_exp
 
-        # TODO: cp_a is not a good name
-        self.cp_a = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
-        self.cp_b = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
-        self.cp_c = nn.Parameter(torch.empty(self.out_k, r, len(partition_layer)))
+        self.param_left = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
+        self.param_right = nn.Parameter(torch.empty(self.in_k, r, len(partition_layer)))
+        self.param_out = nn.Parameter(torch.empty(self.out_k, r, len(partition_layer)))
 
         # (float ** float) is not guaranteed to be float, but here we know it is
         self.param_clamp_value["min"] = cast(
             float,
-            torch.finfo(self.cp_a.dtype).smallest_normal ** (1 / 3 if self.prod_exp else 1 / 2),
+            torch.finfo(self.param_left.dtype).smallest_normal
+            ** (1 / 3 if self.prod_exp else 1 / 2),
         )
 
         self.reset_parameters()
 
     # pylint: disable=too-many-locals
-    def _forward_einsum(self, log_left_prob: Tensor, log_right_prob: Tensor) -> Tensor:
+    def forward(  # type: ignore[override]
+        self, log_left_prob: Tensor, log_right_prob: Tensor
+    ) -> Tensor:
         """Compute the main Einsum operation of the layer.
 
         :param log_left_prob: value in log space for left child.
@@ -54,13 +57,13 @@ class CPLayer(EinsumLayer):
         right_max: Tensor = torch.max(log_right_prob, dim=1, keepdim=True)[0]
         right_prob = torch.exp(log_right_prob - right_max)
 
-        left_hidden = torch.einsum("bip,irp->brp", left_prob, self.cp_a)
-        right_hidden = torch.einsum("bjp,jrp->brp", right_prob, self.cp_b)
+        left_hidden = torch.einsum("bip,irp->brp", left_prob, self.param_left)
+        right_hidden = torch.einsum("bjp,jrp->brp", right_prob, self.param_right)
 
         if self.prod_exp:
             # TODO: extract log sum exp as routine?
             hidden = left_hidden * right_hidden
-            prob = torch.einsum("brp,orp->bop", hidden, self.cp_c)
+            prob = torch.einsum("brp,orp->bop", hidden, self.param_out)
             log_prob = torch.log(prob) + left_max + right_max
         else:
             log_left_hidden = torch.log(left_hidden) + left_max
@@ -70,7 +73,7 @@ class CPLayer(EinsumLayer):
             # TODO: same as above
             hidden_max: Tensor = torch.max(log_hidden, 1, keepdim=True)[0]
             hidden = torch.exp(log_hidden - hidden_max)
-            prob = torch.einsum("brp,orp->bop", hidden, self.cp_c)
+            prob = torch.einsum("brp,orp->bop", hidden, self.param_out)
             log_prob = torch.log(prob) + hidden_max
 
         return log_prob
