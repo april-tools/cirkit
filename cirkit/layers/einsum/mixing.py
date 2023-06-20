@@ -135,8 +135,7 @@ class EinsumMixingLayer(Layer):
         prob = torch.einsum("bonc,onc->bon", input_prob, self.param)
         log_prob = torch.log(prob) + input_max[..., 0]
 
-        self.prob = log_prob
-        return self.prob
+        return log_prob
 
     # # TODO: how is this useful?
     # # TODO: not refactored

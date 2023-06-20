@@ -4,6 +4,7 @@ from typing import Any, Dict, Generator, List, NamedTuple, Optional, Tuple, Type
 
 import torch
 from torch import Tensor, nn
+from torch.nn import functional as F
 
 from cirkit.layers.einsum.mixing import EinsumMixingLayer
 from cirkit.region_graph import RegionGraph, RegionNode
@@ -227,7 +228,7 @@ class LowRankEiNet(nn.Module):
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
-        self.einet_layers = nn.ModuleList(einet_layers)
+        self.einet_layers: List[Layer] = nn.ModuleList(einet_layers)  # type: ignore[assignment]
         self.exp_reparam: bool = False
         self.mixing_softmax: bool = False
 
@@ -257,8 +258,7 @@ class LowRankEiNet(nn.Module):
         assert not mixing_softmax  # TODO: then why have this?
         assert not exp_reparam  # TODO: then why have this?
 
-        # TODO: I really don't know how to avoid force cast
-        for layer in cast(List[Layer], self.einet_layers):
+        for layer in self.einet_layers:
             layer.reset_parameters()
 
     # TODO: this get/set is not good
@@ -325,30 +325,34 @@ class LowRankEiNet(nn.Module):
         Returns:
             Tensor: Return value.
         """
-        input_layer = self.einet_layers[0]  # type: ignore[misc]
-        input_layer(x)
+        input_layer = self.einet_layers[0]
+        outputs = {input_layer: input_layer(x)}
 
         # TODO: use zip instead
-        for i, einsum_layer in enumerate(self.einet_layers[1:], 1):  # type: ignore[misc]
+        for i, einsum_layer in enumerate(self.einet_layers[1:], 1):
             if isinstance(einsum_layer, EinsumLayer):  # type: ignore[misc]
                 left_addr, right_addr = self.bookkeeping[i]
                 assert isinstance(left_addr, list) and isinstance(right_addr, list)
                 # TODO: we should use dim=2, check all code
                 log_left_prob = torch.stack(
-                    [addr.layer.prob[:, :, addr.idx] for addr in left_addr], dim=2
+                    [outputs[addr.layer][:, :, addr.idx] for addr in left_addr], dim=2
                 )
                 log_right_prob = torch.stack(
-                    [addr.layer.prob[:, :, addr.idx] for addr in right_addr], dim=2
+                    [outputs[addr.layer][:, :, addr.idx] for addr in right_addr], dim=2
                 )
-                einsum_layer(log_left_prob, log_right_prob)
-            elif isinstance(einsum_layer, EinsumMixingLayer):  # type: ignore[misc]
+                out = einsum_layer(log_left_prob, log_right_prob)
+                # TODO: what's the most efficient dummy_idx?
+                out = F.pad(out, [0, 1], "constant", float("-inf"))
+            elif isinstance(einsum_layer, EinsumMixingLayer):
                 _, padded_idx = self.bookkeeping[i]
                 assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
-                log_input_prob = einsum_layer.input_layer_as_list[0].prob[:, :, padded_idx]
-                einsum_layer(log_input_prob)
+                log_input_prob = outputs[self.einet_layers[i - 1]][:, :, padded_idx]
+                out = einsum_layer(log_input_prob)
+            else:
+                assert False
+            outputs[einsum_layer] = out
 
-        # TODO: why use prob but not directly return?
-        return cast(EinsumMixingLayer, self.einet_layers[-1]).prob[:, :, 0]
+        return outputs[self.einet_layers[-1]][:, :, 0]
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):

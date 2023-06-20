@@ -2,7 +2,6 @@ from abc import abstractmethod
 from typing import Any, List
 
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from cirkit.region_graph import PartitionNode
 
@@ -74,21 +73,16 @@ class EinsumLayer(Layer):
         for param in self.parameters():
             nn.init.uniform_(param, 0.01, 0.99)
 
-    @abstractmethod
-    def _forward_einsum(self, log_left_prob: Tensor, log_right_prob: Tensor) -> Tensor:
-        """Compute the main Einsum operation of the layer.
-
-        :param log_left_prob: value in log space for left child.
-        :param log_right_prob: value in log space for right child.
-        :return: result of the left operations, in log-space.
-        """
-
     # TODO: find a better way to do this override
+    # TODO: what about abstract?
+    @abstractmethod
     # pylint: disable=arguments-differ
     def forward(  # type: ignore[override]
         self, log_left_prob: Tensor, log_right_prob: Tensor
     ) -> Tensor:
-        """Do EinsumLayer forward pass.
+        """Compute the main Einsum operation of the layer.
+
+        Do EinsumLayer forward pass.
 
         We assume that all parameters are in the correct range (no checks done).
 
@@ -104,10 +98,3 @@ class EinsumLayer(Layer):
         :param log_right_prob: value in log space for right child.
         :return: result of the left operations, in log-space.
         """
-        log_prob = self._forward_einsum(log_left_prob, log_right_prob)
-
-        # if self.dummy_idx is not None:
-        log_prob = F.pad(log_prob, [0, 1], "constant", float("-inf"))
-
-        self.prob = log_prob
-        return self.prob

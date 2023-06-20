@@ -42,7 +42,9 @@ class CPLayer(EinsumLayer):
         self.reset_parameters()
 
     # pylint: disable=too-many-locals
-    def _forward_einsum(self, log_left_prob: Tensor, log_right_prob: Tensor) -> Tensor:
+    def forward(  # type: ignore[override]
+        self, log_left_prob: Tensor, log_right_prob: Tensor
+    ) -> Tensor:
         """Compute the main Einsum operation of the layer.
 
         :param log_left_prob: value in log space for left child.
