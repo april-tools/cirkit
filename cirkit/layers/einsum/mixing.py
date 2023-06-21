@@ -5,6 +5,7 @@ from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
 from cirkit.region_graph import RegionNode
+from cirkit.utils import log_func_exp
 
 # TODO: rework docstrings
 
@@ -87,27 +88,23 @@ class EinsumMixingLayer(Layer):
 
             self.param /= self.param.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
+    def _forward_linear(self, x: Tensor) -> Tensor:
+        return torch.einsum("bonc,onc->bon", x, self.param)
+
     # TODO: make forward return something
     # pylint: disable=arguments-differ
-    def forward(self, log_input_prob: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, log_input: Tensor) -> Tensor:  # type: ignore[override]
         """Do the forward.
 
         Args:
-            log_input_prob (Tensor): The input.
+            log_input (Tensor): The input.
 
         Returns:
             Tensor: the output.
         """
-        # TODO: still the same torch max problem by mypy
-        input_max: Tensor = torch.max(log_input_prob, dim=3, keepdim=True)[0]
-        input_prob = torch.exp(log_input_prob - input_max)
-
-        # TODO: use a mul or gather?
+        # TODO: use a mul or gather? or do we need this?
         assert (self.param * self.params_mask == self.param).all()
 
-        prob = torch.einsum("bonc,onc->bon", input_prob, self.param)
-        log_prob = torch.log(prob) + input_max[..., 0]
-
-        return log_prob
+        return log_func_exp(log_input, func=self._forward_linear, dim=3, keepdim=False)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack
