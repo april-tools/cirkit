@@ -87,14 +87,14 @@ def _get_einet() -> TensorizedPC:
 
 def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
     return {
-        "einet_layers.0.params": (4, 1, 1, 2),
-        "einet_layers.1.params_left": (1, 1, 4),
-        "einet_layers.1.params_right": (1, 1, 4),
-        "einet_layers.1.params_out": (1, 1, 4),
-        "einet_layers.2.params_left": (1, 1, 2),
-        "einet_layers.2.params_right": (1, 1, 2),
-        "einet_layers.2.params_out": (1, 1, 2),
-        "einet_layers.3.params": (1, 1, 2),
+        "input_layer.params": (4, 1, 1, 2),
+        "inner_layers.0.params_left": (1, 1, 4),
+        "inner_layers.0.params_right": (1, 1, 4),
+        "inner_layers.0.params_out": (1, 1, 4),
+        "inner_layers.1.params_left": (1, 1, 2),
+        "inner_layers.1.params_right": (1, 1, 2),
+        "inner_layers.1.params_out": (1, 1, 2),
+        "inner_layers.2.params": (1, 1, 2),
     }
 
 
@@ -102,7 +102,7 @@ def _set_params(einet: TensorizedPC) -> None:
     state_dict = einet.state_dict()  # type: ignore[misc]
     state_dict.update(  # type: ignore[misc]
         {  # type: ignore[misc]
-            "einet_layers.0.params": torch.tensor(
+            "input_layer.params": torch.tensor(
                 # TODO: source of Any not identified
                 [  # type: ignore[misc]
                     [0, 0],  # type: ignore[misc]  # 1/2, 1/2
@@ -111,13 +111,13 @@ def _set_params(einet: TensorizedPC) -> None:
                     [math.log(3), 0],  # type: ignore[misc]  # 3/4, 1/4
                 ]
             ).reshape(4, 1, 1, 2),
-            "einet_layers.1.params_left": torch.ones(1, 1, 4) / 2,
-            "einet_layers.1.params_right": torch.ones(1, 1, 4) * 2,
-            "einet_layers.1.params_out": torch.ones(1, 1, 4),
-            "einet_layers.2.params_left": torch.ones(1, 1, 2) * 2,
-            "einet_layers.2.params_right": torch.ones(1, 1, 2) / 2,
-            "einet_layers.2.params_out": torch.ones(1, 1, 2),
-            "einet_layers.3.params": torch.tensor(
+            "inner_layers.0.params_left": torch.ones(1, 1, 4) / 2,
+            "inner_layers.0.params_right": torch.ones(1, 1, 4) * 2,
+            "inner_layers.0.params_out": torch.ones(1, 1, 4),
+            "inner_layers.1.params_left": torch.ones(1, 1, 2) * 2,
+            "inner_layers.1.params_right": torch.ones(1, 1, 2) / 2,
+            "inner_layers.1.params_out": torch.ones(1, 1, 2),
+            "inner_layers.2.params": torch.tensor(
                 [1 / 3, 2 / 3],  # type: ignore[misc]
             ).reshape(1, 1, 2),
         }

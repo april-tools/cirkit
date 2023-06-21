@@ -1,16 +1,15 @@
 from collections import defaultdict
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union, cast
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+from cirkit.layers.einsum import EinsumLayer
 from cirkit.layers.einsum.mixing import EinsumMixingLayer
+from cirkit.layers.exp_family import ExpFamilyLayer
+from cirkit.layers.layer import Layer
 from cirkit.region_graph import RegionGraph, RegionNode
-
-from ..layers.einsum import EinsumLayer
-from ..layers.exp_family import ExpFamilyLayer
-from ..layers.layer import Layer
 
 # TODO: check all type casts. There should not be any without a good reason
 # TODO: rework docstrings
@@ -23,7 +22,7 @@ class _TwoInputs(NamedTuple):
     right: RegionNode
 
 
-class TensorizedPC(nn.Module):
+class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
     """Tensorized and folded PC implementation."""
 
     # pylint: disable-next=too-many-locals,too-many-statements,too-many-arguments
@@ -79,15 +78,14 @@ class TensorizedPC(nn.Module):
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
         self.graph_layers = graph.topological_layers(bottom_up=False)
 
-        # input layer
-        input_layer = efamily_cls(
+        # Initialize input layer
+        self.input_layer = efamily_cls(
             self.graph_layers[0][1],
             num_vars,
             num_channels,
             num_input_units,
             **efamily_kwargs,  # type: ignore[misc]
         )
-        layers: List[Layer] = [input_layer]
 
         # Book-keeping: None for input, Tensor for mixing, Tuple for einsum
         self.bookkeeping: List[
@@ -96,8 +94,10 @@ class TensorizedPC(nn.Module):
                 Tuple[Tensor, Tensor],
                 Tuple[None, None],
             ]
-        ] = [(None, None)]
+        ] = []
 
+        # Build inner layers
+        inner_layers: List[Layer] = []
         # TODO: use start as kwarg?
         for idx, (partition_layer, region_layer) in enumerate(self.graph_layers[1:], start=1):
             # TODO: duplicate check with einet layer, but also useful here?
@@ -114,7 +114,7 @@ class TensorizedPC(nn.Module):
             inner_layer = layer_cls(
                 partition_layer, num_inputs, num_outputs, **layer_kwargs  # type: ignore[misc]
             )
-            layers.append(inner_layer)
+            inner_layers.append(inner_layer)
 
             # get pairs of nodes which are input to the products (list of lists)
             # length of the outer list is same as self.products, length of inner lists is 2
@@ -173,7 +173,7 @@ class TensorizedPC(nn.Module):
                 assert dummy_idx is not None
                 max_components = max(len(region.inputs) for region in multi_sums)
                 mixing_layer = EinsumMixingLayer(multi_sums, num_outputs, max_components)
-                layers.append(mixing_layer)
+                inner_layers.append(mixing_layer)
 
                 # The following code does some bookkeeping.
                 # padded_idx indexes into the log-density tensor of the previous
@@ -195,9 +195,9 @@ class TensorizedPC(nn.Module):
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
-        self.einet_layers: List[Layer] = nn.ModuleList(layers)  # type: ignore[assignment]
-        self.exp_reparam: bool = False
-        self.mixing_softmax: bool = False
+        self.inner_layers: List[Layer] = nn.ModuleList(inner_layers)  # type: ignore[assignment]
+        self.exp_reparam = False
+        self.mixing_softmax = False
 
     # TODO: find a better way to do this. should be in Module? (what about multi device?)
     # TODO: maybe we should stick to some device agnostic impl rules
@@ -208,8 +208,10 @@ class TensorizedPC(nn.Module):
             torch.device: the device.
         """
         # TODO: ModuleList is not generic type
-        return cast(ExpFamilyLayer, self.einet_layers[0]).params.device
+        return self.input_layer.params.device
 
+    # TODO: The Pytorch style is to just let layers initialize the parameters themselves.
+    #  We should follow that.
     def initialize(
         self,
         exp_reparam: bool = False,
@@ -225,7 +227,8 @@ class TensorizedPC(nn.Module):
         assert not mixing_softmax  # TODO: then why have this?
         assert not exp_reparam  # TODO: then why have this?
 
-        for layer in self.einet_layers:
+        self.input_layer.reset_parameters()
+        for layer in self.inner_layers:
             layer.reset_parameters()
 
     # TODO: this get/set is not good
@@ -235,7 +238,7 @@ class TensorizedPC(nn.Module):
         Args:
             idx (Tensor): The indices.
         """
-        cast(ExpFamilyLayer, self.einet_layers[0]).set_marginalization_idx(idx)
+        self.input_layer.set_marginalization_idx(idx)
 
     def get_marginalization_idx(self) -> Optional[Tensor]:
         """Get indicices of marginalized variables.
@@ -243,7 +246,7 @@ class TensorizedPC(nn.Module):
         Returns:
             Tensor: The indices.
         """
-        return cast(ExpFamilyLayer, self.einet_layers[0]).get_marginalization_idx()
+        return self.input_layer.get_marginalization_idx()
 
     def partition_function(self, x: Optional[Tensor] = None) -> Tensor:
         """Do something that I don't know.
@@ -259,13 +262,13 @@ class TensorizedPC(nn.Module):
         self.set_marginalization_idx(torch.arange(self.num_vars))
 
         if x is not None:
-            z = self.forward(x)
+            z = self(x)
         else:
             # TODO: check this, size=(1, self.num_var, self.num_dims) is appropriate
             # TODO: above is original, but size is not stated?
             # TODO: use tuple as shape because of line folding? or everywhere?
             fake_data = torch.ones((1, self.num_vars), device=self.get_device())
-            z = self.forward(fake_data)  # TODO: why call forward but not __call__
+            z = self(fake_data)
 
         # TODO: can indeed be None
         self.set_marginalization_idx(old_marg_idx)  # type: ignore[arg-type]
@@ -282,9 +285,8 @@ class TensorizedPC(nn.Module):
         """
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
-    # TODO: originally there's a plot_dict. REMOVED assuming not ploting.
     def forward(self, x: Tensor) -> Tensor:
-        """Evaluate the EinsumNetwork feed forward.
+        """Evaluate the TensorizedPC feed forward.
 
         Args:
             x (Tensor): the shape is (batch_size, self.num_var, self.num_dims)
@@ -292,13 +294,15 @@ class TensorizedPC(nn.Module):
         Returns:
             Tensor: Return value.
         """
-        input_layer = self.einet_layers[0]
-        outputs = {input_layer: input_layer(x)}
+        # TODO: can we have just a dictionary with integer keys instead?
+        #  It would be much simpler and clean
+        outputs: Dict[Layer, Tensor] = {self.input_layer: self.input_layer(x)}
 
         # TODO: use zip instead
-        for i, einsum_layer in enumerate(self.einet_layers[1:], 1):
-            if isinstance(einsum_layer, EinsumLayer):  # type: ignore[misc]
-                left_addr, right_addr = self.bookkeeping[i]
+        # TODO: Generalize if statements here, they should be layer agnostic
+        for idx, inner_layer in enumerate(self.inner_layers):
+            if isinstance(inner_layer, EinsumLayer):  # type: ignore[misc]
+                left_addr, right_addr = self.bookkeeping[idx]
                 assert isinstance(left_addr, tuple) and isinstance(right_addr, tuple)
                 # TODO: we should use dim=2, check all code
                 # TODO: duplicate code
@@ -306,21 +310,21 @@ class TensorizedPC(nn.Module):
                 log_left_prob = log_left_prob[:, :, left_addr[1]]
                 log_right_prob = torch.cat([outputs[layer] for layer in right_addr[0]], dim=2)
                 log_right_prob = log_right_prob[:, :, right_addr[1]]
-                out = einsum_layer(log_left_prob, log_right_prob)
-            elif isinstance(einsum_layer, EinsumMixingLayer):
-                _, padded_idx = self.bookkeeping[i]
+                out = inner_layer(log_left_prob, log_right_prob)
+            elif isinstance(inner_layer, EinsumMixingLayer):
+                _, padded_idx = self.bookkeeping[idx]
                 assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
                 # TODO: a better way to pad?
-                outputs[self.einet_layers[i - 1]] = F.pad(
-                    outputs[self.einet_layers[i - 1]], [0, 1], "constant", float("-inf")
+                outputs[self.inner_layers[idx - 1]] = F.pad(
+                    outputs[self.inner_layers[idx - 1]], [0, 1], "constant", float("-inf")
                 )
-                log_input_prob = outputs[self.einet_layers[i - 1]][:, :, padded_idx]
-                out = einsum_layer(log_input_prob)
+                log_input_prob = outputs[self.inner_layers[idx - 1]][:, :, padded_idx]
+                out = inner_layer(log_input_prob)
             else:
                 assert False
-            outputs[einsum_layer] = out
+            outputs[inner_layer] = out
 
-        return outputs[self.einet_layers[-1]][:, :, 0]
+        return outputs[self.inner_layers[-1]][:, :, 0]
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
