@@ -73,9 +73,7 @@ class EinsumLayer(Layer):
     # TODO: what about abstract?
     @abstractmethod
     # pylint: disable=arguments-differ
-    def forward(  # type: ignore[override]
-        self, log_left_prob: Tensor, log_right_prob: Tensor
-    ) -> Tensor:
+    def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         Do EinsumLayer forward pass.
@@ -90,7 +88,7 @@ class EinsumLayer(Layer):
         4a) go to exp space do the einsum and back to log   || 4b) do the einsum operation [OPT]
         5a) do nothing                                      || 5b) back to log space
 
-        :param log_left_prob: value in log space for left child.
-        :param log_right_prob: value in log space for right child.
+        :param log_left: value in log space for left child.
+        :param log_right: value in log space for right child.
         :return: result of the left operations, in log-space.
         """
