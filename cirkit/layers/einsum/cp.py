@@ -4,6 +4,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.region_graph import PartitionNode
+from cirkit.utils import log_func_exp
 
 from .einsum import EinsumLayer
 
@@ -41,39 +42,38 @@ class CPLayer(EinsumLayer):
 
         self.reset_parameters()
 
-    # pylint: disable=too-many-locals
-    def forward(  # type: ignore[override]
-        self, log_left_prob: Tensor, log_right_prob: Tensor
-    ) -> Tensor:
+    # TODO: use bmm to replace einsum? also axis order?
+    def _forward_left_linear(self, x: Tensor) -> Tensor:
+        return torch.einsum("bip,irp->brp", x, self.param_left)
+
+    def _forward_right_linear(self, x: Tensor) -> Tensor:
+        return torch.einsum("bip,irp->brp", x, self.param_right)
+
+    def _forward_out_linear(self, x: Tensor) -> Tensor:
+        return torch.einsum("brp,orp->bop", x, self.param_out)
+
+    def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
+        left_hidden = self._forward_left_linear(left)
+        right_hidden = self._forward_right_linear(right)
+        return self._forward_out_linear(left_hidden * right_hidden)
+
+    def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
-        :param log_left_prob: value in log space for left child.
-        :param log_right_prob: value in log space for right child.
+        :param log_left: value in log space for left child.
+        :param log_right: value in log space for right child.
         :return: result of the left operations, in log-space.
         """
-        # TODO: max return type cannot be analysed (but strangely sum is normal)
-        left_max: Tensor = torch.max(log_left_prob, dim=1, keepdim=True)[0]
-        left_prob = torch.exp(log_left_prob - left_max)
-        right_max: Tensor = torch.max(log_right_prob, dim=1, keepdim=True)[0]
-        right_prob = torch.exp(log_right_prob - right_max)
-
-        left_hidden = torch.einsum("bip,irp->brp", left_prob, self.param_left)
-        right_hidden = torch.einsum("bjp,jrp->brp", right_prob, self.param_right)
-
+        # TODO: do we split into two impls?
         if self.prod_exp:
-            # TODO: extract log sum exp as routine?
-            hidden = left_hidden * right_hidden
-            prob = torch.einsum("brp,orp->bop", hidden, self.param_out)
-            log_prob = torch.log(prob) + left_max + right_max
-        else:
-            log_left_hidden = torch.log(left_hidden) + left_max
-            log_right_hidden = torch.log(right_hidden) + right_max
-            log_hidden = log_left_hidden + log_right_hidden
+            return log_func_exp(log_left, log_right, func=self._forward_linear, dim=1, keepdim=True)
 
-            # TODO: same as above
-            hidden_max: Tensor = torch.max(log_hidden, 1, keepdim=True)[0]
-            hidden = torch.exp(log_hidden - hidden_max)
-            prob = torch.einsum("brp,orp->bop", hidden, self.param_out)
-            log_prob = torch.log(prob) + hidden_max
-
-        return log_prob
+        log_left_hidden = log_func_exp(
+            log_left, func=self._forward_left_linear, dim=1, keepdim=True
+        )
+        log_right_hidden = log_func_exp(
+            log_right, func=self._forward_right_linear, dim=1, keepdim=True
+        )
+        return log_func_exp(
+            log_left_hidden + log_right_hidden, func=self._forward_out_linear, dim=1, keepdim=True
+        )
