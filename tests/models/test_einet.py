@@ -210,10 +210,8 @@ def test_einet_partition_function(
     out = einet(torch.tensor(all_lists))
 
     # log sum exp on outputs to compute their sum
-    out_max: Tensor = torch.max(out, dim=0, keepdim=True)[0]  # TODO: max typing issue in pytorch
-    probs = torch.exp(out - out_max)
-    total_prob = probs.sum(0)
-    log_prob = torch.log(total_prob) + out_max
+    # TODO: for simple log-sum-exp, pytorch have implementation
+    sum_out = torch.logsumexp(out, dim=0, keepdim=True)
 
-    assert torch.isclose(log_prob, torch.tensor(log_answer), rtol=1e-6, atol=0)
-    assert torch.isclose(einet.partition_function(), log_prob, rtol=1e-6, atol=0)
+    assert torch.isclose(sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0)
+    assert torch.isclose(einet.partition_function(), sum_out, rtol=1e-6, atol=0)
