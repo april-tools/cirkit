@@ -4,84 +4,12 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 jobs:
-  black:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out
-        uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.8'
-          cache: 'pip'
-          cache-dependency-path: pyproject.toml
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[lint]
-      - name: Run Black
-        run: black --verbose --check --diff $(git ls-files "*.py")
-
-  isort:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out
-        uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.8'
-          cache: 'pip'
-          cache-dependency-path: pyproject.toml
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[lint]
-      - name: Run isort
-        run: isort --verbose --check --diff $(git ls-files "*.py")
-
-  pydocstyle:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out
-        uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.8'
-          cache: 'pip'
-          cache-dependency-path: pyproject.toml
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[lint]
-      - name: Run pydocstyle
-        run: pydocstyle --verbose $(git ls-files "*.py")
-
-  pylint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out with submodules
-        uses: actions/checkout@v3
-        with:
-          submodules: true
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.8'
-          cache: 'pip'
-          cache-dependency-path: pyproject.toml
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[lint]
-          bash ./benchmark/install_submodule.sh all
-      - name: Run Pylint
-        run: pylint --verbose --persistent=n $(git ls-files "*.py")
-
-  mypy:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Check out with submodules
@@ -105,5 +33,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[lint]
           bash ./benchmark/install_submodule.sh all
+      - name: Run Black
+        run: black --verbose --check --diff $(git ls-files "*.py")
+      - name: Run Isort
+        run: isort --verbose --check --diff $(git ls-files "*.py")
+      - name: Run Pydocstyle
+        run: pydocstyle --verbose $(git ls-files "*.py")
+      - name: Run Pylint
+        run: pylint --verbose --persistent=n $(git ls-files "*.py")
       - name: Run Mypy
         run: mypy $(git ls-files "*.py")
