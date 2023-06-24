@@ -341,11 +341,13 @@ class LowRankEiNet(nn.Module):
                     [outputs[addr.layer][:, :, addr.idx] for addr in right_addr], dim=2
                 )
                 out = einsum_layer(log_left_prob, log_right_prob)
-                # TODO: what's the most efficient dummy_idx?
-                out = F.pad(out, [0, 1], "constant", float("-inf"))
             elif isinstance(einsum_layer, EinsumMixingLayer):
                 _, padded_idx = self.bookkeeping[i]
                 assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
+                # TODO: a better way to pad?
+                outputs[self.einet_layers[i - 1]] = F.pad(
+                    outputs[self.einet_layers[i - 1]], [0, 1], "constant", float("-inf")
+                )
                 log_input_prob = outputs[self.einet_layers[i - 1]][:, :, padded_idx]
                 out = einsum_layer(log_input_prob)
             else:
