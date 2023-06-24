@@ -62,6 +62,7 @@ class EinsumMixingLayer(Layer):
         :param max_components:
         """
         super().__init__()
+        self.fold_count = len(region_layer)
 
         k = set(region.k for region in region_layer)
         assert len(k) == 1, f"The K of region nodes in the same layer must be the same, got {k}."

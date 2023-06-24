@@ -59,6 +59,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         self.nodes = nodes
         self.num_var = num_var
         self.num_dims = num_dims
+        self.fold_count = len(nodes)
 
         num_dists = set(n.k for n in self.nodes)
         assert len(num_dists) == 1, "All leaves must have the same number of distributions."
