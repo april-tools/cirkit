@@ -23,6 +23,7 @@ class Layer(nn.Module, ABC):
         """Init class."""
         super().__init__()  # TODO: do we need multi-inherit init?
         self.param_clamp_value: _ClampValue = {}
+        self.fold_count = 0
 
     @abstractmethod
     def reset_parameters(self) -> None:

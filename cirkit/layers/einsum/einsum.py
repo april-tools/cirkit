@@ -31,6 +31,7 @@ class EinsumLayer(Layer):
             kwargs (Any): Passed to subclasses.
         """
         super().__init__()
+        self.fold_count = len(partition_layer)
 
         # TODO: do we really need these checks?
         # define in_k and out_k here, for subclass param init

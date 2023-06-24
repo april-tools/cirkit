@@ -8,7 +8,6 @@ from torch.nn import functional as F
 
 from cirkit.layers.einsum.mixing import EinsumMixingLayer
 from cirkit.region_graph import RegionGraph, RegionNode
-from cirkit.region_graph.rg_node import _EiNetAddress
 
 from ..layers.einsum import EinsumLayer
 from ..layers.exp_family import ExpFamilyLayer
@@ -133,7 +132,7 @@ class LowRankEiNet(nn.Module):
         ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
         self.bookkeeping: List[
             Union[
-                Tuple[List[_EiNetAddress], List[_EiNetAddress]],
+                Tuple[Tuple[List[Layer], Tensor], Tuple[List[Layer], Tensor]],
                 Tuple[Tensor, Tensor],
                 Tuple[None, None],
             ]
@@ -176,9 +175,30 @@ class LowRankEiNet(nn.Module):
             two_inputs = [_TwoInputs(*sorted(partition.inputs)) for partition in partition_layer]
             # TODO: again, why do we need sorting
             # collect all layers which contain left/right children
-            left_addr = [inputs.left.einet_address for inputs in two_inputs]
-            right_addr = [inputs.right.einet_address for inputs in two_inputs]
-            self.bookkeeping.append((left_addr, right_addr))
+            # TODO: duplicate code
+            left_layer = list(set(inputs.left.einet_address.layer for inputs in two_inputs))
+            left_starts = torch.tensor([0] + [layer.fold_count for layer in left_layer]).cumsum(
+                dim=0
+            )
+            left_idx = torch.tensor(
+                [  # type: ignore[misc]
+                    inputs.left.einet_address.idx
+                    + left_starts[left_layer.index(inputs.left.einet_address.layer)]
+                    for inputs in two_inputs
+                ]
+            )
+            right_layer = list(set(inputs.right.einet_address.layer for inputs in two_inputs))
+            right_starts = torch.tensor([0] + [layer.fold_count for layer in right_layer]).cumsum(
+                dim=0
+            )
+            right_idx = torch.tensor(
+                [  # type: ignore[misc]
+                    inputs.right.einet_address.idx
+                    + right_starts[right_layer.index(inputs.right.einet_address.layer)]
+                    for inputs in two_inputs
+                ]
+            )
+            self.bookkeeping.append(((left_layer, left_idx), (right_layer, right_idx)))
 
             # when the EinsumLayer is followed by a EinsumMixingLayer, we produce a
             # dummy "node" which outputs 0 (-inf in log-domain) for zero-padding.
@@ -332,20 +352,21 @@ class LowRankEiNet(nn.Module):
         for i, einsum_layer in enumerate(self.einet_layers[1:], 1):
             if isinstance(einsum_layer, EinsumLayer):  # type: ignore[misc]
                 left_addr, right_addr = self.bookkeeping[i]
-                assert isinstance(left_addr, list) and isinstance(right_addr, list)
+                assert isinstance(left_addr, tuple) and isinstance(right_addr, tuple)
                 # TODO: we should use dim=2, check all code
-                log_left_prob = torch.stack(
-                    [outputs[addr.layer][:, :, addr.idx] for addr in left_addr], dim=2
-                )
-                log_right_prob = torch.stack(
-                    [outputs[addr.layer][:, :, addr.idx] for addr in right_addr], dim=2
-                )
+                # TODO: duplicate code
+                log_left_prob = torch.cat([outputs[layer] for layer in left_addr[0]], dim=2)
+                log_left_prob = log_left_prob[:, :, left_addr[1]]
+                log_right_prob = torch.cat([outputs[layer] for layer in right_addr[0]], dim=2)
+                log_right_prob = log_right_prob[:, :, right_addr[1]]
                 out = einsum_layer(log_left_prob, log_right_prob)
-                # TODO: what's the most efficient dummy_idx?
-                out = F.pad(out, [0, 1], "constant", float("-inf"))
             elif isinstance(einsum_layer, EinsumMixingLayer):
                 _, padded_idx = self.bookkeeping[i]
                 assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
+                # TODO: a better way to pad?
+                outputs[self.einet_layers[i - 1]] = F.pad(
+                    outputs[self.einet_layers[i - 1]], [0, 1], "constant", float("-inf")
+                )
                 log_input_prob = outputs[self.einet_layers[i - 1]][:, :, padded_idx]
                 out = einsum_layer(log_input_prob)
             else:
