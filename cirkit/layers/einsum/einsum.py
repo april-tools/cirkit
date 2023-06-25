@@ -73,7 +73,7 @@ class EinsumLayer(Layer):
     # TODO: find a better way to do this override
     # TODO: what about abstract?
     @abstractmethod
-    # pylint: disable=arguments-differ
+    # pylint: disable-next=arguments-differ
     def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 

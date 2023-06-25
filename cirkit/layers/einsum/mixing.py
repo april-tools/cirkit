@@ -93,7 +93,7 @@ class EinsumMixingLayer(Layer):
         return torch.einsum("bonc,onc->bon", x, self.param)
 
     # TODO: make forward return something
-    # pylint: disable=arguments-differ
+    # pylint: disable-next=arguments-differ
     def forward(self, log_input: Tensor) -> Tensor:  # type: ignore[override]
         """Do the forward.
 

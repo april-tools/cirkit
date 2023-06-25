@@ -86,7 +86,7 @@ class LowRankEiNet(nn.Module):
     """EiNet with low rank impl."""
 
     # TODO: why graph is not in args?
-    # pylint: disable=too-complex,too-many-locals,too-many-statements
+    # pylint: disable-next=too-complex,too-many-locals,too-many-statements
     def __init__(self, graph: RegionGraph, args: _Args) -> None:
         """Make an EinsumNetwork.
 
@@ -378,7 +378,7 @@ class LowRankEiNet(nn.Module):
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
     # TODO: there's actually nothing to doc
-    # pylint: disable=missing-param-doc
+    # pylint: disable-next=missing-param-doc
     def backtrack(self, *_: Any, **__: Any) -> None:  # type: ignore[misc]
         """Raise an error.
 
@@ -387,6 +387,7 @@ class LowRankEiNet(nn.Module):
         """
         raise NotImplementedError
 
+    # pylint: disable-next=missing-param-doc
     def sample(  # type: ignore[misc]
         self, num_samples: int = 1, class_idx: int = 0, x: Optional[Tensor] = None, **_: Any
     ) -> None:
@@ -399,6 +400,7 @@ class LowRankEiNet(nn.Module):
         """
         self.backtrack(num_samples=num_samples, class_idx=class_idx, x=x, mode="sample")
 
+    # pylint: disable-next=missing-param-doc
     def mpe(  # type: ignore[misc]
         self, num_samples: int = 1, class_idx: int = 0, x: Optional[Tensor] = None, **_: Any
     ) -> None:

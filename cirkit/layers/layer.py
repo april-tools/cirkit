@@ -61,7 +61,7 @@ class Layer(nn.Module, ABC):
         return super().__call__(*args, **kwargs)  # type: ignore[no-any-return,misc]
 
     @abstractmethod
-    # pylint: disable=missing-param-doc
+    # pylint: disable-next=missing-param-doc
     def forward(self, *args: Tensor, **kwargs: Tensor) -> Tensor:
         """Implement forward.
 
