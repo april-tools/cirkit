@@ -26,7 +26,7 @@ command = [
     "--batch_size",
     str(BATCH_SIZE),
     "--region_graph",
-    "../quad_tree_stdec_28_28.json",  # cwd is HERE
+    "../quad_tree_28x28.json",  # cwd is HERE
     "--num_latents",
     "32",
     "--first_pass_only",
