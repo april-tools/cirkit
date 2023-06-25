@@ -10,17 +10,18 @@ from typing import Callable, Tuple, TypeVar
 import numpy as np
 import torch
 import torch.backends.cudnn  # TODO: this is not exported
-from load_rg import load_region_graph
-from pyjuice.model import ProbCircuit
 from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
+
+from .load_rg import load_region_graph
 
 # cat  prod ---sum---
 # 0011_1111_1111_1111
 if "JUICE_COMPILE_FLAG" not in os.environ:
     os.environ["JUICE_COMPILE_FLAG"] = str(0b0011_1111_1111_1111)
 print(os.environ["JUICE_COMPILE_FLAG"])
-import pyjuice as juice  # pylint: disable=wrong-import-position
+import pyjuice as juice  # pylint: disable=wrong-import-order,wrong-import-position
+from pyjuice import ProbCircuit  # pylint: disable=wrong-import-order,wrong-import-position
 
 # disable only the following warnings (there shouldn't be other warnings by torch._inductor.utils)
 # torch._inductor.utils: [WARNING] skipping cudagraphs due to input mutation
