@@ -1,12 +1,9 @@
 import argparse
 import enum
 import functools
-import os
-import random
 from dataclasses import dataclass
-from typing import Callable, Tuple, TypeVar
+from typing import Tuple
 
-import numpy as np
 import torch
 import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor, optim
@@ -16,8 +13,9 @@ from cirkit.layers.einsum.cp import CPLayer  # TODO: rework interfaces for impor
 from cirkit.layers.exp_family import CategoricalLayer
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
+from cirkit.utils import RandomCtx, set_determinism
 
-T = TypeVar("T")
+from ..utils import benchmarker
 
 device = torch.device("cuda")
 
@@ -55,51 +53,6 @@ def process_args() -> _ArgsNamespace:
     parser.add_argument("--num_latents", type=int, help="num_latents")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
     return parser.parse_args(namespace=_ArgsNamespace())
-
-
-def seed_all(seed: int) -> None:
-    """Seed all random generators and enforce deterministic algorithms to \
-        guarantee reproducible results (may limit performance).
-
-    Args:
-        seed (int): The seed shared by all RNGs.
-    """
-    seed %= 2**32  # some only accept 32bit seed
-    assert os.environ.get("PYTHONHASHSEED", "") == str(
-        seed
-    ), "Must set PYTHONHASHSEED to the same seed before starting python."
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.use_deterministic_algorithms(True, warn_only=True)
-    torch.backends.cudnn.benchmark = False
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-
-
-def benchmarker(fn: Callable[[], T]) -> Tuple[T, Tuple[float, float]]:
-    """Benchmark a given function and record time and GPU memory cost.
-
-    Args:
-        fn (Callable[[], T]): The function to benchmark.
-
-    Returns:
-        Tuple[T, Tuple[float, float]]: The original return value, followed by \
-            time in milliseconds and peak memory in megabytes (1024 scale).
-    """
-    torch.cuda.synchronize()  # finish all prev ops and reset mem counter
-    torch.cuda.reset_peak_memory_stats()
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    start_event.record(torch.cuda.current_stream())
-
-    ret = fn()
-
-    end_event.record(torch.cuda.current_stream())
-    torch.cuda.synchronize()  # wait for event finish
-    # TODO: Event.elapsed_time is not typed
-    elapsed_time: float = start_event.elapsed_time(end_event)  # ms
-    peak_memory = torch.cuda.max_memory_allocated() / 2**20  # MB
-    return ret, (elapsed_time, peak_memory)
 
 
 @torch.no_grad()
@@ -168,7 +121,9 @@ def main() -> None:
     print(args)
 
     if args.seed:
-        seed_all(args.seed)
+        # TODO: find a way to set w/o with
+        RandomCtx(args.seed).__enter__()  # pylint: disable=unnecessary-dunder-call
+        set_determinism(check_hash_seed=True)
 
     num_vars = 28 * 28
     data_size = args.batch_size if args.first_pass_only else args.num_batches * args.batch_size
