@@ -109,7 +109,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """Reset parameters to default initialization: N(0, 1)."""
         nn.init.normal_(self.params)
 
-    # pylint: disable=arguments-differ
+    # pylint: disable-next=arguments-differ
     def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the factorized leaf densities. We are doing the computation \
             in the log-domain, so this is actually \
