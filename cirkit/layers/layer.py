@@ -14,7 +14,6 @@ class _ClampValue(TypedDict, total=False):
     max: float
 
 
-# TODO: name it layer?
 # TODO: what interface do we need in this very generic class?
 class Layer(nn.Module, ABC):
     """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""

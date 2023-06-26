@@ -130,8 +130,8 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
                   If self.num_dims > 1, this must be of shape \
                     (batch_size, self.num_var, self.num_dims).
         :return: log-density vectors of leaves
-                 Will be of shape (batch_size, num_dist, len(self.nodes))
-                 Note: num_dist is K in the paper, len(self.nodes) is the number of PC leaves
+                 Will be of shape (batch_size, num_dist, len(self.rg_nodes))
+                 Note: num_dist is K in the paper, len(self.rg_nodes) is the number of PC leaves
         """
         # TODO: no_grad? the deleted self.reparam==None branch have no_grad
         phi = self.reparam(self.params)

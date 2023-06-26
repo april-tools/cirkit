@@ -264,7 +264,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         if x is not None:
             z = self(x)
         else:
-            # TODO: check this, size=(1, self.num_var, self.num_dims) is appropriate
+            # TODO: check this, size=(1, self.args.num_var, self.args.num_dims) is appropriate
             # TODO: above is original, but size is not stated?
             # TODO: use tuple as shape because of line folding? or everywhere?
             fake_data = torch.ones((1, self.num_vars), device=self.get_device())
