@@ -11,7 +11,7 @@ from torch import Tensor
 
 from cirkit.layers.einsum.cp import CPLayer
 from cirkit.layers.exp_family import CategoricalLayer
-from cirkit.models.einet import LowRankEiNet
+from cirkit.models.einet import TensorizedPC
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.region_graph.poon_domingos import PoonDomingos
 from cirkit.region_graph.quad_tree import QuadTree
@@ -67,19 +67,18 @@ def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
     return graph
 
 
-def _get_einet() -> LowRankEiNet:
+def _get_einet() -> TensorizedPC:
     rg = _gen_rg_2x2()
 
-    einet = LowRankEiNet(
+    einet = TensorizedPC(
         rg,
-        layer_type=CPLayer,  # type: ignore[misc]
-        exponential_family=CategoricalLayer,
-        exponential_family_args={"num_categories": 2},  # type: ignore[misc]
-        num_sums=1,
-        num_input=1,
-        num_var=4,
-        prod_exp=True,
-        r=1,
+        num_vars=4,
+        layer_cls=CPLayer,  # type: ignore[misc]
+        efamily_cls=CategoricalLayer,
+        layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
+        efamily_kwargs={"num_categories": 2},  # type: ignore[misc]
+        num_inner_units=1,
+        num_input_units=1,
     )
     # TODO: we should not be required to call initialize for default init, but it builds the params
     einet.initialize(exp_reparam=False, mixing_softmax=False)
@@ -99,7 +98,7 @@ def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
     }
 
 
-def _set_params(einet: LowRankEiNet) -> None:
+def _set_params(einet: TensorizedPC) -> None:
     state_dict = einet.state_dict()  # type: ignore[misc]
     state_dict.update(  # type: ignore[misc]
         {  # type: ignore[misc]
@@ -137,7 +136,7 @@ def _get_output() -> Tensor:
 def test_einet_creation() -> None:
     einet = _get_einet()
     einet.to("cpu")
-    einet.to("meta")
+    einet.to("meta")  # TODO: what to test here?
     param_shapes = {name: tuple(param.shape) for name, param in einet.named_parameters()}
     assert param_shapes == _get_param_shapes()
 
@@ -186,16 +185,15 @@ def test_einet_partition_function(
 
     graph = rg_cls(**kwargs)
 
-    einet = LowRankEiNet(
+    einet = TensorizedPC(
         graph,
-        layer_type=CPLayer,  # type: ignore[misc]
-        exponential_family=CategoricalLayer,
-        exponential_family_args={"num_categories": 2},  # type: ignore[misc]
-        num_sums=16,
-        num_input=16,
-        num_var=16,
-        prod_exp=True,
-        r=1,
+        num_vars=16,
+        layer_cls=CPLayer,  # type: ignore[misc]
+        efamily_cls=CategoricalLayer,
+        layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
+        efamily_kwargs={"num_categories": 2},  # type: ignore[misc]
+        num_inner_units=16,
+        num_input_units=16,
     )
     einet.initialize(exp_reparam=False, mixing_softmax=False)
     einet.to(device)

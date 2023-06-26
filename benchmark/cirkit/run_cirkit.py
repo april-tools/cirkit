@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from cirkit.layers.einsum.cp import CPLayer  # TODO: rework interfaces for import
 from cirkit.layers.exp_family import CategoricalLayer
-from cirkit.models import LowRankEiNet
+from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 
 T = TypeVar("T")
@@ -103,11 +103,11 @@ def benchmarker(fn: Callable[[], T]) -> Tuple[T, Tuple[float, float]]:
 
 
 @torch.no_grad()
-def evaluate(pc: LowRankEiNet, data_loader: DataLoader[Tuple[Tensor, ...]]) -> float:
+def evaluate(pc: TensorizedPC, data_loader: DataLoader[Tuple[Tensor, ...]]) -> float:
     """Evaluate circuit on given data.
 
     Args:
-        pc (LowRankEiNet): The PC to evaluate.
+        pc (TensorizedPC): The PC to evaluate.
         data_loader (DataLoader[Tuple[Tensor, ...]]): The evaluation data.
 
     Returns:
@@ -129,12 +129,12 @@ def evaluate(pc: LowRankEiNet, data_loader: DataLoader[Tuple[Tensor, ...]]) -> f
 
 
 def train(
-    pc: LowRankEiNet, optimizer: optim.Optimizer, data_loader: DataLoader[Tuple[Tensor, ...]]
+    pc: TensorizedPC, optimizer: optim.Optimizer, data_loader: DataLoader[Tuple[Tensor, ...]]
 ) -> float:
     """Train circuit on given data.
 
     Args:
-        pc (LowRankEiNet): The PC to optimize.
+        pc (TensorizedPC): The PC to optimize.
         optimizer (optim.Optimizer): The optimizer for circuit.
         data_loader (DataLoader[Tuple[Tensor, ...]]): The training data.
 
@@ -181,16 +181,15 @@ def main() -> None:
         drop_last=True,
     )
 
-    pc = LowRankEiNet(
+    pc = TensorizedPC(
         RegionGraph.load(args.region_graph),
-        layer_type=CPLayer,  # type: ignore[misc]
-        num_var=num_vars,
-        num_sums=args.num_latents,
-        num_input=args.num_latents,
-        exponential_family=CategoricalLayer,
-        exponential_family_args={"k": 256},  # type: ignore[misc]
-        r=1,
-        prod_exp=True,
+        num_vars=num_vars,
+        layer_cls=CPLayer,  # type: ignore[misc]
+        efamily_cls=CategoricalLayer,
+        layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
+        efamily_kwargs={"num_categories": 256},  # type: ignore[misc]
+        num_inner_units=args.num_latents,
+        num_input_units=args.num_latents,
     )
     pc.to(device)
 

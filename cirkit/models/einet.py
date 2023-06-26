@@ -23,68 +23,73 @@ class _TwoInputs(NamedTuple):
     right: RegionNode
 
 
-class LowRankEiNet(nn.Module):
-    """EiNet with low rank impl."""
+class TensorizedPC(nn.Module):
+    """Tensorized and folded PC implementation."""
 
     # pylint: disable-next=too-many-locals,too-many-statements,too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
         graph: RegionGraph,
-        layer_type: Type[EinsumLayer],
-        num_var: int,
-        num_sums: int,
-        num_input: int,
-        exponential_family: Type[ExpFamilyLayer],
-        exponential_family_args: Dict[str, Any],
-        r: int = 1,
-        prod_exp: bool = False,
+        num_vars: int,
+        layer_cls: Type[EinsumLayer],
+        efamily_cls: Type[ExpFamilyLayer],
+        layer_kwargs: Dict[str, Any],
+        efamily_kwargs: Dict[str, Any],
+        num_inner_units: int,
+        num_input_units: int,
+        num_channels: int = 1,
+        num_classes: int = 1,
     ) -> None:
-        """Make an EinsumNetwork.
+        """Make an TensorizedPC.
 
         Args:
             graph (RegionGraph): The region graph.
-            layer_type (Type[EinsumLayer]): I don't know.
-            num_var (int): I don't know.
-            num_sums (int): I don't know.
-            num_input (int): I don't know.
-            exponential_family (Type[ExponentialFamilyArray]): I don't know.
-            exponential_family_args (Dict[str, Any]): I don't know.
-            r (int, optional): I don't know. Defaults to 1.
-            prod_exp (bool, optional): I don't know. Defaults to False.
-            pd_num_pieces (int, optional): I don't know. Defaults to 0.
-            shrink (bool, optional): I don't know. Defaults to False.
+            num_vars (int): The number of variables.
+            layer_cls (Type[EinsumLayer]): The inner layer class.
+            efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
+            layer_kwargs (Dict[str, Any]): The parameters for the inner layer class.
+            efamily_kwargs (Dict[str, Any]): The parameters for the exponential family class.
+            num_inner_units (int): The number of units for each layer.
+            num_input_units (int): The number of input units in the input layer.
+            num_channels (int): The number of channels (e.g., 3 for RGB pixel). Defaults to 1.
+            num_classes (int): The number of classes of the PC. Defaults to 1.
         """
+        assert num_inner_units > 0, "The number of output units per layer should be positive"
+        assert (
+            num_input_units > 0
+        ), "The number of input untis in the input layer should be positive"
+        assert num_classes > 0, "The number of classes should be positive"
         super().__init__()
 
         # TODO: check graph. but do we need it?
-
         self.graph = graph
-        self.num_var = num_var
-
-        num_dims = 1
-        num_classes = 1
+        self.num_vars = num_vars
+        num_output_units = num_inner_units  # TODO: clean up relationship among all num_*_units
 
         assert (
             len(list(graph.output_nodes)) == 1
-        ), "Currently only EinNets with single root node supported."
+        ), "Currently only circuits with single root region node are supported."
 
         # TODO: return a list instead?
         output_node = list(graph.output_nodes)[0]
-        assert output_node.scope == set(range(num_var)), "The graph should be over range(num_var)."
+        assert output_node.scope == set(
+            range(num_vars)
+        ), "The region graph should have been defined on the same number of variables"
 
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
         self.graph_layers = graph.topological_layers(bottom_up=False)
 
         # input layer
-        einet_layers: List[Layer] = [
-            exponential_family(
-                self.graph_layers[0][1],
-                num_var,
-                num_dims,
-                num_input,
-                **exponential_family_args,  # type: ignore[misc]
-            )
-        ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
+        input_layer = efamily_cls(
+            self.graph_layers[0][1],
+            num_vars,
+            num_channels,
+            num_input_units,
+            **efamily_kwargs,  # type: ignore[misc]
+        )
+        layers: List[Layer] = [input_layer]
+
+        # Book-keeping: None for input, Tensor for mixing, Tuple for einsum
         self.bookkeeping: List[
             Union[
                 Tuple[Tuple[List[Layer], Tensor], Tuple[List[Layer], Tensor]],
@@ -93,10 +98,7 @@ class LowRankEiNet(nn.Module):
             ]
         ] = [(None, None)]
 
-        num_output_units = num_sums
-
         # TODO: use start as kwarg?
-        # internal layers
         for idx, (partition_layer, region_layer) in enumerate(self.graph_layers[1:], start=1):
             # TODO: duplicate check with einet layer, but also useful here?
             # out_k = set(
@@ -108,11 +110,11 @@ class LowRankEiNet(nn.Module):
             # TODO: this can be a wrong layer, refer to back up code
             # assert out_k > 1
             num_outputs = num_output_units if idx < len(self.graph_layers) - 1 else num_classes
-            num_inputs = num_input if idx == 1 else num_output_units
-            einsum_layer = layer_type(
-                partition_layer, num_inputs, num_outputs, rank=r, prod_exp=prod_exp
+            num_inputs = num_input_units if idx == 1 else num_output_units
+            inner_layer = layer_cls(
+                partition_layer, num_inputs, num_outputs, **layer_kwargs  # type: ignore[misc]
             )
-            einet_layers.append(einsum_layer)
+            layers.append(inner_layer)
 
             # get pairs of nodes which are input to the products (list of lists)
             # length of the outer list is same as self.products, length of inner lists is 2
@@ -160,18 +162,18 @@ class LowRankEiNet(nn.Module):
                 out_region = partition.outputs[0]
 
                 if len(out_region.inputs) == 1:
-                    out_region.einet_address.layer = einsum_layer
+                    out_region.einet_address.layer = inner_layer
                     out_region.einet_address.idx = part_idx
                 else:  # case followed by EinsumMixingLayer
                     mixing_component_idx[out_region].append(part_idx)
                     dummy_idx = len(partition_layer)
 
-            # the Mixing layer is only for regions which have multiple partitions as children.
+            # The Mixing layer is only for regions which have multiple partitions as children.
             if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
                 assert dummy_idx is not None
                 max_components = max(len(region.inputs) for region in multi_sums)
                 mixing_layer = EinsumMixingLayer(multi_sums, num_outputs, max_components)
-                einet_layers.append(mixing_layer)
+                layers.append(mixing_layer)
 
                 # The following code does some bookkeeping.
                 # padded_idx indexes into the log-density tensor of the previous
@@ -193,7 +195,7 @@ class LowRankEiNet(nn.Module):
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
-        self.einet_layers: List[Layer] = nn.ModuleList(einet_layers)  # type: ignore[assignment]
+        self.einet_layers: List[Layer] = nn.ModuleList(layers)  # type: ignore[assignment]
         self.exp_reparam: bool = False
         self.mixing_softmax: bool = False
 
@@ -254,7 +256,7 @@ class LowRankEiNet(nn.Module):
         """
         old_marg_idx = self.get_marginalization_idx()
         # assert old_marg_idx is not None  # TODO: then why return None?
-        self.set_marginalization_idx(torch.arange(self.num_var))
+        self.set_marginalization_idx(torch.arange(self.num_vars))
 
         if x is not None:
             z = self.forward(x)
@@ -262,7 +264,7 @@ class LowRankEiNet(nn.Module):
             # TODO: check this, size=(1, self.num_var, self.num_dims) is appropriate
             # TODO: above is original, but size is not stated?
             # TODO: use tuple as shape because of line folding? or everywhere?
-            fake_data = torch.ones((1, self.num_var), device=self.get_device())
+            fake_data = torch.ones((1, self.num_vars), device=self.get_device())
             z = self.forward(fake_data)  # TODO: why call forward but not __call__
 
         # TODO: can indeed be None
