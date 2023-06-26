@@ -15,7 +15,6 @@ from torch.utils.data import DataLoader, TensorDataset
 from cirkit.layers.einsum.cp import CPLayer  # TODO: rework interfaces for import
 from cirkit.layers.exp_family import CategoricalLayer
 from cirkit.models import LowRankEiNet
-from cirkit.models.einet import _Args
 from cirkit.region_graph import RegionGraph
 
 T = TypeVar("T")
@@ -184,16 +183,14 @@ def main() -> None:
 
     pc = LowRankEiNet(
         RegionGraph.load(args.region_graph),
-        _Args(
-            layer_type=CPLayer,  # type: ignore[misc]
-            num_var=num_vars,
-            num_sums=args.num_latents,
-            num_input=args.num_latents,
-            exponential_family=CategoricalLayer,
-            exponential_family_args={"k": 256},  # type: ignore[misc]
-            r=1,
-            prod_exp=True,
-        ),
+        layer_type=CPLayer,  # type: ignore[misc]
+        num_var=num_vars,
+        num_sums=args.num_latents,
+        num_input=args.num_latents,
+        exponential_family=CategoricalLayer,
+        exponential_family_args={"k": 256},  # type: ignore[misc]
+        r=1,
+        prod_exp=True,
     )
     pc.to(device)
 

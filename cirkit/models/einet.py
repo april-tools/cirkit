@@ -24,25 +24,13 @@ class _TwoInputs(NamedTuple):
     right: RegionNode
 
 
-# TODO: might be a good idea. but how to design better
-# pylint: disable-next=too-many-instance-attributes,too-few-public-methods
-class _Args:
-    """Arguments for EinsumNetwork class.
+class LowRankEiNet(nn.Module):
+    """EiNet with low rank impl."""
 
-    num_var: number of random variables (RVs). An RV might be multidimensional \
-        though -- see num_dims.
-    num_dims: number of dimensions per RV. E.g. you can model an 32x32 RGB \
-        image as an 32x32 array of three dimensional RVs.
-    num_input_distributions: number of distributions per input region (K in the paper).
-    num_sums: number of sum nodes per internal region (K in the paper).
-    num_classes: number of outputs of the PC.
-    exponential_family: which exponential family to use; (sub-class ExponentialFamilyTensor).
-    exponential_family_args: arguments for the exponential family, e.g. trial-number N for Binomial.
-    """
-
-    # pylint: disable-next=too-many-arguments
+    # pylint: disable-next=too-complex,too-many-locals,too-many-statements,too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
+        graph: RegionGraph,
         layer_type: Type[EinsumLayer],
         num_var: int,
         num_sums: int,
@@ -51,12 +39,12 @@ class _Args:
         exponential_family_args: Dict[str, Any],
         r: int = 1,
         prod_exp: bool = False,
-        pd_num_pieces: int = 0,  # TODO: this is not used?
         shrink: bool = False,
-    ):
-        """Init class.
+    ) -> None:
+        """Make an EinsumNetwork.
 
         Args:
+            graph (RegionGraph): The region graph.
             layer_type (Type[EinsumLayer]): I don't know.
             num_var (int): I don't know.
             num_sums (int): I don't know.
@@ -68,38 +56,15 @@ class _Args:
             pd_num_pieces (int, optional): I don't know. Defaults to 0.
             shrink (bool, optional): I don't know. Defaults to False.
         """
-        self.r = r
-        self.num_var = num_var
-        self.num_dims = 1
-        self.num_input_distributions = num_input
-        self.num_sums = num_sums
-        self.num_classes = 1
-        self.exponential_family = exponential_family
-        self.exponential_family_args = exponential_family_args  # type: ignore[misc]
-        self.prod_exp = prod_exp
-        self.pd_num_pieces = pd_num_pieces
-        self.shrink = shrink
-        self.layer_type = layer_type
-
-
-class LowRankEiNet(nn.Module):
-    """EiNet with low rank impl."""
-
-    # TODO: why graph is not in args?
-    # pylint: disable-next=too-complex,too-many-locals,too-many-statements
-    def __init__(self, graph: RegionGraph, args: _Args) -> None:
-        """Make an EinsumNetwork.
-
-        Args:
-            graph (RegionGraph): The region graph.
-            args (Args): The args.
-        """
         super().__init__()
 
         # TODO: check graph. but do we need it?
 
         self.graph = graph
-        self.args = args
+        self.num_var = num_var
+
+        num_dims = 1
+        num_classes = 1
 
         assert (
             len(list(graph.output_nodes)) == 1
@@ -107,27 +72,25 @@ class LowRankEiNet(nn.Module):
 
         # TODO: return a list instead?
         output_node = list(graph.output_nodes)[0]
-        assert output_node.scope == set(
-            range(args.num_var)
-        ), "The graph should be over range(num_var)."
+        assert output_node.scope == set(range(num_var)), "The graph should be over range(num_var)."
 
         # TODO: don't bind it to RG
         for node in graph.input_nodes:
-            node.k = args.num_input_distributions
+            node.k = num_input
 
         for node in graph.inner_region_nodes:
-            node.k = args.num_sums if node is not output_node else args.num_classes
+            node.k = num_sums if node is not output_node else num_classes
 
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
         self.graph_layers = graph.topological_layers(bottom_up=False)
 
         # input layer
         einet_layers: List[Layer] = [
-            args.exponential_family(
+            exponential_family(
                 self.graph_layers[0][1],
-                args.num_var,
-                args.num_dims,
-                **args.exponential_family_args,  # type: ignore[misc]
+                num_var,
+                num_dims,
+                **exponential_family_args,  # type: ignore[misc]
             )
         ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
         self.bookkeeping: List[
@@ -141,9 +104,9 @@ class LowRankEiNet(nn.Module):
         def _k_gen() -> Generator[int, None, None]:
             k_list = (
                 # TODO: another mypy ** bug
-                [cast(int, 2**i) for i in range(5, int(math.log2(args.num_sums)))]
-                if args.shrink
-                else [args.num_sums]
+                [cast(int, 2**i) for i in range(5, int(math.log2(num_sums)))]
+                if shrink
+                else [num_sums]
             )
             while True:  # pylint: disable=while-used
                 if len(k_list) > 1:
@@ -164,9 +127,7 @@ class LowRankEiNet(nn.Module):
 
             # TODO: this can be a wrong layer, refer to back up code
             # assert out_k > 1
-            einsum_layer = args.layer_type(
-                partition_layer, k=next(k), prod_exp=args.prod_exp, r=args.r
-            )
+            einsum_layer = layer_type(partition_layer, k=next(k), prod_exp=prod_exp, r=r)
             einet_layers.append(einsum_layer)
 
             # get pairs of nodes which are input to the products (list of lists)
@@ -309,15 +270,15 @@ class LowRankEiNet(nn.Module):
         """
         old_marg_idx = self.get_marginalization_idx()
         # assert old_marg_idx is not None  # TODO: then why return None?
-        self.set_marginalization_idx(torch.arange(self.args.num_var))
+        self.set_marginalization_idx(torch.arange(self.num_var))
 
         if x is not None:
             z = self.forward(x)
         else:
-            # TODO: check this, size=(1, self.args.num_var, self.args.num_dims) is appropriate
+            # TODO: check this, size=(1, self.num_var, self.num_dims) is appropriate
             # TODO: above is original, but size is not stated?
             # TODO: use tuple as shape because of line folding? or everywhere?
-            fake_data = torch.ones((1, self.args.num_var), device=self.get_device())
+            fake_data = torch.ones((1, self.num_var), device=self.get_device())
             z = self.forward(fake_data)  # TODO: why call forward but not __call__
 
         # TODO: can indeed be None

@@ -11,7 +11,7 @@ from torch import Tensor
 
 from cirkit.layers.einsum.cp import CPLayer
 from cirkit.layers.exp_family import CategoricalLayer
-from cirkit.models.einet import LowRankEiNet, _Args
+from cirkit.models.einet import LowRankEiNet
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.region_graph.poon_domingos import PoonDomingos
 from cirkit.region_graph.quad_tree import QuadTree
@@ -70,7 +70,8 @@ def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
 def _get_einet() -> LowRankEiNet:
     rg = _gen_rg_2x2()
 
-    args = _Args(
+    einet = LowRankEiNet(
+        rg,
         layer_type=CPLayer,  # type: ignore[misc]
         exponential_family=CategoricalLayer,
         exponential_family_args={"k": 2},  # type: ignore[misc]
@@ -80,8 +81,6 @@ def _get_einet() -> LowRankEiNet:
         prod_exp=True,
         r=1,
     )
-
-    einet = LowRankEiNet(rg, args)
     # TODO: we should not be required to call initialize for default init, but it builds the params
     einet.initialize(exp_reparam=False, mixing_softmax=False)
     return einet
@@ -187,7 +186,8 @@ def test_einet_partition_function(
 
     graph = rg_cls(**kwargs)
 
-    args = _Args(
+    einet = LowRankEiNet(
+        graph,
         layer_type=CPLayer,  # type: ignore[misc]
         exponential_family=CategoricalLayer,
         exponential_family_args={"k": 2},  # type: ignore[misc]
@@ -197,8 +197,6 @@ def test_einet_partition_function(
         prod_exp=True,
         r=1,
     )
-
-    einet = LowRankEiNet(graph, args)
     einet.initialize(exp_reparam=False, mixing_softmax=False)
     einet.to(device)
 
