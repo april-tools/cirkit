@@ -40,32 +40,32 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
     scope_tensor: Tensor  # to be registered as buffer
 
+    # pylint: disable-next=too-many-arguments
     def __init__(
         self,
-        nodes: List[RegionNode],
+        rg_nodes: List[RegionNode],
         num_var: int,
         num_dims: int,
-        num_stats: int,
+        num_units: int,
+        num_stats: int = 1,
     ):
         """Init class.
 
-        :param nodes: list of PC leaves (DistributionVector, see Graph.py)
+        :param rg_nodes: list of PC leaves (DistributionVector, see Graph.py)
         :param num_var: number of random variables (int)
         :param num_dims: dimensionality of RVs (int)
+        :param num_units: The number of units (int).
         :param num_stats: number of sufficient statistics of exponential family (int)
         """
         super().__init__()
-
-        self.nodes = nodes
+        self.rg_nodes = rg_nodes
         self.num_var = num_var
         self.num_dims = num_dims
-        self.fold_count = len(nodes)
+        self.num_units = num_units
+        self.num_stats = num_stats
+        self.fold_count = len(rg_nodes)
 
-        num_dists = set(n.k for n in self.nodes)
-        assert len(num_dists) == 1, "All leaves must have the same number of distributions."
-        num_dist = num_dists.pop()
-
-        replica_indices = set(n.einet_address.replica_idx for n in self.nodes)
+        replica_indices = set(n.einet_address.replica_idx for n in self.rg_nodes)
         num_replica = len(replica_indices)
         assert replica_indices == set(
             range(num_replica)
@@ -74,17 +74,15 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # self.scope_tensor indicates which densities in self.ef_array belongs to which leaf.
         # TODO: it might be smart to have a sparse implementation --
         # I have experimented a bit with this, but it is not always faster.
-        self.register_buffer("scope_tensor", torch.zeros(num_var, num_replica, len(self.nodes)))
-        for i, node in enumerate(self.nodes):
+        self.register_buffer("scope_tensor", torch.zeros(num_var, num_replica, len(self.rg_nodes)))
+        for i, node in enumerate(self.rg_nodes):
             self.scope_tensor[
                 list(node.scope), node.einet_address.replica_idx, i  # type: ignore[misc]
             ] = 1
             node.einet_address.layer = self
             node.einet_address.idx = i
 
-        self.num_stats = num_stats
-        self.params_shape = (num_var, num_dist, num_replica, num_stats)
-
+        self.params_shape = (num_var, num_units, num_replica, num_stats)
         self.params = nn.Parameter(torch.empty(self.params_shape))
 
         # TODO: is this a good init? (originally None)
@@ -250,8 +248,8 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
                 )
                 assert len(dist_idx[n]) == len(node_idx[n]), "Invalid input."
                 for c, k in enumerate(node_idx[n]):
-                    scope = list(self.nodes[k].scope)
-                    rep = self.nodes[k].einet_address.replica_idx
+                    scope = list(self.rg_nodes[k].scope)
+                    rep = self.rg_nodes[k].einet_address.replica_idx
                     cur_value[scope, :] = (
                         ef_values[n, scope, :, dist_idx[n][c], rep]
                         if mode == "sample"

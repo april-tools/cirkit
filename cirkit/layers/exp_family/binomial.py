@@ -15,17 +15,19 @@ from .normal import _shift_last_axis_to
 class BinomialLayer(ExpFamilyLayer):
     """Implementation of Binomial distribution."""
 
-    def __init__(self, nodes: List[RegionNode], num_var: int, num_dims: int, n: int):
+    def __init__(
+        self, nodes: List[RegionNode], num_var: int, num_dims: int, num_units: int, *, n: int
+    ):
         """Init class.
 
         Args:
             nodes (List[RegionNode]): Passed to super.
             num_var (int): Number of vars.
             num_dims (int): Number of dims.
-            array_shape (Sequence[int]): Shape of array.
+            num_units (int): The number of units.
             n (int): n for binomial.
         """
-        super().__init__(nodes, num_var, num_dims, num_stats=num_dims)
+        super().__init__(nodes, num_var, num_dims, num_units, num_stats=num_dims)
         self.n = n
 
     def reparam_function(self, params: Tensor) -> Tensor:

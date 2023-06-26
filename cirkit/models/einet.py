@@ -88,6 +88,7 @@ class LowRankEiNet(nn.Module):
                 self.graph_layers[0][1],
                 num_var,
                 num_dims,
+                num_input,
                 **exponential_family_args,  # type: ignore[misc]
             )
         ]  # note: enforcing this todo: restore  # TODO: <-- what does this mean
