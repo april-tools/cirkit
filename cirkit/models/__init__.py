@@ -1,1 +1,1 @@
-from .einet import LowRankEiNet as LowRankEiNet
+from .einet import TensorizedPC as TensorizedPC

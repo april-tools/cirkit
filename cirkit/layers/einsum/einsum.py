@@ -19,51 +19,24 @@ class EinsumLayer(Layer):
     # TODO: subclasses should call reset_params -- where params are inited
     def __init__(  # type: ignore[misc]
         self,  # pylint: disable=unused-argument
-        partition_layer: List[PartitionNode],
-        k: int,
+        rg_nodes: List[PartitionNode],
+        num_input_units: int,
+        num_output_units: int,
         **kwargs: Any,
     ) -> None:
         """Init class.
 
         Args:
-            partition_layer (List[PartitionNode]): The current partition layer.
-            k (int): The K.
+            rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
+            num_input_units (int): The number of input units.
+            num_output_units (int): The number of output units.
             kwargs (Any): Passed to subclasses.
         """
         super().__init__()
-        self.fold_count = len(partition_layer)
+        self.fold_count = len(rg_nodes)
 
-        # TODO: do we really need these checks?
-        # define in_k and out_k here, for subclass param init
-
-        # TODO: check all constructions that can use comprehension
-        out_k = set(
-            out_region.k for partition in partition_layer for out_region in partition.outputs
-        )
-        assert (
-            len(out_k) == 1
-        ), f"The K of output region nodes in the same layer must be the same, got {out_k}."
-
-        # check if it is root  # TODO: what does this mean?
-        if out_k.pop() > 1:
-            self.out_k = k
-            # set num_sums in the graph  # TODO: but should decouple from RG
-            for partition in partition_layer:
-                for out_region in partition.outputs:
-                    out_region.k = k
-        else:
-            self.out_k = 1
-
-        # TODO: why do we check it here?
-        assert all(
-            len(partition.inputs) == 2 for partition in partition_layer
-        ), "Only 2-partitions are currently supported."
-
-        in_k = set(in_region.k for partition in partition_layer for in_region in partition.inputs)
-        assert (
-            len(in_k) == 1
-        ), f"The K of output region nodes in the same layer must be the same, got {in_k}."
-        self.in_k = in_k.pop()
+        self.num_input_units = num_input_units
+        self.num_output_units = num_output_units
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99)."""

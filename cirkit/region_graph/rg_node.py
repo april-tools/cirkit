@@ -84,7 +84,6 @@ class RegionNode(RGNode):  # pylint: disable=too-few-public-methods
     def __init__(self, scope: Iterable[int]) -> None:
         """Is a docstring."""  # TODO: how to avoid rewrite docstring?
         super().__init__(scope)
-        self.k: int = 0  # TODO: number of distributions???
         self.einet_address = _EiNetAddress()
 
     def __lt__(self, other: RGNode) -> bool:
