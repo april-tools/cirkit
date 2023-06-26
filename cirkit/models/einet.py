@@ -180,7 +180,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 # EinsumLayer, padded with a dummy input which
                 # outputs constantly 0 (-inf in the log-domain), see class EinsumLayer.
                 padded_idx: List[List[int]] = []
-                for reg_idx, region in enumerate(region_layer):
+                for reg_idx, region in enumerate(multi_sums):
                     num_components = len(mixing_component_idx[region])
                     this_idx = mixing_component_idx[region] + [dummy_idx] * (
                         max_components - num_components
