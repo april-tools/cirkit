@@ -54,23 +54,24 @@ class EinsumMixingLayer(Layer):
     # to be registered as buffer
     params_mask: Tensor
 
-    def __init__(self, region_layer: List[RegionNode], max_components: int):
+    # TODO: num_output_units is num_input_units
+    def __init__(self, rg_nodes: List[RegionNode], num_output_units: int, max_components: int):
         """Init class.
 
-        :param region_layer: the nodes of the current layer (see constructor of \
-            EinsumNetwork), which have multiple children
-        :param max_components:
+        Args:
+            rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
+            num_output_units (int): The number of output units.
+            max_components (int): Max number of mixing components.
         """
         super().__init__()
-        self.fold_count = len(region_layer)
+        self.fold_count = len(rg_nodes)
 
-        k = set(region.k for region in region_layer)
-        assert len(k) == 1, f"The K of region nodes in the same layer must be the same, got {k}."
-        self.k = k.pop()
+        # TODO: what need to be saved to self?
+        self.num_output_units = num_output_units
 
         # TODO: test best perf?
         # param_shape = (len(self.nodes), self.max_components) for better perf
-        self.params = nn.Parameter(torch.empty(self.k, len(region_layer), max_components))
+        self.params = nn.Parameter(torch.empty(num_output_units, len(rg_nodes), max_components))
         # TODO: what's the use of params_mask?
         self.register_buffer("params_mask", torch.ones_like(self.params))
 

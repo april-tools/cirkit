@@ -1,6 +1,5 @@
-import math
 from collections import defaultdict
-from typing import Any, Dict, Generator, List, NamedTuple, Optional, Tuple, Type, Union, cast
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union, cast
 
 import torch
 from torch import Tensor, nn
@@ -27,7 +26,7 @@ class _TwoInputs(NamedTuple):
 class LowRankEiNet(nn.Module):
     """EiNet with low rank impl."""
 
-    # pylint: disable-next=too-complex,too-many-locals,too-many-statements,too-many-arguments
+    # pylint: disable-next=too-many-locals,too-many-statements,too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
         graph: RegionGraph,
@@ -39,7 +38,6 @@ class LowRankEiNet(nn.Module):
         exponential_family_args: Dict[str, Any],
         r: int = 1,
         prod_exp: bool = False,
-        shrink: bool = False,
     ) -> None:
         """Make an EinsumNetwork.
 
@@ -101,23 +99,11 @@ class LowRankEiNet(nn.Module):
             ]
         ] = [(None, None)]
 
-        def _k_gen() -> Generator[int, None, None]:
-            k_list = (
-                # TODO: another mypy ** bug
-                [cast(int, 2**i) for i in range(5, int(math.log2(num_sums)))]
-                if shrink
-                else [num_sums]
-            )
-            while True:  # pylint: disable=while-used
-                if len(k_list) > 1:
-                    yield k_list.pop(-1)
-                else:
-                    yield k_list[0]
+        num_output_units = num_sums
 
-        k = _k_gen()
-
+        # TODO: use start as kwarg?
         # internal layers
-        for partition_layer, region_layer in self.graph_layers[1:]:
+        for idx, (partition_layer, region_layer) in enumerate(self.graph_layers[1:], start=1):
             # TODO: duplicate check with einet layer, but also useful here?
             # out_k = set(
             #     out_region.k for partition in partition_layer for out_region in partition.outputs
@@ -127,7 +113,11 @@ class LowRankEiNet(nn.Module):
 
             # TODO: this can be a wrong layer, refer to back up code
             # assert out_k > 1
-            einsum_layer = layer_type(partition_layer, k=next(k), prod_exp=prod_exp, r=r)
+            num_outputs = num_output_units if idx < len(self.graph_layers) - 1 else num_classes
+            num_inputs = num_input if idx == 1 else num_output_units
+            einsum_layer = layer_type(
+                partition_layer, num_inputs, num_outputs, rank=r, prod_exp=prod_exp
+            )
             einet_layers.append(einsum_layer)
 
             # get pairs of nodes which are input to the products (list of lists)
@@ -186,7 +176,7 @@ class LowRankEiNet(nn.Module):
             if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
                 assert dummy_idx is not None
                 max_components = max(len(region.inputs) for region in multi_sums)
-                mixing_layer = EinsumMixingLayer(multi_sums, max_components)
+                mixing_layer = EinsumMixingLayer(multi_sums, num_outputs, max_components)
                 einet_layers.append(mixing_layer)
 
                 # The following code does some bookkeeping.
