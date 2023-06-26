@@ -72,13 +72,6 @@ class LowRankEiNet(nn.Module):
         output_node = list(graph.output_nodes)[0]
         assert output_node.scope == set(range(num_var)), "The graph should be over range(num_var)."
 
-        # TODO: don't bind it to RG
-        for node in graph.input_nodes:
-            node.k = num_input
-
-        for node in graph.inner_region_nodes:
-            node.k = num_sums if node is not output_node else num_classes
-
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
         self.graph_layers = graph.topological_layers(bottom_up=False)
 
