@@ -3,7 +3,7 @@
 
 import itertools
 import math
-from typing import Callable, Dict, List, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union, cast
 
 import pytest
 import torch
@@ -162,30 +162,45 @@ def test_einet_partition_func() -> None:
         (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.188161849975586),
         (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 51.31766128540039),
         (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.198360443115234),
+        (PoonDomingos, {"shape": [3, 3], "delta": 2}, None),
+        (QuadTree, {"width": 3, "height": 3, "struct_decomp": False}, None),
+        (RandomBinaryTree, {"num_vars": 9, "depth": 3, "num_repetitions": 2}, None)
     ],
 )
 @RandomCtx(42)
 def test_einet_partition_function(
     rg_cls: Callable[..., RegionGraph],
     kwargs: Dict[str, Union[int, bool, List[int]]],
-    log_answer: float,
+    log_answer: Optional[float],
 ) -> None:
     """Tests the creation and partition of an einet.
 
     Args:
         rg_cls (Type[RegionGraph]): The class of RG to test.
         kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
-        log_answer (float): The answer of partition func. NOTE: we don't know if it's correct, but \
-            it guarantees reproducibility.
+        log_answer (Optional[float]): The answer of partition func.
+            NOTE: we don't know if it's correct, but it guarantees reproducibility.
     """
-    # TODO: type of kwargs should be refined
+    # TODO: remove this, tensors are on the CPU by default
     device = "cpu"
 
-    graph = rg_cls(**kwargs)
+    if "num_vars" in kwargs:
+        num_vars: int = cast(int, kwargs["num_vars"])
+    elif "width" in kwargs and "height" in kwargs:
+        width = cast(int, kwargs["width"])
+        height = cast(int, kwargs["height"])
+        num_vars: int = width * height  # type: ignore[no-redef]
+    elif "shape" in kwargs:
+        shape = cast(List[int], kwargs["shape"])
+        num_vars: int = shape[0] * shape[1]  # type: ignore[no-redef]
+    else:
+        assert False, "Invalid test parameters"
 
+    # TODO: type of kwargs should be refined
+    rg = rg_cls(**kwargs)
     einet = TensorizedPC(
-        graph,
-        num_vars=16,
+        rg,
+        num_vars=num_vars,
         layer_cls=CPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
@@ -197,7 +212,7 @@ def test_einet_partition_function(
 
     # Generate all possible combinations of 16 integers from the list of possible values
     possible_values = [0, 1]
-    all_lists = list(itertools.product(possible_values, repeat=16))
+    all_lists = list(itertools.product(possible_values, repeat=num_vars))
 
     # compute outputs
     out = einet(torch.tensor(all_lists))
@@ -207,4 +222,5 @@ def test_einet_partition_function(
     sum_out = torch.logsumexp(out, dim=0, keepdim=True)
 
     assert torch.isclose(einet.partition_function(), sum_out, rtol=1e-6, atol=0)
-    assert torch.isclose(sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0), f"{sum_out.item()}"
+    if log_answer is not None:
+        assert torch.isclose(sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0)
