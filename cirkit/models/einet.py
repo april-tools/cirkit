@@ -190,7 +190,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                         mixing_layer.params_mask[:, reg_idx, num_components:] = 0.0
                     region.einet_address.layer = mixing_layer
                     region.einet_address.idx = reg_idx
-                mixing_layer.reset_parameters()
+                mixing_layer.apply_params_mask()
                 self.bookkeeping.append((mixing_layer.params_mask, torch.tensor(padded_idx)))
 
         # TODO: can we annotate a list here?
@@ -209,27 +209,6 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         """
         # TODO: ModuleList is not generic type
         return self.input_layer.params.device
-
-    # TODO: The Pytorch style is to just let layers initialize the parameters themselves.
-    #  We should follow that.
-    def initialize(
-        self,
-        exp_reparam: bool = False,
-        mixing_softmax: bool = False,
-    ) -> None:
-        """Initialize layers.
-
-        :param exp_reparam: I don't know
-        :param mixing_softmax: I don't know
-        """
-        # TODO: do we need this function? because each layer inits itself in __init__
-        self.exp_reparam = exp_reparam
-        assert not mixing_softmax  # TODO: then why have this?
-        assert not exp_reparam  # TODO: then why have this?
-
-        self.input_layer.reset_parameters()
-        for layer in self.inner_layers:
-            layer.reset_parameters()
 
     # TODO: this get/set is not good
     def set_marginalization_idx(self, idx: Tensor) -> None:

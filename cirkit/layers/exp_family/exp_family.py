@@ -100,7 +100,6 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # if em is switched off, we re-parametrize the expectation parameters
         # self.reparam holds the function object for this task
         self.reparam = self.reparam_function
-
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
