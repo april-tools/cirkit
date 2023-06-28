@@ -74,20 +74,19 @@ class EinsumMixingLayer(Layer):
         self.params = nn.Parameter(torch.empty(num_output_units, len(rg_nodes), max_components))
         # TODO: what's the use of params_mask?
         self.register_buffer("params_mask", torch.ones_like(self.params))
-
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
-
-        # self.reset_parameters()  # TODO: params_mask caused a mess
+        self.reset_parameters()
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
         nn.init.uniform_(self.params, 0.01, 0.99)
 
+    def apply_params_mask(self) -> None:
+        """Apply the parameters mask."""
+        # TODO: What is this? Is it needed?
         with torch.no_grad():
-            if self.params_mask is not None:
-                # TODO: assume mypy bug with __mul__ and __div__
-                self.params *= self.params_mask  # type: ignore[misc]
-
+            # TODO: assume mypy bug with __mul__ and __div__
+            self.params *= self.params_mask  # type: ignore[misc]
             self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
     def _forward_linear(self, x: Tensor) -> Tensor:

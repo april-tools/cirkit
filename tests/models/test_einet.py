@@ -80,8 +80,6 @@ def _get_einet() -> TensorizedPC:
         num_inner_units=1,
         num_input_units=1,
     )
-    # TODO: we should not be required to call initialize for default init, but it builds the params
-    einet.initialize(exp_reparam=False, mixing_softmax=False)
     return einet
 
 
@@ -161,9 +159,9 @@ def test_einet_partition_func() -> None:
 @pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs,log_answer",
     [
-        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.94407844543457),
-        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.791404724121094),
-        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 23.796138763427734),
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.188161849975586),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 51.31766128540039),
+        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.198360443115234),
     ],
 )
 @RandomCtx(42)
@@ -195,7 +193,6 @@ def test_einet_partition_function(
         num_inner_units=16,
         num_input_units=16,
     )
-    einet.initialize(exp_reparam=False, mixing_softmax=False)
     einet.to(device)
 
     # Generate all possible combinations of 16 integers from the list of possible values
@@ -209,5 +206,5 @@ def test_einet_partition_function(
     # TODO: for simple log-sum-exp, pytorch have implementation
     sum_out = torch.logsumexp(out, dim=0, keepdim=True)
 
-    assert torch.isclose(sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0)
     assert torch.isclose(einet.partition_function(), sum_out, rtol=1e-6, atol=0)
+    assert torch.isclose(sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0), f"{sum_out.item()}"
