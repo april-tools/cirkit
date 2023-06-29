@@ -3,7 +3,6 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from cirkit.layers.einsum import EinsumLayer
 from cirkit.layers.einsum.mixing import EinsumMixingLayer
@@ -294,9 +293,11 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 _, padded_idx = self.bookkeeping[idx]
                 assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
                 # TODO: a better way to pad?
-                outputs[self.inner_layers[idx - 1]] = F.pad(
-                    outputs[self.inner_layers[idx - 1]], [0, 1], "constant", float("-inf")
-                )
+                # TODO: padding here breaks bookkeeping by changing the tensors shape.
+                #  We need to find another way to implement it.
+                # outputs[self.inner_layers[idx - 1]] = F.pad(
+                #     outputs[self.inner_layers[idx - 1]], [0, 1], "constant", float("-inf")
+                # )
                 log_input_prob = outputs[self.inner_layers[idx - 1]][:, :, padded_idx]
                 out = inner_layer(log_input_prob)
             else:
