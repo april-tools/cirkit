@@ -1,4 +1,5 @@
 import functools
+import os
 import random
 import types
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
@@ -6,7 +7,11 @@ from typing_extensions import ParamSpec  # TODO: in typing from 3.10
 
 import numpy as np
 import torch
+import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor
+
+# TODO: build a unified reproducibility handler
+
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -75,3 +80,22 @@ class RandomCtx:
         torch.set_rng_state(self.torch_state)
         if self.use_cuda:
             torch.cuda.set_rng_state_all(self.cuda_state)
+
+
+def set_determinism(check_hash_seed: bool = False) -> None:
+    """Set all algorithms to be deterministic (may limit performance).
+
+    Some PyTorch operations do not have a deterministic implementation. A warning will be raised \
+    when such an operation is invoked.
+
+    The PYTHONHASHSEED must be set before the Python process starts, so it's not set but only \
+    checked here. It's an optional setting that guarantees hashing is not randomized.
+
+    Args:
+        check_hash_seed (bool, optional): Whether to check PYTHONHASHSEED. Defaults to False.
+    """
+    if check_hash_seed:
+        assert os.environ.get("PYTHONHASHSEED", "") == "0", "PYTHONHASHSEED not set."
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.backends.cudnn.benchmark = False
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
