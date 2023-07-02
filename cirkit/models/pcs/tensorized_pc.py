@@ -86,12 +86,17 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             **efamily_kwargs,  # type: ignore[misc]
         )
 
+        # A dictionary mapping each region node ID to
+        #   (i) its index in the corresponding fold, and
+        #   (ii) the layer that computes such fold.
+        region_id_fold: Dict[int, Tuple[int, Layer]] = {}
+        for i, region in enumerate(self.graph_layers[0][1]):
+            region_id_fold[region.get_id()] = (i, self.input_layer)
+
         # Book-keeping: None for input, Tensor for mixing, Tuple for einsum
         self.bookkeeping: List[
             Union[
-                Tuple[Tuple[List[Layer], Tensor], Tuple[List[Layer], Tensor]],
-                Tuple[Tensor, Tensor],
-                Tuple[None, None],
+                Tuple[Tuple[List[Layer], Tensor], Tuple[List[Layer], Tensor]], Tuple[Tensor, Tensor]
             ]
         ] = []
 
@@ -122,29 +127,29 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             # TODO: again, why do we need sorting
             # collect all layers which contain left/right children
             # TODO: duplicate code
-            left_layer = list(set(inputs.left.einet_address.layer for inputs in two_inputs))
-            left_starts = torch.tensor([0] + [layer.fold_count for layer in left_layer]).cumsum(
+            left_region_ids = list(r.left.get_id() for r in two_inputs)
+            right_region_ids = list(r.right.get_id() for r in two_inputs)
+            left_layers = list(region_id_fold[i][1] for i in left_region_ids)
+            right_layers = list(region_id_fold[i][1] for i in right_region_ids)
+            left_starts = torch.tensor([0] + [layer.fold_count for layer in left_layers]).cumsum(
                 dim=0
             )
-            left_idx = torch.tensor(
-                [  # type: ignore[misc]
-                    inputs.left.einet_address.idx
-                    + left_starts[left_layer.index(inputs.left.einet_address.layer)]
-                    for inputs in two_inputs
-                ]
-            )
-            right_layer = list(set(inputs.right.einet_address.layer for inputs in two_inputs))
-            right_starts = torch.tensor([0] + [layer.fold_count for layer in right_layer]).cumsum(
+            right_starts = torch.tensor([0] + [layer.fold_count for layer in right_layers]).cumsum(
                 dim=0
             )
-            right_idx = torch.tensor(
+            left_indices = torch.tensor(
                 [  # type: ignore[misc]
-                    inputs.right.einet_address.idx
-                    + right_starts[right_layer.index(inputs.right.einet_address.layer)]
-                    for inputs in two_inputs
+                    region_id_fold[r.left.get_id()][0] + left_starts[i]
+                    for i, r in enumerate(two_inputs)
                 ]
             )
-            self.bookkeeping.append(((left_layer, left_idx), (right_layer, right_idx)))
+            right_indices = torch.tensor(
+                [  # type: ignore[misc]
+                    region_id_fold[r.right.get_id()][0] + right_starts[i]
+                    for i, r in enumerate(two_inputs)
+                ]
+            )
+            self.bookkeeping.append(((left_layers, left_indices), (right_layers, right_indices)))
 
             # when the EinsumLayer is followed by a EinsumMixingLayer, we produce a
             # dummy "node" which outputs 0 (-inf in log-domain) for zero-padding.
@@ -161,8 +166,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 out_region = partition.outputs[0]
 
                 if len(out_region.inputs) == 1:
-                    out_region.einet_address.layer = inner_layer
-                    out_region.einet_address.idx = part_idx
+                    region_id_fold[out_region.get_id()] = (part_idx, inner_layer)
                 else:  # case followed by EinsumMixingLayer
                     mixing_component_idx[out_region].append(part_idx)
                     dummy_idx = len(partition_layer)
@@ -187,8 +191,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                     padded_idx.append(this_idx)
                     if max_components > num_components:
                         mixing_layer.params_mask[:, reg_idx, num_components:] = 0.0
-                    region.einet_address.layer = mixing_layer
-                    region.einet_address.idx = reg_idx
+                    region_id_fold[region.get_id()] = (reg_idx, mixing_layer)
                 mixing_layer.apply_params_mask()
                 self.bookkeeping.append((mixing_layer.params_mask, torch.tensor(padded_idx)))
 
