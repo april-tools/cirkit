@@ -6,12 +6,12 @@ from torch import Tensor, nn
 from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
 
-from .einsum import EinsumLayer
+from .sum_product import SumProductLayer
 
 # TODO: rework docstrings
 
 
-class CPLayer(EinsumLayer):
+class CPLayer(SumProductLayer):
     """Candecomp Parafac (decomposition) layer."""
 
     # TODO: better way to call init by base class?

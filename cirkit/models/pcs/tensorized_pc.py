@@ -4,10 +4,10 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers.einsum import EinsumLayer
-from cirkit.layers.einsum.mixing import EinsumMixingLayer
 from cirkit.layers.exp_family import ExpFamilyLayer
+from cirkit.layers.factorized import SumProductLayer
 from cirkit.layers.layer import Layer
+from cirkit.layers.mixing import MixingLayer
 from cirkit.region_graph import RegionGraph, RegionNode
 
 # TODO: check all type casts. There should not be any without a good reason
@@ -29,7 +29,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         self,
         graph: RegionGraph,
         num_vars: int,
-        layer_cls: Type[EinsumLayer],
+        layer_cls: Type[SumProductLayer],
         efamily_cls: Type[ExpFamilyLayer],
         layer_kwargs: Dict[str, Any],
         efamily_kwargs: Dict[str, Any],
@@ -43,7 +43,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         Args:
             graph (RegionGraph): The region graph.
             num_vars (int): The number of variables.
-            layer_cls (Type[EinsumLayer]): The inner layer class.
+            layer_cls (Type[SumProductLayer]): The inner layer class.
             efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
             layer_kwargs (Dict[str, Any]): The parameters for the inner layer class.
             efamily_kwargs (Dict[str, Any]): The parameters for the exponential family class.
@@ -151,13 +151,13 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             )
             self.bookkeeping.append(((left_layers, left_indices), (right_layers, right_indices)))
 
-            # when the EinsumLayer is followed by a EinsumMixingLayer, we produce a
+            # when the SumProductLayer is followed by a MixingLayer, we produce a
             # dummy "node" which outputs 0 (-inf in log-domain) for zero-padding.
             dummy_idx: Optional[int] = None
 
             # the dictionary mixing_component_idx stores which nodes (axis 2 of the
             # log-density tensor) need to get mixed
-            # in the following EinsumMixingLayer
+            # in the following MixingLayer
             mixing_component_idx: Dict[RegionNode, List[int]] = defaultdict(list)
 
             for part_idx, partition in enumerate(partition_layer):
@@ -167,7 +167,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
                 if len(out_region.inputs) == 1:
                     region_id_fold[out_region.get_id()] = (part_idx, inner_layer)
-                else:  # case followed by EinsumMixingLayer
+                else:  # case followed by MixingLayer
                     mixing_component_idx[out_region].append(part_idx)
                     dummy_idx = len(partition_layer)
 
@@ -175,13 +175,13 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
                 assert dummy_idx is not None
                 max_components = max(len(region.inputs) for region in multi_sums)
-                mixing_layer = EinsumMixingLayer(multi_sums, num_outputs, max_components)
+                mixing_layer = MixingLayer(multi_sums, num_outputs, max_components)
                 inner_layers.append(mixing_layer)
 
                 # The following code does some bookkeeping.
                 # padded_idx indexes into the log-density tensor of the previous
-                # EinsumLayer, padded with a dummy input which
-                # outputs constantly 0 (-inf in the log-domain), see class EinsumLayer.
+                # SumProductLayer, padded with a dummy input which
+                # outputs constantly 0 (-inf in the log-domain), see class SumProductLayer.
                 padded_idx: List[List[int]] = []
                 for reg_idx, region in enumerate(multi_sums):
                     num_components = len(mixing_component_idx[region])
@@ -282,7 +282,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         # TODO: use zip instead
         # TODO: Generalize if statements here, they should be layer agnostic
         for idx, inner_layer in enumerate(self.inner_layers):
-            if isinstance(inner_layer, EinsumLayer):  # type: ignore[misc]
+            if isinstance(inner_layer, SumProductLayer):  # type: ignore[misc]
                 left_addr, right_addr = self.bookkeeping[idx]
                 assert isinstance(left_addr, tuple) and isinstance(right_addr, tuple)
                 # TODO: we should use dim=2, check all code
@@ -292,7 +292,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 log_right_prob = torch.cat([outputs[layer] for layer in right_addr[0]], dim=2)
                 log_right_prob = log_right_prob[:, :, right_addr[1]]
                 out = inner_layer(log_left_prob, log_right_prob)
-            elif isinstance(inner_layer, EinsumMixingLayer):
+            elif isinstance(inner_layer, MixingLayer):
                 _, padded_idx = self.bookkeeping[idx]
                 assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
                 # TODO: a better way to pad?
