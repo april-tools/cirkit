@@ -1,1 +1,1 @@
-from .einet import TensorizedPC as TensorizedPC
+from .tensorized_circuit import TensorizedPC as TensorizedPC
