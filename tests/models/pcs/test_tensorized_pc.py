@@ -10,8 +10,8 @@ import torch
 from torch import Tensor
 
 from cirkit.layers.exp_family import CategoricalLayer
-from cirkit.layers.factorized.cp import CPLayer
-from cirkit.models.pcs import TensorizedPC
+from cirkit.layers.sum_product import CPLayer
+from cirkit.models.tensorized_circuit import TensorizedPC
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.region_graph.poon_domingos import PoonDomingos
 from cirkit.region_graph.quad_tree import QuadTree

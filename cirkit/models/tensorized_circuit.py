@@ -5,9 +5,9 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers.exp_family import ExpFamilyLayer
-from cirkit.layers.factorized import SumProductLayer
 from cirkit.layers.layer import Layer
 from cirkit.layers.mixing import MixingLayer
+from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import RegionGraph, RegionNode
 
 # TODO: check all type casts. There should not be any without a good reason

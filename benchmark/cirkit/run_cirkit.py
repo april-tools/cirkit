@@ -13,7 +13,7 @@ from torch import Tensor, optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from cirkit.layers.exp_family import CategoricalLayer
-from cirkit.layers.factorized.cp import CPLayer  # TODO: rework interfaces for import
+from cirkit.layers.sum_product.cp import CPLayer  # TODO: rework interfaces for import
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 

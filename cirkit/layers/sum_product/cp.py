@@ -3,10 +3,9 @@ from typing import Any, List, cast
 import torch
 from torch import Tensor, nn
 
+from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
-
-from .sum_product import SumProductLayer
 
 # TODO: rework docstrings
 
