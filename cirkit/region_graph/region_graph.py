@@ -100,7 +100,7 @@ class RegionGraph:
 
     ##############################   Miscellaneous   ###############################
 
-    @cached_property
+    @property
     def num_variables(self) -> int:
         """Get the number of variables the region graph is defined on."""
         return len(set(v for node in self.output_nodes for v in node.scope))
