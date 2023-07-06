@@ -22,7 +22,6 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
     def __init__(  # type: ignore[misc]
         self,
         graph: RegionGraph,
-        num_vars: int,
         layer_cls: Type[SumProductLayer],
         efamily_cls: Type[ExpFamilyLayer],
         *,
@@ -37,7 +36,6 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
         Args:
             graph (RegionGraph): The region graph.
-            num_vars (int): The number of variables.
             layer_cls (Type[SumProductLayer]): The inner layer class.
             efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
             layer_kwargs (Dict[str, Any]): The parameters for the inner layer class.
@@ -61,7 +59,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
         # TODO: check graph. but do we need it?
         self.graph = graph
-        self.num_vars = num_vars
+        self.num_vars = graph.num_variables
 
         assert (
             len(list(graph.output_nodes)) == 1
@@ -70,7 +68,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         # TODO: return a list instead?
         output_node = list(graph.output_nodes)[0]
         assert output_node.scope == set(
-            range(num_vars)
+            range(self.num_vars)
         ), "The region graph should have been defined on the same number of variables"
 
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!

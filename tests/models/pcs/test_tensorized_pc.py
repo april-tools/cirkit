@@ -72,7 +72,6 @@ def _get_einet() -> TensorizedPC:
 
     einet = TensorizedPC(
         rg,
-        num_vars=4,
         layer_cls=CPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
@@ -201,7 +200,6 @@ def test_einet_partition_function(
     rg = rg_cls(**kwargs)
     einet = TensorizedPC(
         rg,
-        num_vars=num_vars,
         layer_cls=CPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
