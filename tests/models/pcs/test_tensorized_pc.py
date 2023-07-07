@@ -86,13 +86,13 @@ def _get_einet() -> TensorizedPC:
 def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
     return {
         "input_layer.params": (4, 1, 1, 2),
-        "inner_layers.0.params_left": (1, 1, 4),
-        "inner_layers.0.params_right": (1, 1, 4),
-        "inner_layers.0.params_out": (1, 1, 4),
-        "inner_layers.1.params_left": (1, 1, 2),
-        "inner_layers.1.params_right": (1, 1, 2),
-        "inner_layers.1.params_out": (1, 1, 2),
-        "inner_layers.2.params": (1, 1, 2),
+        "inner_layers.0.params_left": (4, 1, 1),
+        "inner_layers.0.params_right": (4, 1, 1),
+        "inner_layers.0.params_out": (4, 1, 1),
+        "inner_layers.1.params_left": (2, 1, 1),
+        "inner_layers.1.params_right": (2, 1, 1),
+        "inner_layers.1.params_out": (2, 1, 1),
+        "inner_layers.2.params": (1, 2, 1),
     }
 
 
@@ -109,15 +109,15 @@ def _set_params(einet: TensorizedPC) -> None:
                     [math.log(3), 0],  # type: ignore[misc]  # 3/4, 1/4
                 ]
             ).reshape(4, 1, 1, 2),
-            "inner_layers.0.params_left": torch.ones(1, 1, 4) / 2,
-            "inner_layers.0.params_right": torch.ones(1, 1, 4) * 2,
-            "inner_layers.0.params_out": torch.ones(1, 1, 4),
-            "inner_layers.1.params_left": torch.ones(1, 1, 2) * 2,
-            "inner_layers.1.params_right": torch.ones(1, 1, 2) / 2,
-            "inner_layers.1.params_out": torch.ones(1, 1, 2),
+            "inner_layers.0.params_left": torch.ones(4, 1, 1) / 2,
+            "inner_layers.0.params_right": torch.ones(4, 1, 1) * 2,
+            "inner_layers.0.params_out": torch.ones(4, 1, 1),
+            "inner_layers.1.params_left": torch.ones(2, 1, 1) * 2,
+            "inner_layers.1.params_right": torch.ones(2, 1, 1) / 2,
+            "inner_layers.1.params_out": torch.ones(2, 1, 1),
             "inner_layers.2.params": torch.tensor(
                 [1 / 3, 2 / 3],  # type: ignore[misc]
-            ).reshape(1, 1, 2),
+            ).reshape(1, 2, 1),
         }
     )
     einet.load_state_dict(state_dict)  # type: ignore[misc]
@@ -164,7 +164,8 @@ def test_einet_partition_func() -> None:
         (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.198360443115234),
         (PoonDomingos, {"shape": [3, 3], "delta": 2}, None),
         (QuadTree, {"width": 3, "height": 3, "struct_decomp": False}, None),
-        (RandomBinaryTree, {"num_vars": 9, "depth": 3, "num_repetitions": 2}, None),
+        (QuadTree, {"width": 3, "height": 3, "struct_decomp": True}, None),
+        (RandomBinaryTree, {"num_vars": 9, "depth": 3, "num_repetitions": 2}, None)
     ],
 )
 @RandomCtx(42)

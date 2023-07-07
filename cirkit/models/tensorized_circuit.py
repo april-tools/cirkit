@@ -4,6 +4,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 import numpy as np
 import torch
 from torch import Tensor, nn
+import torch.nn.functional as F
 
 from cirkit.layers.exp_family import ExpFamilyLayer
 from cirkit.layers.layer import Layer
@@ -96,8 +97,8 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         ] = []
 
         # Build inner layers
-        inner_layers: List[SumProductLayer] = []
-        for layer_idx, (lpartitions, lregions) in enumerate(self.graph_layers[1:], start=1):
+        inner_layers: List[Layer] = []
+        for rg_layer_idx, (lpartitions, lregions) in enumerate(self.graph_layers[1:], start=1):
             # Gather the input regions of each partition
             input_regions = [sorted(p.inputs) for p in lpartitions]
             num_input_regions = list(len(ins) for ins in input_regions)
@@ -124,19 +125,50 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             book_entry = (should_pad, unique_layer_ids, torch.tensor(input_region_indices))
             self.bookkeeping.append(book_entry)
 
+            region_mixing_indices: Dict[int, List[int]] = defaultdict(list)
             for i, p in enumerate(lpartitions):
                 # Each partition must belong to exactly one region
                 assert len(p.outputs) == 1
                 out_region = p.outputs[0]
-                region_id_fold[out_region.get_id()] = (i, layer_idx)
-            num_folds.append(cumulative_idx[-1])
+                if len(out_region.inputs) == 1:
+                    region_id_fold[out_region.get_id()] = (i, len(inner_layers) + 1)
+                else:
+                    region_mixing_indices[out_region.get_id()].append(i)
+            num_folds.append(len(lpartitions))
 
-            num_outputs = num_output_units if layer_idx < len(self.graph_layers) - 1 else num_classes
-            num_inputs = num_input_units if layer_idx == 1 else num_output_units
+            num_outputs = num_output_units if rg_layer_idx < len(self.graph_layers) - 1 else num_classes
+            num_inputs = num_input_units if rg_layer_idx == 1 else num_output_units
             layer = layer_cls(
                 lpartitions, num_inputs, num_outputs, **layer_kwargs  # type: ignore[misc]
             )
             inner_layers.append(layer)
+
+            non_unary_regions = [r for r in lregions if len(r.inputs) > 1]
+            if not non_unary_regions:
+                continue
+            max_num_input_partitions = max(len(r.inputs) for r in non_unary_regions)
+
+            should_pad = False
+            params_mask: Optional[Tensor] = None
+            input_partition_indices = list()
+            for i, region in enumerate(non_unary_regions):
+                num_input_partitions = len(region.inputs)
+                partition_indices = region_mixing_indices[region.get_id()]
+                if max_num_input_partitions > num_input_partitions:
+                    should_pad = True
+                    if params_mask is None:
+                        params_mask = torch.ones(len(non_unary_regions), max_num_input_partitions, num_outputs)
+                    params_mask[:, i, num_input_partitions:] = 0
+                    partition_indices.extend([-1] * (max_num_input_partitions - num_input_partitions))
+                input_partition_indices.append(partition_indices)
+                region_id_fold[region.get_id()] = (i, len(inner_layers) + 1)
+            num_folds.append(len(non_unary_regions))
+
+            mixing_layer = MixingLayer(
+                non_unary_regions, num_outputs, max_num_input_partitions, mask=params_mask
+            )
+            self.bookkeeping.append((should_pad, [len(inner_layers)], torch.tensor(input_partition_indices)))
+            inner_layers.append(mixing_layer)
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
@@ -221,28 +253,29 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         in_outputs = self.input_layer(x)
         in_outputs = in_outputs.permute(2, 0, 1)
         outputs: List[Tensor] = [in_outputs]
-        # (batch_size, num_units, num_regions)
 
         # TODO: Generalize if statements here, they should be layer agnostic
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
             if isinstance(layer, SumProductLayer):  # type: ignore[misc]
-                # (fold_1 + fold_2, batch_size, units)
-                print(in_layer_ids)
+                # (fold_1 + ... + fold_n, batch_size, units)
                 inputs = torch.cat([outputs[i] for i in in_layer_ids], dim=0)
                 if should_pad:
-                    # TODO: pad along dim 0
-                    pass
-                # (new_fold, arity, batch_size, units)
+                    inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=-np.inf)
+                # (fold_k, arity, batch_size, units)
                 inputs = inputs[fold_idx]
-                print(inputs.shape)
                 output = layer(inputs)
             elif isinstance(layer, MixingLayer):
-                pass
+                in_layer_id, = in_layer_ids
+                inputs = outputs[in_layer_id]
+                if should_pad:
+                    inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=-np.inf)
+                inputs = inputs[fold_idx]
+                output = layer(inputs)
             else:
                 assert False
             outputs.append(output)
 
-        return outputs[-1][:, :, 0]
+        return outputs[-1][0]
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):

@@ -74,7 +74,7 @@ class MixingLayer(Layer):
 
         # TODO: test best perf?
         # param_shape = (len(self.nodes), self.max_components) for better perf
-        self.params = nn.Parameter(torch.empty(num_output_units, len(rg_nodes), max_components))
+        self.params = nn.Parameter(torch.empty(len(rg_nodes), max_components, num_output_units))
         self.mask = mask
 
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
@@ -86,12 +86,12 @@ class MixingLayer(Layer):
         with torch.no_grad():
             if self.mask is not None:
                 self.params *= self.mask  # type: ignore[misc]
-            self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
+            self.params /= self.params.sum(dim=1, keepdim=True)  # type: ignore[misc]
 
     def _forward_linear(self, x: Tensor) -> Tensor:
         if self.mask is not None:
-            torch.einsum("bonc,onc->bon", x, self.params * self.mask)
-        return torch.einsum("bonc,onc->bon", x, self.params)
+            torch.einsum('pibo,pio->pbo', x, self.params * self.mask)
+        return torch.einsum('pibo,pio->pbo', x, self.params)
 
     # TODO: make forward return something
     # pylint: disable-next=arguments-differ
@@ -104,6 +104,6 @@ class MixingLayer(Layer):
         Returns:
             Tensor: the output.
         """
-        return log_func_exp(log_input, func=self._forward_linear, dim=3, keepdim=False)
+        return log_func_exp(log_input, func=self._forward_linear, dim=1, keepdim=False)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack
