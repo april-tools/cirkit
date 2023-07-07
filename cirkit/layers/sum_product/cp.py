@@ -38,9 +38,9 @@ class CPLayer(SumProductLayer):
         super().__init__(rg_nodes, num_input_units, num_output_units)
         self.prod_exp = prod_exp
 
-        self.params_left = nn.Parameter(torch.empty(num_input_units, rank, len(rg_nodes)))
-        self.params_right = nn.Parameter(torch.empty(num_input_units, rank, len(rg_nodes)))
-        self.params_out = nn.Parameter(torch.empty(num_output_units, rank, len(rg_nodes)))
+        self.params_left = nn.Parameter(torch.empty(len(rg_nodes), num_input_units, rank))
+        self.params_right = nn.Parameter(torch.empty(len(rg_nodes), num_input_units, rank))
+        self.params_out = nn.Parameter(torch.empty(len(rg_nodes), num_output_units, rank))
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is
@@ -54,36 +54,38 @@ class CPLayer(SumProductLayer):
 
     # TODO: use bmm to replace einsum? also axis order?
     def _forward_left_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("bip,irp->brp", x, self.params_left)
+        return torch.einsum("pbi,pir->pbr", x, self.params_left)
 
     def _forward_right_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("bip,irp->brp", x, self.params_right)
+        return torch.einsum("pbi,pir->pbr", x, self.params_right)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("brp,orp->bop", x, self.params_out)
+        return torch.einsum("pbr,por->pbo", x, self.params_out)
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         left_hidden = self._forward_left_linear(left)
         right_hidden = self._forward_right_linear(right)
         return self._forward_out_linear(left_hidden * right_hidden)
 
-    def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param log_left: value in log space for left child.
         :param log_right: value in log space for right child.
         :return: result of the left operations, in log-space.
         """
+        log_left, log_right = inputs[:, 0], inputs[:, 1]
+
         # TODO: do we split into two impls?
         if self.prod_exp:
-            return log_func_exp(log_left, log_right, func=self._forward_linear, dim=1, keepdim=True)
+            return log_func_exp(log_left, log_right, func=self._forward_linear, dim=2, keepdim=True)
 
         log_left_hidden = log_func_exp(
-            log_left, func=self._forward_left_linear, dim=1, keepdim=True
+            log_left, func=self._forward_left_linear, dim=2, keepdim=True
         )
         log_right_hidden = log_func_exp(
-            log_right, func=self._forward_right_linear, dim=1, keepdim=True
+            log_right, func=self._forward_right_linear, dim=2, keepdim=True
         )
         return log_func_exp(
-            log_left_hidden + log_right_hidden, func=self._forward_out_linear, dim=1, keepdim=True
+            log_left_hidden + log_right_hidden, func=self._forward_out_linear, dim=2, keepdim=True
         )

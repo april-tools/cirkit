@@ -1,6 +1,7 @@
 from collections import defaultdict
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 
+import numpy as np
 import torch
 from torch import Tensor, nn
 
@@ -12,13 +13,6 @@ from cirkit.region_graph import RegionGraph, RegionNode
 
 # TODO: check all type casts. There should not be any without a good reason
 # TODO: rework docstrings
-
-
-class _TwoInputs(NamedTuple):
-    """Provide names for left and right inputs."""
-
-    left: RegionNode
-    right: RegionNode
 
 
 class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
@@ -88,117 +82,61 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
         # A dictionary mapping each region node ID to
         #   (i) its index in the corresponding fold, and
-        #   (ii) the layer that computes such fold.
-        region_id_fold: Dict[int, Tuple[int, Layer]] = {}
+        #   (ii) the id of the layer that computes such fold (-1 for the input layer)
+        region_id_fold: Dict[int, Tuple[int, int]] = {}
         for i, region in enumerate(self.graph_layers[0][1]):
-            region_id_fold[region.get_id()] = (i, self.input_layer)
+            region_id_fold[region.get_id()] = (i, 0)
 
-        # Book-keeping: None for input, Tensor for mixing, Tuple for einsum
+        # A dictionary mapping layer ids to the number of folds
+        num_folds = [len(self.graph_layers[0][1])]
+
+        # Book-keeping: for each layer
         self.bookkeeping: List[
-            Union[
-                Tuple[Tuple[List[Layer], Tensor], Tuple[List[Layer], Tensor]], Tuple[Layer, Tensor]
-            ]
+            Tuple[bool, List[int], Tensor]
         ] = []
 
         # Build inner layers
-        inner_layers: List[Layer] = []
-        # TODO: use start as kwarg?
-        for idx, (partition_layer, region_layer) in enumerate(self.graph_layers[1:], start=1):
-            # TODO: duplicate check with einet layer, but also useful here?
-            # out_k = set(
-            #     out_region.k for partition in partition_layer for out_region in partition.outputs
-            # )
-            # assert len(out_k) == 1, f"For internal {c} there are {len(out_k)} nums sums"
-            # out_k = out_k.pop()
+        inner_layers: List[SumProductLayer] = []
+        for layer_idx, (lpartitions, lregions) in enumerate(self.graph_layers[1:], start=1):
+            # Gather the input regions of each partition
+            input_regions = [sorted(p.inputs) for p in lpartitions]
+            num_input_regions = list(len(ins) for ins in input_regions)
+            max_num_input_regions = max(num_input_regions)
 
-            # TODO: this can be a wrong layer, refer to back up code
-            # assert out_k > 1
-            num_outputs = num_output_units if idx < len(self.graph_layers) - 1 else num_classes
-            num_inputs = num_input_units if idx == 1 else num_output_units
-            inner_layer = layer_cls(
-                partition_layer, num_inputs, num_outputs, **layer_kwargs  # type: ignore[misc]
+            input_regions_ids = [list(r.get_id() for r in ins) for ins in input_regions]
+            input_layers_ids = [list(region_id_fold[i][1] for i in ids) for ids in input_regions_ids]
+            unique_layer_ids = list(set(i for ids in input_layers_ids for i in ids))
+            cumulative_idx = np.cumsum([0] + [num_folds[i] for i in unique_layer_ids]).tolist()
+            base_layer_idx = {layer_id: idx for layer_id, idx in zip(unique_layer_ids, cumulative_idx)}
+
+            should_pad = False
+            input_region_indices = list()
+            for regions in input_regions:
+                region_indices = list()
+                for r in regions:
+                    fold_idx, layer_id = region_id_fold[r.get_id()]
+                    region_indices.append(base_layer_idx[layer_id] + fold_idx)
+                if len(regions) < max_num_input_regions:
+                    should_pad = True
+                    region_indices.extend([-1] * (max_num_input_regions - len(regions)))
+                input_region_indices.append(region_indices)
+
+            book_entry = (should_pad, unique_layer_ids, torch.tensor(input_region_indices))
+            self.bookkeeping.append(book_entry)
+
+            for i, p in enumerate(lpartitions):
+                # Each partition must belong to exactly one region
+                assert len(p.outputs) == 1
+                out_region = p.outputs[0]
+                region_id_fold[out_region.get_id()] = (i, layer_idx)
+            num_folds.append(cumulative_idx[-1])
+
+            num_outputs = num_output_units if layer_idx < len(self.graph_layers) - 1 else num_classes
+            num_inputs = num_input_units if layer_idx == 1 else num_output_units
+            layer = layer_cls(
+                lpartitions, num_inputs, num_outputs, **layer_kwargs  # type: ignore[misc]
             )
-            inner_layers.append(inner_layer)
-
-            # get pairs of nodes which are input to the products (list of lists)
-            # length of the outer list is same as self.products, length of inner lists is 2
-            # "left child" has index 0, "right child" has index 1
-            two_inputs = [_TwoInputs(*sorted(partition.inputs)) for partition in partition_layer]
-            # TODO: again, why do we need sorting
-            # collect all layers which contain left/right children
-            # TODO: duplicate code
-            left_region_ids = list(r.left.get_id() for r in two_inputs)
-            right_region_ids = list(r.right.get_id() for r in two_inputs)
-            left_layers = list(region_id_fold[i][1] for i in left_region_ids)
-            right_layers = list(region_id_fold[i][1] for i in right_region_ids)
-            left_starts = torch.tensor([0] + [layer.fold_count for layer in left_layers]).cumsum(
-                dim=0
-            )
-            right_starts = torch.tensor([0] + [layer.fold_count for layer in right_layers]).cumsum(
-                dim=0
-            )
-            left_indices = torch.tensor(
-                [  # type: ignore[misc]
-                    region_id_fold[r.left.get_id()][0] + left_starts[i]
-                    for i, r in enumerate(two_inputs)
-                ]
-            )
-            right_indices = torch.tensor(
-                [  # type: ignore[misc]
-                    region_id_fold[r.right.get_id()][0] + right_starts[i]
-                    for i, r in enumerate(two_inputs)
-                ]
-            )
-            self.bookkeeping.append(((left_layers, left_indices), (right_layers, right_indices)))
-
-            # when the SumProductLayer is followed by a MixingLayer, we produce a
-            # dummy "node" which outputs 0 (-inf in log-domain) for zero-padding.
-            dummy_idx: Optional[int] = None
-
-            # the dictionary mixing_component_idx stores which nodes (axis 2 of the
-            # log-density tensor) need to get mixed
-            # in the following MixingLayer
-            mixing_component_idx: Dict[RegionNode, List[int]] = defaultdict(list)
-
-            for part_idx, partition in enumerate(partition_layer):
-                # each product must have exactly 1 parent (sum node)
-                assert len(partition.outputs) == 1
-                out_region = partition.outputs[0]
-
-                if len(out_region.inputs) == 1:
-                    region_id_fold[out_region.get_id()] = (part_idx, inner_layer)
-                else:  # case followed by MixingLayer
-                    mixing_component_idx[out_region].append(part_idx)
-                    dummy_idx = len(partition_layer)
-
-            # The Mixing layer is only for regions which have multiple partitions as children.
-            if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
-                assert dummy_idx is not None
-                max_components = max(len(region.inputs) for region in multi_sums)
-
-                # The following code does some bookkeeping.
-                # padded_idx indexes into the log-density tensor of the previous
-                # SumProductLayer, padded with a dummy input which
-                # outputs constantly 0 (-inf in the log-domain), see class SumProductLayer.
-                padded_idx: List[List[int]] = []
-                params_mask: Optional[Tensor] = None
-                for reg_idx, region in enumerate(multi_sums):
-                    num_components = len(mixing_component_idx[region])
-                    this_idx = mixing_component_idx[region] + [dummy_idx] * (
-                        max_components - num_components
-                    )
-                    padded_idx.append(this_idx)
-                    if max_components > num_components:
-                        if params_mask is None:
-                            params_mask = torch.ones(num_outputs, len(multi_sums), max_components)
-                        params_mask[:, reg_idx, num_components:] = 0.0
-                mixing_layer = MixingLayer(
-                    multi_sums, num_outputs, max_components, mask=params_mask
-                )
-                for reg_idx, region in enumerate(multi_sums):
-                    region_id_fold[region.get_id()] = (reg_idx, mixing_layer)
-                self.bookkeeping.append((inner_layers[-1], torch.tensor(padded_idx)))
-                inner_layers.append(mixing_layer)
+            inner_layers.append(layer)
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
@@ -280,39 +218,31 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         Returns:
             Tensor: Return value.
         """
-        # TODO: can we have just a dictionary with integer keys instead?
-        #  It would be much simpler and clean
-        outputs: Dict[Layer, Tensor] = {self.input_layer: self.input_layer(x)}
+        in_outputs = self.input_layer(x)
+        in_outputs = in_outputs.permute(2, 0, 1)
+        outputs: List[Tensor] = [in_outputs]
+        # (batch_size, num_units, num_regions)
 
-        # TODO: use zip instead
         # TODO: Generalize if statements here, they should be layer agnostic
-        for idx, inner_layer in enumerate(self.inner_layers):
-            if isinstance(inner_layer, SumProductLayer):  # type: ignore[misc]
-                left_addr, right_addr = self.bookkeeping[idx]
-                assert isinstance(left_addr, tuple) and isinstance(right_addr, tuple)
-                # TODO: we should use dim=2, check all code
-                # TODO: duplicate code
-                log_left_prob = torch.cat([outputs[layer] for layer in left_addr[0]], dim=2)
-                log_left_prob = log_left_prob[:, :, left_addr[1]]
-                log_right_prob = torch.cat([outputs[layer] for layer in right_addr[0]], dim=2)
-                log_right_prob = log_right_prob[:, :, right_addr[1]]
-                out = inner_layer(log_left_prob, log_right_prob)
-            elif isinstance(inner_layer, MixingLayer):
-                _, padded_idx = self.bookkeeping[idx]
-                assert isinstance(padded_idx, Tensor)  # type: ignore[misc]
-                # TODO: a better way to pad?
-                # TODO: padding here breaks bookkeeping by changing the tensors shape.
-                #  We need to find another way to implement it.
-                # outputs[self.inner_layers[idx - 1]] = F.pad(
-                #     outputs[self.inner_layers[idx - 1]], [0, 1], "constant", float("-inf")
-                # )
-                log_input_prob = outputs[self.inner_layers[idx - 1]][:, :, padded_idx]
-                out = inner_layer(log_input_prob)
+        for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
+            if isinstance(layer, SumProductLayer):  # type: ignore[misc]
+                # (fold_1 + fold_2, batch_size, units)
+                print(in_layer_ids)
+                inputs = torch.cat([outputs[i] for i in in_layer_ids], dim=0)
+                if should_pad:
+                    # TODO: pad along dim 0
+                    pass
+                # (new_fold, arity, batch_size, units)
+                inputs = inputs[fold_idx]
+                print(inputs.shape)
+                output = layer(inputs)
+            elif isinstance(layer, MixingLayer):
+                pass
             else:
                 assert False
-            outputs[inner_layer] = out
+            outputs.append(output)
 
-        return outputs[self.inner_layers[-1]][:, :, 0]
+        return outputs[-1][:, :, 0]
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):

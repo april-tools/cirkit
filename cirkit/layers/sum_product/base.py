@@ -46,7 +46,7 @@ class SumProductLayer(Layer):
     # TODO: what about abstract?
     @abstractmethod
     # pylint: disable-next=arguments-differ
-    def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main einsum operation of the layer.
 
         Do SumProductLayer forward pass.
