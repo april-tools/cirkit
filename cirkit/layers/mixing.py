@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import torch
 from torch import Tensor, nn
@@ -50,18 +50,21 @@ class MixingLayer(Layer):
     excerpt.
     """
 
-    # TODO: might be good to doc params and buffers here
-    # to be registered as buffer
-    params_mask: Tensor
-
     # TODO: num_output_units is num_input_units
-    def __init__(self, rg_nodes: List[RegionNode], num_output_units: int, max_components: int):
+    def __init__(
+        self,
+        rg_nodes: List[RegionNode],
+        num_output_units: int,
+        max_components: int,
+        mask: Optional[Tensor] = None,
+    ):
         """Init class.
 
         Args:
             rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
             num_output_units (int): The number of output units.
             max_components (int): Max number of mixing components.
+            mask (Optional[Tensor]): The mask to apply to the parameters.
         """
         super().__init__()
         self.fold_count = len(rg_nodes)
@@ -72,24 +75,22 @@ class MixingLayer(Layer):
         # TODO: test best perf?
         # param_shape = (len(self.nodes), self.max_components) for better perf
         self.params = nn.Parameter(torch.empty(num_output_units, len(rg_nodes), max_components))
-        # TODO: what's the use of params_mask?
-        self.register_buffer("params_mask", torch.ones_like(self.params))
+        self.mask = mask
+
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
         nn.init.uniform_(self.params, 0.01, 0.99)
-
-    def apply_params_mask(self) -> None:
-        """Apply the parameters mask."""
-        # TODO: What is this? Is it needed?
         with torch.no_grad():
-            # TODO: assume mypy bug with __mul__ and __div__
-            self.params *= self.params_mask  # type: ignore[misc]
+            if self.mask is not None:
+                self.params *= self.mask  # type: ignore[misc]
             self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
     def _forward_linear(self, x: Tensor) -> Tensor:
+        if self.mask is not None:
+            torch.einsum("bonc,onc->bon", x, self.params * self.mask)
         return torch.einsum("bonc,onc->bon", x, self.params)
 
     # TODO: make forward return something
@@ -103,9 +104,6 @@ class MixingLayer(Layer):
         Returns:
             Tensor: the output.
         """
-        # TODO: use a mul or gather? or do we need this?
-        assert (self.params * self.params_mask == self.params).all()
-
         return log_func_exp(log_input, func=self._forward_linear, dim=3, keepdim=False)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack

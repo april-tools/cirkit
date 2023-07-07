@@ -96,7 +96,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         # Book-keeping: None for input, Tensor for mixing, Tuple for einsum
         self.bookkeeping: List[
             Union[
-                Tuple[Tuple[List[Layer], Tensor], Tuple[List[Layer], Tensor]], Tuple[Tensor, Tensor]
+                Tuple[Tuple[List[Layer], Tensor], Tuple[List[Layer], Tensor]], Tuple[Layer, Tensor]
             ]
         ] = []
 
@@ -175,14 +175,13 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             if multi_sums := [region for region in region_layer if len(region.inputs) > 1]:
                 assert dummy_idx is not None
                 max_components = max(len(region.inputs) for region in multi_sums)
-                mixing_layer = MixingLayer(multi_sums, num_outputs, max_components)
-                inner_layers.append(mixing_layer)
 
                 # The following code does some bookkeeping.
                 # padded_idx indexes into the log-density tensor of the previous
                 # SumProductLayer, padded with a dummy input which
                 # outputs constantly 0 (-inf in the log-domain), see class SumProductLayer.
                 padded_idx: List[List[int]] = []
+                params_mask: Optional[Tensor] = None
                 for reg_idx, region in enumerate(multi_sums):
                     num_components = len(mixing_component_idx[region])
                     this_idx = mixing_component_idx[region] + [dummy_idx] * (
@@ -190,10 +189,16 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                     )
                     padded_idx.append(this_idx)
                     if max_components > num_components:
-                        mixing_layer.params_mask[:, reg_idx, num_components:] = 0.0
+                        if params_mask is None:
+                            params_mask = torch.ones(num_outputs, len(multi_sums), max_components)
+                        params_mask[:, reg_idx, num_components:] = 0.0
+                mixing_layer = MixingLayer(
+                    multi_sums, num_outputs, max_components, mask=params_mask
+                )
+                for reg_idx, region in enumerate(multi_sums):
                     region_id_fold[region.get_id()] = (reg_idx, mixing_layer)
-                mixing_layer.apply_params_mask()
-                self.bookkeeping.append((mixing_layer.params_mask, torch.tensor(padded_idx)))
+                self.bookkeeping.append((inner_layers[-1], torch.tensor(padded_idx)))
+                inner_layers.append(mixing_layer)
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
