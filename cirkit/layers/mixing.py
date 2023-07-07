@@ -90,8 +90,8 @@ class MixingLayer(Layer):
 
     def _forward_linear(self, x: Tensor) -> Tensor:
         if self.mask is not None:
-            torch.einsum('pibo,pio->pbo', x, self.params * self.mask)
-        return torch.einsum('pibo,pio->pbo', x, self.params)
+            torch.einsum("pibo,pio->pbo", x, self.params * self.mask)
+        return torch.einsum("pibo,pio->pbo", x, self.params)
 
     # TODO: make forward return something
     # pylint: disable-next=arguments-differ

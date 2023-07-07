@@ -54,13 +54,13 @@ class CPLayer(SumProductLayer):
 
     # TODO: use bmm to replace einsum? also axis order?
     def _forward_left_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum('pbi,pir->pbr', x, self.params_left)
+        return torch.einsum("pbi,pir->pbr", x, self.params_left)
 
     def _forward_right_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum('pbi,pir->pbr', x, self.params_right)
+        return torch.einsum("pbi,pir->pbr", x, self.params_right)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum('pbr,por->pbo', x, self.params_out)
+        return torch.einsum("pbr,por->pbo", x, self.params_out)
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         left_hidden = self._forward_left_linear(left)
@@ -70,8 +70,7 @@ class CPLayer(SumProductLayer):
     def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
-        :param log_left: value in log space for left child.
-        :param log_right: value in log space for right child.
+        :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
         log_left, log_right = inputs[:, 0], inputs[:, 1]

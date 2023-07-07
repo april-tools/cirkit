@@ -61,7 +61,6 @@ class SumProductLayer(Layer):
         4a) go to exp space do the einsum and back to log   || 4b) do the einsum operation [OPT]
         5a) do nothing                                      || 5b) back to log space
 
-        :param log_left: value in log space for left child.
-        :param log_right: value in log space for right child.
+        :param inputs: the input tensor.
         :return: result of the left operations, in log-space.
         """
