@@ -159,9 +159,13 @@ def test_einet_partition_func() -> None:
 @pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs,log_answer",
     [
-        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.188161849975586),
-        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 51.31766128540039),
-        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.198360443115234),
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}, None),  # 10.188161849975586
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, None),  # 51.31766128540039
+        (
+            RandomBinaryTree,
+            {"num_vars": 16, "depth": 3, "num_repetitions": 2},
+            None,
+        ),  # 24.198360443115234
         (PoonDomingos, {"shape": [3, 3], "delta": 2}, None),
         (QuadTree, {"width": 3, "height": 3, "struct_decomp": False}, None),
         (QuadTree, {"width": 3, "height": 3, "struct_decomp": True}, None),

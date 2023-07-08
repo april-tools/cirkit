@@ -160,7 +160,9 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                     region_indices.append(base_layer_idx[layer_id] + fold_idx)
                 if len(regions) < max_num_input_regions:
                     should_pad = True
-                    region_indices.extend([-1] * (max_num_input_regions - len(regions)))
+                    region_indices.extend(
+                        [cumulative_idx[-1]] * (max_num_input_regions - len(regions))
+                    )
                 input_region_indices.append(region_indices)
             book_entry = (should_pad, unique_layer_ids, torch.tensor(input_region_indices))
             self.bookkeeping.append(book_entry)
@@ -194,29 +196,21 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
             # Same as above, construct indices and update dictionaries
             should_pad = False
-            params_mask: Optional[Tensor] = None
             input_partition_indices = []
             for i, region in enumerate(non_unary_regions):
                 num_input_partitions = len(region.inputs)
                 partition_indices = region_mixing_indices[region.get_id()]
                 if max_num_input_partitions > num_input_partitions:
                     should_pad = True
-                    if params_mask is None:
-                        params_mask = torch.ones(
-                            len(non_unary_regions), max_num_input_partitions, num_outputs
-                        )
-                    params_mask[:, i, num_input_partitions:] = 0
                     partition_indices.extend(
-                        [-1] * (max_num_input_partitions - num_input_partitions)
+                        [num_folds[-1]] * (max_num_input_partitions - num_input_partitions)
                     )
                 input_partition_indices.append(partition_indices)
                 region_id_fold[region.get_id()] = (i, len(self.inner_layers) + 1)
             num_folds.append(len(non_unary_regions))
 
             # Build the actual mixing layer
-            mixing_layer = MixingLayer(
-                non_unary_regions, num_outputs, max_num_input_partitions, mask=params_mask
-            )
+            mixing_layer = MixingLayer(non_unary_regions, num_outputs, max_num_input_partitions)
             self.bookkeeping.append(
                 (should_pad, [len(self.inner_layers)], torch.tensor(input_partition_indices))
             )
@@ -298,30 +292,28 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         """
         in_outputs = self.input_layer(x)
         in_outputs = in_outputs.permute(2, 0, 1)
-        outputs: List[Tensor] = [in_outputs]
+        layer_outputs: List[Tensor] = [in_outputs]
 
-        # TODO: Generalize if statements here, they should be layer agnostic
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
-            if isinstance(layer, SumProductLayer):  # type: ignore[misc]
-                # (fold_1 + ... + fold_n, batch_size, units)
-                inputs = torch.cat([outputs[i] for i in in_layer_ids], dim=0)
-                if should_pad:
-                    inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=-np.inf)
-                # (fold_k, arity, batch_size, units)
-                inputs = inputs[fold_idx]
-                output = layer(inputs)
-            elif isinstance(layer, MixingLayer):
+            # (fold_1 + ... + fold_n, batch_size, units)
+            if len(in_layer_ids) == 1:
                 (in_layer_id,) = in_layer_ids
-                inputs = outputs[in_layer_id]
-                if should_pad:
-                    inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=-np.inf)
-                inputs = inputs[fold_idx]
-                output = layer(inputs)
+                inputs = layer_outputs[in_layer_id]
             else:
-                assert False
-            outputs.append(output)
+                inputs = torch.cat([layer_outputs[i] for i in in_layer_ids], dim=0)
+            if should_pad:
+                if isinstance(layer, SumProductLayer):  # type: ignore[misc]
+                    pad_value = 0.0
+                else:
+                    pad_value = -np.inf
+                inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=pad_value)
+            # inputs: (fold, arity, batch_size, units)
+            inputs = inputs[fold_idx]
+            # outputs: (fold, batch_size, units)
+            outputs = layer(inputs)
+            layer_outputs.append(outputs)
 
-        return outputs[-1][0]
+        return layer_outputs[-1][0]
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
