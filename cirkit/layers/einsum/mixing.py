@@ -71,7 +71,7 @@ class EinsumMixingLayer(Layer):
 
         # TODO: test best perf?
         # param_shape = (len(self.nodes), self.max_components) for better perf
-        self.params = nn.Parameter(torch.empty(num_output_units, len(rg_nodes), max_components))
+        self.params = nn.Parameter(torch.empty(max_components, len(rg_nodes), num_output_units))
         # TODO: what's the use of params_mask?
         self.register_buffer("params_mask", torch.ones_like(self.params))
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
@@ -91,7 +91,7 @@ class EinsumMixingLayer(Layer):
 
     def _forward_linear(self, x: Tensor) -> Tensor:
         # the einsum result is not contiguous
-        return torch.einsum("cfk,cfbk->fbk", self.params.permute(2, 1, 0), x)
+        return torch.einsum("cfk,cfbk->fbk", self.params, x)
 
     # TODO: make forward return something
     # pylint: disable-next=arguments-differ

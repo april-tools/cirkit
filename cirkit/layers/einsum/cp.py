@@ -39,9 +39,9 @@ class CPLayer(EinsumLayer):
         super().__init__(rg_nodes, num_input_units, num_output_units)
         self.prod_exp = prod_exp
 
-        self.params_left = nn.Parameter(torch.empty(num_input_units, rank, len(rg_nodes)))
-        self.params_right = nn.Parameter(torch.empty(num_input_units, rank, len(rg_nodes)))
-        self.params_out = nn.Parameter(torch.empty(num_output_units, rank, len(rg_nodes)))
+        self.params_left = nn.Parameter(torch.empty(len(rg_nodes), num_input_units, rank))
+        self.params_right = nn.Parameter(torch.empty(len(rg_nodes), num_input_units, rank))
+        self.params_out = nn.Parameter(torch.empty(len(rg_nodes), rank, num_output_units))
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is
@@ -55,13 +55,13 @@ class CPLayer(EinsumLayer):
 
     # TODO: use bmm to replace einsum? also axis order?
     def _forward_left_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("fbk,fkr->fbr", x, self.params_left.permute(2, 0, 1))
+        return torch.einsum("fbk,fkr->fbr", x, self.params_left)
 
     def _forward_right_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("fbk,fkr->fbr", x, self.params_right.permute(2, 0, 1))
+        return torch.einsum("fbk,fkr->fbr", x, self.params_right)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("fbr,frk->fbk", x, self.params_out.permute(2, 1, 0))
+        return torch.einsum("fbr,frk->fbk", x, self.params_out)
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         left_hidden = self._forward_left_linear(left)
