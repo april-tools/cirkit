@@ -3,15 +3,16 @@ from typing import Any, List
 
 from torch import Tensor, nn
 
-from cirkit.layers.layer import Layer
 from cirkit.region_graph import PartitionNode
+
+from ..layer import Layer
 
 # TODO: relative import or absolute
 # TODO: rework docstrings
 
 
-class SumProductLayer(Layer):
-    """Base for all "fused" sum-product layers."""
+class EinsumLayer(Layer):
+    """Base for all einsums."""
 
     # TODO: kwargs should be public interface instead of `_`. How to supress this warning?
     #       all subclasses should accept all args as kwargs except for layer and k
@@ -47,13 +48,13 @@ class SumProductLayer(Layer):
     @abstractmethod
     # pylint: disable-next=arguments-differ
     def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
-        """Compute the main einsum operation of the layer.
+        """Compute the main Einsum operation of the layer.
 
-        Do SumProductLayer forward pass.
+        Do EinsumLayer forward pass.
 
         We assume that all parameters are in the correct range (no checks done).
 
-        Skeleton for each SumProductLayer (options Xa and Xb are mutual exclusive \
+        Skeleton for each EinsumLayer (options Xa and Xb are mutual exclusive \
             and follows an a-path o b-path)
         1) Go To exp-space (with maximum subtraction) -> NON SPECIFIC
         2a) Do the einsum operation and go to the log space || 2b) Do the einsum operation

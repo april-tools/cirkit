@@ -204,6 +204,10 @@ class RegionGraph:
             graph.add_edge(part_input_left, partition_node)
             graph.add_edge(part_input_right, partition_node)
 
+        # TODO: need to set? but this is wrong for random bin tree
+        # for node in get_leaves(graph):
+        #     node.einet_address.replica_idx = 0
+
         return graph
 
     ##############################    Layerization    ##############################
