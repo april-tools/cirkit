@@ -71,7 +71,7 @@ class EinsumMixingLayer(Layer):
 
         # TODO: test best perf?
         # param_shape = (len(self.nodes), self.max_components) for better perf
-        self.params = nn.Parameter(torch.empty(num_output_units, len(rg_nodes), max_components))
+        self.params = nn.Parameter(torch.empty(max_components, len(rg_nodes), num_output_units))
         # TODO: what's the use of params_mask?
         self.register_buffer("params_mask", torch.ones_like(self.params))
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
@@ -90,7 +90,7 @@ class EinsumMixingLayer(Layer):
             self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
 
     def _forward_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("bonc,onc->bon", x, self.params)
+        return torch.einsum("cfk,cfkb->fkb", self.params, x)
 
     # TODO: make forward return something
     # pylint: disable-next=arguments-differ
@@ -106,6 +106,6 @@ class EinsumMixingLayer(Layer):
         # TODO: use a mul or gather? or do we need this?
         assert (self.params * self.params_mask == self.params).all()
 
-        return log_func_exp(log_input, func=self._forward_linear, dim=3, keepdim=False)
+        return log_func_exp(log_input, func=self._forward_linear, dim=0, keepdim=False)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack

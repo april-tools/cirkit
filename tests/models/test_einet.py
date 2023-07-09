@@ -86,13 +86,13 @@ def _get_einet() -> TensorizedPC:
 def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
     return {
         "input_layer.params": (4, 1, 1, 2),
-        "inner_layers.0.params_left": (1, 1, 4),
-        "inner_layers.0.params_right": (1, 1, 4),
-        "inner_layers.0.params_out": (1, 1, 4),
-        "inner_layers.1.params_left": (1, 1, 2),
-        "inner_layers.1.params_right": (1, 1, 2),
-        "inner_layers.1.params_out": (1, 1, 2),
-        "inner_layers.2.params": (1, 1, 2),
+        "inner_layers.0.params_left": (4, 1, 1),
+        "inner_layers.0.params_right": (4, 1, 1),
+        "inner_layers.0.params_out": (4, 1, 1),
+        "inner_layers.1.params_left": (2, 1, 1),
+        "inner_layers.1.params_right": (2, 1, 1),
+        "inner_layers.1.params_out": (2, 1, 1),
+        "inner_layers.2.params": (2, 1, 1),
     }
 
 
@@ -109,15 +109,15 @@ def _set_params(einet: TensorizedPC) -> None:
                     [math.log(3), 0],  # type: ignore[misc]  # 3/4, 1/4
                 ]
             ).reshape(4, 1, 1, 2),
-            "inner_layers.0.params_left": torch.ones(1, 1, 4) / 2,
-            "inner_layers.0.params_right": torch.ones(1, 1, 4) * 2,
-            "inner_layers.0.params_out": torch.ones(1, 1, 4),
-            "inner_layers.1.params_left": torch.ones(1, 1, 2) * 2,
-            "inner_layers.1.params_right": torch.ones(1, 1, 2) / 2,
-            "inner_layers.1.params_out": torch.ones(1, 1, 2),
+            "inner_layers.0.params_left": torch.ones(4, 1, 1) / 2,
+            "inner_layers.0.params_right": torch.ones(4, 1, 1) * 2,
+            "inner_layers.0.params_out": torch.ones(4, 1, 1),
+            "inner_layers.1.params_left": torch.ones(2, 1, 1) * 2,
+            "inner_layers.1.params_right": torch.ones(2, 1, 1) / 2,
+            "inner_layers.1.params_out": torch.ones(2, 1, 1),
             "inner_layers.2.params": torch.tensor(
                 [1 / 3, 2 / 3],  # type: ignore[misc]
-            ).reshape(1, 1, 2),
+            ).reshape(2, 1, 1),
         }
     )
     einet.load_state_dict(state_dict)  # type: ignore[misc]
@@ -159,9 +159,9 @@ def test_einet_partition_func() -> None:
 @pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs,log_answer",
     [
-        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.188161849975586),
-        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 51.31766128540039),
-        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.198360443115234),
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.935434341430664),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 44.412864685058594),
+        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.313674926757812),
         (PoonDomingos, {"shape": [3, 3], "delta": 2}, None),
         (QuadTree, {"width": 3, "height": 3, "struct_decomp": False}, None),
         (RandomBinaryTree, {"num_vars": 9, "depth": 3, "num_repetitions": 2}, None),
@@ -223,4 +223,6 @@ def test_einet_partition_function(
 
     assert torch.isclose(einet.partition_function(), sum_out, rtol=1e-6, atol=0)
     if log_answer is not None:
-        assert torch.isclose(sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0)
+        assert torch.isclose(
+            sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0
+        ), f"{sum_out.item()}"
