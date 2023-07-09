@@ -55,13 +55,13 @@ class CPLayer(EinsumLayer):
 
     # TODO: use bmm to replace einsum? also axis order?
     def _forward_left_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("bip,irp->brp", x, self.params_left)
+        return torch.einsum("fbk,fkr->fbr", x, self.params_left.permute(2, 0, 1))
 
     def _forward_right_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("bip,irp->brp", x, self.params_right)
+        return torch.einsum("fbk,fkr->fbr", x, self.params_right.permute(2, 0, 1))
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("brp,orp->bop", x, self.params_out)
+        return torch.einsum("fbr,frk->fbk", x, self.params_out.permute(2, 1, 0))
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         left_hidden = self._forward_left_linear(left)
@@ -77,14 +77,14 @@ class CPLayer(EinsumLayer):
         """
         # TODO: do we split into two impls?
         if self.prod_exp:
-            return log_func_exp(log_left, log_right, func=self._forward_linear, dim=1, keepdim=True)
+            return log_func_exp(log_left, log_right, func=self._forward_linear, dim=2, keepdim=True)
 
         log_left_hidden = log_func_exp(
-            log_left, func=self._forward_left_linear, dim=1, keepdim=True
+            log_left, func=self._forward_left_linear, dim=2, keepdim=True
         )
         log_right_hidden = log_func_exp(
-            log_right, func=self._forward_right_linear, dim=1, keepdim=True
+            log_right, func=self._forward_right_linear, dim=2, keepdim=True
         )
         return log_func_exp(
-            log_left_hidden + log_right_hidden, func=self._forward_out_linear, dim=1, keepdim=True
+            log_left_hidden + log_right_hidden, func=self._forward_out_linear, dim=2, keepdim=True
         )
