@@ -3,15 +3,14 @@ from typing import Any, List, cast
 import torch
 from torch import Tensor, nn
 
+from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
-
-from .einsum import EinsumLayer
 
 # TODO: rework docstrings
 
 
-class CPLayer(EinsumLayer):
+class CPLayer(SumProductLayer):
     """Candecomp Parafac (decomposition) layer."""
 
     # TODO: better way to call init by base class?

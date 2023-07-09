@@ -250,8 +250,4 @@ def PoonDomingos(
             if found_cut_on_level:
                 break
 
-    # TODO: do we need this? already defaults to 0
-    # for node in get_leaves(graph):
-    #     node.einet_address.replica_idx = 0
-
     return graph

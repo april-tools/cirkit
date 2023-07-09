@@ -16,6 +16,7 @@ def _partition_node_randomly(
     node: RegionNode,
     num_parts: Optional[int] = None,
     proportions: Optional[Sequence[float]] = None,
+    repetition: int = 0,
 ) -> List[RegionNode]:
     """Call partition_on_node with a random partition -- used for random binary trees (RAT-SPNs).
 
@@ -23,6 +24,7 @@ def _partition_node_randomly(
     :param node: node in the graph (DistributionVector)
     :param num_parts: number of parts in the partition. If None, use len proportions (int)
     :param proportions: split proportions of each part, len must be num_parts, can be sum not 1
+    :param repetition: the repetition index
     :return: a list of partitioned region nodes
     """  # TODO: rework docstring
     scope = list(node.scope)
@@ -52,7 +54,7 @@ def _partition_node_randomly(
     region_nodes: List[RegionNode] = []
     for l, r in zip(split_point[:-1], split_point[1:]):
         assert l < r, f"Over-partitioned with proportions {proportions} on {node}."
-        region_node = RegionNode(scope[l:r])
+        region_node = RegionNode(scope[l:r], replica_idx=repetition)
         graph.add_edge(region_node, partition_node)
         region_nodes.append(region_node)
 
@@ -85,11 +87,9 @@ def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionG
         for _ in range(depth):
             nodes = list(
                 itertools.chain.from_iterable(
-                    _partition_node_randomly(graph, node, num_parts=2) for node in nodes
+                    _partition_node_randomly(graph, n, num_parts=2, repetition=repetition)
+                    for n in nodes
                 )
             )
-        for node in nodes:
-            # TODO: confirm: only replica idx for leaf?
-            node.einet_address.replica_idx = repetition
 
     return graph

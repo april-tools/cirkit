@@ -24,10 +24,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         num_replica is picked large enough such that "we compute enough \
             leaf densities". At the moment we rely that
         the PC structure (see Class Graph) provides the necessary information \
-            to determine num_replica. In
-        particular, we require that each leaf of the graph has the field \
-            einet_address.replica_idx defined;
-        num_replica is simply the max over all einet_address.replica_idx.
+            to determine num_replica.
         In the future, it would convenient to have an automatic allocation \
             of leaves to replica, without requiring
         the user to specify this.
@@ -65,7 +62,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         self.num_stats = num_stats
         self.fold_count = len(rg_nodes)
 
-        replica_indices = set(n.einet_address.replica_idx for n in self.rg_nodes)
+        replica_indices = set(n.get_replica_idx() for n in self.rg_nodes)
         num_replica = len(replica_indices)
         assert replica_indices == set(
             range(num_replica)
@@ -76,11 +73,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # I have experimented a bit with this, but it is not always faster.
         self.register_buffer("scope_tensor", torch.zeros(num_var, num_replica, len(self.rg_nodes)))
         for i, node in enumerate(self.rg_nodes):
-            self.scope_tensor[
-                list(node.scope), node.einet_address.replica_idx, i  # type: ignore[misc]
-            ] = 1
-            node.einet_address.layer = self
-            node.einet_address.idx = i
+            self.scope_tensor[list(node.scope), node.get_replica_idx(), i] = 1  # type: ignore[misc]
 
         self.params_shape = (num_var, num_units, num_replica, num_stats)
         self.params = nn.Parameter(torch.empty(self.params_shape))
@@ -250,7 +243,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
                 assert len(dist_idx[n]) == len(node_idx[n]), "Invalid input."
                 for c, k in enumerate(node_idx[n]):
                     scope = list(self.rg_nodes[k].scope)
-                    rep = self.rg_nodes[k].einet_address.replica_idx
+                    rep: int = self.rg_nodes[k].get_replica_idx()
                     cur_value[scope, :] = (
                         ef_values[n, scope, :, dist_idx[n][c], rep]
                         if mode == "sample"
