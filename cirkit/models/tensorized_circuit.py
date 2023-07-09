@@ -294,7 +294,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         layer_outputs: List[Tensor] = [in_outputs]
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
-            # (fold_1 + ... + fold_n, batch_size, units)
+            # (fold_1 + ... + fold_n, units, batch_size)
             if len(in_layer_ids) == 1:
                 (in_layer_id,) = in_layer_ids
                 inputs = layer_outputs[in_layer_id]
