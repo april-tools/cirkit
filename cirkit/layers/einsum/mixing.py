@@ -10,7 +10,7 @@ from cirkit.utils import log_func_exp
 # TODO: rework docstrings
 
 
-class MixingLayer(Layer):
+class EinsumMixingLayer(Layer):
     # TODO: how we fold line here?
     r"""Implement the Mixing Layer, in order to handle sum nodes with multiple children.
 
@@ -41,10 +41,10 @@ class MixingLayer(Layer):
 
     The input nodes N have already been computed. The product nodes P and the \
         first sum layer are computed using an
-    SumProductLayer, yielding a log-density tensor of shape
+    EinsumLayer, yielding a log-density tensor of shape
         (batch_size, vector_length, num_nodes).
     In this example num_nodes is 5, since the are 5 product nodes (or 5 singleton \
-        sum nodes). The MixingLayer
+        sum nodes). The EinsumMixingLayer
     then simply mixes sums from the first layer, to yield 2 sums. This is just an \
         over-parametrization of the original
     excerpt.
