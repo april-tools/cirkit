@@ -163,7 +163,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # I try with an einsum operation (x, o, d, s), (b, x, s) -> b, x, o, d.
         # That should have the same result
 
-        crucial_quantity_einsum = torch.einsum("xods,bxs->bxod", theta, self.suff_stats)
+        crucial_quantity_einsum = torch.einsum("xkds,bxs->bxkd", theta, self.suff_stats)
 
         # assert not torch.isnan(crucial_quantity_einsum).any()
 
@@ -198,7 +198,9 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
             self.marginalization_mask = None
             output = self.ll
 
-        return torch.einsum("bxir,xro->bio", output, self.scope_tensor)
+        # why bxkr instead of bxkd?
+        # TODO: the axes order for input layer? better remove this contiguous
+        return torch.einsum("bxkr,xrf->fkb", output, self.scope_tensor).contiguous()
 
     # TODO: how to fix?
     # pylint: disable-next=arguments-differ

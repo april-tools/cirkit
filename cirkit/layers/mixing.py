@@ -79,7 +79,7 @@ class MixingLayer(Layer):
             self.params /= self.params.sum(dim=1, keepdim=True)  # type: ignore[misc]
 
     def _forward_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("pibo,pio->pbo", x, self.params)
+        return torch.einsum("fck,fckb->fkb", self.params, x)
 
     # TODO: make forward return something
     # pylint: disable-next=arguments-differ

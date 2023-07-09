@@ -224,5 +224,6 @@ def test_einet_partition_function(
 
     assert torch.isclose(einet.partition_function(), sum_out, rtol=1e-6, atol=0)
     if log_answer is not None:
-        print(sum_out.item())
-        assert torch.isclose(sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0)
+        assert torch.isclose(
+            sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0
+        ), f"{sum_out.item()}"

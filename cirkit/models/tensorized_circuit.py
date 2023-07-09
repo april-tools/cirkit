@@ -291,7 +291,6 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             Tensor: Return value.
         """
         in_outputs = self.input_layer(x)
-        in_outputs = in_outputs.permute(2, 0, 1)
         layer_outputs: List[Tensor] = [in_outputs]
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
@@ -307,13 +306,13 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 else:
                     pad_value = -np.inf
                 inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=pad_value)
-            # inputs: (fold, arity, batch_size, units)
+            # inputs: (fold, arity, units, batch_size)
             inputs = inputs[fold_idx]
-            # outputs: (fold, batch_size, units)
+            # outputs: (fold, units, batch_size)
             outputs = layer(inputs)
             layer_outputs.append(outputs)
 
-        return layer_outputs[-1][0]
+        return layer_outputs[-1][0].T
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
