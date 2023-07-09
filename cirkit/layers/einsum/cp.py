@@ -55,13 +55,13 @@ class CPLayer(EinsumLayer):
 
     # TODO: use bmm to replace einsum? also axis order?
     def _forward_left_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("bip,irp->brp", x, self.params_left)
+        return torch.einsum("fkr,fkb->frb", self.params_left.permute(2, 0, 1), x)
 
     def _forward_right_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("bip,irp->brp", x, self.params_right)
+        return torch.einsum("fkr,fkb->frb", self.params_right.permute(2, 0, 1), x)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("brp,orp->bop", x, self.params_out)
+        return torch.einsum("frk,frb->fkb", self.params_out.permute(2, 1, 0), x)
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         left_hidden = self._forward_left_linear(left)

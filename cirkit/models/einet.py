@@ -190,7 +190,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                     region.einet_address.layer = mixing_layer
                     region.einet_address.idx = reg_idx
                 mixing_layer.apply_params_mask()
-                self.bookkeeping.append((mixing_layer.params_mask, torch.tensor(padded_idx)))
+                self.bookkeeping.append((mixing_layer.params_mask, torch.tensor(padded_idx).T))
 
         # TODO: can we annotate a list here?
         # TODO: actually we should not mix all the input/mix/ein different types in one list
@@ -284,10 +284,10 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 assert isinstance(left_addr, tuple) and isinstance(right_addr, tuple)
                 # TODO: we should use dim=2, check all code
                 # TODO: duplicate code
-                log_left_prob = torch.cat([outputs[layer] for layer in left_addr[0]], dim=2)
-                log_left_prob = log_left_prob[:, :, left_addr[1]]
-                log_right_prob = torch.cat([outputs[layer] for layer in right_addr[0]], dim=2)
-                log_right_prob = log_right_prob[:, :, right_addr[1]]
+                log_left_prob = torch.cat([outputs[layer] for layer in left_addr[0]], dim=0)
+                log_left_prob = log_left_prob[left_addr[1]]
+                log_right_prob = torch.cat([outputs[layer] for layer in right_addr[0]], dim=0)
+                log_right_prob = log_right_prob[right_addr[1]]
                 out = inner_layer(log_left_prob, log_right_prob)
             elif isinstance(inner_layer, EinsumMixingLayer):
                 _, padded_idx = self.bookkeeping[idx]
@@ -298,13 +298,13 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 # outputs[self.inner_layers[idx - 1]] = F.pad(
                 #     outputs[self.inner_layers[idx - 1]], [0, 1], "constant", float("-inf")
                 # )
-                log_input_prob = outputs[self.inner_layers[idx - 1]][:, :, padded_idx]
+                log_input_prob = outputs[self.inner_layers[idx - 1]][padded_idx]
                 out = inner_layer(log_input_prob)
             else:
                 assert False
             outputs[inner_layer] = out
 
-        return outputs[self.inner_layers[-1]][:, :, 0]
+        return outputs[self.inner_layers[-1]][0].T  # return shape (B, K)
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
