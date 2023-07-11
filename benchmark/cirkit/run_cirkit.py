@@ -2,20 +2,20 @@ import argparse
 import enum
 import functools
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
+import numpy as np
 import torch
 import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor, optim
 from torch.utils.data import DataLoader, TensorDataset
 
+from benchmark.utils import benchmarker
 from cirkit.layers.exp_family import CategoricalLayer
 from cirkit.layers.sum_product.cp import CPLayer  # TODO: rework interfaces for import
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 from cirkit.utils import RandomCtx, set_determinism
-
-from ..utils import benchmarker
 
 device = torch.device("cuda")
 
@@ -56,7 +56,9 @@ def process_args() -> _ArgsNamespace:
 
 
 @torch.no_grad()
-def evaluate(pc: TensorizedPC, data_loader: DataLoader[Tuple[Tensor, ...]]) -> float:
+def evaluate(
+    pc: TensorizedPC, data_loader: DataLoader[Tuple[Tensor, ...]]
+) -> Tuple[Tuple[List[float], List[float]], float]:
     """Evaluate circuit on given data.
 
     Args:
@@ -64,26 +66,29 @@ def evaluate(pc: TensorizedPC, data_loader: DataLoader[Tuple[Tensor, ...]]) -> f
         data_loader (DataLoader[Tuple[Tensor, ...]]): The evaluation data.
 
     Returns:
-        float: The average LL.
+        Tuple[Tuple[List[float], List[float]], float]:
+         A tuple consisting of time and memory measurements, and the average LL.
     """
 
     def _iter(x: Tensor) -> Tensor:
         return pc(x)
 
     ll_total = 0.0
+    ts, ms = [], []
     batch: Tuple[Tensor]
     for batch in data_loader:
         x = batch[0].to(device)
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
-        print("t/m:", t, m)
+        ts.append(t)
+        ms.append(m)
         ll_total += ll.mean().item()
         del x, ll
-    return ll_total / len(data_loader)
+    return (ts, ms), ll_total / len(data_loader)
 
 
 def train(
     pc: TensorizedPC, optimizer: optim.Optimizer, data_loader: DataLoader[Tuple[Tensor, ...]]
-) -> float:
+) -> Tuple[Tuple[List[float], List[float]], float]:
     """Train circuit on given data.
 
     Args:
@@ -92,7 +97,8 @@ def train(
         data_loader (DataLoader[Tuple[Tensor, ...]]): The training data.
 
     Returns:
-        float: The average LL.
+        Tuple[Tuple[List[float], List[float]], float]:
+         A tuple consisting of time and memory measurements, and the average LL.
     """
 
     def _iter(x: Tensor) -> Tensor:
@@ -104,14 +110,16 @@ def train(
         return ll.detach()
 
     ll_total = 0.0
+    ts, ms = [], []
     batch: Tuple[Tensor]
     for batch in data_loader:
         x = batch[0].to(device)
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
-        print("t/m:", t, m)
+        ts.append(t)
+        ms.append(m)
         ll_total += ll.item()
         del x, ll  # TODO: is everything released properly
-    return ll_total / len(data_loader)
+    return (ts, ms), ll_total / len(data_loader)
 
 
 def main() -> None:
@@ -147,14 +155,25 @@ def main() -> None:
         num_input_units=args.num_latents,
     )
     pc.to(device)
+    print(pc)
+    print(f"Number of parameters: {sum(p.numel() for p in pc.parameters())}")
 
     if args.mode == _Modes.TRAIN:
         optimizer = optim.Adam(pc.parameters())  # just keep everything default
-        ll_train = train(pc, optimizer, data_loader)
-        print("train LL:", ll_train)
-    if args.mode == _Modes.EVAL:
-        ll_eval = evaluate(pc, data_loader)
-        print("eval LL:", ll_eval)
+        (ts, ms), ll_train = train(pc, optimizer, data_loader)
+        print("Train LL:", ll_train)
+    elif args.mode == _Modes.EVAL:
+        (ts, ms), ll_eval = evaluate(pc, data_loader)
+        print("Evaluation LL:", ll_eval)
+    else:
+        assert False, "Something is wrong here"
+    if not args.first_pass_only and args.num_batches > 1:
+        # Skip warmup step
+        ts, ms = ts[1:], ms[1:]
+    mu_t, sigma_t = np.mean(ts).item(), np.std(ts).item()  # type: ignore[misc]
+    mu_m, sigma_m = np.mean(ms).item(), np.std(ms).item()  # type: ignore[misc]
+    print(f"Time (ms): {mu_t:.3f}+-{sigma_t:.3f}")
+    print(f"Memory (MiB): {mu_m:.3f}+-{sigma_m:.3f}")
 
 
 if __name__ == "__main__":
