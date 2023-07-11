@@ -32,8 +32,7 @@ class SumProductLayer(Layer):
             kwargs (Any): Passed to subclasses.
         """
         super().__init__()
-        self.fold_count = len(rg_nodes)
-
+        self.rg_nodes = rg_nodes
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
 
@@ -46,7 +45,7 @@ class SumProductLayer(Layer):
     # TODO: what about abstract?
     @abstractmethod
     # pylint: disable-next=arguments-differ
-    def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main einsum operation of the layer.
 
         Do SumProductLayer forward pass.
@@ -61,7 +60,6 @@ class SumProductLayer(Layer):
         4a) go to exp space do the einsum and back to log   || 4b) do the einsum operation [OPT]
         5a) do nothing                                      || 5b) back to log space
 
-        :param log_left: value in log space for left child.
-        :param log_right: value in log space for right child.
+        :param inputs: the input tensor.
         :return: result of the left operations, in log-space.
         """

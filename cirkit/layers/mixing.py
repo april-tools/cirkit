@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 import torch
 from torch import Tensor, nn
@@ -51,46 +51,35 @@ class MixingLayer(Layer):
     """
 
     # TODO: num_output_units is num_input_units
-    def __init__(
-        self,
-        rg_nodes: List[RegionNode],
-        num_output_units: int,
-        max_components: int,
-        mask: Optional[Tensor] = None,
-    ):
+    def __init__(self, rg_nodes: List[RegionNode], num_output_units: int, max_components: int):
         """Init class.
 
         Args:
             rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
             num_output_units (int): The number of output units.
             max_components (int): Max number of mixing components.
-            mask (Optional[Tensor]): The mask to apply to the parameters.
         """
         super().__init__()
-        self.fold_count = len(rg_nodes)
+        self.rg_nodes = rg_nodes
 
         # TODO: what need to be saved to self?
         self.num_output_units = num_output_units
 
         # TODO: test best perf?
         # param_shape = (len(self.nodes), self.max_components) for better perf
-        self.params = nn.Parameter(torch.empty(max_components, len(rg_nodes), num_output_units))
-        self.mask = mask
+        self.params = nn.Parameter(torch.empty(len(rg_nodes), max_components, num_output_units))
 
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
-        nn.init.uniform_(self.params, 0.01, 0.99)
         with torch.no_grad():
-            if self.mask is not None:
-                # TODO: assume mypy bug with __mul__ and __div_
-                self.params *= self.mask  # type: ignore[misc]
-            self.params /= self.params.sum(dim=2, keepdim=True)  # type: ignore[misc]
+            nn.init.uniform_(self.params, 0.01, 0.99)
+            self.params /= self.params.sum(dim=1, keepdim=True)  # type: ignore[misc]
 
     def _forward_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("cfk,cfkb->fkb", self.params, x)
+        return torch.einsum("fck,fckb->fkb", self.params, x)
 
     # TODO: make forward return something
     # pylint: disable-next=arguments-differ
@@ -103,6 +92,6 @@ class MixingLayer(Layer):
         Returns:
             Tensor: the output.
         """
-        return log_func_exp(log_input, func=self._forward_linear, dim=0, keepdim=False)
+        return log_func_exp(log_input, func=self._forward_linear, dim=1, keepdim=False)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack

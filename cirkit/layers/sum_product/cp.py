@@ -67,13 +67,14 @@ class CPLayer(SumProductLayer):
         right_hidden = self._forward_right_linear(right)
         return self._forward_out_linear(left_hidden * right_hidden)
 
-    def forward(self, log_left: Tensor, log_right: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
-        :param log_left: value in log space for left child.
-        :param log_right: value in log space for right child.
+        :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
+        log_left, log_right = inputs[:, 0], inputs[:, 1]
+
         # TODO: do we split into two impls?
         if self.prod_exp:
             return log_func_exp(log_left, log_right, func=self._forward_linear, dim=1, keepdim=True)
