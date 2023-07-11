@@ -32,8 +32,7 @@ class SumProductLayer(Layer):
             kwargs (Any): Passed to subclasses.
         """
         super().__init__()
-        self.fold_count = len(rg_nodes)
-
+        self.rg_nodes = rg_nodes
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
 

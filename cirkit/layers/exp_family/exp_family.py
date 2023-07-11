@@ -60,7 +60,6 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         self.num_dims = num_dims
         self.num_units = num_units
         self.num_stats = num_stats
-        self.fold_count = len(rg_nodes)
 
         replica_indices = set(n.get_replica_idx() for n in self.rg_nodes)
         num_replica = len(replica_indices)

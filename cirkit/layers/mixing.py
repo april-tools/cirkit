@@ -60,7 +60,7 @@ class MixingLayer(Layer):
             max_components (int): Max number of mixing components.
         """
         super().__init__()
-        self.fold_count = len(rg_nodes)
+        self.rg_nodes = rg_nodes
 
         # TODO: what need to be saved to self?
         self.num_output_units = num_output_units
