@@ -16,7 +16,7 @@ from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 from cirkit.utils import RandomCtx, set_determinism
 
-from ..utils import benchmarker
+from benchmark.utils import benchmarker
 
 device = torch.device("cuda")
 
