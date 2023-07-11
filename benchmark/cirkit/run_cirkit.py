@@ -173,7 +173,7 @@ def main() -> None:
     mu_t, sigma_t = np.mean(ts).item(), np.std(ts).item()  # type: ignore[misc]
     mu_m, sigma_m = np.mean(ms).item(), np.std(ms).item()  # type: ignore[misc]
     print(f"Time (ms): {mu_t:.3f}+-{sigma_t:.3f}")
-    print(f"Memory (GiB): {mu_m:.3f}+-{sigma_m:.3f}")
+    print(f"Memory (MiB): {mu_m:.3f}+-{sigma_m:.3f}")
 
 
 if __name__ == "__main__":
