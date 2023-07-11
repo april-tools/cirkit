@@ -129,8 +129,8 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             # TODO: duplicate code
             left_region_ids = list(r.left.get_id() for r in two_inputs)
             right_region_ids = list(r.right.get_id() for r in two_inputs)
-            left_layers = list(region_id_fold[i][1] for i in left_region_ids)
-            right_layers = list(region_id_fold[i][1] for i in right_region_ids)
+            left_layers = list(set(region_id_fold[i][1] for i in left_region_ids))
+            right_layers = list(set(region_id_fold[i][1] for i in right_region_ids))
             left_starts = torch.tensor([0] + [layer.fold_count for layer in left_layers]).cumsum(
                 dim=0
             )
@@ -139,13 +139,15 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             )
             left_indices = torch.tensor(
                 [  # type: ignore[misc]
-                    region_id_fold[r.left.get_id()][0] + left_starts[i]
+                    region_id_fold[r.left.get_id()][0]
+                    + left_starts[left_layers.index(region_id_fold[r.left.get_id()][1])]
                     for i, r in enumerate(two_inputs)
                 ]
             )
             right_indices = torch.tensor(
                 [  # type: ignore[misc]
-                    region_id_fold[r.right.get_id()][0] + right_starts[i]
+                    region_id_fold[r.right.get_id()][0]
+                    + right_starts[right_layers.index(region_id_fold[r.right.get_id()][1])]
                     for i, r in enumerate(two_inputs)
                 ]
             )
