@@ -155,6 +155,8 @@ def main() -> None:
         num_input_units=args.num_latents,
     )
     pc.to(device)
+    print(pc)
+    print(f"Number of parameters: {sum(p.numel() for p in pc.parameters())}")
 
     if args.mode == _Modes.TRAIN:
         optimizer = optim.Adam(pc.parameters())  # just keep everything default
