@@ -2,8 +2,9 @@ import argparse
 import enum
 import functools
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
+import numpy as np
 import torch
 import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor, optim
@@ -56,7 +57,9 @@ def process_args() -> _ArgsNamespace:
 
 
 @torch.no_grad()
-def evaluate(pc: TensorizedPC, data_loader: DataLoader[Tuple[Tensor, ...]]) -> float:
+def evaluate(
+    pc: TensorizedPC, data_loader: DataLoader[Tuple[Tensor, ...]]
+) -> Tuple[Tuple[List[float], List[float]], float]:
     """Evaluate circuit on given data.
 
     Args:
@@ -64,26 +67,29 @@ def evaluate(pc: TensorizedPC, data_loader: DataLoader[Tuple[Tensor, ...]]) -> f
         data_loader (DataLoader[Tuple[Tensor, ...]]): The evaluation data.
 
     Returns:
-        float: The average LL.
+        Tuple[Tuple[List[float], List[float]], float]:
+         A tuple consisting of time and memory measurements, and the average LL.
     """
 
     def _iter(x: Tensor) -> Tensor:
         return pc(x)
 
     ll_total = 0.0
+    ts, ms = [], []
     batch: Tuple[Tensor]
     for batch in data_loader:
         x = batch[0].to(device)
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
-        print("t/m:", t, m)
+        ts.append(t)
+        ms.append(m)
         ll_total += ll.mean().item()
         del x, ll
-    return ll_total / len(data_loader)
+    return (ts, ms), ll_total / len(data_loader)
 
 
 def train(
     pc: TensorizedPC, optimizer: optim.Optimizer, data_loader: DataLoader[Tuple[Tensor, ...]]
-) -> float:
+) -> Tuple[Tuple[List[float], List[float]], float]:
     """Train circuit on given data.
 
     Args:
@@ -92,7 +98,8 @@ def train(
         data_loader (DataLoader[Tuple[Tensor, ...]]): The training data.
 
     Returns:
-        float: The average LL.
+        Tuple[Tuple[List[float], List[float]], float]:
+         A tuple consisting of time and memory measurements, and the average LL.
     """
 
     def _iter(x: Tensor) -> Tensor:
@@ -104,14 +111,16 @@ def train(
         return ll.detach()
 
     ll_total = 0.0
+    ts, ms = [], []
     batch: Tuple[Tensor]
     for batch in data_loader:
         x = batch[0].to(device)
         ll, (t, m) = benchmarker(functools.partial(_iter, x))
-        print("t/m:", t, m)
+        ts.append(t)
+        ms.append(m)
         ll_total += ll.item()
         del x, ll  # TODO: is everything released properly
-    return ll_total / len(data_loader)
+    return (ts, ms), ll_total / len(data_loader)
 
 
 def main() -> None:
@@ -150,11 +159,17 @@ def main() -> None:
 
     if args.mode == _Modes.TRAIN:
         optimizer = optim.Adam(pc.parameters())  # just keep everything default
-        ll_train = train(pc, optimizer, data_loader)
-        print("train LL:", ll_train)
-    if args.mode == _Modes.EVAL:
-        ll_eval = evaluate(pc, data_loader)
-        print("eval LL:", ll_eval)
+        (ts, ms), ll_train = train(pc, optimizer, data_loader)
+        print("Train LL:", ll_train)
+    elif args.mode == _Modes.EVAL:
+        (ts, ms), ll_eval = evaluate(pc, data_loader)
+        print("Evaluation LL:", ll_eval)
+    else:
+        assert False, "Something is wrong here"
+    mu_t, sigma_t = np.mean(ts).item(), np.std(ts).item()  # type: ignore[misc]
+    mu_m, sigma_m = np.mean(ms).item(), np.std(ms).item()  # type: ignore[misc]
+    print(f"Time (ms): {mu_t:.3f}+-{sigma_t:.3f}")
+    print(f"Memory (GiB): {mu_m:.3f}+-{sigma_m:.3f}")
 
 
 if __name__ == "__main__":
