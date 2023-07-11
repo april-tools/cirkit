@@ -10,13 +10,12 @@ import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor, optim
 from torch.utils.data import DataLoader, TensorDataset
 
+from benchmark.utils import benchmarker
 from cirkit.layers.exp_family import CategoricalLayer
 from cirkit.layers.sum_product.cp import CPLayer  # TODO: rework interfaces for import
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 from cirkit.utils import RandomCtx, set_determinism
-
-from benchmark.utils import benchmarker
 
 device = torch.device("cuda")
 
@@ -166,6 +165,9 @@ def main() -> None:
         print("Evaluation LL:", ll_eval)
     else:
         assert False, "Something is wrong here"
+    if not args.first_pass_only and args.num_batches > 1:
+        # Skip warmup step
+        ts, ms = ts[1:], ms[1:]
     mu_t, sigma_t = np.mean(ts).item(), np.std(ts).item()  # type: ignore[misc]
     mu_m, sigma_m = np.mean(ms).item(), np.std(ms).item()  # type: ignore[misc]
     print(f"Time (ms): {mu_t:.3f}+-{sigma_t:.3f}")
