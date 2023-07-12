@@ -12,7 +12,7 @@ from cirkit.utils import log_func_exp
 
 
 class TuckerLayer(SumProductLayer):
-    """Candecomp Parafac (decomposition) layer."""
+    """Tucker (2) layer."""
 
     # TODO: better way to call init by base class?
     # TODO: better default value
@@ -31,8 +31,6 @@ class TuckerLayer(SumProductLayer):
             rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            rank (int): The rank of the CP decomposition (i.e., the number of inner units of the \
-                layer).
             prod_exp (bool): Whether to compute products in linear space rather than in log-space.
         """
         # TODO: for now we don't care about the case of prod_exp False
