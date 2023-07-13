@@ -43,7 +43,6 @@ test = [
   "pytest-cov",
 ]
 notebooks = [
-  "tqdm",
   "torchvision"
 ]
 
