@@ -19,17 +19,17 @@ from cirkit.region_graph import RegionGraph
 class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
     """Tensorized and folded PC implementation."""
 
-    # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
         graph: RegionGraph,
         num_vars: int,
         layer_cls: Type[SumProductLayer],
         efamily_cls: Type[ExpFamilyLayer],
-        layer_kwargs: Dict[str, Any],
-        efamily_kwargs: Dict[str, Any],
-        num_inner_units: int,
-        num_input_units: int,
+        *,
+        layer_kwargs: Optional[Dict[str, Any]] = None,
+        efamily_kwargs: Optional[Dict[str, Any]] = None,
+        num_inner_units: int = 2,
+        num_input_units: int = 2,
         num_channels: int = 1,
         num_classes: int = 1,
     ) -> None:
@@ -53,6 +53,11 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         ), "The number of input untis in the input layer should be positive"
         assert num_classes > 0, "The number of classes should be positive"
         super().__init__()
+
+        if layer_kwargs is None:  # type: ignore[misc]
+            layer_kwargs = {}
+        if efamily_kwargs is None:  # type: ignore[misc]
+            efamily_kwargs = {}
 
         # TODO: check graph. but do we need it?
         self.graph = graph
@@ -81,11 +86,11 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         )
 
         # Book-keeping: for each layer keep track of the following information
-        # (i) Whether the output tensor needs to be padded.
+        # (i) Whether the input tensor needs to be padded.
         #     This is necessary if we want to fold layers with different number of inputs.
         # (ii) The list of layers whose output tensors needs to be concatenated.
         #      This is necessary because the inputs of a layer might come from different layers.
-        # (iii) The tensorized indices of shape (num_regions, arity),
+        # (iii) The tensorized indices of shape (fold count, arity): (F, H),
         #       where arity is the number of inputs of the layer. When folding
         #       layers with different arity (e.g., the mixing layer) a padding will be
         #       added *and* the last dimension will correspond to the maximum arity.
@@ -124,12 +129,13 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         """
         # A dictionary mapping each region node ID to
         #   (i) its index in the corresponding fold, and
-        #   (ii) the id of the layer that computes such fold (0 for the input layer)
+        #   (ii) the id of the layer that computes such fold
+        #        (0 for the input layer and > 0 for inner layers)
         region_id_fold: Dict[int, Tuple[int, int]] = {}
         for i, region in enumerate(self.graph_layers[0][1]):
             region_id_fold[region.get_id()] = (i, 0)
 
-        # A dictionary mapping layer ids to the number of folds in the output tensor
+        # A list mapping layer ids to the number of folds in the output tensor
         num_folds = [len(self.graph_layers[0][1])]
 
         # Build inner layers
@@ -152,7 +158,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
             # Build indices
             should_pad = False
-            input_region_indices = []
+            input_region_indices = []  # (F, H)
             for regions in input_regions:
                 region_indices = []
                 for r in regions:
@@ -196,7 +202,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
             # Same as above, construct indices and update dictionaries
             should_pad = False
-            input_partition_indices = []
+            input_partition_indices = []  # (F, H)
             for i, region in enumerate(non_unary_regions):
                 num_input_partitions = len(region.inputs)
                 partition_indices = region_mixing_indices[region.get_id()]
@@ -294,11 +300,12 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         layer_outputs: List[Tensor] = [in_outputs]
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
-            # (fold_1 + ... + fold_n, units, batch_size)
             if len(in_layer_ids) == 1:
+                # (F, K, B)
                 (in_layer_id,) = in_layer_ids
                 inputs = layer_outputs[in_layer_id]
             else:
+                # (F_1 + ... + F_n, K, B)
                 inputs = torch.cat([layer_outputs[i] for i in in_layer_ids], dim=0)
             if should_pad:
                 if isinstance(layer, SumProductLayer):  # type: ignore[misc]
@@ -306,13 +313,11 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 else:
                     pad_value = -np.inf
                 inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=pad_value)
-            # inputs: (fold, arity, units, batch_size)
-            inputs = inputs[fold_idx]
-            # outputs: (fold, units, batch_size)
-            outputs = layer(inputs)
+            inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
+            outputs = layer(inputs)  # outputs: (F, K, B)
             layer_outputs.append(outputs)
 
-        return layer_outputs[-1][0].T
+        return layer_outputs[-1][0].T  # (B, K)
 
     # TODO: and what's the meaning of this?
     # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
