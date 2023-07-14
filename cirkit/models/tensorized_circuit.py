@@ -308,11 +308,10 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
                 # (F_1 + ... + F_n, K, B)
                 inputs = torch.cat([layer_outputs[i] for i in in_layer_ids], dim=0)
             if should_pad:
-                if isinstance(layer, SumProductLayer):  # type: ignore[misc]
-                    pad_value = 0.0
-                else:
-                    pad_value = -np.inf
-                inputs = F.pad(inputs, [0, 0, 0, 0, 1, 0], value=pad_value)
+                # TODO: The padding value depends on the computation space.
+                #  It should be the absorbing element (or annihilating element) of a group.
+                #  For now computations are in log-space, thus -infinity is our pad value.
+                inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=-float("inf"))
             inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
             outputs = layer(inputs)  # outputs: (F, K, B)
             layer_outputs.append(outputs)
