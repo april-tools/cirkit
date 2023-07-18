@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import copy
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 import numpy as np
@@ -6,9 +7,14 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from cirkit.atlas.integrate import IntegrationContext
+from cirkit.layers.input import InputLayer
+from cirkit.layers.input.constant import ConstantLayer
 from cirkit.layers.input.exp_family import ExpFamilyLayer
+from cirkit.layers.input.integral import IntegralLayer
 from cirkit.layers.layer import Layer
 from cirkit.layers.mixing import MixingLayer
+from cirkit.layers.scope import ScopeLayer
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import RegionGraph
 
@@ -16,13 +22,12 @@ from cirkit.region_graph import RegionGraph
 # TODO: rework docstrings
 
 
-class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
+class TensorizedPC(nn.Module):
     """Tensorized and folded PC implementation."""
 
     def __init__(  # type: ignore[misc]
         self,
-        graph: RegionGraph,
-        num_vars: int,
+        rg: RegionGraph,
         layer_cls: Type[SumProductLayer],
         efamily_cls: Type[ExpFamilyLayer],
         *,
@@ -36,8 +41,7 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         """Make an TensorizedPC.
 
         Args:
-            graph (RegionGraph): The region graph.
-            num_vars (int): The number of variables.
+            rg (RegionGraph): The region rg.
             layer_cls (Type[SumProductLayer]): The inner layer class.
             efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
             layer_kwargs (Dict[str, Any]): The parameters for the inner layer class.
@@ -59,30 +63,32 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         if efamily_kwargs is None:  # type: ignore[misc]
             efamily_kwargs = {}
 
-        # TODO: check graph. but do we need it?
-        self.graph = graph
-        self.num_vars = num_vars
-
+        # TODO: check rg. but do we need it?
+        self.rg = rg
+        self.num_variables = rg.num_variables
         assert (
-            len(list(graph.output_nodes)) == 1
+            len(list(rg.output_nodes)) == 1
         ), "Currently only circuits with single root region node are supported."
 
         # TODO: return a list instead?
-        output_node = list(graph.output_nodes)[0]
+        output_node = list(rg.output_nodes)[0]
         assert output_node.scope == set(
-            range(num_vars)
-        ), "The region graph should have been defined on the same number of variables"
+            range(self.num_variables)
+        ), "The region rg should have been defined on the same number of variables"
 
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
-        self.graph_layers = graph.topological_layers(bottom_up=False)
+        self.graph_layers = rg.topological_layers(bottom_up=False)
 
         # Initialize input layer
-        self.input_layer = efamily_cls(
+        self.input_layer: InputLayer = efamily_cls(
             self.graph_layers[0][1],
             num_channels,
             num_input_units,
             **efamily_kwargs,  # type: ignore[misc]
         )
+
+        # Initialize scope layer
+        self.scope_layer = ScopeLayer(self.graph_layers[0][1])
 
         # Book-keeping: for each layer keep track of the following information
         # (i) Whether the input tensor needs to be padded.
@@ -97,6 +103,8 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
 
         # TODO: can we annotate a list here?
         self.inner_layers: List[Layer] = nn.ModuleList()  # type: ignore[assignment]
+
+        # Build layers: this will populate the book-keeping data structure above
         self._build_layers(
             layer_cls,
             layer_kwargs,  # type: ignore[misc]
@@ -105,8 +113,26 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             num_classes=num_classes,
         )
 
-        self.exp_reparam = False
-        self.mixing_softmax = False
+    def integrate(self, icontext: Optional[IntegrationContext] = None) -> "TensorizedPC":
+        """Integrate the tensorized circuit encoding c(X_1, ..., X_d).
+
+        Args:
+            icontext: The integration context containing the variables to integrate.
+             If this is None then all variables will be integrated.
+
+        Returns:
+            Another tensorized circuit computing the integral of c over some variables.
+        """
+        circuit = copy(self)  # Shallow copy
+        if icontext is None:
+            circuit.input_layer = ConstantLayer(
+                circuit.input_layer.rg_nodes, value=circuit.input_layer.integrate
+            )
+        else:
+            circuit.input_layer = IntegralLayer(
+                circuit.input_layer.rg_nodes, circuit.input_layer, icontext
+            )
+        return circuit
 
     # pylint: disable-next=too-many-arguments,too-complex,too-many-locals,too-many-statements
     def _build_layers(  # type: ignore[misc]
@@ -221,60 +247,6 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
             )
             self.inner_layers.append(mixing_layer)
 
-    # TODO: find a better way to do this. should be in Module? (what about multi device?)
-    # TODO: maybe we should stick to some device agnostic impl rules
-    def get_device(self) -> torch.device:
-        """Get the device that params is on.
-
-        Returns:
-            torch.device: the device.
-        """
-        # TODO: ModuleList is not generic type
-        return self.input_layer.params.device
-
-    # TODO: this get/set is not good
-    def set_marginalization_idx(self, idx: Tensor) -> None:
-        """Set indicices of marginalized variables.
-
-        Args:
-            idx (Tensor): The indices.
-        """
-        self.input_layer.set_marginalization_idx(idx)
-
-    def get_marginalization_idx(self) -> Optional[Tensor]:
-        """Get indicices of marginalized variables.
-
-        Returns:
-            Tensor: The indices.
-        """
-        return self.input_layer.get_marginalization_idx()
-
-    def partition_function(self, x: Optional[Tensor] = None) -> Tensor:
-        """Do something that I don't know.
-
-        Args:
-            x (Optional[Tensor], optional): The input. Defaults to None.
-
-        Returns:
-            Tensor: The output.
-        """
-        old_marg_idx = self.get_marginalization_idx()
-        # assert old_marg_idx is not None  # TODO: then why return None?
-        self.set_marginalization_idx(torch.arange(self.num_vars))
-
-        if x is not None:
-            z = self(x)
-        else:
-            # TODO: check this, size=(1, self.args.num_var, self.args.num_dims) is appropriate
-            # TODO: above is original, but size is not stated?
-            # TODO: use tuple as shape because of line folding? or everywhere?
-            fake_data = torch.ones((1, self.num_vars), device=self.get_device())
-            z = self(fake_data)
-
-        # TODO: can indeed be None
-        self.set_marginalization_idx(old_marg_idx)  # type: ignore[arg-type]
-        return z
-
     def __call__(self, x: Tensor) -> Tensor:
         """Invoke the forward.
 
@@ -290,12 +262,12 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         """Evaluate the TensorizedPC feed forward.
 
         Args:
-            x (Tensor): the shape is (batch_size, self.num_var, self.num_dims)
+            x (Tensor): the shape is (batch_size, self.num_vars, self.num_channels)
 
         Returns:
             Tensor: Return value.
         """
-        in_outputs = self.input_layer(x)
+        in_outputs = self.scope_layer(self.input_layer(x))
         layer_outputs: List[Tensor] = [in_outputs]
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
