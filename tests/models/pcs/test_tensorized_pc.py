@@ -9,7 +9,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from cirkit.layers.exp_family import CategoricalLayer
+from cirkit.layers.input.exp_family import CategoricalLayer
 from cirkit.layers.sum_product import CPLayer
 from cirkit.models.tensorized_circuit import TensorizedPC
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
