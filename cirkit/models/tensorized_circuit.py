@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from cirkit.layers.exp_family import ExpFamilyLayer
+from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.layers.layer import Layer
 from cirkit.layers.mixing import MixingLayer
 from cirkit.layers.sum_product import SumProductLayer
@@ -79,7 +79,6 @@ class TensorizedPC(nn.Module):  # pylint: disable=too-many-instance-attributes
         # Initialize input layer
         self.input_layer = efamily_cls(
             self.graph_layers[0][1],
-            num_vars,
             num_channels,
             num_input_units,
             **efamily_kwargs,  # type: ignore[misc]

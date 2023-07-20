@@ -24,7 +24,6 @@ class NormalLayer(ExpFamilyLayer):
     def __init__(
         self,
         nodes: List[RegionNode],
-        num_var: int,
         num_dims: int,
         num_units: int,
         *,
@@ -35,13 +34,12 @@ class NormalLayer(ExpFamilyLayer):
 
         Args:
             nodes (List[RegionNode]): Passed to super.
-            num_var (int): Number of vars.
             num_dims (int): Number of dims.
             num_units (int): Number of units.
             min_var (float, optional): Min var. Defaults to 0.0001.
             max_var (float, optional): Max var. Defaults to 10.0.
         """
-        super().__init__(nodes, num_var, num_dims, num_units, num_stats=2 * num_dims)
+        super().__init__(nodes, num_dims, num_units, num_stats=2 * num_dims)
         self.min_var = min_var
         self.max_var = max_var
         self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_dims)

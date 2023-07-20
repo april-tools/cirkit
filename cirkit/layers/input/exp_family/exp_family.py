@@ -4,16 +4,15 @@ from typing import Any, List, Literal, Optional, Sequence
 import torch
 from torch import Tensor, nn
 
+from cirkit.layers.input import InputLayer
 from cirkit.region_graph.rg_node import RegionNode
-
-from ..layer import Layer
 
 # TODO: find a good way to doc tensor shape
 # TODO: rework docstrings
 
 
 # TODO: but we don't have a non-factorized one
-class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
+class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attributes
     """Computes all EiNet leaves in parallel, where each leaf is a vector of \
         factorized distributions, where factors are from exponential families.
 
@@ -28,7 +27,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         In the future, it would convenient to have an automatic allocation \
             of leaves to replica, without requiring
         the user to specify this.
-    The generate ExponentialFamilyArray has shape (batch_size, num_var, \
+    The generate ExponentialFamilyArray has shape (batch_size, self.num_vars, \
         num_dist, num_replica). This array of densities
         will contain all densities over single RVs, which are then multiplied \
         (actually summed, due to log-domain
@@ -37,11 +36,9 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
     scope_tensor: Tensor  # to be registered as buffer
 
-    # pylint: disable-next=too-many-arguments
     def __init__(
         self,
         rg_nodes: List[RegionNode],
-        num_var: int,
         num_dims: int,
         num_units: int,
         num_stats: int = 1,
@@ -49,14 +46,11 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """Init class.
 
         :param rg_nodes: list of PC leaves (DistributionVector, see Graph.py)
-        :param num_var: number of random variables (int)
         :param num_dims: dimensionality of RVs (int)
         :param num_units: The number of units (int).
         :param num_stats: number of sufficient statistics of exponential family (int)
         """
-        super().__init__()
-        self.rg_nodes = rg_nodes
-        self.num_var = num_var
+        super().__init__(rg_nodes)
         self.num_dims = num_dims
         self.num_units = num_units
         self.num_stats = num_stats
@@ -70,11 +64,13 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # self.scope_tensor indicates which densities in self.ef_array belongs to which leaf.
         # TODO: it might be smart to have a sparse implementation --
         # I have experimented a bit with this, but it is not always faster.
-        self.register_buffer("scope_tensor", torch.zeros(num_var, num_replica, len(self.rg_nodes)))
+        self.register_buffer(
+            "scope_tensor", torch.zeros(self.num_vars, num_replica, len(self.rg_nodes))
+        )
         for i, node in enumerate(self.rg_nodes):
             self.scope_tensor[list(node.scope), node.get_replica_idx(), i] = 1  # type: ignore[misc]
 
-        self.params_shape = (num_var, num_units, num_replica, num_stats)
+        self.params_shape = (self.num_vars, num_units, num_replica, num_stats)
         self.params = nn.Parameter(torch.empty(self.params_shape))
 
         # TODO: is this a good init? (originally None)
@@ -105,7 +101,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
             computing sums over densities.
 
         We first pass the data x into self.ef_array, which computes a tensor of shape
-            (batch_size, num_var, num_dist, num_replica). This is best interpreted \
+            (batch_size, self.num_vars, num_dist, num_replica). This is best interpreted \
             as vectors of length num_dist, for each \
             sample in the batch and each RV. Since some leaves have overlapping \
             scope, we need to compute "enough" leaves, \
@@ -116,10 +112,10 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         :param x: input data (Tensor).
                   If self.num_dims == 1, this can be either of shape \
-                    (batch_size, self.num_var, 1) or
-                  (batch_size, self.num_var).
+                    (batch_size, self.num_vars, 1) or
+                  (batch_size, self.num_vars).
                   If self.num_dims > 1, this must be of shape \
-                    (batch_size, self.num_var, self.num_dims).
+                    (batch_size, self.num_vars, self.num_dims).
         :return: log-density vectors of leaves
                  Will be of shape (batch_size, num_dist, len(self.rg_nodes))
                  Note: num_dist is K in the paper, len(self.rg_nodes) is the number of PC leaves
@@ -135,16 +131,16 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # assert not torch.isnan(theta).any()
         # assert not torch.isinf(theta).any()
 
-        # suff_stats: (batch_size, self.num_var, self.num_stats)
+        # suff_stats: (batch_size, self.num_vars, self.num_stats)
         self.suff_stats = self.sufficient_statistics(x)
 
         # assert not torch.isnan(self.suff_stats).any()
         # assert not torch.isinf(self.suff_stats).any()
 
-        # log_normalizer: (self.num_var, *self.array_shape)
+        # log_normalizer: (self.num_vars, *self.array_shape)
         log_normalizer = self.log_normalizer(theta)
 
-        # log_h: scalar, or (batch_size, self.num_var)
+        # log_h: scalar, or (batch_size, self.num_vars)
         log_h = self.log_h(x)
         if len(log_h.shape) > 0:
             # reshape for broadcasting
@@ -152,7 +148,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
             log_h = log_h.reshape(log_h.shape[:2] + (1, 1))
 
         # compute the exponential family tensor
-        # (batch_size, self.num_var, *self.array_shape)
+        # (batch_size, self.num_vars, *self.array_shape)
 
         # antonio_mari -> edit: (theta.unsqueeze(0) * self.suff_stats).sum(-1) is inefficient
         # example: for MNIST with PD structure, batch_size=100 and num_sums=128,
@@ -184,13 +180,13 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         # only when marginalization_idx changes.
         if self.marginalization_idx is not None:
             with torch.no_grad():
-                # TODO: is this better? torch.ones(self.num_var).to(self.ll)
+                # TODO: is this better? torch.ones(self.num_vars).to(self.ll)
                 self.marginalization_mask = torch.ones(
-                    self.num_var, dtype=self.ll.dtype, device=self.ll.device
+                    self.num_vars, dtype=self.ll.dtype, device=self.ll.device
                 )
                 self.marginalization_mask[self.marginalization_idx] = 0
                 # TODO: find another way to reshape
-                shape = (1, self.num_var) + (1, 1)
+                shape = (1, self.num_vars) + (1, 1)
                 self.marginalization_mask = self.marginalization_mask.reshape(shape)
             output = self.ll * self.marginalization_mask
         else:
@@ -218,7 +214,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         :param mode: 'sample' or 'argmax'; for sampling or MPE approximation, respectively.
         :param _: ignored
         :param kwargs: keyword arguments
-        :return: samples (Tensor). Of shape (N, self.num_var, self.num_dims).
+        :return: samples (Tensor). Of shape (N, self.num_vars, self.num_dims).
         """
         assert len(dist_idx) == len(node_idx), "Invalid input."
 
@@ -231,13 +227,13 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
             )
 
             values = torch.zeros(
-                big_n, self.num_var, self.num_dims, device=ef_values.device, dtype=ef_values.dtype
+                big_n, self.num_vars, self.num_dims, device=ef_values.device, dtype=ef_values.dtype
             )
 
             # TODO: use enumerate?
             for n in range(big_n):
                 cur_value = torch.zeros(
-                    self.num_var, self.num_dims, device=ef_values.device, dtype=ef_values.dtype
+                    self.num_vars, self.num_dims, device=ef_values.device, dtype=ef_values.dtype
                 )
                 assert len(dist_idx[n]) == len(node_idx[n]), "Invalid input."
                 for c, k in enumerate(node_idx[n]):
@@ -305,12 +301,12 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         :param x: observed data (Tensor).
                   If self.num_dims == 1, this can be either of shape \
-                    (batch_size, self.num_var, 1) or
-                  (batch_size, self.num_var).
+                    (batch_size, self.num_vars, 1) or
+                  (batch_size, self.num_vars).
                   If self.num_dims > 1, this must be of shape \
-                    (batch_size, self.num_var, self.num_dims).
+                    (batch_size, self.num_vars, self.num_dims).
         :return: sufficient statistics of the implemented exponential family (Tensor).
-                 Must be of shape (batch_size, self.num_var, self.num_stats)
+                 Must be of shape (batch_size, self.num_vars, self.num_stats)
         """
 
     @abstractmethod
@@ -318,8 +314,8 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """Log-normalizer of the implemented exponential family (called A(theta) in the paper).
 
         :param theta: natural parameters (Tensor). Must be of shape \
-            (self.num_var, *self.array_shape, self.num_stats).
-        :return: log-normalizer (Tensor). Must be of shape (self.num_var, *self.array_shape).
+            (self.num_vars, *self.array_shape, self.num_stats).
+        :return: log-normalizer (Tensor). Must be of shape (self.num_vars, *self.array_shape).
         """
 
     @abstractmethod
@@ -328,12 +324,12 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         :param x: observed data (Tensor).
                   If self.num_dims == 1, this can be either of shape \
-                    (batch_size, self.num_var, 1) or
-                  (batch_size, self.num_var).
+                    (batch_size, self.num_vars, 1) or
+                  (batch_size, self.num_vars).
                   If self.num_dims > 1, this must be of shape \
-                    (batch_size, self.num_var, self.num_dims).
+                    (batch_size, self.num_vars, self.num_dims).
         :return: log(h) of the implemented exponential family (Tensor).
-                 Can either be a scalar or must be of shape (batch_size, self.num_var)
+                 Can either be a scalar or must be of shape (batch_size, self.num_vars)
         """
 
     @abstractmethod
@@ -342,7 +338,7 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
             theta, for the implemented exponential family.
 
         :param phi: expectation parameters (Tensor). Must be of shape \
-            (self.num_var, *self.array_shape, self.num_stats).
+            (self.num_vars, *self.array_shape, self.num_stats).
         :return: natural parameters theta (Tensor). Same shape as phi.
         """
 
@@ -369,11 +365,11 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
 
         :param num_samples: number of samples to be produced
         :param params: expectation parameters (phi) of the exponential family, of shape
-                       (self.num_var, *self.array_shape, self.num_stats)
+                       (self.num_vars, *self.array_shape, self.num_stats)
         :param kwargs: keyword arguments
                Depending on the implementation, kwargs can also contain further arguments.
         :return: i.i.d. samples of the exponential family (Tensor).
-                 Should be of shape (num_samples, self.num_var, self.num_dims, *self.array_shape)
+                 Should be of shape (num_samples, self.num_vars, self.num_dims, *self.array_shape)
         """
 
     @abstractmethod
@@ -381,9 +377,9 @@ class ExpFamilyLayer(Layer):  # pylint: disable=too-many-instance-attributes
         """Is helper function for getting the argmax of the exponential family.
 
         :param params: expectation parameters (phi) of the exponential family, of shape
-                       (self.num_var, *self.array_shape, self.num_stats)
+                       (self.num_vars, *self.array_shape, self.num_stats)
         :param kwargs: keyword arguments
                Depending on the implementation, kwargs can also contain further arguments.
         :return: argmax of the exponential family (Tensor).
-                 Should be of shape (self.num_var, self.num_dims, *self.array_shape)
+                 Should be of shape (self.num_vars, self.num_dims, *self.array_shape)
         """
