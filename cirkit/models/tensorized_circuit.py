@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
@@ -14,9 +14,9 @@ from cirkit.layers.mixing import MixingLayer
 from cirkit.layers.scope import ScopeLayer
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
+from cirkit.utils.reparams import reparam_id
 from cirkit.utils.scope import one_hot_variables
 
-# TODO: check all type casts. There should not be any without a good reason
 # TODO: rework docstrings
 
 
@@ -33,6 +33,7 @@ class TensorizedPC(nn.Module):
         *,
         layer_kwargs: Optional[Dict[str, Any]] = None,
         efamily_kwargs: Optional[Dict[str, Any]] = None,
+        reparam: Callable[[Tensor], Tensor] = reparam_id,
         num_inner_units: int = 2,
         num_input_units: int = 2,
         num_channels: int = 1,
@@ -46,6 +47,7 @@ class TensorizedPC(nn.Module):
             efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
             layer_kwargs (Dict[str, Any]): The parameters for the inner layer class.
             efamily_kwargs (Dict[str, Any]): The parameters for the exponential family class.
+            reparam (Callable[[Tensor], Tensor]): The reparametrization function.
             num_inner_units (int): The number of units for each layer.
             num_input_units (int): The number of input units in the input layer.
             num_channels (int): The number of channels (e.g., 3 for RGB pixel). Defaults to 1.
@@ -94,6 +96,7 @@ class TensorizedPC(nn.Module):
             rg_layers,
             layer_cls,
             layer_kwargs,  # type: ignore[misc]
+            reparam,
             num_inner_units,
             num_input_units,
             num_classes=num_classes,
@@ -144,6 +147,7 @@ class TensorizedPC(nn.Module):
         rg_layers: List[Tuple[List[PartitionNode], List[RegionNode]]],
         layer_cls: Type[SumProductLayer],
         layer_kwargs: Dict[str, Any],
+        reparam: Callable[[Tensor], Tensor],
         num_inner_units: int,
         num_input_units: int,
         num_classes: int = 1,
@@ -154,6 +158,7 @@ class TensorizedPC(nn.Module):
             rg_layers: The region graph layers.
             layer_cls (Type[SumProductNetwork]): The layer class.
             layer_kwargs (Dict[str, Any]): The layer arguments.
+            reparam (Callable[[Tensor], Tensor]): The reparametrization function.
             num_inner_units (int): The number of units per inner layer.
             num_input_units (int): The number of units of the input layer.
             num_classes (int): The number of outputs of the network.
@@ -223,7 +228,11 @@ class TensorizedPC(nn.Module):
             num_outputs = num_inner_units if rg_layer_idx < len(rg_layers) - 1 else num_classes
             num_inputs = num_input_units if rg_layer_idx == 1 else num_inner_units
             layer = layer_cls(
-                lpartitions, num_inputs, num_outputs, **layer_kwargs  # type: ignore[misc]
+                lpartitions,
+                num_inputs,
+                num_outputs,
+                reparam=reparam,
+                **layer_kwargs,  # type: ignore[misc]
             )
             inner_layers.append(layer)
 
@@ -248,7 +257,9 @@ class TensorizedPC(nn.Module):
             num_folds.append(len(non_unary_regions))
 
             # Build the actual mixing layer
-            mixing_layer = MixingLayer(non_unary_regions, num_outputs, max_num_input_partitions)
+            mixing_layer = MixingLayer(
+                non_unary_regions, num_outputs, max_num_input_partitions, reparam=reparam
+            )
             bookkeeping.append(
                 (should_pad, [len(inner_layers)], torch.tensor(input_partition_indices))
             )
