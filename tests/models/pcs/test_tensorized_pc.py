@@ -9,9 +9,9 @@ import pytest
 import torch
 from torch import Tensor
 
-from cirkit.atlas.integrate import IntegrationContext
 from cirkit.layers.input.exp_family import CategoricalLayer
 from cirkit.layers.sum_product import CPLayer
+from cirkit.models.functional import integrate
 from cirkit.models.tensorized_circuit import TensorizedPC
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.region_graph.poon_domingos import PoonDomingos
@@ -68,10 +68,10 @@ def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
     return graph
 
 
-def _get_pc() -> TensorizedPC:
+def _get_pc_2x2() -> TensorizedPC:
     rg = _gen_rg_2x2()
 
-    pc = TensorizedPC(
+    pc = TensorizedPC.from_region_graph(
         rg,
         layer_cls=CPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
@@ -132,28 +132,27 @@ def _get_output() -> Tensor:
 
 
 def test_pc_creation() -> None:
-    pc = _get_pc()
-    # TODO: what to test here?
+    pc = _get_pc_2x2()
     param_shapes = {name: tuple(param.shape) for name, param in pc.named_parameters()}
+    assert pc.num_variables == 4
     assert param_shapes == _get_param_shapes()
 
 
 def test_pc_output() -> None:
-    pc = _get_pc()
+    pc = _get_pc_2x2()
     _set_params(pc)
-    possible_values = [0, 1]
-    all_inputs = list(itertools.product(possible_values, repeat=4))
+    all_inputs = list(itertools.product([0, 1], repeat=4))
     output = pc(torch.tensor(all_inputs))
     assert output.shape == (16, 1)
     assert torch.allclose(output, _get_output(), rtol=0, atol=torch.finfo(torch.float32).eps)
 
 
 def test_small_pc_partition_function() -> None:
-    pc = _get_pc()
+    pc = _get_pc_2x2()
     _set_params(pc)
     # part_func should be 1, log is 0
-    pc_pf = pc.integrate()
-    assert torch.allclose(pc_pf(torch.zeros(())), torch.zeros(()), atol=0, rtol=0)
+    pc_pf = integrate(pc)
+    assert torch.allclose(pc_pf(), torch.zeros(()), atol=0, rtol=0)
 
 
 def _get_deep_pc(  # type: ignore[misc]
@@ -161,7 +160,7 @@ def _get_deep_pc(  # type: ignore[misc]
 ) -> TensorizedPC:
     # TODO: type of kwargs should be refined
     rg = rg_cls(**kwargs)
-    pc = TensorizedPC(
+    pc = TensorizedPC.from_region_graph(
         rg,
         layer_cls=CPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
@@ -174,7 +173,7 @@ def _get_deep_pc(  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(  # type: ignore[misc]
-    "rg_cls,kwargs,log_answer",
+    "rg_cls,kwargs,true_log_z",
     [
         (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.246478080749512),
         (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 51.94971466064453),
@@ -186,79 +185,51 @@ def _get_deep_pc(  # type: ignore[misc]
     ],
 )
 @RandomCtx(42)
-def test_pc_partition_function(
-    rg_cls: Callable[..., RegionGraph],
-    kwargs: Dict[str, Union[int, bool, List[int]]],
-    log_answer: Optional[float],
-) -> None:
-    """Tests the creation and partition function computation on a PC.
-
-    Args:
-        rg_cls (Type[RegionGraph]): The class of RG to test.
-        kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
-        log_answer (Optional[float]): The answer of partition func.
-            NOTE: we don't know if it's correct, but it guarantees reproducibility.
-    """
-    pc = _get_deep_pc(rg_cls, kwargs)  # type: ignore[misc]
-
-    # Generate all possible combinations of 16 integers from the list of possible values
-    possible_values = [0, 1]
-    all_lists = list(itertools.product(possible_values, repeat=pc.num_variables))
-
-    # compute outputs
-    out = pc(torch.tensor(all_lists))
-
-    # log sum exp on outputs to compute their sum
-    # TODO: for simple log-sum-exp, pytorch have implementation
-    sum_out = torch.logsumexp(out, dim=0, keepdim=True)
-
-    pc_pf = pc.integrate()
-    assert torch.isclose(pc_pf(torch.zeros(())), sum_out, rtol=1e-6, atol=0)
-    if log_answer is not None:
-        assert torch.isclose(
-            sum_out, torch.tensor(log_answer), rtol=1e-6, atol=0
-        ), f"{sum_out.item()}"
-
-
-@pytest.mark.parametrize(  # type: ignore[misc]
-    "rg_cls,kwargs",
-    [
-        (PoonDomingos, {"shape": [4, 4], "delta": 2}),
-        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}),
-        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}),
-        (PoonDomingos, {"shape": [3, 3], "delta": 2}),
-        (QuadTree, {"width": 3, "height": 3, "struct_decomp": False}),
-        (QuadTree, {"width": 3, "height": 3, "struct_decomp": True}),
-        (RandomBinaryTree, {"num_vars": 9, "depth": 3, "num_repetitions": 2}),
-    ],
-)
-@RandomCtx(42)
 def test_pc_marginalization(
     rg_cls: Callable[..., RegionGraph],
     kwargs: Dict[str, Union[int, bool, List[int]]],
+    true_log_z: Optional[float],
 ) -> None:
-    """Tests variables marginalization on a PC.
+    """Tests the creation and variable marginalization on a PC.
 
     Args:
         rg_cls (Type[RegionGraph]): The class of RG to test.
         kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
+        true_log_z (Optional[float]): The answer of partition func.
+            NOTE: we don't know if it's correct, but it guarantees reproducibility.
     """
     pc = _get_deep_pc(rg_cls, kwargs)  # type: ignore[misc]
     num_vars = pc.num_variables
 
-    # Compute log-likelihoods
-    all_data = torch.tensor(list(itertools.product([0, 1], repeat=num_vars)))  # type: ignore[misc]
-    lls = pc(all_data)
+    # Generate all possible combinations of 16 integers from the list of possible values
+    possible_values = [0, 1]
+    all_data = torch.tensor(
+        list(itertools.product(possible_values, repeat=pc.num_variables))  # type: ignore[misc]
+    )
 
-    # Perform marginalization on the last two variables
-    mar_pc = pc.integrate(icontext=IntegrationContext(num_vars, ivars=[num_vars - 2, num_vars - 1]))
+    # Instantiate the integral of the PC, i.e., computing the partition function
+    pc_pf = integrate(pc)
+    log_z = pc_pf()
+    assert log_z.shape == (1, 1)
+
+    # Compute outputs
+    log_scores = pc(all_data)
+
+    lls = log_scores - log_z
+
+    # Check the partition function computation
+    assert torch.isclose(log_z, torch.logsumexp(log_scores, dim=0, keepdim=True), rtol=1e-6, atol=0)
+
+    # Compare the partition function against the answer, if given
+    if true_log_z is not None:
+        assert torch.isclose(log_z, torch.tensor(true_log_z), rtol=1e-6, atol=0), f"{log_z.item()}"
+
+    # Perform variable marginalization on the last two variables
     mar_data = all_data[::4]
-    mar_lls = mar_pc(mar_data)
+    mar_scores = pc.integrate(mar_data, [num_vars - 2, num_vars - 1])
+    mar_lls = mar_scores - log_z
 
     # Check the results of marginalization
     sum_lls = torch.logsumexp(lls.view(-1, 4), dim=1, keepdim=True)
     assert mar_lls.shape[0] == lls.shape[0] // 4 and len(mar_lls.shape) == len(lls.shape)
-    # TODO: when working in log-space it is REALLY difficult to get atol < 5e-7 in my experience.
-    #  We might decide to run tests using float64 arithmetic, because we only care about correctness
-    #  regardless of arithmetic precision.
-    assert torch.allclose(sum_lls, mar_lls, rtol=1e-6, atol=5e-7)
+    assert torch.allclose(sum_lls, mar_lls, rtol=1e-6, atol=torch.finfo(torch.float32).eps)

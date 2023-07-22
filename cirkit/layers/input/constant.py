@@ -36,7 +36,7 @@ class ConstantLayer(InputLayer):
         Returns:
             torch.Tensor: The integration of the layer over all variables.
         """
-        raise NotImplementedError("The integration of constants functions is not implemented yet")
+        raise NotImplementedError("The integration of constants functions is not implemented")
 
     def forward(self, *args: torch.Tensor, **kwargs: torch.Tensor) -> torch.Tensor:
         """Compute the output of the layer.
