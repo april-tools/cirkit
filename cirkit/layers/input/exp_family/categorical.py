@@ -26,7 +26,6 @@ class CategoricalLayer(ExpFamilyLayer):
     def __init__(
         self,
         rg_nodes: List[RegionNode],
-        num_var: int,
         num_dims: int,
         num_units: int,
         *,
@@ -36,14 +35,11 @@ class CategoricalLayer(ExpFamilyLayer):
 
         Args:
             rg_nodes (List[RegionNode]): Passed to super.
-            num_var (int): Number of vars.
             num_dims (int): Number of dims.
             num_units (int): Number of input units,
             num_categories (int): k for category.
         """
-        super().__init__(
-            rg_nodes, num_var, num_dims, num_units, num_stats=num_dims * num_categories
-        )
+        super().__init__(rg_nodes, num_dims, num_units, num_stats=num_dims * num_categories)
         self.num_categories = num_categories
 
     def reparam_function(self, params: Tensor) -> Tensor:
@@ -86,9 +82,9 @@ class CategoricalLayer(ExpFamilyLayer):
         # TODO: how to save the shape
         array_shape = self.params_shape[1:3]
         theta = torch.clamp(phi, 1e-12, 1)
-        theta = theta.reshape(self.num_var, *array_shape, self.num_dims, self.num_categories)
+        theta = theta.reshape(self.num_vars, *array_shape, self.num_dims, self.num_categories)
         theta /= theta.sum(dim=-1, keepdim=True)
-        theta = theta.reshape(self.num_var, *array_shape, self.num_dims * self.num_categories)
+        theta = theta.reshape(self.num_vars, *array_shape, self.num_dims * self.num_categories)
         theta = torch.log(theta)
         return theta
 
@@ -120,7 +116,7 @@ class CategoricalLayer(ExpFamilyLayer):
         with torch.no_grad():
             # TODO: save shape
             array_shape = self.params_shape[1:3]
-            dist = params.reshape(self.num_var, *array_shape, self.num_dims, self.num_categories)
+            dist = params.reshape(self.num_vars, *array_shape, self.num_dims, self.num_categories)
             cum_sum = torch.cumsum(dist[..., :-1], dim=-1)  # TODO: why slice to -1?
             rand = torch.rand(num_samples, *cum_sum.shape[:-1], 1, device=cum_sum.device)
             samples = torch.sum(rand > cum_sum, dim=-1).to(dtype)
@@ -133,6 +129,6 @@ class CategoricalLayer(ExpFamilyLayer):
         with torch.no_grad():
             # TODO: save shape
             array_shape = self.params_shape[1:3]
-            dist = params.reshape(self.num_var, *array_shape, self.num_dims, self.num_categories)
+            dist = params.reshape(self.num_vars, *array_shape, self.num_dims, self.num_categories)
             mode = torch.argmax(dist, dim=-1).to(dtype)
             return _shift_last_axis_to(mode, 1)
