@@ -9,7 +9,7 @@ from cirkit.utils import log_func_exp
 
 
 class CPSharedLayer(SumProductLayer):
-    """Candecomp Parafac (decomposition) layer with parameter sharing, collapsing the C matrix. """
+    """Candecomp Parafac (decomposition) layer with parameter sharing, collapsing the C matrix."""
 
     # TODO: better way to call init by base class?
     # TODO: better default value
@@ -40,8 +40,7 @@ class CPSharedLayer(SumProductLayer):
         # (float ** float) is not guaranteed to be float, but here we know it is
         self.param_clamp_value["min"] = cast(
             float,
-            torch.finfo(self.params_left.dtype).smallest_normal
-            ** (1 / 2),
+            torch.finfo(self.params_left.dtype).smallest_normal ** (1 / 2),
         )
 
         self.reset_parameters()

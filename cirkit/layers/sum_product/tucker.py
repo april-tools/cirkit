@@ -40,15 +40,15 @@ class TuckerLayer(SumProductLayer):
         super().__init__(rg_nodes, num_input_units, num_output_units)
         self.prod_exp = prod_exp
 
-        self.params = nn.Parameter(torch.empty(len(rg_nodes), num_input_units,
-                                               num_input_units, num_output_units))
+        self.params = nn.Parameter(
+            torch.empty(len(rg_nodes), num_input_units, num_input_units, num_output_units)
+        )
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is
         self.param_clamp_value["min"] = cast(
             float,
-            torch.finfo(self.params.dtype).smallest_normal
-            ** (1 / 2),
+            torch.finfo(self.params.dtype).smallest_normal ** (1 / 2),
         )
 
         self.reset_parameters()
@@ -64,6 +64,4 @@ class TuckerLayer(SumProductLayer):
         """
         log_left, log_right = inputs[:, 0], inputs[:, 1]
 
-        return log_func_exp(
-            log_left, log_right, func=self._forward_out_linear, dim=1, keepdim=True
-        )
+        return log_func_exp(log_left, log_right, func=self._forward_out_linear, dim=1, keepdim=True)

@@ -16,6 +16,7 @@ from cirkit.layers.sum_product.cp import CPLayer  # TODO: rework interfaces for 
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 from cirkit.utils import RandomCtx, set_determinism
+from layers.sum_product.tucker import TuckerLayer
 
 device = torch.device("cuda")
 
@@ -147,7 +148,7 @@ def main() -> None:
     pc = TensorizedPC(
         RegionGraph.load(args.region_graph),
         num_vars=num_vars,
-        layer_cls=CPLayer,  # type: ignore[misc]
+        layer_cls=TuckerLayer,  # type: ignore[misc] # CPLayer
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
         efamily_kwargs={"num_categories": 256},  # type: ignore[misc]

@@ -9,7 +9,7 @@ from cirkit.utils import log_func_exp
 
 
 class CPCollapsedLayer(SumProductLayer):
-    """Candecomp Parafac (decomposition) layer, collapsing the C matrix. """
+    """Candecomp Parafac (decomposition) layer, collapsing the C matrix."""
 
     # TODO: better way to call init by base class?
     # TODO: better default value
@@ -33,17 +33,18 @@ class CPCollapsedLayer(SumProductLayer):
         super().__init__(rg_nodes, num_input_units, num_output_units)
         self.prod_exp = prod_exp
 
-        self.params_left = nn.Parameter(torch.empty(len(rg_nodes),
-                                                    num_input_units, num_output_units))
-        self.params_right = nn.Parameter(torch.empty(len(rg_nodes),
-                                                     num_input_units, num_output_units))
+        self.params_left = nn.Parameter(
+            torch.empty(len(rg_nodes), num_input_units, num_output_units)
+        )
+        self.params_right = nn.Parameter(
+            torch.empty(len(rg_nodes), num_input_units, num_output_units)
+        )
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is
         self.param_clamp_value["min"] = cast(
             float,
-            torch.finfo(self.params_left.dtype).smallest_normal
-            ** (1 / 2),
+            torch.finfo(self.params_left.dtype).smallest_normal ** (1 / 2),
         )
 
         self.reset_parameters()
