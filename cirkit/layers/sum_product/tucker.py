@@ -64,4 +64,4 @@ class TuckerLayer(SumProductLayer):
         """
         log_left, log_right = inputs[:, 0], inputs[:, 1]
 
-        return log_func_exp(log_left, log_right, func=self._forward_out_linear, dim=1, keepdim=True)
+        return log_func_exp(log_left, log_right, func=self._forward_linear, dim=1, keepdim=True)
