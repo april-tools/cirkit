@@ -1,4 +1,4 @@
-from typing import Any, List, cast
+from typing import Any, Callable, List, cast
 
 import torch
 from torch import Tensor, nn
@@ -6,6 +6,7 @@ from torch import Tensor, nn
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
+from cirkit.utils.reparams import reparam_id
 
 # TODO: rework docstrings
 
@@ -22,6 +23,7 @@ class CPLayer(SumProductLayer):
         num_output_units: int,
         *,
         rank: int = 1,
+        reparam: Callable[[torch.Tensor], torch.Tensor] = reparam_id,
         prod_exp: bool,
         **_: Any,
     ) -> None:
@@ -33,9 +35,11 @@ class CPLayer(SumProductLayer):
             num_output_units (int): The number of output units.
             rank (int): The rank of the CP decomposition (i.e., the number of inner units of the \
                 layer).
+            reparam: The reparameterization function.
             prod_exp (bool): Whether to compute products in linear space rather than in log-space.
         """
         super().__init__(rg_nodes, num_input_units, num_output_units)
+        self.reparam = reparam
         self.prod_exp = prod_exp
 
         self.params_left = nn.Parameter(torch.empty(len(rg_nodes), num_input_units, rank))
@@ -54,13 +58,13 @@ class CPLayer(SumProductLayer):
 
     # TODO: use bmm to replace einsum? also axis order?
     def _forward_left_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("fkr,fkb->frb", self.params_left, x)
+        return torch.einsum("fkr,fkb->frb", self.reparam(self.params_left), x)
 
     def _forward_right_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("fkr,fkb->frb", self.params_right, x)
+        return torch.einsum("fkr,fkb->frb", self.reparam(self.params_right), x)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("frk,frb->fkb", self.params_out, x)
+        return torch.einsum("frk,frb->fkb", self.reparam(self.params_out), x)
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         left_hidden = self._forward_left_linear(left)
