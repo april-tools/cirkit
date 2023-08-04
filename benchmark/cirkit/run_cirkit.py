@@ -144,7 +144,7 @@ def main() -> None:
         drop_last=True,
     )
 
-    pc = TensorizedPC(
+    pc = TensorizedPC.from_region_graph(
         RegionGraph.load(args.region_graph),
         layer_cls=CPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
