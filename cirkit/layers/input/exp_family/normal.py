@@ -24,7 +24,7 @@ class NormalLayer(ExpFamilyLayer):
     def __init__(
         self,
         nodes: List[RegionNode],
-        num_dims: int,
+        num_channels: int,
         num_units: int,
         *,
         min_var: float = 0.0001,
@@ -34,15 +34,15 @@ class NormalLayer(ExpFamilyLayer):
 
         Args:
             nodes (List[RegionNode]): Passed to super.
-            num_dims (int): Number of dims.
+            num_channels (int): Number of dims.
             num_units (int): Number of units.
             min_var (float, optional): Min var. Defaults to 0.0001.
             max_var (float, optional): Max var. Defaults to 10.0.
         """
-        super().__init__(nodes, num_dims, num_units, num_stats=2 * num_dims)
+        super().__init__(nodes, num_channels, num_units, num_stats=2 * num_channels)
         self.min_var = min_var
         self.max_var = max_var
-        self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_dims)
+        self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_channels)
 
     def reparam_function(self, params: Tensor) -> Tensor:
         """Get reparamed params.
@@ -53,9 +53,9 @@ class NormalLayer(ExpFamilyLayer):
         Returns:
             Tensor: Re-params.
         """
-        mu = params[..., : self.num_dims]
+        mu = params[..., : self.num_channels]
         var = (
-            torch.sigmoid(params[..., self.num_dims :]) * (self.max_var - self.min_var)
+            torch.sigmoid(params[..., self.num_channels :]) * (self.max_var - self.min_var)
             + self.min_var
         )
         # TODO: is this a mypy bug?
@@ -86,9 +86,9 @@ class NormalLayer(ExpFamilyLayer):
             Tensor: The expectation.
         """
         # TODO: is this a mypy bug?
-        var: Tensor = phi[..., : self.num_dims] ** 2
-        var = phi[..., self.num_dims :] - var
-        theta1 = phi[..., : self.num_dims] / var
+        var: Tensor = phi[..., : self.num_channels] ** 2
+        var = phi[..., self.num_channels :] - var
+        theta1 = phi[..., : self.num_channels] / var
         # TODO: another mypy bug? 2*var is ok, but -1/() is Any
         theta2: Tensor = -1 / (2 * var)
         return torch.cat((theta1, theta2), dim=-1)
@@ -103,9 +103,9 @@ class NormalLayer(ExpFamilyLayer):
             Tensor: The normalizer.
         """
         # TODO: is this a mypy bug?
-        log_normalizer: Tensor = theta[..., : self.num_dims] ** 2 / (  # type: ignore[misc]
-            -4 * theta[..., self.num_dims :]
-        ) - 0.5 * torch.log(-2 * theta[..., self.num_dims :])
+        log_normalizer: Tensor = theta[..., : self.num_channels] ** 2 / (  # type: ignore[misc]
+            -4 * theta[..., self.num_channels :]
+        ) - 0.5 * torch.log(-2 * theta[..., self.num_channels :])
         log_normalizer = torch.sum(log_normalizer, dim=-1)
         return log_normalizer
 
@@ -126,9 +126,9 @@ class NormalLayer(ExpFamilyLayer):
     ) -> Tensor:
         # TODO: no_grad on decorator?
         with torch.no_grad():
-            mu = params[..., : self.num_dims]
+            mu = params[..., : self.num_channels]
             # TODO: is this a mypy bug?
-            std = torch.sqrt(params[..., self.num_dims :] - mu**2)  # type: ignore[misc]
+            std = torch.sqrt(params[..., self.num_channels :] - mu**2)  # type: ignore[misc]
             # TODO: same dtype device idiom?
             samples = mu.unsqueeze(0) + std_correction * std.unsqueeze(0) * torch.randn(
                 num_samples, *mu.shape, dtype=mu.dtype, device=mu.device
@@ -138,5 +138,5 @@ class NormalLayer(ExpFamilyLayer):
     # TODO: do we allow explicit any?
     def _argmax(self, params: Tensor, **_: Any) -> Tensor:  # type: ignore[misc]
         with torch.no_grad():
-            mu = params[..., : self.num_dims]
+            mu = params[..., : self.num_channels]
             return _shift_last_axis_to(mu, 1)

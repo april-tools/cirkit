@@ -98,6 +98,13 @@ class RegionGraph:
         """Get inner (non-input) region nodes in the graph."""
         return (node for node in self.region_nodes if node.inputs)
 
+    ##############################   Miscellaneous   ###############################
+
+    @property
+    def num_variables(self) -> int:
+        """Get the number of variables the region graph is defined on."""
+        return len(set(v for node in self.output_nodes for v in node.scope))
+
     ##########################    Structural properties    #########################
 
     # The RG is expected to be immutable after construction. Also, each of these properties is

@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, List, Literal, Optional, Sequence
+from typing import Any, List, Literal, Sequence
 
 import torch
 from torch import Tensor, nn
@@ -12,7 +12,7 @@ from cirkit.region_graph.rg_node import RegionNode
 
 
 # TODO: but we don't have a non-factorized one
-class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attributes
+class ExpFamilyLayer(InputLayer):
     """Computes all EiNet leaves in parallel, where each leaf is a vector of \
         factorized distributions, where factors are from exponential families.
 
@@ -24,66 +24,44 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
             leaf densities". At the moment we rely that
         the PC structure (see Class Graph) provides the necessary information \
             to determine num_replica.
-        In the future, it would convenient to have an automatic allocation \
+        In the future, it would be convenient to have an automatic allocation \
             of leaves to replica, without requiring
         the user to specify this.
-    The generate ExponentialFamilyArray has shape (batch_size, self.num_vars, \
+    The generate ExponentialFamilyArray has shape (batch_size, num_vars, \
         num_dist, num_replica). This array of densities
         will contain all densities over single RVs, which are then multiplied \
         (actually summed, due to log-domain
         computation) together in forward(...).
     """
 
-    scope_tensor: Tensor  # to be registered as buffer
-
     def __init__(
         self,
         rg_nodes: List[RegionNode],
-        num_dims: int,
+        num_channels: int,
         num_units: int,
         num_stats: int = 1,
     ):
         """Init class.
 
         :param rg_nodes: list of PC leaves (DistributionVector, see Graph.py)
-        :param num_dims: dimensionality of RVs (int)
+        :param num_vars: number of random variables (int)
+        :param num_channels: dimensionality of RVs (int)
         :param num_units: The number of units (int).
         :param num_stats: number of sufficient statistics of exponential family (int)
         """
         super().__init__(rg_nodes)
-        self.num_dims = num_dims
+        self.num_channels = num_channels
         self.num_units = num_units
         self.num_stats = num_stats
 
-        replica_indices = set(n.get_replica_idx() for n in self.rg_nodes)
-        num_replica = len(replica_indices)
+        replica_indices = set(n.get_replica_idx() for n in rg_nodes)
+        self.num_replicas = len(replica_indices)
         assert replica_indices == set(
-            range(num_replica)
+            range(self.num_replicas)
         ), "Replica indices should be consecutive, starting with 0."
 
-        # self.scope_tensor indicates which densities in self.ef_array belongs to which leaf.
-        # TODO: it might be smart to have a sparse implementation --
-        # I have experimented a bit with this, but it is not always faster.
-        self.register_buffer(
-            "scope_tensor", torch.zeros(self.num_vars, num_replica, len(self.rg_nodes))
-        )
-        for i, node in enumerate(self.rg_nodes):
-            self.scope_tensor[list(node.scope), node.get_replica_idx(), i] = 1  # type: ignore[misc]
-
-        self.params_shape = (self.num_vars, num_units, num_replica, num_stats)
-        self.params = nn.Parameter(torch.empty(self.params_shape))
-
-        # TODO: is this a good init? (originally None)
-        self.ll: Tensor = torch.Tensor()
-        self.suff_stats: Tensor = torch.Tensor()
-
-        self.marginalization_idx: Optional[Tensor] = None  # TODO: should this be Tensor?
-        self.marginalization_mask: Optional[Tensor] = None
-
-        # TODO: types of all `None`s?
-        # TODO: why allow None but not directly init?
-        self._p_acc: Optional[Tensor] = None
-        self._stats_acc: Optional[Tensor] = None
+        params_shape = (self.num_vars, self.num_units, self.num_replicas, self.num_stats)
+        self.params = nn.Parameter(torch.empty(params_shape))
 
         # if em is switched off, we re-parametrize the expectation parameters
         # self.reparam holds the function object for this task
@@ -94,6 +72,18 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
         """Reset parameters to default initialization: N(0, 1)."""
         nn.init.normal_(self.params)
 
+    def integrate(self) -> torch.Tensor:
+        """Return the integation, which is a zero tensor for this layer (in log-space).
+
+        Returns:
+            torch.Tensor: A zero tensor of shape (1, num_vars, num_units, num_replicas).
+        """
+        return torch.zeros(
+            size=(1, self.num_vars, self.num_units, self.num_replicas),
+            requires_grad=False,
+            device=self.params.device,
+        )
+
     # pylint: disable-next=arguments-differ
     def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the factorized leaf densities. We are doing the computation \
@@ -101,7 +91,7 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
             computing sums over densities.
 
         We first pass the data x into self.ef_array, which computes a tensor of shape
-            (batch_size, self.num_vars, num_dist, num_replica). This is best interpreted \
+            (batch_size, num_vars, num_dist, num_replica). This is best interpreted \
             as vectors of length num_dist, for each \
             sample in the batch and each RV. Since some leaves have overlapping \
             scope, we need to compute "enough" leaves, \
@@ -111,91 +101,45 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
         In the end, the factorization (sum in log-domain) is realized with a single einsum.
 
         :param x: input data (Tensor).
-                  If self.num_dims == 1, this can be either of shape \
+                  If self.num_channels == 1, this can be either of shape \
                     (batch_size, self.num_vars, 1) or
                   (batch_size, self.num_vars).
-                  If self.num_dims > 1, this must be of shape \
-                    (batch_size, self.num_vars, self.num_dims).
+                  If self.num_channels > 1, this must be of shape \
+                    (batch_size, self.num_vars, self.num_channels).
         :return: log-density vectors of leaves
                  Will be of shape (batch_size, num_dist, len(self.rg_nodes))
                  Note: num_dist is K in the paper, len(self.rg_nodes) is the number of PC leaves
         """
+        # Re-parametrize first
         # TODO: no_grad? the deleted self.reparam==None branch have no_grad
         phi = self.reparam(self.params)
 
-        # assert not torch.isnan(self.params).any()
-        # assert not torch.isnan(phi).any()
-
+        # Convert to natural parameters
+        # theta: (num_vars, num_units, num_replicas, num_stats)
         theta = self.expectation_to_natural(phi)
 
-        # assert not torch.isnan(theta).any()
-        # assert not torch.isinf(theta).any()
+        # Compute sufficient statistics
+        # suff_stats: (batch_size, num_vars, num_stats)
+        suff_stats = self.sufficient_statistics(x)
 
-        # suff_stats: (batch_size, self.num_vars, self.num_stats)
-        self.suff_stats = self.sufficient_statistics(x)
-
-        # assert not torch.isnan(self.suff_stats).any()
-        # assert not torch.isinf(self.suff_stats).any()
-
-        # log_normalizer: (self.num_vars, *self.array_shape)
+        # Compute the log normalizer
+        # log_normalizer: (num_vars, num_units, num_replicas)
         log_normalizer = self.log_normalizer(theta)
 
-        # log_h: scalar, or (batch_size, self.num_vars)
+        # Compute the log h(x) values
+        # log_h: scalar or (batch_size, num_vars, 1, 1)
         log_h = self.log_h(x)
         if len(log_h.shape) > 0:
-            # reshape for broadcasting
-            # TODO: this line is definitely not written in a good way
-            log_h = log_h.reshape(log_h.shape[:2] + (1, 1))
+            log_h = log_h.unsqueeze(dim=2).unsqueeze(dim=3)
 
-        # compute the exponential family tensor
-        # (batch_size, self.num_vars, *self.array_shape)
+        # Compute the product of natural parameters and sufficient statistics.
+        # Moreover, sum over channel dimensions, which translates to naive factorization
+        theta_suff_stats = torch.einsum("dipj,bdj->bdip", theta, suff_stats)
 
-        # antonio_mari -> edit: (theta.unsqueeze(0) * self.suff_stats).sum(-1) is inefficient
-        # example: for MNIST with PD structure, batch_size=100 and num_sums=128,
-        # categorical distr. it's computed
-        # a tensor (100, 784, 128, 1, 256) -> over 10GB
-        # given by the tensor broadcasting (1, 784, 128, 1, 256) * (100, 784, 1, 1, 256).
-        # I try with an einsum operation (x, o, d, s), (b, x, s) -> b, x, o, d.
-        # That should have the same result
-
-        crucial_quantity_einsum = torch.einsum("xkds,bxs->bxkd", theta, self.suff_stats)
-
-        # assert not torch.isnan(crucial_quantity_einsum).any()
-
-        # reshape for broadcasting
-        # shape = self.suff_stats.shape
-        # shape = shape[0:2] + (1,) * len(self.array_shape) + (shape[2],)
-        # self.suff_stats = self.suff_stats.reshape(shape)
-        # crucial_quantity_orig = (theta.unsqueeze(0) * self.suff_stats).sum(-1)
-        # assert torch.all(torch.eq(crucial_quantity_einsum, crucial_quantity_orig))
-        # TODO: check also for other cases, for now I checked and it's correct
-
-        # TODO: does ll have grad now?
-        self.ll = log_h + crucial_quantity_einsum - log_normalizer
-
-        # Marginalization in PCs works by simply setting leaves corresponding to
-        # marginalized variables to 1 (0 in
-        # (log-domain). We achieve this by a simple multiplicative 0-1 mask, generated here.
-        # TODO: the marginalization mask doesn't need to be computed every time;
-        # only when marginalization_idx changes.
-        if self.marginalization_idx is not None:
-            with torch.no_grad():
-                # TODO: is this better? torch.ones(self.num_vars).to(self.ll)
-                self.marginalization_mask = torch.ones(
-                    self.num_vars, dtype=self.ll.dtype, device=self.ll.device
-                )
-                self.marginalization_mask[self.marginalization_idx] = 0
-                # TODO: find another way to reshape
-                shape = (1, self.num_vars) + (1, 1)
-                self.marginalization_mask = self.marginalization_mask.reshape(shape)
-            output = self.ll * self.marginalization_mask
-        else:
-            self.marginalization_mask = None
-            output = self.ll
-
-        # why bxkr instead of bxkd?
-        # TODO: the axes order for input layer? better remove this contiguous
-        return torch.einsum("bxkr,xrf->fkb", output, self.scope_tensor).contiguous()
+        # Finally compute the log-likelihoods
+        # log_probs: (batch_size, num_vars, num_units, num_replicas)
+        log_probs = log_h + theta_suff_stats - log_normalizer
+        return log_probs
 
     # TODO: how to fix?
     # pylint: disable-next=arguments-differ
@@ -214,7 +158,7 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
         :param mode: 'sample' or 'argmax'; for sampling or MPE approximation, respectively.
         :param _: ignored
         :param kwargs: keyword arguments
-        :return: samples (Tensor). Of shape (N, self.num_vars, self.num_dims).
+        :return: samples (Tensor). Of shape (N, self.num_vars, self.num_channels).
         """
         assert len(dist_idx) == len(node_idx), "Invalid input."
 
@@ -227,13 +171,17 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
             )
 
             values = torch.zeros(
-                big_n, self.num_vars, self.num_dims, device=ef_values.device, dtype=ef_values.dtype
+                big_n,
+                self.num_vars,
+                self.num_channels,
+                device=ef_values.device,
+                dtype=ef_values.dtype,
             )
 
             # TODO: use enumerate?
             for n in range(big_n):
                 cur_value = torch.zeros(
-                    self.num_vars, self.num_dims, device=ef_values.device, dtype=ef_values.dtype
+                    self.num_vars, self.num_channels, device=ef_values.device, dtype=ef_values.dtype
                 )
                 assert len(dist_idx[n]) == len(node_idx[n]), "Invalid input."
                 for c, k in enumerate(node_idx[n]):
@@ -247,24 +195,6 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
                 values[n, :, :] = cur_value  # TODO: directly slice this
 
             return values
-
-    # TODO: why we need this for public attr?
-    def set_marginalization_idx(self, idx: Tensor) -> None:
-        """Set indicices of marginalized variables.
-
-        Args:
-            idx (Tensor): The indices.
-        """
-        self.marginalization_idx = idx
-
-    # TODO: why optional?
-    def get_marginalization_idx(self) -> Optional[Tensor]:
-        """Get indicices of marginalized variables.
-
-        Returns:
-            Tensor: The indices.
-        """
-        return self.marginalization_idx
 
     def sample(self, num_samples: int = 1, **kwargs: Any) -> Tensor:  # type: ignore[misc]
         """Sample the dist.
@@ -300,11 +230,11 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
             family (called T(x) in the paper).
 
         :param x: observed data (Tensor).
-                  If self.num_dims == 1, this can be either of shape \
+                  If self.num_channels == 1, this can be either of shape \
                     (batch_size, self.num_vars, 1) or
                   (batch_size, self.num_vars).
-                  If self.num_dims > 1, this must be of shape \
-                    (batch_size, self.num_vars, self.num_dims).
+                  If self.num_channels > 1, this must be of shape \
+                    (batch_size, self.num_vars, self.num_channels).
         :return: sufficient statistics of the implemented exponential family (Tensor).
                  Must be of shape (batch_size, self.num_vars, self.num_stats)
         """
@@ -323,11 +253,11 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
         """Get the log of the base measure (called h(x) in the paper).
 
         :param x: observed data (Tensor).
-                  If self.num_dims == 1, this can be either of shape \
+                  If self.num_channels == 1, this can be either of shape \
                     (batch_size, self.num_vars, 1) or
                   (batch_size, self.num_vars).
-                  If self.num_dims > 1, this must be of shape \
-                    (batch_size, self.num_vars, self.num_dims).
+                  If self.num_channels > 1, this must be of shape \
+                    (batch_size, self.num_vars, self.num_channels).
         :return: log(h) of the implemented exponential family (Tensor).
                  Can either be a scalar or must be of shape (batch_size, self.num_vars)
         """
@@ -365,11 +295,11 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
 
         :param num_samples: number of samples to be produced
         :param params: expectation parameters (phi) of the exponential family, of shape
-                       (self.num_vars, *self.array_shape, self.num_stats)
+                       (num_vars, *self.array_shape, num_stats)
         :param kwargs: keyword arguments
                Depending on the implementation, kwargs can also contain further arguments.
         :return: i.i.d. samples of the exponential family (Tensor).
-                 Should be of shape (num_samples, self.num_vars, self.num_dims, *self.array_shape)
+                 Should be of shape (num_samples, num_vars, num_channels, *self.array_shape)
         """
 
     @abstractmethod
@@ -381,5 +311,5 @@ class ExpFamilyLayer(InputLayer):  # pylint: disable=too-many-instance-attribute
         :param kwargs: keyword arguments
                Depending on the implementation, kwargs can also contain further arguments.
         :return: argmax of the exponential family (Tensor).
-                 Should be of shape (self.num_vars, self.num_dims, *self.array_shape)
+                 Should be of shape (self.num_vars, self.num_channels, *self.array_shape)
         """

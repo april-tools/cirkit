@@ -23,7 +23,6 @@ class Layer(nn.Module, ABC):
         super().__init__()  # TODO: do we need multi-inherit init?
         self.param_clamp_value: _ClampValue = {}
 
-    @abstractmethod
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization."""
 
