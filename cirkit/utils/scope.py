@@ -3,8 +3,9 @@ from typing import List, Union
 import torch
 
 
-def one_hot_variables(num_vars: int, ivars: Union[List[int], List[List[int]]],
-                      device: torch.device) -> torch.Tensor:
+def one_hot_variables(
+    num_vars: int, ivars: Union[List[int], List[List[int]]], device: torch.device
+) -> torch.Tensor:
     """Return a one-hot encoding mask of a batch of list of variables.
 
     Args:
