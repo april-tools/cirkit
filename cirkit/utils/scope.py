@@ -11,6 +11,7 @@ def one_hot_variables(
     Args:
         num_vars: The maximum number of variables.
         ivars: A list of variables or a batch of list of variables.
+        device: Device where to create the mask
 
     Returns:
         torch.Tensor: A floating-point mask M of shape (batch_size, num_vars)
