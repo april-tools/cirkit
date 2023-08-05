@@ -3,7 +3,8 @@ from typing import List, Union
 import torch
 
 
-def one_hot_variables(num_vars: int, ivars: Union[List[int], List[List[int]]]) -> torch.Tensor:
+def one_hot_variables(num_vars: int, ivars: Union[List[int], List[List[int]]],
+                      device: torch.device) -> torch.Tensor:
     """Return a one-hot encoding mask of a batch of list of variables.
 
     Args:
@@ -24,7 +25,7 @@ def one_hot_variables(num_vars: int, ivars: Union[List[int], List[List[int]]]) -
         assert all(
             v in all_vars for v in vs
         ), f"The id of variables in the {i}-th batch should be in [0, {num_vars})"
-    mask = torch.zeros(len(batch_ivars), num_vars, requires_grad=False)
+    mask = torch.zeros(len(batch_ivars), num_vars, requires_grad=False, device=device)
     for i, vs in enumerate(batch_ivars):
         mask[i, vs] = 1
     return mask

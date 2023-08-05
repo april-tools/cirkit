@@ -350,7 +350,7 @@ class TensorizedPC(nn.Module):
 
         # TODO: cache the construction of the integration mask here.
         #  Perhaps we can hash in_vars and construct a cache for them in this class.
-        in_mask = one_hot_variables(self.num_variables, in_vars).to(x.device)
+        in_mask = one_hot_variables(self.num_variables, in_vars, device=x.device)
         in_outputs = self.scope_layer(self.integral_input_layer(x, in_mask))
         return self._eval_layers(in_outputs)
 
