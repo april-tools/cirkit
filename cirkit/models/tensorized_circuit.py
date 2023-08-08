@@ -91,7 +91,7 @@ class TensorizedPC(nn.Module):
         # Initialize scope layer
         scope_layer = ScopeLayer(rg_layers[0][1])
 
-        # Build layers: this will populate the book-keeping data structure above
+        # Build layers: this will populate the bookkeeping data structure above
         bookkeeping, inner_layers = TensorizedPC._build_layers(
             rg_layers,
             layer_cls,
@@ -230,9 +230,9 @@ class TensorizedPC(nn.Module):
             num_inputs = num_input_units if rg_layer_idx == 1 else num_inner_units
             fold_mask = fold_indices >= 0 if should_pad else None
             layer = layer_cls(
-                lpartitions,
                 num_inputs,
                 num_outputs,
+                num_folds=len(lpartitions),
                 fold_mask=fold_mask,
                 reparam=reparam,
                 **layer_kwargs,  # type: ignore[misc]
@@ -265,9 +265,9 @@ class TensorizedPC(nn.Module):
             # Build the actual mixing layer
             fold_mask = fold_indices >= 0 if should_pad else None
             mixing_layer = MixingLayer(
-                non_unary_regions,
-                num_outputs,
                 max_num_input_partitions,
+                num_outputs,
+                num_folds=len(non_unary_regions),
                 fold_mask=fold_mask,
                 reparam=reparam,
             )

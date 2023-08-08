@@ -1,10 +1,9 @@
-from typing import Any, List, Optional, cast
+from typing import Any, Optional, cast
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.layers.sum_product import SumProductLayer
-from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
@@ -16,9 +15,9 @@ class CPSharedLayer(SumProductLayer):
     # TODO: better default value
     def __init__(  # type: ignore[misc]
         self,
-        rg_nodes: List[PartitionNode],
         num_input_units: int,
         num_output_units: int,
+        num_folds: int = 1,
         fold_mask: Optional[torch.Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
@@ -28,14 +27,16 @@ class CPSharedLayer(SumProductLayer):
         """Init class.
 
         Args:
-            rg_nodes (List[PartitionNode]): The region nodes on which the layer is defined on.
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
+            num_folds (int): The number of folds.
             fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
             prod_exp (bool): Whether to compute products in linear space rather than in log-space.
         """
-        super().__init__(rg_nodes, num_input_units, num_output_units, fold_mask=fold_mask)
+        super().__init__(
+            num_input_units, num_output_units, num_folds=num_folds, fold_mask=fold_mask
+        )
         self.reparam = reparam
         self.prod_exp = prod_exp
 
@@ -53,12 +54,12 @@ class CPSharedLayer(SumProductLayer):
 
     # TODO: use bmm to replace einsum? also axis order?
     def _forward_left_linear(self, x: Tensor) -> Tensor:
-        fold_mask = self.fold_mask[:, [0]] if self.fold_mask is not None else None
+        fold_mask = self.fold_mask[:, 0].unsqueeze(dim=1) if self.fold_mask is not None else None
         weight = self.reparam(self.params_left, fold_mask)
         return torch.einsum("ko,fkb->fob", weight, x)
 
     def _forward_right_linear(self, x: Tensor) -> Tensor:
-        fold_mask = self.fold_mask[:, [1]] if self.fold_mask is not None else None
+        fold_mask = self.fold_mask[:, 1].unsqueeze(dim=1) if self.fold_mask is not None else None
         weight = self.reparam(self.params_right, fold_mask)
         return torch.einsum("ko,fkb->fob", weight, x)
 

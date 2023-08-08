@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict
 
 import torch
 from torch import Tensor, nn
-
-from cirkit.region_graph import PartitionNode, RegionNode
 
 # TODO: rework docstrings
 
@@ -22,35 +20,24 @@ class Layer(nn.Module, ABC):
 
     def __init__(
         self,
-        rg_nodes: Union[List[RegionNode], List[PartitionNode]],
+        num_folds: int = 1,
         fold_mask: Optional[torch.Tensor] = None,
     ) -> None:
         """Initialize a layer.
 
         Args:
-            rg_nodes (List[RegionNode]): The region nodes on which the layer is defined on.
+            num_folds: The number of folds that the layer computes.
             fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
         """
-        super().__init__()  # TODO: do we need multi-inherit init?
-        self.rg_nodes = rg_nodes
+        super().__init__()
+        assert num_folds > 0
+        self.num_folds = num_folds
         if fold_mask is not None:
             if fold_mask.dtype == torch.bool:
                 fold_mask = fold_mask.to(torch.get_default_dtype())
             fold_mask = fold_mask.unsqueeze(dim=-1)
-        self.register_buffer("fold_mask", fold_mask)
+        self.register_buffer("_fold_mask", fold_mask)
         self.param_clamp_value: _ClampValue = {}
-
-    def reset_parameters(self) -> None:
-        """Reset parameters to default initialization."""
-
-    @property
-    def fold_size(self) -> int:
-        """Get the number of folds computed by the layer.
-
-        Returns:
-            int: The number of folds.
-        """
-        return len(self.rg_nodes)
 
     @property
     def num_params(self) -> int:
@@ -60,6 +47,18 @@ class Layer(nn.Module, ABC):
             int: The number of params
         """
         return sum(param.numel() for param in self.parameters())
+
+    @property
+    def fold_mask(self) -> Optional[torch.Tensor]:
+        """Get the fold mask.
+
+        Returns:
+            torch.Tensor: The fold mask.
+        """
+        return self._fold_mask  # type: ignore[return-value]
+
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization."""
 
     @torch.no_grad()
     def clamp_params(self, clamp_all: bool = False) -> None:

@@ -1,11 +1,10 @@
 import warnings
-from typing import Any, List, Optional, cast
+from typing import Any, Optional, cast
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.layers.sum_product import SumProductLayer
-from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
@@ -19,9 +18,9 @@ class TuckerLayer(SumProductLayer):
     # TODO: better default value
     def __init__(  # type: ignore[misc]
         self,
-        rg_nodes: List[PartitionNode],
         num_input_units: int,
         num_output_units: int,
+        num_folds: int = 1,
         fold_mask: Optional[torch.Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
@@ -31,9 +30,9 @@ class TuckerLayer(SumProductLayer):
         """Init class.
 
         Args:
-            rg_nodes (List[PartitionNode]): The region nodes on which the layer is defined on.
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
+            num_folds (int): The number of folds.
             fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
             prod_exp (bool): Whether to compute products in linear space rather than in log-space.
@@ -42,12 +41,14 @@ class TuckerLayer(SumProductLayer):
         if prod_exp:
             warnings.warn("Prod exp not available for Tucker")
 
-        super().__init__(rg_nodes, num_input_units, num_output_units, fold_mask=fold_mask)
+        super().__init__(
+            num_input_units, num_output_units, num_folds=num_folds, fold_mask=fold_mask
+        )
         self.reparam = reparam
         self.prod_exp = prod_exp
 
         self.params = nn.Parameter(
-            torch.empty(self.fold_size, num_input_units, num_input_units, num_output_units)
+            torch.empty(self.num_folds, num_input_units, num_input_units, num_output_units)
         )
 
         # TODO: get torch.default_float_dtype

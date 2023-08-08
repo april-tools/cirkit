@@ -1,11 +1,10 @@
 from abc import abstractmethod
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
-from cirkit.region_graph import PartitionNode
 
 # TODO: relative import or absolute
 # TODO: rework docstrings
@@ -19,22 +18,22 @@ class SumProductLayer(Layer):
     # TODO: subclasses should call reset_params -- where params are inited
     def __init__(  # type: ignore[misc]
         self,  # pylint: disable=unused-argument
-        rg_nodes: List[PartitionNode],
         num_input_units: int,
         num_output_units: int,
+        num_folds: int = 1,
         fold_mask: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> None:
         """Init class.
 
         Args:
-            rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
+            num_folds (int): The number of folds.
             fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
             kwargs (Any): Passed to subclasses.
         """
-        super().__init__(rg_nodes, fold_mask=fold_mask)
+        super().__init__(num_folds=num_folds, fold_mask=fold_mask)
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
 

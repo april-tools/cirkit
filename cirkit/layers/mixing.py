@@ -1,10 +1,9 @@
-from typing import List, Optional
+from typing import Optional
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
-from cirkit.region_graph import RegionNode
 from cirkit.utils import log_func_exp
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
@@ -54,9 +53,9 @@ class MixingLayer(Layer):
     # TODO: num_output_units is num_input_units
     def __init__(
         self,
-        rg_nodes: List[RegionNode],
+        num_input_components: int,
         num_output_units: int,
-        max_components: int,
+        num_folds: int = 1,
         fold_mask: Optional[torch.Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
@@ -64,18 +63,20 @@ class MixingLayer(Layer):
         """Init class.
 
         Args:
-            rg_nodes (List[PartitionNode]): The region nodes on which the layer is defined on.
+            num_input_components (int): The number of mixing components.
             num_output_units (int): The number of output units.
-            max_components (int): Max number of mixing components.
+            num_folds (int): The number of folds.
             fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
         """
-        super().__init__(rg_nodes, fold_mask=fold_mask)
+        super().__init__(num_folds=num_folds, fold_mask=fold_mask)
         self.reparam = reparam
-        self.max_components = max_components
+        self.num_input_components = num_input_components
         self.num_output_units = num_output_units
 
-        self.params = nn.Parameter(torch.empty(self.fold_size, max_components, num_output_units))
+        self.params = nn.Parameter(
+            torch.empty(self.num_folds, num_input_components, num_output_units)
+        )
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
         self.reset_parameters()
 
