@@ -4,7 +4,6 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers.sum_product import SumProductLayer
-from cirkit.utils import log_func_exp
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 # TODO: rework docstrings
@@ -15,16 +14,17 @@ class CPLayer(SumProductLayer):
 
     # TODO: better way to call init by base class?
     # TODO: better default value
+    # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]
         self,
         num_input_units: int,
         num_output_units: int,
+        arity: int = 2,
         num_folds: int = 1,
         fold_mask: Optional[torch.Tensor] = None,
         *,
         rank: int = 1,
         reparam: ReparamFunction = reparam_id,
-        prod_exp: bool,
         **_: Any,
     ) -> None:
         """Init class.
@@ -32,52 +32,42 @@ class CPLayer(SumProductLayer):
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
+            arity (int): The arity of the product units.
             num_folds (int): The number of folds.
             fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
             rank (int): The rank of the CP decomposition (i.e., the number of inner units of the \
                 layer).
             reparam: The reparameterization function.
-            prod_exp (bool): Whether to compute products in linear space rather than in log-space.
         """
         super().__init__(
             num_input_units, num_output_units, num_folds=num_folds, fold_mask=fold_mask
         )
+        assert arity > 0
+        self.arity = arity
         self.reparam = reparam
-        self.prod_exp = prod_exp
 
-        self.params_left = nn.Parameter(torch.empty(self.num_folds, num_input_units, rank))
-        self.params_right = nn.Parameter(torch.empty(self.num_folds, num_input_units, rank))
+        self.params_in = nn.Parameter(torch.empty(self.num_folds, arity, num_input_units, rank))
         self.params_out = nn.Parameter(torch.empty(self.num_folds, rank, num_output_units))
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is
         self.param_clamp_value["min"] = cast(
-            float,
-            torch.finfo(self.params_left.dtype).smallest_normal
-            ** (1 / 3 if self.prod_exp else 1 / 2),
+            float, torch.finfo(self.params_in.dtype).smallest_normal ** 0.5
         )
-
         self.reset_parameters()
 
-    # TODO: use bmm to replace einsum? also axis order?
-    def _forward_left_linear(self, x: Tensor) -> Tensor:
-        fold_mask = self.fold_mask[:, 0].unsqueeze(dim=1) if self.fold_mask is not None else None
-        weight = self.reparam(self.params_left, fold_mask)
-        return torch.einsum("fkr,fkb->frb", weight, x)
+    # TODO: use bmm to replace einsum?
+    def _forward_in(self, x: Tensor) -> Tensor:
+        if self.fold_mask is not None:  # pylint: disable=consider-ternary-expression
+            fold_mask = self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)
+        else:
+            fold_mask = None
+        weight = self.reparam(self.params_in, fold_mask)
+        return torch.einsum("fhkr,fhkb->fhrb", weight, x)
 
-    def _forward_right_linear(self, x: Tensor) -> Tensor:
-        fold_mask = self.fold_mask[:, 1].unsqueeze(dim=1) if self.fold_mask is not None else None
-        weight = self.reparam(self.params_right, fold_mask)
-        return torch.einsum("fkr,fkb->frb", weight, x)
-
-    def _forward_out_linear(self, x: Tensor) -> Tensor:
+    def _forward_out(self, x: Tensor) -> Tensor:
         weight = self.reparam(self.params_out, None)
         return torch.einsum("frk,frb->fkb", weight, x)
-
-    def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
-        left_hidden = self._forward_left_linear(left)
-        right_hidden = self._forward_right_linear(right)
-        return self._forward_out_linear(left_hidden * right_hidden)
 
     def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
@@ -85,18 +75,16 @@ class CPLayer(SumProductLayer):
         :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
-        log_left, log_right = inputs[:, 0], inputs[:, 1]
-
-        # TODO: do we split into two impls?
-        if self.prod_exp:
-            return log_func_exp(log_left, log_right, func=self._forward_linear, dim=1, keepdim=True)
-
-        log_left_hidden = log_func_exp(
-            log_left, func=self._forward_left_linear, dim=1, keepdim=True
-        )
-        log_right_hidden = log_func_exp(
-            log_right, func=self._forward_right_linear, dim=1, keepdim=True
-        )
-        return log_func_exp(
-            log_left_hidden + log_right_hidden, func=self._forward_out_linear, dim=1, keepdim=True
-        )
+        m: Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
+        x = torch.exp(inputs - m)  # (F, H, K, B)
+        x = self._forward_in(x)  # (F, H, R, B)
+        x = torch.log(x)
+        if self.fold_mask is not None:
+            x = torch.nan_to_num(x, nan=0)
+            m = torch.nan_to_num(m, neginf=0)
+        x = torch.sum(x + m, dim=1)  # (F, R, B)
+        m: Tensor = torch.max(x, dim=1, keepdim=True)[0]  # type: ignore[no-redef,misc] # (F, 1, B)
+        x = torch.exp(x - m)  # (F, R, B)
+        x = self._forward_out(x)  # (F, K, B)
+        x = torch.log(x) + m
+        return x

@@ -35,7 +35,6 @@ class Layer(nn.Module, ABC):
         if fold_mask is not None:
             if fold_mask.dtype == torch.bool:
                 fold_mask = fold_mask.to(torch.get_default_dtype())
-            fold_mask = fold_mask.unsqueeze(dim=-1)
         self.register_buffer("_fold_mask", fold_mask)
         self.param_clamp_value: _ClampValue = {}
 

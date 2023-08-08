@@ -4,7 +4,6 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
-from cirkit.utils import log_func_exp
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 # TODO: rework docstrings
@@ -86,8 +85,9 @@ class MixingLayer(Layer):
             nn.init.uniform_(self.params, 0.01, 0.99)
             self.params /= self.params.sum(dim=1, keepdim=True)  # type: ignore[misc]
 
-    def _forward_linear(self, x: Tensor) -> Tensor:
-        weight = self.reparam(self.params, self.fold_mask)
+    def _forward(self, x: Tensor) -> Tensor:
+        fold_mask = self.fold_mask.unsqueeze(dim=-1) if self.fold_mask is not None else None
+        weight = self.reparam(self.params, fold_mask)
         return torch.einsum("fck,fckb->fkb", weight, x)
 
     # TODO: make forward return something
@@ -101,6 +101,13 @@ class MixingLayer(Layer):
         Returns:
             Tensor: the output.
         """
-        return log_func_exp(log_input, func=self._forward_linear, dim=1, keepdim=False)
+        m: Tensor = torch.max(log_input, dim=1, keepdim=True)[0]  # (F, 1, K, B)
+        x = torch.exp(log_input - m)  # (F, C, K, B)
+        x = self._forward(x)  # (F, K, B)
+        x = torch.log(x)
+        if self.fold_mask is not None:
+            x = torch.nan_to_num(x, nan=0)
+            m = torch.nan_to_num(m, neginf=0)
+        return x + m.squeeze(dim=1)  # (F, K, B)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack

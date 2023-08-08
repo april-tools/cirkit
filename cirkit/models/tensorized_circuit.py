@@ -216,8 +216,7 @@ class TensorizedPC(nn.Module):
             # Update dictionaries and number of folds
             region_mixing_indices: Dict[int, List[int]] = defaultdict(list)
             for i, p in enumerate(lpartitions):
-                # Each partition must belong to exactly one region
-                assert len(p.outputs) == 1
+                assert len(p.outputs) == 1, "Each partition must belong to exactly one region"
                 out_region = p.outputs[0]
                 if len(out_region.inputs) == 1:
                     region_id_fold[out_region.get_id()] = (i, len(inner_layers) + 1)
@@ -228,11 +227,12 @@ class TensorizedPC(nn.Module):
             # Build the actual layer
             num_outputs = num_inner_units if rg_layer_idx < len(rg_layers) - 1 else num_classes
             num_inputs = num_input_units if rg_layer_idx == 1 else num_inner_units
-            fold_mask = fold_indices >= 0 if should_pad else None
+            fold_mask = fold_indices < cumulative_idx[-1] if should_pad else None
             layer = layer_cls(
                 num_inputs,
                 num_outputs,
-                num_folds=len(lpartitions),
+                arity=max_num_input_regions,
+                num_folds=num_folds[-1],
                 fold_mask=fold_mask,
                 reparam=reparam,
                 **layer_kwargs,  # type: ignore[misc]
@@ -263,11 +263,11 @@ class TensorizedPC(nn.Module):
             bookkeeping.append(book_entry)
 
             # Build the actual mixing layer
-            fold_mask = fold_indices >= 0 if should_pad else None
+            fold_mask = fold_indices < num_folds[-2] if should_pad else None
             mixing_layer = MixingLayer(
                 max_num_input_partitions,
                 num_outputs,
-                num_folds=len(non_unary_regions),
+                num_folds=num_folds[-1],
                 fold_mask=fold_mask,
                 reparam=reparam,
             )
@@ -318,8 +318,8 @@ class TensorizedPC(nn.Module):
                 inputs = torch.cat([layer_outputs[i] for i in in_layer_ids], dim=0)
             if should_pad:
                 # TODO: The padding value depends on the computation space.
-                #  It should be the absorbing element (or annihilating element) of a group.
-                #  For now computations are in log-space, thus -infinity is our pad value.
+                #  It should be the neutral element of a group.
+                #  For now computations are in log-space, thus 0 is our pad value.
                 inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=-float("inf"))
             inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
             outputs = layer(inputs)  # outputs: (F, K, B)

@@ -34,6 +34,8 @@ class SumProductLayer(Layer):
             kwargs (Any): Passed to subclasses.
         """
         super().__init__(num_folds=num_folds, fold_mask=fold_mask)
+        assert num_input_units > 0
+        assert num_output_units > 0
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
 

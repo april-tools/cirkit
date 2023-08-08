@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 
 import torch
 from torch import Tensor
@@ -13,7 +13,7 @@ from .normal import _shift_last_axis_to
 
 
 @torch.no_grad()
-def _one_hot(x: Tensor, k: int, dtype: torch.dtype = torch.float32) -> Tensor:
+def _one_hot(x: Tensor, k: int, dtype: Optional[torch.dtype] = None) -> Tensor:
     """One hot encoding."""
     ind = torch.zeros(*x.shape, k, dtype=dtype, device=x.device)
     ind.scatter_(dim=-1, index=x.unsqueeze(-1), value=1)
