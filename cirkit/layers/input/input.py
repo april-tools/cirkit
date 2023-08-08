@@ -17,7 +17,7 @@ class InputLayer(Layer):
             rg_nodes: The region nodes on which it is defined.
             **kwargs: Unused.
         """
-        super().__init__()
+        super().__init__(rg_nodes)
         self.rg_nodes = rg_nodes
         self.num_vars = len(set(v for n in rg_nodes for v in n.scope))
 

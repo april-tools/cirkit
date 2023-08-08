@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, List, cast
+from typing import Any, List, Optional, cast
 
 import torch
 from torch import Tensor, nn
@@ -7,6 +7,7 @@ from torch import Tensor, nn
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
+from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 # TODO: rework docstrings
 
@@ -21,27 +22,32 @@ class TuckerLayer(SumProductLayer):
         rg_nodes: List[PartitionNode],
         num_input_units: int,
         num_output_units: int,
+        fold_mask: Optional[torch.Tensor] = None,
         *,
+        reparam: ReparamFunction = reparam_id,
         prod_exp: bool,
         **_: Any,
     ) -> None:
         """Init class.
 
         Args:
-            rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
+            rg_nodes (List[PartitionNode]): The region nodes on which the layer is defined on.
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
+            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            reparam: The reparameterization function.
             prod_exp (bool): Whether to compute products in linear space rather than in log-space.
         """
         # TODO: for now we don't care about the case of prod_exp False
         if prod_exp:
             warnings.warn("Prod exp not available for Tucker")
 
-        super().__init__(rg_nodes, num_input_units, num_output_units)
+        super().__init__(rg_nodes, num_input_units, num_output_units, fold_mask=fold_mask)
+        self.reparam = reparam
         self.prod_exp = prod_exp
 
         self.params = nn.Parameter(
-            torch.empty(len(rg_nodes), num_input_units, num_input_units, num_output_units)
+            torch.empty(self.fold_size, num_input_units, num_input_units, num_output_units)
         )
 
         # TODO: get torch.default_float_dtype
@@ -54,7 +60,8 @@ class TuckerLayer(SumProductLayer):
         self.reset_parameters()
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
-        return torch.einsum("pib,pjb,pijo->pob", left, right, self.params)
+        weight = self.reparam(self.params, self.fold_mask)
+        return torch.einsum("pib,pjb,pijo->pob", left, right, weight)
 
     def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.

@@ -19,6 +19,7 @@ from cirkit.region_graph.quad_tree import QuadTree
 from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 from cirkit.utils import RandomCtx
 from cirkit.utils.reparams import (
+    ReparamFunction,
     reparam_exp,
     reparam_id,
     reparam_positive,
@@ -165,7 +166,7 @@ def test_small_pc_partition_function() -> None:
 def _get_deep_pc(  # type: ignore[misc]
     rg_cls: Callable[..., RegionGraph],
     kwargs: Dict[str, Union[int, bool, List[int]]],
-    reparam_func: Callable[[torch.Tensor], torch.Tensor] = reparam_id,
+    reparam_func: ReparamFunction = reparam_id,
 ) -> TensorizedPC:
     # TODO: type of kwargs should be refined
     rg = rg_cls(**kwargs)
