@@ -22,7 +22,6 @@ class CPSharedLayer(SumProductLayer):
         fold_mask: Optional[torch.Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
-        prod_exp: bool,
         **_: Any,
     ) -> None:
         """Init class.
@@ -42,7 +41,6 @@ class CPSharedLayer(SumProductLayer):
         assert arity > 0
         self.arity = arity
         self.reparam = reparam
-        self.prod_exp = prod_exp
 
         self.params = nn.Parameter(torch.empty(arity, num_input_units, num_output_units))
 
@@ -56,17 +54,13 @@ class CPSharedLayer(SumProductLayer):
         self.reset_parameters()
 
     # TODO: use bmm to replace einsum? also axis order?
-    def _forward_in(self, x: Tensor) -> Tensor:
+    def _forward(self, x: Tensor) -> Tensor:
         if self.fold_mask is not None:
             fold_mask = self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)  # (F, H, 1, 1)
             weight = self.reparam(self.params, fold_mask)  # (F, H, K, J)
             return torch.einsum("fhkj,fhkb->fhjb", weight, x)  # (F, H, J, B)
         weight = self.reparam(self.params, None)  # (H, K, J)
         return torch.einsum("hkj,fhkb->fhjb", weight, x)  # (F, H, J, B)
-
-    def _forward(self, x: Tensor) -> Tensor:
-        x = self._forward_in(x)  # (F, H, J, B)
-        return torch.prod(x, dim=1)  # (F, J, B)
 
     def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.

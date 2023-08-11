@@ -2,13 +2,13 @@
 # TODO: disable checking for docstrings for every test file in tests/
 import itertools
 import math
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Type
 
 import torch
 from torch import Tensor
 
 from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product import CPLayer
+from cirkit.layers.sum_product import CPLayer, SumProductLayer
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
@@ -64,13 +64,17 @@ def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
 
 
 def get_pc_from_region_graph(
-    rg: RegionGraph, num_units: int = 1, reparam: ReparamFunction = reparam_id
+    rg: RegionGraph,
+    num_units: int = 1,
+    layer_cls: Type[SumProductLayer] = CPLayer,
+    reparam: ReparamFunction = reparam_id,
 ) -> TensorizedPC:
+    layer_kwargs = {"rank": 1} if layer_cls == CPLayer else {}  # type: ignore[misc]
     pc = TensorizedPC.from_region_graph(
         rg,
-        layer_cls=CPLayer,  # type: ignore[misc]
+        layer_cls=layer_cls,
         efamily_cls=CategoricalLayer,
-        layer_kwargs={"rank": 1},  # type: ignore[misc]
+        layer_kwargs=layer_kwargs,
         efamily_kwargs={"num_categories": 2},  # type: ignore[misc]
         num_inner_units=num_units,
         num_input_units=num_units,

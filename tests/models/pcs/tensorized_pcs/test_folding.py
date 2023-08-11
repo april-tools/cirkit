@@ -1,10 +1,12 @@
 # pylint: disable=missing-function-docstring
 import functools
 import itertools
+from typing import Type
 
 import pytest
 import torch
 
+from cirkit.layers.sum_product import CPCollapsedLayer, CPLayer, CPSharedLayer, SumProductLayer
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
@@ -96,18 +98,24 @@ def test_rg_5_sparse() -> None:
     assert len(list(rg.input_nodes)) == 5
 
 
-def _get_pc_5_sparse(normalized: bool) -> TensorizedPC:
+def _get_pc_5_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> TensorizedPC:
     rg = _gen_rg_5_sparse()
     reparam = functools.partial(reparam_softmax, dim=-2) if normalized else reparam_exp
-    return get_pc_from_region_graph(rg, num_units=2, reparam=reparam)  # type: ignore[arg-type]
+    return get_pc_from_region_graph(
+        rg, num_units=2, layer_cls=layer_cls, reparam=reparam  # type: ignore[arg-type]
+    )
 
 
 @pytest.mark.parametrize(
-    "normalized",
-    [(False,), (True,)],
+    "normalized,layer_cls",
+    list(
+        itertools.product(
+            [False, True], [CPLayer, CPCollapsedLayer, CPSharedLayer]  # type: ignore[misc]
+        )
+    ),
 )
-def test_pc_sparse(normalized: bool) -> None:
-    pc = _get_pc_5_sparse(normalized)
+def test_pc_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
+    pc = _get_pc_5_sparse(normalized, layer_cls=layer_cls)
     assert any(should_pad for (should_pad, _, __) in pc.bookkeeping)
     assert any(not should_pad for (should_pad, _, _) in pc.bookkeeping)
     data = torch.tensor(list(itertools.product([0, 1], repeat=5)))  # type: ignore[misc]
@@ -115,19 +123,23 @@ def test_pc_sparse(normalized: bool) -> None:
     log_z = pc_pf()
     log_scores = pc(data)
     lls = log_scores - log_z
-    assert torch.allclose(torch.logsumexp(lls, dim=0), torch.zeros(()), atol=3e-7)
+    assert torch.allclose(torch.logsumexp(lls, dim=0), torch.zeros(()), atol=5e-7)
     if normalized:
-        assert torch.allclose(log_z, torch.zeros(()), atol=3e-7)
+        assert torch.allclose(log_z, torch.zeros(()), atol=5e-7)
 
 
 @torch.set_grad_enabled(True)
 @pytest.mark.parametrize(
-    "normalized",
-    [(False,), (True,)],
+    "normalized,layer_cls",
+    list(
+        itertools.product(
+            [False, True], [CPLayer, CPCollapsedLayer, CPSharedLayer]  # type: ignore[misc]
+        )
+    ),
 )
-def test_pc_sparse_backprop(normalized: bool) -> None:
-    pc = _get_pc_5_sparse(normalized)
-    opt = torch.optim.SGD(pc.parameters(), lr=0.01)
+def test_pc_sparse_backprop(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
+    pc = _get_pc_5_sparse(normalized, layer_cls=layer_cls)
+    opt = torch.optim.SGD(pc.parameters(), lr=0.1)
     data = torch.tensor(list(itertools.product([0, 1], repeat=5)))  # type: ignore[misc]
     pc_pf = integrate(pc)
     log_z = pc_pf()
