@@ -2,7 +2,7 @@ import argparse
 import enum
 import functools
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, cast
 
 import numpy as np
 import torch
@@ -52,7 +52,7 @@ def process_args() -> _ArgsNamespace:
     parser.add_argument("--region_graph", type=str, help="region_graph filename")
     parser.add_argument("--num_latents", type=int, help="num_latents")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
-    return parser.parse_args(namespace=_ArgsNamespace())
+    return cast(_ArgsNamespace, parser.parse_args(namespace=_ArgsNamespace()))
 
 
 @torch.no_grad()

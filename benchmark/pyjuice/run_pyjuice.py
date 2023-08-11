@@ -5,7 +5,7 @@ import logging
 import os
 import random
 from dataclasses import dataclass
-from typing import Callable, Tuple, TypeVar
+from typing import Callable, Tuple, TypeVar, cast
 
 import numpy as np
 import torch
@@ -83,7 +83,7 @@ def process_args() -> _ArgsNamespace:
     parser.add_argument("--region_graph", type=str, help="region_graph filename")
     parser.add_argument("--num_latents", type=int, help="num_latents")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
-    return parser.parse_args(namespace=_ArgsNamespace())
+    return cast(_ArgsNamespace, parser.parse_args(namespace=_ArgsNamespace()))
 
 
 T = TypeVar("T")
