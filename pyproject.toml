@@ -33,8 +33,8 @@ dependencies = [
 [project.optional-dependencies]
 lint = [
   "black~=23.0",
+  "mypy~=1.5.0",
   "pylint",
-  "mypy",
   "pydocstyle[toml]",
   "pytest",  # this is required to lint the test files
 ]
@@ -162,7 +162,7 @@ disallow_subclassing_any = true
 disallow_untyped_decorators = true
 disallow_untyped_defs = true
 implicit_reexport = false
-strict_concatenate = true
+extra_checks = true
 strict_equality = true
 warn_redundant_casts = true
 warn_return_any = true
