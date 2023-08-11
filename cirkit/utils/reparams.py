@@ -71,6 +71,8 @@ def reparam_softmax(
     """
     if fold_mask is not None:
         p = p + torch.log(fold_mask)
+        p = torch.softmax(p, dim=dim)
+        return torch.nan_to_num(p, nan=0)
     return torch.softmax(p, dim=dim)
 
 
@@ -89,6 +91,8 @@ def reparam_log_softmax(
     """
     if fold_mask is not None:
         p = p + torch.log(fold_mask)
+        p = torch.log_softmax(p, dim=dim)
+        return torch.nan_to_num(p, nan=-float("inf"))
     return torch.log_softmax(p, dim=dim)
 
 

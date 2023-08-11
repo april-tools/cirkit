@@ -156,3 +156,13 @@ def test_pc_sparse_backprop(normalized: bool, layer_cls: Type[SumProductLayer]) 
     new_loss = -torch.mean(lls)
     assert torch.isfinite(new_loss)
     assert new_loss < loss
+    loss = new_loss
+    loss.backward()
+    opt.step()
+    opt.zero_grad()
+    log_z = pc_pf()
+    log_scores = pc(data)
+    lls = log_scores - log_z
+    new_loss = -torch.mean(lls)
+    assert torch.isfinite(new_loss)
+    assert new_loss < loss

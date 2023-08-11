@@ -75,6 +75,5 @@ class CPCollapsedLayer(SumProductLayer):
         x = self._forward(x)  # (F, H, J, B)
         x = torch.log(x)
         if self.fold_mask is not None:
-            x = torch.nan_to_num(x, nan=0)
-            m = torch.nan_to_num(m, neginf=0)
+            x = torch.nan_to_num(x, neginf=0)
         return torch.sum(x + m, dim=1)  # (F, J, B)

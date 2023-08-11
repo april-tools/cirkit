@@ -80,8 +80,7 @@ class CPLayer(SumProductLayer):
         x = self._forward_in(x)  # (F, H, R, B)
         x = torch.log(x)
         if self.fold_mask is not None:
-            x = torch.nan_to_num(x, nan=0)
-            m = torch.nan_to_num(m, neginf=0)
+            x = torch.nan_to_num(x, neginf=0)
         x = torch.sum(x + m, dim=1)  # (F, R, B)
         m: Tensor = torch.max(x, dim=1, keepdim=True)[0]  # type: ignore[no-redef,misc] # (F, 1, B)
         x = torch.exp(x - m)  # (F, R, B)

@@ -43,6 +43,11 @@ class CPSharedLayer(SumProductLayer):
         self.reparam = reparam
 
         self.params = nn.Parameter(torch.empty(arity, num_input_units, num_output_units))
+        if fold_mask is not None:
+            # If we are folding CP-shared layers *and* we have a folding mask on the parameters,
+            # then it is necessary to put -inf grads to zero. This is because the same parameters
+            # are shared across all heterogenous folds.
+            self.params.register_hook(lambda g: torch.nan_to_num(g, neginf=0))  # type: ignore[misc]
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is
@@ -73,6 +78,5 @@ class CPSharedLayer(SumProductLayer):
         x = self._forward(x)  # (F, H, K, B)
         x = torch.log(x)
         if self.fold_mask is not None:
-            x = torch.nan_to_num(x, nan=0.0)
-            m = torch.nan_to_num(m, neginf=0.0)
+            x = torch.nan_to_num(x, neginf=0)
         return torch.sum(x + m, dim=1)  # (F, K, B)
