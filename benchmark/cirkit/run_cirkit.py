@@ -148,7 +148,7 @@ def main() -> None:
         RegionGraph.load(args.region_graph),
         layer_cls=CPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
-        layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
+        layer_kwargs={"rank": 1},  # type: ignore[misc]
         efamily_kwargs={"num_categories": 256},  # type: ignore[misc]
         num_inner_units=args.num_latents,
         num_input_units=args.num_latents,
