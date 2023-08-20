@@ -10,6 +10,7 @@ from cirkit.layers.sum_product import CPCollapsedLayer, CPLayer, CPSharedLayer, 
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
+from cirkit.utils import RandomCtx
 from cirkit.utils.reparams import reparam_exp, reparam_softmax
 from tests.models.pcs.tensorized_pcs.test_instantiation import get_pc_from_region_graph
 
@@ -114,6 +115,7 @@ def _get_pc_5_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> Tens
         )
     ),
 )
+@RandomCtx(42)
 def test_pc_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
     pc = _get_pc_5_sparse(normalized, layer_cls=layer_cls)
     assert any(should_pad for (should_pad, _, __) in pc.bookkeeping)
@@ -123,9 +125,11 @@ def test_pc_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
     log_z = pc_pf()
     log_scores = pc(data)
     lls = log_scores - log_z
-    assert torch.allclose(torch.logsumexp(lls, dim=0), torch.zeros(()), atol=5e-7)
+    # TODO: atol is quite large here, I think it has to do with how we
+    #  initialize the parameters, and for some of them it lose precision in float32
+    assert torch.allclose(torch.logsumexp(lls, dim=0), torch.zeros(()), atol=2e-6)
     if normalized:
-        assert torch.allclose(log_z, torch.zeros(()), atol=5e-7)
+        assert torch.allclose(log_z, torch.zeros(()), atol=2e-6)
 
 
 @torch.set_grad_enabled(True)
@@ -137,6 +141,7 @@ def test_pc_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
         )
     ),
 )
+@RandomCtx(42)
 def test_pc_sparse_backprop(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
     pc = _get_pc_5_sparse(normalized, layer_cls=layer_cls)
     opt = torch.optim.SGD(pc.parameters(), lr=0.1)

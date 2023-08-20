@@ -32,7 +32,7 @@ from tests.models.pcs.tensorized_pcs.test_likelihoods import get_deep_pc
     ],
 )
 @RandomCtx(42)
-def test_einet_nonneg_reparams(
+def test_pc_nonneg_reparams(
     rg_cls: Callable[..., RegionGraph],
     kwargs: Dict[str, Union[int, bool, List[int]]],
     reparam_name: str,
