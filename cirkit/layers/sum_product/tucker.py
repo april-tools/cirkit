@@ -1,12 +1,16 @@
 from typing import Any, Optional, cast
 
 import torch
-from torch import Tensor, nn
+from torch import nn
 
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 # TODO: rework docstrings
+
+
+def _tucker_einsum(xl: torch.Tensor, xr: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+    return torch.einsum("pib,pjb,pijo->pob", xl, xr, w)
 
 
 class TuckerLayer(SumProductLayer):
@@ -58,21 +62,21 @@ class TuckerLayer(SumProductLayer):
 
         self.reset_parameters()
 
-    def _forward(self, left: Tensor, right: Tensor) -> Tensor:
-        weight = self.reparam(self.params, None)
-        return torch.einsum("pib,pjb,pijo->pob", left, right, weight)
+    def _reparam(self) -> torch.Tensor:
+        return self.reparam(self.params, None)
 
-    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
-        log_left, log_right = inputs[:, 0], inputs[:, 1]
-        ml: Tensor = torch.max(log_left, dim=1)[0]  # (F, 1, B)
-        mr: Tensor = torch.max(log_right, dim=1)[0]  # (F, 1, B)
-        el = torch.exp(log_left - ml)  # (F, K, B)
-        er = torch.exp(log_right - mr)  # (F, K, B)
-        x = self._forward(el, er)  # (F, J, B)
+        params = self._reparam()
+        xl, xr = inputs[:, 0], inputs[:, 1]
+        ml: torch.Tensor = torch.max(xl, dim=1)[0]  # (F, 1, B)
+        mr: torch.Tensor = torch.max(xr, dim=1)[0]  # (F, 1, B)
+        el = torch.exp(xl - ml)  # (F, K, B)
+        er = torch.exp(xr - mr)  # (F, K, B)
+        x = _tucker_einsum(el, er, params)  # (F, J, B)
         x = torch.log(x) + ml + mr
         return x

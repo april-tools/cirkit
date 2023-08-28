@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 
 from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product import CPLayer, SumProductLayer
+from cirkit.layers.sum_product import SumProductLayer, UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
@@ -66,10 +66,10 @@ def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
 def get_pc_from_region_graph(
     rg: RegionGraph,
     num_units: int = 1,
-    layer_cls: Type[SumProductLayer] = CPLayer,
+    layer_cls: Type[SumProductLayer] = UncollapsedCPLayer,
     reparam: ReparamFunction = reparam_id,
 ) -> TensorizedPC:
-    layer_kwargs = {"rank": 1} if layer_cls == CPLayer else {}  # type: ignore[misc]
+    layer_kwargs = {"rank": 1} if layer_cls == UncollapsedCPLayer else {}  # type: ignore[misc]
     pc = TensorizedPC.from_region_graph(
         rg,
         layer_cls=layer_cls,

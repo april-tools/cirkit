@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from benchmark.utils import benchmarker
 from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product.cp import CPLayer  # TODO: rework interfaces for import
+from cirkit.layers.sum_product.cp import UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 from cirkit.utils import RandomCtx, set_determinism
@@ -146,7 +146,7 @@ def main() -> None:
 
     pc = TensorizedPC.from_region_graph(
         RegionGraph.load(args.region_graph),
-        layer_cls=CPLayer,  # type: ignore[misc]
+        layer_cls=UncollapsedCPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1},  # type: ignore[misc]
         efamily_kwargs={"num_categories": 256},  # type: ignore[misc]

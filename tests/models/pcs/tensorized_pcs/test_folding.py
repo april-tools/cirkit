@@ -6,7 +6,7 @@ from typing import Type
 import pytest
 import torch
 
-from cirkit.layers.sum_product import CPCollapsedLayer, CPLayer, CPSharedLayer, SumProductLayer
+from cirkit.layers.sum_product import CPLayer, SharedCPLayer, SumProductLayer, UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
@@ -111,7 +111,7 @@ def _get_pc_5_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> Tens
     "normalized,layer_cls",
     list(
         itertools.product(
-            [False, True], [CPLayer, CPCollapsedLayer, CPSharedLayer]  # type: ignore[misc]
+            [False, True], [CPLayer, UncollapsedCPLayer, SharedCPLayer]  # type: ignore[misc]
         )
     ),
 )
@@ -137,7 +137,7 @@ def test_pc_sparse(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
     "normalized,layer_cls",
     list(
         itertools.product(
-            [False, True], [CPLayer, CPCollapsedLayer, CPSharedLayer]  # type: ignore[misc]
+            [False, True], [CPLayer, UncollapsedCPLayer, SharedCPLayer]  # type: ignore[misc]
         )
     ),
 )

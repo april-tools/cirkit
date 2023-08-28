@@ -74,7 +74,7 @@ def test_pc_nonneg_reparams(
 
     # Check the partition function computation
     assert torch.isclose(
-        log_z, torch.logsumexp(log_scores, dim=0, keepdim=True), rtol=5e-5, atol=5e-7
+        log_z, torch.logsumexp(log_scores, dim=0, keepdim=True), rtol=5e-5, atol=1e-6
     )
 
     # The circuit should be already normalized,

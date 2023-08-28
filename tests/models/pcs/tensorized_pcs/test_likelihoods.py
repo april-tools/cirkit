@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product import CPCollapsedLayer
+from cirkit.layers.sum_product import UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
 from cirkit.region_graph import RegionGraph
@@ -28,7 +28,7 @@ def get_deep_pc(  # type: ignore[misc]
     rg = rg_cls(**kwargs)
     pc = TensorizedPC.from_region_graph(
         rg,
-        layer_cls=CPCollapsedLayer,  # type: ignore[misc]
+        layer_cls=UncollapsedCPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1},  # type: ignore[misc]
         efamily_kwargs={"num_categories": 2},  # type: ignore[misc]
@@ -42,9 +42,9 @@ def get_deep_pc(  # type: ignore[misc]
 @pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs,true_log_z",
     [
-        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 12.631830215454102),
-        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 62.408206939697266),
-        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 28.86357307434082),
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}, 10.115896224975586),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}, 52.03461456298828),
+        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}, 24.08788299560547),
         (PoonDomingos, {"shape": [3, 3], "delta": 2}, None),
         (QuadTree, {"width": 3, "height": 3, "struct_decomp": False}, None),
         (QuadTree, {"width": 3, "height": 3, "struct_decomp": True}, None),
