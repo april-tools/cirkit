@@ -22,20 +22,21 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "torch>=2.0.0",
+  "torch~=2.1.0",
   "numpy>=1.24.0",
 ]
 
 [project.optional-dependencies]
 lint = [
   "black~=23.0",
-  "mypy~=1.5.0",
-  "pylint",
-  "pydocstyle[toml]",
+  "mypy==1.6.1",  # should be specific version for stable typing
+  "pylint~=3.0.0",
+  "pydocstyle[toml]~=6.3.0",
   "pytest",  # this is required to lint the test files
 ]
 test = [
@@ -67,7 +68,7 @@ required-version = 23
 
 # import style
 [tool.isort]
-py_version = 39
+py_version = 38
 profile = "black"
 line_length = 100
 extra_standard_library = [  # we treat these as stdlib
@@ -89,12 +90,11 @@ evaluation = """
     1, fatal + (5 * error + warning + refactor + convention + 0.1 * info) / statement
   )
 """  # take into account `info`
-load-plugins = [
+load-plugins = [  # as available in pylint/extensions
   "pylint.extensions.bad_builtin",
   "pylint.extensions.broad_try_clause",
   "pylint.extensions.check_elif",
   "pylint.extensions.code_style",
-  "pylint.extensions.comparetozero",
   "pylint.extensions.comparison_placement",
   "pylint.extensions.confusing_elif",
   "pylint.extensions.consider_refactoring_into_while_condition",
@@ -104,9 +104,9 @@ load-plugins = [
   "pylint.extensions.docstyle",
   "pylint.extensions.dunder",
   "pylint.extensions.empty_comment",
-  "pylint.extensions.emptystring",
   "pylint.extensions.eq_without_hash",
   "pylint.extensions.for_any_all",
+  # "pylint.extensions.magic_value",  # too strict
   "pylint.extensions.mccabe",
   "pylint.extensions.no_self_use",
   "pylint.extensions.overlapping_exceptions",
@@ -119,12 +119,14 @@ load-plugins = [
 ]
 [tool.pylint."messages control"]
 enable= [
+  "use-implicit-booleaness-not-comparison-to-string",
+  "use-implicit-booleaness-not-comparison-to-zero",
+  "consider-using-augmented-assign",
+  "prefer-typing-namedtuple",
   "bad-inline-option",
-  "useless-suppression",
   "deprecated-pragma",
   "use-symbolic-message-instead",
-  "consider-using-augmented-assign",
-  # "prefer-typing-namedtuple",  # to be updated in the future pylint
+  "useless-suppression",
 ]
 disable = [
   "missing-module-docstring",
@@ -132,10 +134,6 @@ disable = [
   "fixme",
   "duplicate-code",
 ]
-[tool.pylint.basic]
-argument-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
-attr-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
-variable-rgx = '([^\W\dA-Z][^\WA-Z]*|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)$'
 [tool.pylint.import]
 allow-reexport-from-package = true
 [tool.pylint.parameter_documentation]
@@ -151,28 +149,36 @@ python_version = 3.8
 mypy_path = "3rd-party-stubs"
 follow_imports = "silent"
 follow_imports_for_stubs = true
-check_untyped_defs = true
+# https://mypy.readthedocs.io/en/v1.6.1/command_line.html#config-file
+warn_unused_configs = true
+# https://mypy.readthedocs.io/en/stable/command_line.html#disallow-dynamic-typing
+disallow_any_unimported = true
+disallow_any_expr = true
 disallow_any_decorated = true
 disallow_any_explicit = true
-disallow_any_expr = true
 disallow_any_generics = true
-disallow_any_unimported = true
-disallow_incomplete_defs = true
 disallow_subclassing_any = true
-disallow_untyped_decorators = true
+# https://mypy.readthedocs.io/en/stable/command_line.html#untyped-definitions-and-calls
+disallow_untyped_calls = true
 disallow_untyped_defs = true
-implicit_reexport = false
-extra_checks = true
-strict_equality = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+# https://mypy.readthedocs.io/en/stable/command_line.html#configuring-warnings
 warn_redundant_casts = true
+warn_unused_ignores = true
 warn_return_any = true
 warn_unreachable = true
-warn_unused_configs = true
-warn_unused_ignores = true
+# https://mypy.readthedocs.io/en/stable/command_line.html#miscellaneous-strictness-flags
+implicit_reexport = false
+strict_equality = true
+extra_checks = true
 enable_error_code = [
-  "ignore-without-code",
-  "redundant-expr",
   "redundant-self",
+  "redundant-expr",
+  "possibly-undefined",
   "truthy-bool",
   "truthy-iterable",
+  "ignore-without-code",
+  # "explicit-override",  # can be useful, introduced in 3.12 and typing_extensions
 ]

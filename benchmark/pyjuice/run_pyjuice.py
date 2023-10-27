@@ -5,7 +5,7 @@ import logging
 import os
 import random
 from dataclasses import dataclass
-from typing import Callable, Tuple, TypeVar, cast
+from typing import Callable, Tuple, TypeVar
 
 import numpy as np
 import torch
@@ -83,7 +83,7 @@ def process_args() -> _ArgsNamespace:
     parser.add_argument("--region_graph", type=str, help="region_graph filename")
     parser.add_argument("--num_latents", type=int, help="num_latents")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
-    return cast(_ArgsNamespace, parser.parse_args(namespace=_ArgsNamespace()))
+    return parser.parse_args(namespace=_ArgsNamespace())
 
 
 T = TypeVar("T")
@@ -101,15 +101,16 @@ def benchmarker(fn: Callable[[], T]) -> Tuple[T, Tuple[float, float]]:
     """
     torch.cuda.synchronize()  # finish all prev ops and reset mem counter
     torch.cuda.reset_peak_memory_stats()
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    start_event.record(torch.cuda.current_stream())
+    # TODO: repeated with benchmark/utils/gpu_benchmark.py
+    start_event = torch.cuda.Event(enable_timing=True)  # type: ignore[no-untyped-call]
+    end_event = torch.cuda.Event(enable_timing=True)  # type: ignore[no-untyped-call]
+    start_event.record(torch.cuda.current_stream())  # type: ignore[no-untyped-call]
 
     ret = fn()
 
-    end_event.record(torch.cuda.current_stream())
+    end_event.record(torch.cuda.current_stream())  # type: ignore[no-untyped-call]
     torch.cuda.synchronize()  # wait for event finish
-    elapsed_time: float = start_event.elapsed_time(end_event)  # ms
+    elapsed_time: float = start_event.elapsed_time(end_event)  # type: ignore[no-untyped-call]  # ms
     peak_memory = torch.cuda.max_memory_allocated() / 2**20  # MB
     return ret, (elapsed_time, peak_memory)
 
@@ -160,7 +161,7 @@ def batch_em_epoch(
         optimizer.zero_grad()
         ll: Tensor = pc(x)
         ll = ll.mean()
-        ll.backward()
+        ll.backward()  # type: ignore[no-untyped-call]
         optimizer.step()
         return ll.detach()
 

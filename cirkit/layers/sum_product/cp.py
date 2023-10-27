@@ -3,7 +3,7 @@ from typing import Any, Callable, List, cast
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers.sum_product import SumProductLayer
+from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
 from cirkit.utils.reparams import reparam_id
@@ -16,7 +16,7 @@ class CPLayer(SumProductLayer):
 
     # TODO: better way to call init by base class?
     # TODO: better default value
-    def __init__(  # type: ignore[misc]
+    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
         self,
         rg_nodes: List[PartitionNode],
         num_input_units: int,
