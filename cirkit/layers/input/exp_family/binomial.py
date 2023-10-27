@@ -74,8 +74,8 @@ class BinomialLayer(ExpFamilyLayer):
         Returns:
             Tensor: The normalizer.
         """
-        # TODO: this is torch issue
-        return torch.sum(F.softplus(theta), dim=-1)  # type: ignore[misc]
+        # TODO: issue with pylint on torch?
+        return torch.sum(F.softplus(theta), dim=-1)  # pylint: disable=not-callable
 
     def log_h(self, x: Tensor) -> Tensor:
         """Get log h.

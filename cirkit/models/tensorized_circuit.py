@@ -25,7 +25,7 @@ class TensorizedPC(nn.Module):
 
     @classmethod
     # pylint: disable-next=too-many-locals
-    def from_region_graph(  # type: ignore[misc]
+    def from_region_graph(  # type: ignore[misc]   # pylint: disable=too-many-arguments
         cls,
         rg: RegionGraph,
         layer_cls: Type[SumProductLayer],
@@ -312,6 +312,8 @@ class TensorizedPC(nn.Module):
                 # TODO: The padding value depends on the computation space.
                 #  It should be the absorbing element (or annihilating element) of a group.
                 #  For now computations are in log-space, thus -infinity is our pad value.
+                # TODO: issue with pylint on torch?
+                # pylint: disable-next=not-callable
                 inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=-float("inf"))
             inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
             outputs = layer(inputs)  # outputs: (F, K, B)

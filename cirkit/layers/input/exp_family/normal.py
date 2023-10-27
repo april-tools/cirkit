@@ -21,7 +21,7 @@ def _shift_last_axis_to(x: Tensor, i: int) -> Tensor:
 class NormalLayer(ExpFamilyLayer):
     """Implementation of Normal distribution."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         nodes: List[RegionNode],
         num_channels: int,
