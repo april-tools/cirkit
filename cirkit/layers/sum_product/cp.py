@@ -3,7 +3,7 @@ from typing import Any, Callable, List, cast
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers.sum_product import SumProductLayer
+from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode
 from cirkit.utils import log_func_exp
 from cirkit.utils.reparams import reparam_id
