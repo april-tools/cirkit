@@ -3,7 +3,7 @@ from typing import Any, Optional, cast
 import torch
 from torch import nn
 
-from cirkit.layers.sum_product import SumProductLayer
+from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 
@@ -113,7 +113,7 @@ class CPLayer(SumProductLayer):
         if not self.uncollapsed:
             return x
         params_out = self._reparam_out()
-        m: torch.Tensor = torch.max(x, dim=1, keepdim=True)[0]  # type: ignore[no-redef,misc]
+        m: torch.Tensor = torch.max(x, dim=1, keepdim=True)[0]  # type: ignore[no-redef]
         x = torch.exp(x - m)  # (F, R, B)
         x = _cp_uncollapsed_einsum(x, params_out)  # (F, K, B)
         x = torch.log(x) + m
@@ -202,7 +202,9 @@ class SharedCPLayer(SumProductLayer):
             # If we are folding CP-shared layers *and* we have a folding mask on the parameters,
             # then it is necessary to put -inf grads to zero. This is because the same parameters
             # are shared across all heterogeneous folds.
-            self.params.register_hook(lambda g: torch.nan_to_num(g, neginf=0))  # type: ignore[misc]
+            self.params.register_hook(
+                lambda g: torch.nan_to_num(g, neginf=0)  # type: ignore[no-untyped-call,misc]
+            )
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is

@@ -11,6 +11,7 @@ class ScopeLayer(Layer):
 
     It re-orders unit activations such that they belong to the inputs of a circuit.
     """
+
     scope: torch.Tensor  # To be registered as buffer
 
     def __init__(self, rg_nodes: List[RegionNode]):

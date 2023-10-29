@@ -3,7 +3,7 @@ from typing import Any, Optional, cast
 import torch
 from torch import nn
 
-from cirkit.layers.sum_product import SumProductLayer
+from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 # TODO: rework docstrings
@@ -45,7 +45,7 @@ class TuckerLayer(SumProductLayer):
             num_input_units, num_output_units, num_folds=num_folds, fold_mask=fold_mask
         )
         assert arity > 0
-        if arity != 2 and fold_mask is None:
+        if arity != 2 or fold_mask is not None:
             raise NotImplementedError("Tucker layers can only compute binary product units")
         self.reparam = reparam
 
@@ -73,8 +73,8 @@ class TuckerLayer(SumProductLayer):
         """
         params = self._reparam()
         xl, xr = inputs[:, 0], inputs[:, 1]
-        ml: torch.Tensor = torch.max(xl, dim=1)[0]  # (F, 1, B)
-        mr: torch.Tensor = torch.max(xr, dim=1)[0]  # (F, 1, B)
+        ml: torch.Tensor = torch.max(xl, dim=1, keepdim=True)[0]  # (F, 1, B)
+        mr: torch.Tensor = torch.max(xr, dim=1, keepdim=True)[0]  # (F, 1, B)
         el = torch.exp(xl - ml)  # (F, K, B)
         er = torch.exp(xr - mr)  # (F, K, B)
         x = _tucker_einsum(el, er, params)  # (F, J, B)

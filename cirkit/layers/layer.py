@@ -18,6 +18,8 @@ class _ClampValue(TypedDict, total=False):
 class Layer(nn.Module, ABC):
     """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""
 
+    _fold_mask: Optional[torch.Tensor]
+
     def __init__(
         self,
         num_folds: int = 1,
@@ -54,7 +56,7 @@ class Layer(nn.Module, ABC):
         Returns:
             torch.Tensor: The fold mask.
         """
-        return self._fold_mask  # type: ignore[return-value]
+        return self._fold_mask
 
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization."""
