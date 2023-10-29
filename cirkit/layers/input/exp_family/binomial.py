@@ -74,8 +74,8 @@ class BinomialLayer(ExpFamilyLayer):
         Returns:
             Tensor: The normalizer.
         """
-        # TODO: this is torch issue
-        return torch.sum(F.softplus(theta), dim=-1)  # type: ignore[misc]
+        # TODO: issue with pylint on torch?
+        return torch.sum(F.softplus(theta), dim=-1)  # pylint: disable=not-callable
 
     def log_h(self, x: Tensor) -> Tensor:
         """Get log h.
@@ -109,21 +109,19 @@ class BinomialLayer(ExpFamilyLayer):
     ) -> Tensor:
         # TODO: make function no_grad
         with torch.no_grad():
-            params = params / self.n  # pylint: disable=consider-using-augmented-assign
             if memory_efficient_binomial_sampling:
                 samples = torch.zeros(num_samples, *params.shape, dtype=dtype, device=params.device)
                 for __ in range(self.n):
                     rand = torch.rand(num_samples, *params.shape, device=params.device)
-                    samples += (rand < params).to(dtype)
+                    samples += (rand < params / self.n).to(dtype)
             else:
                 rand = torch.rand(num_samples, *params.shape, self.n, device=params.device)
-                samples = torch.sum(rand < params.unsqueeze(-1), dim=-1).to(dtype)
+                samples = torch.sum(rand < (params / self.n).unsqueeze(-1), dim=-1).to(dtype)
             return _shift_last_axis_to(samples, 2)
 
     def _argmax(  # type: ignore[misc]
         self, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
     ) -> Tensor:
         with torch.no_grad():
-            params = params / self.n  # pylint: disable=consider-using-augmented-assign
-            mode = torch.clamp(torch.floor((self.n + 1) * params), 0, self.n).to(dtype)
+            mode = torch.clamp(torch.floor((self.n + 1) * params / self.n), 0, self.n).to(dtype)
             return _shift_last_axis_to(mode, 1)

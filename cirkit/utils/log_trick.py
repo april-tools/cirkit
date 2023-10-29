@@ -37,9 +37,7 @@ def log_func_exp(  # type: ignore[misc]
         Tensor: The result of `log(func(exp(x)))`.
     """
     # TODO: max type should be fixed by the next pytorch
-    max_x: List[Tensor] = [
-        torch.max(xi, dim=dim, keepdim=True)[0] for xi in x  # type: ignore[misc]
-    ]
+    max_x: List[Tensor] = [torch.max(xi, dim=dim, keepdim=True)[0] for xi in x]
     exp_x = [torch.exp(xi - xi_max) for xi, xi_max in zip(x, max_x)]
 
     func_exp_x = func(*exp_x)

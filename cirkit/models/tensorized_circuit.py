@@ -25,7 +25,7 @@ class TensorizedPC(nn.Module):
 
     @classmethod
     # pylint: disable-next=too-many-locals
-    def from_region_graph(  # type: ignore[misc]
+    def from_region_graph(  # type: ignore[misc]   # pylint: disable=too-many-arguments
         cls,
         rg: RegionGraph,
         layer_cls: Type[SumProductLayer],
