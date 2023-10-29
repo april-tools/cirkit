@@ -1,7 +1,6 @@
 from typing import List
 
 import torch
-from torch import Tensor
 
 from cirkit.layers import Layer
 from cirkit.region_graph import RegionNode
@@ -13,7 +12,7 @@ class ScopeLayer(Layer):
     It re-orders unit activations such that they belong to the inputs of a circuit.
     """
 
-    scope: Tensor  # to be registered as buffer
+    scope: torch.Tensor  # To be registered as buffer
 
     def __init__(self, rg_nodes: List[RegionNode]):
         """Initialize a scope tensor.

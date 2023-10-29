@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
@@ -14,7 +14,7 @@ from cirkit.layers.mixing import MixingLayer
 from cirkit.layers.scope import ScopeLayer
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
-from cirkit.utils.reparams import reparam_id
+from cirkit.utils.reparams import ReparamFunction, reparam_id
 from cirkit.utils.scope import one_hot_variables
 
 # TODO: rework docstrings
@@ -33,7 +33,7 @@ class TensorizedPC(nn.Module):
         *,
         layer_kwargs: Optional[Dict[str, Any]] = None,
         efamily_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: Callable[[Tensor], Tensor] = reparam_id,
+        reparam: ReparamFunction = reparam_id,
         num_inner_units: int = 2,
         num_input_units: int = 2,
         num_channels: int = 1,
@@ -91,7 +91,7 @@ class TensorizedPC(nn.Module):
         # Initialize scope layer
         scope_layer = ScopeLayer(rg_layers[0][1])
 
-        # Build layers: this will populate the book-keeping data structure above
+        # Build layers: this will populate the bookkeeping data structure above
         bookkeeping, inner_layers = TensorizedPC._build_layers(
             rg_layers,
             layer_cls,
@@ -147,7 +147,7 @@ class TensorizedPC(nn.Module):
         rg_layers: List[Tuple[List[PartitionNode], List[RegionNode]]],
         layer_cls: Type[SumProductLayer],
         layer_kwargs: Dict[str, Any],
-        reparam: Callable[[Tensor], Tensor],
+        reparam: ReparamFunction,
         num_inner_units: int,
         num_input_units: int,
         num_classes: int = 1,
@@ -158,7 +158,7 @@ class TensorizedPC(nn.Module):
             rg_layers: The region graph layers.
             layer_cls (Type[SumProductNetwork]): The layer class.
             layer_kwargs (Dict[str, Any]): The layer arguments.
-            reparam (Callable[[Tensor], Tensor]): The reparametrization function.
+            reparam (ReparamFunction): The reparametrization function.
             num_inner_units (int): The number of units per inner layer.
             num_input_units (int): The number of units of the input layer.
             num_classes (int): The number of outputs of the network.
@@ -209,14 +209,14 @@ class TensorizedPC(nn.Module):
                         [cumulative_idx[-1]] * (max_num_input_regions - len(regions))
                     )
                 input_region_indices.append(region_indices)
-            book_entry = (should_pad, unique_layer_ids, torch.tensor(input_region_indices))
+            fold_indices = torch.tensor(input_region_indices)
+            book_entry = (should_pad, unique_layer_ids, fold_indices)
             bookkeeping.append(book_entry)
 
             # Update dictionaries and number of folds
             region_mixing_indices: Dict[int, List[int]] = defaultdict(list)
             for i, p in enumerate(lpartitions):
-                # Each partition must belong to exactly one region
-                assert len(p.outputs) == 1
+                assert len(p.outputs) == 1, "Each partition must belong to exactly one region"
                 out_region = p.outputs[0]
                 if len(out_region.inputs) == 1:
                     region_id_fold[out_region.get_id()] = (i, len(inner_layers) + 1)
@@ -227,10 +227,13 @@ class TensorizedPC(nn.Module):
             # Build the actual layer
             num_outputs = num_inner_units if rg_layer_idx < len(rg_layers) - 1 else num_classes
             num_inputs = num_input_units if rg_layer_idx == 1 else num_inner_units
+            fold_mask = fold_indices < cumulative_idx[-1] if should_pad else None
             layer = layer_cls(
-                lpartitions,
                 num_inputs,
                 num_outputs,
+                arity=max_num_input_regions,
+                num_folds=num_folds[-1],
+                fold_mask=fold_mask,
                 reparam=reparam,
                 **layer_kwargs,  # type: ignore[misc]
             )
@@ -255,13 +258,18 @@ class TensorizedPC(nn.Module):
                 input_partition_indices.append(partition_indices)
                 region_id_fold[region.get_id()] = (i, len(inner_layers) + 1)
             num_folds.append(len(non_unary_regions))
+            fold_indices = torch.tensor(input_partition_indices)
+            book_entry = (should_pad, [len(inner_layers)], fold_indices)
+            bookkeeping.append(book_entry)
 
             # Build the actual mixing layer
+            fold_mask = fold_indices < num_folds[-2] if should_pad else None
             mixing_layer = MixingLayer(
-                non_unary_regions, num_outputs, max_num_input_partitions, reparam=reparam
-            )
-            bookkeeping.append(
-                (should_pad, [len(inner_layers)], torch.tensor(input_partition_indices))
+                max_num_input_partitions,
+                num_outputs,
+                num_folds=num_folds[-1],
+                fold_mask=fold_mask,
+                reparam=reparam,
             )
             inner_layers.append(mixing_layer)
 
@@ -310,11 +318,9 @@ class TensorizedPC(nn.Module):
                 inputs = torch.cat([layer_outputs[i] for i in in_layer_ids], dim=0)
             if should_pad:
                 # TODO: The padding value depends on the computation space.
-                #  It should be the absorbing element (or annihilating element) of a group.
-                #  For now computations are in log-space, thus -infinity is our pad value.
-                # TODO: issue with pylint on torch?
-                # pylint: disable-next=not-callable
-                inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=-float("inf"))
+                #  It should be the neutral element of a group.
+                #  For now computations are in log-space, thus 0 is our pad value.
+                inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=0)  # pylint: disable=not-callable
             inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
             outputs = layer(inputs)  # outputs: (F, K, B)
             layer_outputs.append(outputs)

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 
 import torch
 from torch import Tensor, nn
@@ -18,22 +18,48 @@ class _ClampValue(TypedDict, total=False):
 class Layer(nn.Module, ABC):
     """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""
 
-    def __init__(self) -> None:
-        """Init class."""
-        super().__init__()  # TODO: do we need multi-inherit init?
-        self.param_clamp_value: _ClampValue = {}
+    _fold_mask: Optional[torch.Tensor]
 
-    def reset_parameters(self) -> None:
-        """Reset parameters to default initialization."""
+    def __init__(
+        self,
+        num_folds: int = 1,
+        fold_mask: Optional[torch.Tensor] = None,
+    ) -> None:
+        """Initialize a layer.
+
+        Args:
+            num_folds: The number of folds that the layer computes.
+            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+        """
+        super().__init__()
+        assert num_folds > 0
+        self.num_folds = num_folds
+        if fold_mask is not None:
+            if fold_mask.dtype == torch.bool:
+                fold_mask = fold_mask.to(torch.get_default_dtype())
+        self.register_buffer("_fold_mask", fold_mask)
+        self.param_clamp_value: _ClampValue = {}
 
     @property
     def num_params(self) -> int:
         """Get the number of params.
 
         Returns:
-            int: the number of params
+            int: The number of params
         """
         return sum(param.numel() for param in self.parameters())
+
+    @property
+    def fold_mask(self) -> Optional[torch.Tensor]:
+        """Get the fold mask.
+
+        Returns:
+            torch.Tensor: The fold mask.
+        """
+        return self._fold_mask
+
+    def reset_parameters(self) -> None:
+        """Reset parameters to default initialization."""
 
     @torch.no_grad()
     def clamp_params(self, clamp_all: bool = False) -> None:

@@ -1,12 +1,10 @@
-from typing import Callable, List
+from typing import Optional
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
-from cirkit.region_graph import RegionNode
-from cirkit.utils import log_func_exp
-from cirkit.utils.reparams import reparam_id
+from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 # TODO: rework docstrings
 
@@ -52,33 +50,33 @@ class MixingLayer(Layer):
     """
 
     # TODO: num_output_units is num_input_units
+    # pylint: disable-next=too-many-arguments
     def __init__(
         self,
-        rg_nodes: List[RegionNode],
+        num_input_components: int,
         num_output_units: int,
-        max_components: int,
+        num_folds: int = 1,
+        fold_mask: Optional[torch.Tensor] = None,
         *,
-        reparam: Callable[[torch.Tensor], torch.Tensor] = reparam_id,
+        reparam: ReparamFunction = reparam_id,
     ) -> None:
         """Init class.
 
         Args:
-            rg_nodes (List[PartitionNode]): The region graph's partition node of the layer.
+            num_input_components (int): The number of mixing components.
             num_output_units (int): The number of output units.
-            max_components (int): Max number of mixing components.
+            num_folds (int): The number of folds.
+            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
         """
-        super().__init__()
-        self.rg_nodes = rg_nodes
+        super().__init__(num_folds=num_folds, fold_mask=fold_mask)
         self.reparam = reparam
-
-        # TODO: what need to be saved to self?
+        self.num_input_components = num_input_components
         self.num_output_units = num_output_units
 
-        # TODO: test best perf?
-        # param_shape = (len(self.nodes), self.max_components) for better perf
-        self.params = nn.Parameter(torch.empty(len(rg_nodes), max_components, num_output_units))
-
+        self.params = nn.Parameter(
+            torch.empty(self.num_folds, num_input_components, num_output_units)
+        )
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
         self.reset_parameters()
 
@@ -88,8 +86,10 @@ class MixingLayer(Layer):
             nn.init.uniform_(self.params, 0.01, 0.99)
             self.params /= self.params.sum(dim=1, keepdim=True)  # type: ignore[misc]
 
-    def _forward_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("fck,fckb->fkb", self.reparam(self.params), x)
+    def _forward(self, x: Tensor) -> Tensor:
+        fold_mask = self.fold_mask.unsqueeze(dim=-1) if self.fold_mask is not None else None
+        weight = self.reparam(self.params, fold_mask)
+        return torch.einsum("fck,fckb->fkb", weight, x)
 
     # TODO: make forward return something
     # pylint: disable-next=arguments-differ
@@ -102,6 +102,13 @@ class MixingLayer(Layer):
         Returns:
             Tensor: the output.
         """
-        return log_func_exp(log_input, func=self._forward_linear, dim=1, keepdim=False)
+        m: Tensor = torch.max(log_input, dim=1, keepdim=True)[0]  # (F, 1, K, B)
+        x = torch.exp(log_input - m)  # (F, C, K, B)
+        x = self._forward(x)  # (F, K, B)
+        x = torch.log(x)
+        if self.fold_mask is not None:
+            x = torch.nan_to_num(x, nan=0)
+            m = torch.nan_to_num(m, neginf=0)
+        return x + m.squeeze(dim=1)  # (F, K, B)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack
