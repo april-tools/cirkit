@@ -3,10 +3,10 @@
 from typing import Type
 
 from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product import SumProductLayer, UncollapsedCPLayer, CPLayer
+from cirkit.layers.sum_product import CPLayer, SumProductLayer, UncollapsedCPLayer
 from cirkit.models import TensorizedPC
-from cirkit.region_graph import RegionGraph, RegionNode, PartitionNode
-from cirkit.utils.reparams import ReparamFunction, reparam_id, reparam_softmax, reparam_exp
+from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
+from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 
 def _gen_rg_2x2_dense() -> RegionGraph:  # pylint: disable=too-many-locals
@@ -153,23 +153,21 @@ def get_pc_from_region_graph(
 
 
 def get_pc_2x2_dense(
-        reparam: ReparamFunction = reparam_id,
-        layer_cls: Type[SumProductLayer] = CPLayer,
-        num_units: int = 1) -> TensorizedPC:
+    reparam: ReparamFunction = reparam_id,
+    layer_cls: Type[SumProductLayer] = CPLayer,
+    num_units: int = 1,
+) -> TensorizedPC:
     rg = _gen_rg_2x2_dense()
-    return get_pc_from_region_graph(
-        rg, num_units=num_units, layer_cls=layer_cls, reparam=reparam  # type: ignore[arg-type]
-    )
+    return get_pc_from_region_graph(rg, num_units=num_units, layer_cls=layer_cls, reparam=reparam)
 
 
 def get_pc_5_sparse(
-        reparam: ReparamFunction = reparam_id,
-        layer_cls: Type[SumProductLayer] = CPLayer,
-        num_units: int = 1) -> TensorizedPC:
+    reparam: ReparamFunction = reparam_id,
+    layer_cls: Type[SumProductLayer] = CPLayer,
+    num_units: int = 1,
+) -> TensorizedPC:
     rg = _gen_rg_5_sparse()
-    return get_pc_from_region_graph(
-        rg, num_units=num_units, layer_cls=layer_cls, reparam=reparam  # type: ignore[arg-type]
-    )
+    return get_pc_from_region_graph(rg, num_units=num_units, layer_cls=layer_cls, reparam=reparam)
 
 
 def test_rg_2x2_sparse() -> None:
