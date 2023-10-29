@@ -20,7 +20,7 @@ def reparam_id(p: torch.Tensor, fold_mask: Optional[torch.Tensor] = None) -> tor
         torch.Tensor: No-op, p itself.
     """
     if fold_mask is not None:
-        p = p * fold_mask  # pylint: disable=consider-using-augmented-assign
+        p = p * fold_mask
     return p
 
 
@@ -36,7 +36,7 @@ def reparam_exp(p: torch.Tensor, fold_mask: Optional[torch.Tensor] = None) -> to
     """
     p = torch.exp(p)
     if fold_mask is not None:
-        p = p * fold_mask  # pylint: disable=consider-using-augmented-assign
+        p = p * fold_mask
     return p
 
 
@@ -52,7 +52,7 @@ def reparam_square(p: torch.Tensor, fold_mask: Optional[torch.Tensor] = None) ->
     """
     p = torch.square(p)
     if fold_mask is not None:
-        p = p * fold_mask  # pylint: disable=consider-using-augmented-assign
+        p = p * fold_mask
     return p
 
 
@@ -71,6 +71,8 @@ def reparam_softmax(
     """
     if fold_mask is not None:
         p = p + torch.log(fold_mask)
+        p = torch.softmax(p, dim=dim)
+        return torch.nan_to_num(p, nan=0)
     return torch.softmax(p, dim=dim)
 
 
@@ -89,6 +91,8 @@ def reparam_log_softmax(
     """
     if fold_mask is not None:
         p = p + torch.log(fold_mask)
+        p = torch.log_softmax(p, dim=dim)
+        return torch.nan_to_num(p, nan=-float("inf"))
     return torch.log_softmax(p, dim=dim)
 
 
@@ -108,5 +112,5 @@ def reparam_positive(
     assert eps > 0.0, "The epsilon value should be positive"
     p = torch.clamp(p, min=eps)
     if fold_mask is not None:
-        p = p * fold_mask  # pylint: disable=consider-using-augmented-assign
+        p = p * fold_mask
     return p

@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,missing-return-doc
+# pylint: disable=missing-function-docstring
 # TODO: disable checking for docstrings for every test file in tests/
 import itertools
 import math
@@ -7,84 +7,13 @@ from typing import Dict, Tuple
 import torch
 from torch import Tensor
 
-from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product import CPLayer
+from cirkit.layers.sum_product import UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
-from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
-from cirkit.utils.reparams import ReparamFunction, reparam_id
+from tests.models.pcs.tensorized_pcs.test_utils import get_pc_2x2_dense
 
 
-def _gen_rg_2x2() -> RegionGraph:  # pylint: disable=too-many-locals
-    reg0 = RegionNode({0})
-    reg1 = RegionNode({1})
-    reg2 = RegionNode({2})
-    reg3 = RegionNode({3})
-
-    part01 = PartitionNode({0, 1})
-    part23 = PartitionNode({2, 3})
-    part02 = PartitionNode({0, 2})
-    part13 = PartitionNode({1, 3})
-
-    reg01 = RegionNode({0, 1})
-    reg23 = RegionNode({2, 3})
-    reg02 = RegionNode({0, 2})
-    reg13 = RegionNode({1, 3})
-
-    part01_23 = PartitionNode({0, 1, 2, 3})
-    part02_13 = PartitionNode({0, 1, 2, 3})
-
-    reg0123 = RegionNode({0, 1, 2, 3})
-
-    graph = RegionGraph()
-
-    graph.add_edge(reg0, part01)
-    graph.add_edge(reg0, part02)
-    graph.add_edge(reg1, part01)
-    graph.add_edge(reg1, part13)
-    graph.add_edge(reg2, part02)
-    graph.add_edge(reg2, part23)
-    graph.add_edge(reg3, part13)
-    graph.add_edge(reg3, part23)
-
-    graph.add_edge(part01, reg01)
-    graph.add_edge(part23, reg23)
-    graph.add_edge(part02, reg02)
-    graph.add_edge(part13, reg13)
-
-    graph.add_edge(reg01, part01_23)
-    graph.add_edge(reg23, part01_23)
-    graph.add_edge(reg02, part02_13)
-    graph.add_edge(reg13, part02_13)
-
-    graph.add_edge(part01_23, reg0123)
-    graph.add_edge(part02_13, reg0123)
-
-    return graph
-
-
-def get_pc_from_region_graph(
-    rg: RegionGraph, num_units: int = 1, reparam: ReparamFunction = reparam_id
-) -> TensorizedPC:
-    pc = TensorizedPC.from_region_graph(
-        rg,
-        layer_cls=CPLayer,  # type: ignore[misc]
-        efamily_cls=CategoricalLayer,
-        layer_kwargs={"rank": 1},  # type: ignore[misc]
-        efamily_kwargs={"num_categories": 2},  # type: ignore[misc]
-        num_inner_units=num_units,
-        num_input_units=num_units,
-        reparam=reparam,
-    )
-    return pc
-
-
-def _get_pc_2x2() -> TensorizedPC:
-    rg = _gen_rg_2x2()
-    return get_pc_from_region_graph(rg)
-
-
-def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
+def _get_pc_2x2_param_shapes() -> Dict[str, Tuple[int, ...]]:
     return {
         "input_layer.params": (4, 1, 1, 2),
         "inner_layers.0.params_in": (4, 2, 1, 1),
@@ -95,7 +24,7 @@ def _get_param_shapes() -> Dict[str, Tuple[int, ...]]:
     }
 
 
-def _set_params(pc: TensorizedPC) -> None:
+def _set_pc_2x2_params(pc: TensorizedPC) -> None:
     state_dict = pc.state_dict()  # type: ignore[misc]
     state_dict.update(  # type: ignore[misc]
         {  # type: ignore[misc]
@@ -124,7 +53,7 @@ def _set_params(pc: TensorizedPC) -> None:
     pc.load_state_dict(state_dict)  # type: ignore[misc]
 
 
-def _get_output() -> Tensor:
+def _get_pc_2x2_output() -> Tensor:
     a = torch.tensor([1 / 2, 1 / 2]).reshape(2, 1, 1, 1)  # type: ignore[misc]
     b = torch.tensor([1 / 4, 3 / 4]).reshape(1, 2, 1, 1)  # type: ignore[misc]
     c = torch.tensor([1 / 2, 1 / 2]).reshape(1, 1, 2, 1)  # type: ignore[misc]
@@ -133,24 +62,24 @@ def _get_output() -> Tensor:
 
 
 def test_pc_instantiation() -> None:
-    pc = _get_pc_2x2()
+    pc = get_pc_2x2_dense(layer_cls=UncollapsedCPLayer)  # type: ignore[misc]
     param_shapes = {name: tuple(param.shape) for name, param in pc.named_parameters()}
     assert pc.num_variables == 4
-    assert param_shapes == _get_param_shapes()
+    assert param_shapes == _get_pc_2x2_param_shapes()
 
 
 def test_pc_output() -> None:
-    pc = _get_pc_2x2()
-    _set_params(pc)
+    pc = get_pc_2x2_dense(layer_cls=UncollapsedCPLayer)  # type: ignore[misc]
+    _set_pc_2x2_params(pc)
     all_inputs = list(itertools.product([0, 1], repeat=4))
     output = pc(torch.tensor(all_inputs))
     assert output.shape == (16, 1)
-    assert torch.allclose(output, _get_output(), rtol=0, atol=torch.finfo(torch.float32).eps)
+    assert torch.allclose(output, _get_pc_2x2_output(), rtol=0, atol=torch.finfo(torch.float32).eps)
 
 
 def test_pc_partition_function() -> None:
-    pc = _get_pc_2x2()
-    _set_params(pc)
+    pc = get_pc_2x2_dense(layer_cls=UncollapsedCPLayer)  # type: ignore[misc]
+    _set_pc_2x2_params(pc)
     # part_func should be 1, log is 0
     pc_pf = integrate(pc)
     assert torch.allclose(pc_pf(), torch.zeros(()), atol=0, rtol=0)

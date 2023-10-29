@@ -2,7 +2,7 @@ import argparse
 import enum
 import functools
 from dataclasses import dataclass
-from typing import List, Tuple, cast
+from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from benchmark.utils import benchmarker
 from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product.cp import CPLayer  # TODO: rework interfaces for import
+from cirkit.layers.sum_product.cp import UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import RegionGraph
 from cirkit.utils import RandomCtx, set_determinism
@@ -52,7 +52,7 @@ def process_args() -> _ArgsNamespace:
     parser.add_argument("--region_graph", type=str, help="region_graph filename")
     parser.add_argument("--num_latents", type=int, help="num_latents")
     parser.add_argument("--first_pass_only", action="store_true", help="first_pass_only")
-    return cast(_ArgsNamespace, parser.parse_args(namespace=_ArgsNamespace()))
+    return parser.parse_args(namespace=_ArgsNamespace())
 
 
 @torch.no_grad()
@@ -105,7 +105,7 @@ def train(
         optimizer.zero_grad()
         ll = pc(x)
         ll = ll.mean()
-        (-ll).backward()  # we optimize NLL
+        (-ll).backward()  # type: ignore[no-untyped-call]  # we optimize NLL
         optimizer.step()
         return ll.detach()
 
@@ -146,9 +146,9 @@ def main() -> None:
 
     pc = TensorizedPC.from_region_graph(
         RegionGraph.load(args.region_graph),
-        layer_cls=CPLayer,  # type: ignore[misc]
+        layer_cls=UncollapsedCPLayer,  # type: ignore[misc]
         efamily_cls=CategoricalLayer,
-        layer_kwargs={"rank": 1, "prod_exp": True},  # type: ignore[misc]
+        layer_kwargs={"rank": 1},  # type: ignore[misc]
         efamily_kwargs={"num_categories": 256},  # type: ignore[misc]
         num_inner_units=args.num_latents,
         num_input_units=args.num_latents,

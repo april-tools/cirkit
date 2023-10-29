@@ -25,7 +25,7 @@ class TensorizedPC(nn.Module):
 
     @classmethod
     # pylint: disable-next=too-many-locals
-    def from_region_graph(  # type: ignore[misc]
+    def from_region_graph(  # type: ignore[misc]   # pylint: disable=too-many-arguments
         cls,
         rg: RegionGraph,
         layer_cls: Type[SumProductLayer],
@@ -320,7 +320,7 @@ class TensorizedPC(nn.Module):
                 # TODO: The padding value depends on the computation space.
                 #  It should be the neutral element of a group.
                 #  For now computations are in log-space, thus 0 is our pad value.
-                inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=-float("inf"))
+                inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=0)  # pylint: disable=not-callable
             inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
             outputs = layer(inputs)  # outputs: (F, K, B)
             layer_outputs.append(outputs)

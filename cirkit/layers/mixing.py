@@ -50,6 +50,7 @@ class MixingLayer(Layer):
     """
 
     # TODO: num_output_units is num_input_units
+    # pylint: disable-next=too-many-arguments
     def __init__(
         self,
         num_input_components: int,
