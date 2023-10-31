@@ -43,6 +43,9 @@ test = [
   "pytest",
   "pytest-cov",
 ]
+notebooks = [
+  "torchvision"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/april-tools/cirkit"
