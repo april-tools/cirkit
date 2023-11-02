@@ -86,11 +86,7 @@ class CPLayer(SumProductLayer):
         self.reset_parameters()
 
     def _reparam_in(self) -> Tensor:
-        if self.fold_mask is not None:  # pylint: disable=consider-ternary-expression
-            fold_mask = self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)
-        else:
-            fold_mask = None
-        return self.reparam(self.params_in, fold_mask)  # (F, H, K, J)
+        return self.reparam(self.params_in, None)  # (F, H, K, J)
 
     def _reparam_out(self) -> Tensor:
         params_out = self.reparam(self.params_out, None)  # (F, K, J)
@@ -103,13 +99,14 @@ class CPLayer(SumProductLayer):
         :return: result of the left operations, in log-space.
         """
         params_in = self._reparam_in()
+        # TODO: recover the log_trick here
         m: Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
         x = torch.exp(inputs - m)  # (F, H, K, B)
         x = _cp_einsum(x, params_in)  # (F, H, J, B)
-        x = torch.log(x)
+        x = torch.log(x) + m
         if self.fold_mask is not None:
-            x = torch.nan_to_num(x, neginf=0)
-        x = torch.sum(x + m, dim=1)  # (F, J, B)
+            x = x * self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)
+        x = torch.sum(x, dim=1)  # (F, J, B)
         if not self.uncollapsed:
             return x
         params_out = self._reparam_out()
@@ -198,13 +195,6 @@ class SharedCPLayer(SumProductLayer):
         self.reparam = reparam
 
         self.params = nn.Parameter(torch.empty(arity, num_input_units, num_output_units))
-        if fold_mask is not None:
-            # If we are folding CP-shared layers *and* we have a folding mask on the parameters,
-            # then it is necessary to put -inf grads to zero. This is because the same parameters
-            # are shared across all heterogeneous folds.
-            self.params.register_hook(
-                lambda g: torch.nan_to_num(g, neginf=0)  # type: ignore[no-untyped-call,misc]
-            )
 
         # TODO: get torch.default_float_dtype
         # (float ** float) is not guaranteed to be float, but here we know it is
@@ -216,9 +206,6 @@ class SharedCPLayer(SumProductLayer):
         self.reset_parameters()
 
     def _reparam(self) -> Tensor:
-        if self.fold_mask is not None:
-            fold_mask = self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)
-            return self.reparam(self.params, fold_mask)  # (F, H, K, J)
         return self.reparam(self.params, None)  # (H, K, J)
 
     def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
@@ -234,7 +221,7 @@ class SharedCPLayer(SumProductLayer):
             x = _cp_shared_einsum(x, params)  # (F, H, K, B)
         else:
             x = _cp_einsum(x, params)  # (F, H, K, B)
-        x = torch.log(x)
+        x = torch.log(x) + m
         if self.fold_mask is not None:
-            x = torch.nan_to_num(x, neginf=0)
-        return torch.sum(x + m, dim=1)  # (F, K, B)
+            x = x * self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)
+        return torch.sum(x, dim=1)  # (F, K, B)

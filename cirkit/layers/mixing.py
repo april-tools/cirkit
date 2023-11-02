@@ -106,9 +106,6 @@ class MixingLayer(Layer):
         x = torch.exp(log_input - m)  # (F, C, K, B)
         x = self._forward(x)  # (F, K, B)
         x = torch.log(x)
-        if self.fold_mask is not None:
-            x = torch.nan_to_num(x, nan=0)
-            m = torch.nan_to_num(m, neginf=0)
         return x + m.squeeze(dim=1)  # (F, K, B)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack
