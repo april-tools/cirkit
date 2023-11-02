@@ -56,7 +56,7 @@ class MixingLayer(Layer):
         num_input_components: int,
         num_output_units: int,
         num_folds: int = 1,
-        fold_mask: Optional[torch.Tensor] = None,
+        fold_mask: Optional[Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
     ) -> None:
@@ -66,7 +66,7 @@ class MixingLayer(Layer):
             num_input_components (int): The number of mixing components.
             num_output_units (int): The number of output units.
             num_folds (int): The number of folds.
-            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
         """
         super().__init__(num_folds=num_folds, fold_mask=fold_mask)

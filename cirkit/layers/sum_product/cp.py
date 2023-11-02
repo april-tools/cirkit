@@ -1,27 +1,27 @@
 from typing import Any, Optional, cast
 
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.utils.reparams import ReparamFunction, reparam_id
 
 
-def _cp_einsum(x: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+def _cp_einsum(x: Tensor, w: Tensor) -> Tensor:
     # x: (F, H, K, B)
     # w: (F, H, K, J)
     # output: (F, H, J, B)
     return torch.einsum("fhkj,fhkb->fhjb", w, x)
 
 
-def _cp_uncollapsed_einsum(x: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+def _cp_uncollapsed_einsum(x: Tensor, w: Tensor) -> Tensor:
     # x: (F, K, B)
     # w: (F, K, J)
     # output: (F, J, B)
     return torch.einsum("fkj,fkb->fjb", w, x)
 
 
-def _cp_shared_einsum(x: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+def _cp_shared_einsum(x: Tensor, w: Tensor) -> Tensor:
     # x: (F, H, K, B)
     # w: (H, K, J)
     # output: (F, H, J, B)
@@ -40,7 +40,7 @@ class CPLayer(SumProductLayer):
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
-        fold_mask: Optional[torch.Tensor] = None,
+        fold_mask: Optional[Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
         uncollapsed: bool = False,
@@ -54,7 +54,7 @@ class CPLayer(SumProductLayer):
             num_output_units (int): The number of output units.
             arity (int): The arity of the product units.
             num_folds (int): The number of folds.
-            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
             uncollapsed: Whether to use the "uncollapsed" implementation.
             rank: The rank in case of using the "uncollapsed" implementation.
@@ -85,25 +85,25 @@ class CPLayer(SumProductLayer):
 
         self.reset_parameters()
 
-    def _reparam_in(self) -> torch.Tensor:
+    def _reparam_in(self) -> Tensor:
         if self.fold_mask is not None:  # pylint: disable=consider-ternary-expression
             fold_mask = self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)
         else:
             fold_mask = None
         return self.reparam(self.params_in, fold_mask)  # (F, H, K, J)
 
-    def _reparam_out(self) -> torch.Tensor:
+    def _reparam_out(self) -> Tensor:
         params_out = self.reparam(self.params_out, None)  # (F, K, J)
         return params_out
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
         params_in = self._reparam_in()
-        m: torch.Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
+        m: Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
         x = torch.exp(inputs - m)  # (F, H, K, B)
         x = _cp_einsum(x, params_in)  # (F, H, J, B)
         x = torch.log(x)
@@ -113,7 +113,7 @@ class CPLayer(SumProductLayer):
         if not self.uncollapsed:
             return x
         params_out = self._reparam_out()
-        m: torch.Tensor = torch.max(x, dim=1, keepdim=True)[0]  # type: ignore[no-redef]
+        m: Tensor = torch.max(x, dim=1, keepdim=True)[0]  # type: ignore[no-redef]
         x = torch.exp(x - m)  # (F, R, B)
         x = _cp_uncollapsed_einsum(x, params_out)  # (F, K, B)
         x = torch.log(x) + m
@@ -132,7 +132,7 @@ class UncollapsedCPLayer(CPLayer):
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
-        fold_mask: Optional[torch.Tensor] = None,
+        fold_mask: Optional[Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
         rank: int = 1,
@@ -145,7 +145,7 @@ class UncollapsedCPLayer(CPLayer):
             num_output_units (int): The number of output units.
             arity (int): The arity of the product units.
             num_folds (int): The number of folds.
-            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
             rank (int): The rank of the CP decomposition (i.e., the number of inner units of the \
                 layer).
             reparam: The reparameterization function.
@@ -174,7 +174,7 @@ class SharedCPLayer(SumProductLayer):
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
-        fold_mask: Optional[torch.Tensor] = None,
+        fold_mask: Optional[Tensor] = None,
         *,
         reparam: ReparamFunction = reparam_id,
         **_: Any,
@@ -186,7 +186,7 @@ class SharedCPLayer(SumProductLayer):
             num_output_units (int): The number of output units.
             arity (int): The arity of the product units.
             num_folds (int): The number of folds.
-            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
             prod_exp (bool): Whether to compute products in linear space rather than in log-space.
         """
@@ -215,20 +215,20 @@ class SharedCPLayer(SumProductLayer):
 
         self.reset_parameters()
 
-    def _reparam(self) -> torch.Tensor:
+    def _reparam(self) -> Tensor:
         if self.fold_mask is not None:
             fold_mask = self.fold_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)
             return self.reparam(self.params, fold_mask)  # (F, H, K, J)
         return self.reparam(self.params, None)  # (H, K, J)
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
         params = self._reparam()
-        m: torch.Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
+        m: Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
         x = torch.exp(inputs - m)  # (F, H, K, B)
         if len(params.shape) == 3:  # pylint: disable=consider-ternary-expression
             x = _cp_shared_einsum(x, params)  # (F, H, K, B)
