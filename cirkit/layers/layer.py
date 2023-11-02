@@ -1,17 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional
 
 import torch
 from torch import Tensor, nn
 
+from cirkit.utils.type_aliases import ClampBounds
+
 # TODO: rework docstrings
-
-
-class _ClampValue(TypedDict, total=False):
-    """Wraps the kwargs passed to `torch.clamp()`."""
-
-    min: float
-    max: float
 
 
 # TODO: what interface do we need in this very generic class?
@@ -38,7 +33,7 @@ class Layer(nn.Module, ABC):
             if fold_mask.dtype == torch.bool:
                 fold_mask = fold_mask.to(torch.get_default_dtype())
         self.register_buffer("_fold_mask", fold_mask)
-        self.param_clamp_value: _ClampValue = {}
+        self.param_clamp_value: ClampBounds = {}
 
     @property
     def num_params(self) -> int:
