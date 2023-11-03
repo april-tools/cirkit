@@ -4,7 +4,8 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
-from cirkit.utils.reparams import ReparamFunction, reparam_id
+from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.utils.type_aliases import ReparamFactory
 
 # TODO: rework docstrings
 
@@ -58,7 +59,7 @@ class MixingLayer(Layer):
         num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
         *,
-        reparam: ReparamFunction = reparam_id,
+        reparam: ReparamFactory = ReparamIdentity,
     ) -> None:
         """Init class.
 
@@ -74,21 +75,26 @@ class MixingLayer(Layer):
         self.num_input_components = num_input_components
         self.num_output_units = num_output_units
 
-        self.params = nn.Parameter(
-            torch.empty(self.num_folds, num_input_components, num_output_units)
+        self.params = reparam(
+            (self.num_folds, num_input_components, num_output_units), dim=1, mask=fold_mask
         )
         self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
         self.reset_parameters()
 
+    @torch.no_grad()
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization: U(0.01, 0.99) with normalization."""
-        with torch.no_grad():
-            nn.init.uniform_(self.params, 0.01, 0.99)
-            self.params /= self.params.sum(dim=1, keepdim=True)  # type: ignore[misc]
+        # TODO: is this still correct with reparam?
+        for param in self.parameters():
+            nn.init.uniform_(param, 0.01, 0.99)
+            # TODO: pylint bug?
+            # pylint: disable-next=redefined-loop-name
+            param /= param.sum(dim=1, keepdim=True)  # type: ignore[misc]
 
     def _forward(self, x: Tensor) -> Tensor:
-        fold_mask = self.fold_mask.unsqueeze(dim=-1) if self.fold_mask is not None else None
-        weight = self.reparam(self.params, fold_mask)
+        # TODO: too many `self.fold_mask is None` checks across the repo
+        #       can use apply_mask method?
+        weight = self.params() if self.fold_mask is None else self.params() * self.fold_mask
         return torch.einsum("fck,fckb->fkb", weight, x)
 
     # TODO: make forward return something

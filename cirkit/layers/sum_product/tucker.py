@@ -1,10 +1,10 @@
 from typing import Any, Optional, cast
 
 import torch
-from torch import nn
 
 from cirkit.layers.sum_product.sum_product import SumProductLayer
-from cirkit.utils.reparams import ReparamFunction, reparam_id
+from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.utils.type_aliases import ReparamFactory
 
 # TODO: rework docstrings
 
@@ -27,7 +27,7 @@ class TuckerLayer(SumProductLayer):
         num_folds: int = 1,
         fold_mask: Optional[torch.Tensor] = None,
         *,
-        reparam: ReparamFunction = reparam_id,
+        reparam: ReparamFactory = ReparamIdentity,
         **_: Any,
     ) -> None:
         """Init class.
@@ -47,10 +47,9 @@ class TuckerLayer(SumProductLayer):
         assert arity > 0
         if arity != 2 or fold_mask is not None:
             raise NotImplementedError("Tucker layers can only compute binary product units")
-        self.reparam = reparam
 
-        self.params = nn.Parameter(
-            torch.empty(self.num_folds, num_input_units, num_input_units, num_output_units)
+        self.params = reparam(
+            (self.num_folds, num_input_units, num_input_units, num_output_units), dim=(1, 2)
         )
 
         # TODO: get torch.default_float_dtype
@@ -62,16 +61,13 @@ class TuckerLayer(SumProductLayer):
 
         self.reset_parameters()
 
-    def _reparam(self) -> torch.Tensor:
-        return self.reparam(self.params, None)
-
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
-        params = self._reparam()
+        params = self.params()
         xl, xr = inputs[:, 0], inputs[:, 1]
         ml: torch.Tensor = torch.max(xl, dim=1, keepdim=True)[0]  # (F, 1, B)
         mr: torch.Tensor = torch.max(xr, dim=1, keepdim=True)[0]  # (F, 1, B)
