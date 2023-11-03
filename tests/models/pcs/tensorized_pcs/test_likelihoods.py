@@ -15,14 +15,15 @@ from cirkit.region_graph import RegionGraph
 from cirkit.region_graph.poon_domingos import PoonDomingos
 from cirkit.region_graph.quad_tree import QuadTree
 from cirkit.region_graph.random_binary_tree import RandomBinaryTree
+from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils import RandomCtx
-from cirkit.utils.reparams import ReparamFunction, reparam_id
+from cirkit.utils.type_aliases import ReparamFactory
 
 
 def get_deep_pc(  # type: ignore[misc]
     rg_cls: Callable[..., RegionGraph],
     kwargs: Dict[str, Union[int, bool, List[int]]],
-    reparam_func: ReparamFunction = reparam_id,
+    reparam_func: ReparamFactory = ReparamIdentity,
 ) -> TensorizedPC:
     # TODO: type of kwargs should be refined
     rg = rg_cls(**kwargs)

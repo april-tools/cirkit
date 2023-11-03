@@ -10,8 +10,9 @@ from cirkit.region_graph import RegionGraph
 from cirkit.region_graph.poon_domingos import PoonDomingos
 from cirkit.region_graph.quad_tree import QuadTree
 from cirkit.region_graph.random_binary_tree import RandomBinaryTree
+from cirkit.reparams.leaf import ReparamClamp, ReparamExp, ReparamSoftmax, ReparamSquare
 from cirkit.utils import RandomCtx
-from cirkit.utils.reparams import reparam_exp, reparam_positive, reparam_softmax, reparam_square
+from cirkit.utils.type_aliases import ReparamFactory
 from tests.models.pcs.tensorized_pcs.test_likelihoods import get_deep_pc
 
 
@@ -44,18 +45,19 @@ def test_pc_nonneg_reparams(
         kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
         reparam_name (str): The reparametrization function identifier.
     """
+    reparam: ReparamFactory
     if reparam_name == "exp":
-        reparam_func = reparam_exp
+        reparam = ReparamExp
     elif reparam_name == "square":
-        reparam_func = reparam_square
+        reparam = ReparamSquare
     elif reparam_name == "softmax":
-        reparam_func = functools.partial(reparam_softmax, dim=-2)
+        reparam = ReparamSoftmax
     elif reparam_name == "positive":
-        reparam_func = functools.partial(reparam_positive, eps=1e-7)
+        reparam = functools.partial(ReparamClamp, min=1e-7)  # type: ignore[misc]
     else:
         assert False
 
-    pc = get_deep_pc(rg_cls, kwargs, reparam_func=reparam_func)  # type: ignore[misc]
+    pc = get_deep_pc(rg_cls, kwargs, reparam_func=reparam)  # type: ignore[misc]
     num_vars = pc.num_variables
 
     # Generate all possible combinations of 16 integers from the list of possible values

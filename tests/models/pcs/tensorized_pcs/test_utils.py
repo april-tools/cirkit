@@ -6,7 +6,8 @@ from cirkit.layers.input.exp_family import CategoricalLayer
 from cirkit.layers.sum_product import CPLayer, SumProductLayer, UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
-from cirkit.utils.reparams import ReparamFunction, reparam_id
+from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.utils.type_aliases import ReparamFactory
 
 
 def _gen_rg_2x2_dense() -> RegionGraph:  # pylint: disable=too-many-locals
@@ -136,7 +137,7 @@ def get_pc_from_region_graph(
     rg: RegionGraph,
     num_units: int = 1,
     layer_cls: Type[SumProductLayer] = UncollapsedCPLayer,
-    reparam: ReparamFunction = reparam_id,
+    reparam: ReparamFactory = ReparamIdentity,
 ) -> TensorizedPC:
     layer_kwargs = {"rank": 1} if layer_cls == UncollapsedCPLayer else {}  # type: ignore[misc]
     pc = TensorizedPC.from_region_graph(
@@ -153,7 +154,7 @@ def get_pc_from_region_graph(
 
 
 def get_pc_2x2_dense(
-    reparam: ReparamFunction = reparam_id,
+    reparam: ReparamFactory = ReparamIdentity,
     layer_cls: Type[SumProductLayer] = CPLayer,
     num_units: int = 1,
 ) -> TensorizedPC:
@@ -162,7 +163,7 @@ def get_pc_2x2_dense(
 
 
 def get_pc_5_sparse(
-    reparam: ReparamFunction = reparam_id,
+    reparam: ReparamFactory = ReparamIdentity,
     layer_cls: Type[SumProductLayer] = CPLayer,
     num_units: int = 1,
 ) -> TensorizedPC:

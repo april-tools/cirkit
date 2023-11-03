@@ -16,11 +16,11 @@ from tests.models.pcs.tensorized_pcs.test_utils import get_pc_2x2_dense
 def _get_pc_2x2_param_shapes() -> Dict[str, Tuple[int, ...]]:
     return {
         "input_layer.params": (4, 1, 1, 2),
-        "inner_layers.0.params_in": (4, 2, 1, 1),
-        "inner_layers.0.params_out": (4, 1, 1),
-        "inner_layers.1.params_in": (2, 2, 1, 1),
-        "inner_layers.1.params_out": (2, 1, 1),
-        "inner_layers.2.params": (1, 2, 1),
+        "inner_layers.0.params_in.param": (4, 2, 1, 1),
+        "inner_layers.0.params_out.param": (4, 1, 1),
+        "inner_layers.1.params_in.param": (2, 2, 1, 1),
+        "inner_layers.1.params_out.param": (2, 1, 1),
+        "inner_layers.2.params.param": (1, 2, 1),
     }
 
 
@@ -37,15 +37,15 @@ def _set_pc_2x2_params(pc: TensorizedPC) -> None:
                     [math.log(3), 0],  # type: ignore[misc]  # 3/4, 1/4
                 ]
             ).reshape(4, 1, 1, 2),
-            "inner_layers.0.params_in": torch.stack(
+            "inner_layers.0.params_in.param": torch.stack(
                 [torch.ones(4, 1, 1) / 2, torch.ones(4, 1, 1) * 2], dim=1
             ),
-            "inner_layers.0.params_out": torch.ones(4, 1, 1),
-            "inner_layers.1.params_in": torch.stack(
+            "inner_layers.0.params_out.param": torch.ones(4, 1, 1),
+            "inner_layers.1.params_in.param": torch.stack(
                 [torch.ones(2, 1, 1) * 2, torch.ones(2, 1, 1) / 2], dim=1
             ),
-            "inner_layers.1.params_out": torch.ones(2, 1, 1),
-            "inner_layers.2.params": torch.tensor(
+            "inner_layers.1.params_out.param": torch.ones(2, 1, 1),
+            "inner_layers.2.params.param": torch.tensor(
                 [1 / 3, 2 / 3],  # type: ignore[misc]
             ).reshape(1, 2, 1),
         }
