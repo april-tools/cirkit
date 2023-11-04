@@ -5,28 +5,8 @@ from torch import Tensor
 
 from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
-
-
-def _cp_einsum(x: Tensor, w: Tensor) -> Tensor:
-    # x: (F, H, K, B)
-    # w: (F, H, K, J)
-    # output: (F, H, J, B)
-    return torch.einsum("fhkj,fhkb->fhjb", w, x)
-
-
-def _cp_uncollapsed_einsum(x: Tensor, w: Tensor) -> Tensor:
-    # x: (F, K, B)
-    # w: (F, K, J)
-    # output: (F, J, B)
-    return torch.einsum("fkj,fkb->fjb", w, x)
-
-
-def _cp_shared_einsum(x: Tensor, w: Tensor) -> Tensor:
-    # x: (F, H, K, B)
-    # w: (H, K, J)
-    # output: (F, H, J, B)
-    return torch.einsum("hkj,fhkb->fhjb", w, x)
 
 
 class CPLayer(SumProductLayer):
@@ -88,30 +68,23 @@ class CPLayer(SumProductLayer):
 
         self.reset_parameters()
 
+    def _forward_in_linear(self, x: Tensor) -> Tensor:
+        return torch.einsum("fhkr,fhkb->fhrb", self.params_in(), x)
+
+    def _forward_out_linear(self, x: Tensor) -> Tensor:
+        return torch.einsum("frk,frb->fkb", self.params_out(), x)
+
     def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
-        params_in = self.params_in()
-        # TODO: recover the log_trick here
-        m: Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
-        x = torch.exp(inputs - m)  # (F, H, K, B)
-        x = _cp_einsum(x, params_in)  # (F, H, J, B)
-        x = torch.log(x) + m
-        if self.fold_mask is not None:
-            # TODO: locally it warns consider-using-augmented-assign but not on github
-            x = x * self.fold_mask
-        x = torch.sum(x, dim=1)  # (F, J, B)
+        x = log_func_exp(inputs, func=self._forward_in_linear, dim=2, keepdim=True)
+        x = torch.sum(x if self.fold_mask is None else x * self.fold_mask, dim=1)  # (F, K/R, B)
         if not self.uncollapsed:
             return x
-        params_out = self.params_out()
-        m: Tensor = torch.max(x, dim=1, keepdim=True)[0]  # type: ignore[no-redef]
-        x = torch.exp(x - m)  # (F, R, B)
-        x = _cp_uncollapsed_einsum(x, params_out)  # (F, K, B)
-        x = torch.log(x) + m
-        return x
+        return log_func_exp(x, func=self._forward_out_linear, dim=1, keepdim=True)
 
 
 class UncollapsedCPLayer(CPLayer):
@@ -202,20 +175,14 @@ class SharedCPLayer(SumProductLayer):
 
         self.reset_parameters()
 
+    def _forward_in_linear(self, x: Tensor) -> Tensor:
+        return torch.einsum("hko,fhkb->fhob", self.params(), x)
+
     def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param inputs: value in log space for left child.
         :return: result of the left operations, in log-space.
         """
-        params = self.params()
-        m: Tensor = torch.max(inputs, dim=2, keepdim=True)[0]  # (F, H, 1, B)
-        x = torch.exp(inputs - m)  # (F, H, K, B)
-        if len(params.shape) == 3:  # pylint: disable=consider-ternary-expression
-            x = _cp_shared_einsum(x, params)  # (F, H, K, B)
-        else:
-            x = _cp_einsum(x, params)  # (F, H, K, B)
-        x = torch.log(x) + m
-        if self.fold_mask is not None:
-            x = x * self.fold_mask
-        return torch.sum(x, dim=1)  # (F, K, B)
+        x = log_func_exp(inputs, func=self._forward_in_linear, dim=2, keepdim=True)
+        return torch.sum(x if self.fold_mask is None else x * self.fold_mask, dim=1)  # (F, K, B)

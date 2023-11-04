@@ -5,6 +5,7 @@ from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
 from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
 # TODO: rework docstrings
@@ -91,7 +92,7 @@ class MixingLayer(Layer):
             # pylint: disable-next=redefined-loop-name
             param /= param.sum(dim=1, keepdim=True)  # type: ignore[misc]
 
-    def _forward(self, x: Tensor) -> Tensor:
+    def _forward_linear(self, x: Tensor) -> Tensor:
         # TODO: too many `self.fold_mask is None` checks across the repo
         #       can use apply_mask method?
         weight = self.params() if self.fold_mask is None else self.params() * self.fold_mask
@@ -108,10 +109,6 @@ class MixingLayer(Layer):
         Returns:
             Tensor: the output.
         """
-        m: Tensor = torch.max(log_input, dim=1, keepdim=True)[0]  # (F, 1, K, B)
-        x = torch.exp(log_input - m)  # (F, C, K, B)
-        x = self._forward(x)  # (F, K, B)
-        x = torch.log(x)
-        return x + m.squeeze(dim=1)  # (F, K, B)
+        return log_func_exp(log_input, func=self._forward_linear, dim=1, keepdim=False)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack
