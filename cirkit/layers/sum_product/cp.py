@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, cast
+from typing import Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -76,13 +76,6 @@ class BaseCPLayer(SumProductLayer):
         )
         self.params_out = (
             reparam(self._infer_shape(params_out_dim_name), dim=-2) if params_out_dim_name else None
-        )
-
-        # (float ** float) is not guaranteed to be float, but here we know it is
-        # TODO: assuming this is not useful anymore?
-        self.param_clamp_value["min"] = cast(
-            float,
-            torch.finfo(torch.get_default_dtype()).smallest_normal ** 0.5,
         )
 
         self.reset_parameters()

@@ -4,8 +4,6 @@ from typing import Any, Optional
 import torch
 from torch import Tensor, nn
 
-from cirkit.utils.type_aliases import ClampBounds
-
 # TODO: rework docstrings
 
 
@@ -35,7 +33,6 @@ class Layer(nn.Module, ABC):
             if fold_mask.dtype == torch.bool:
                 fold_mask = fold_mask.to(torch.get_default_dtype())
         self.register_buffer("_fold_mask", fold_mask)
-        self.param_clamp_value: ClampBounds = {}
 
     @property
     def num_params(self) -> int:
@@ -58,20 +55,6 @@ class Layer(nn.Module, ABC):
     @abstractmethod
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization."""
-
-    @torch.no_grad()
-    def clamp_params(self, clamp_all: bool = False) -> None:
-        """Clamp parameters such that they are non-negative and is impossible to \
-            get zero probabilities.
-
-        This involves using a constant that is specific on the computation.
-
-        Args:
-            clamp_all (bool, optional): Whether to clamp all. Defaults to False.
-        """
-        for param in self.parameters():
-            if clamp_all or param.requires_grad:
-                param.clamp_(**self.param_clamp_value)
 
     # TODO: temp solution to accomodate IntegralInputLayer
     def __call__(self, x: Tensor, *_: Any) -> Tensor:  # type: ignore[misc]

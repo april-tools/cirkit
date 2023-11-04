@@ -1,4 +1,4 @@
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 import torch
 from torch import Tensor
@@ -48,13 +48,6 @@ class TuckerLayer(SumProductLayer):
 
         self.params = reparam(
             (self.num_folds, num_input_units, num_input_units, num_output_units), dim=(1, 2)
-        )
-
-        # TODO: get torch.default_float_dtype
-        # (float ** float) is not guaranteed to be float, but here we know it is
-        self.param_clamp_value["min"] = cast(
-            float,
-            torch.finfo(self.params.dtype).smallest_normal ** 0.5,
         )
 
         self.reset_parameters()

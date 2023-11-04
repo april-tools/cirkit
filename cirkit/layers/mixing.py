@@ -79,7 +79,7 @@ class MixingLayer(Layer):
         self.params = reparam(
             (self.num_folds, num_input_components, num_output_units), dim=1, mask=fold_mask
         )
-        self.param_clamp_value["min"] = torch.finfo(self.params.dtype).smallest_normal
+
         self.reset_parameters()
 
     @torch.no_grad()
