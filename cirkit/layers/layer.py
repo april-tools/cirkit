@@ -40,7 +40,7 @@ class Layer(nn.Module, ABC):
         """Get the number of params.
 
         Returns:
-            int: The number of params
+            int: The number of params.
         """
         return sum(param.numel() for param in self.parameters())
 
@@ -71,21 +71,27 @@ class Layer(nn.Module, ABC):
             if clamp_all or param.requires_grad:
                 param.clamp_(**self.param_clamp_value)
 
-    def __call__(self, *args: Tensor, **kwargs: Tensor) -> Tensor:
-        """Invoke forward.
+    # TODO: temp solution to accomodate IntegralInputLayer
+    def __call__(self, x: Tensor, *_: Any) -> Tensor:  # type: ignore[misc]
+        """Invoke forward function.
+
+        Args:
+            x (Tensor): The input to this layer.
 
         Returns:
-            Tensor: Return of forward.
+            Tensor: The output of this layer.
         """
-        return super().__call__(*args, **kwargs)  # type: ignore[no-any-return,misc]
+        return super().__call__(x, *_)  # type: ignore[no-any-return,misc]
 
     @abstractmethod
-    # pylint: disable-next=missing-param-doc
-    def forward(self, *args: Tensor, **kwargs: Tensor) -> Tensor:
-        """Implement forward.
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
+
+        Args:
+            x (Tensor): The input to this layer.
 
         Returns:
-            Tensor: Return of forward.
+            Tensor: The output of this layer.
         """
 
     # TODO: need to implement relevant things

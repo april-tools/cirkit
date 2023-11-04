@@ -21,6 +21,7 @@ class InputLayer(Layer):
         self.rg_nodes = rg_nodes
         self.num_vars = len(set(v for n in rg_nodes for v in n.scope))
 
+    # TODO: this should be in Layer? for some layers it's no-op but interface should exist
     @abstractmethod
     def integrate(self) -> Tensor:
         """Return the definite integral of units activations over the variables domain.

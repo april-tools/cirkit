@@ -74,13 +74,16 @@ class CPLayer(SumProductLayer):
     def _forward_out_linear(self, x: Tensor) -> Tensor:
         return torch.einsum("frk,frb->fkb", self.params_out(), x)
 
-    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
-        """Compute the main Einsum operation of the layer.
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
 
-        :param inputs: value in log space for left child.
-        :return: result of the left operations, in log-space.
+        Args:
+            x (Tensor): The input to this layer.
+
+        Returns:
+            Tensor: The output of this layer.
         """
-        x = log_func_exp(inputs, func=self._forward_in_linear, dim=2, keepdim=True)
+        x = log_func_exp(x, func=self._forward_in_linear, dim=2, keepdim=True)
         x = torch.sum(x if self.fold_mask is None else x * self.fold_mask, dim=1)  # (F, K/R, B)
         if not self.uncollapsed:
             return x
@@ -178,11 +181,14 @@ class SharedCPLayer(SumProductLayer):
     def _forward_in_linear(self, x: Tensor) -> Tensor:
         return torch.einsum("hko,fhkb->fhob", self.params(), x)
 
-    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
-        """Compute the main Einsum operation of the layer.
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
 
-        :param inputs: value in log space for left child.
-        :return: result of the left operations, in log-space.
+        Args:
+            x (Tensor): The input to this layer.
+
+        Returns:
+            Tensor: The output of this layer.
         """
-        x = log_func_exp(inputs, func=self._forward_in_linear, dim=2, keepdim=True)
+        x = log_func_exp(x, func=self._forward_in_linear, dim=2, keepdim=True)
         return torch.sum(x if self.fold_mask is None else x * self.fold_mask, dim=1)  # (F, K, B)

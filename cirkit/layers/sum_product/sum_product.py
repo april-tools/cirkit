@@ -1,4 +1,3 @@
-from abc import abstractmethod
 from typing import Any, Optional
 
 from torch import Tensor, nn
@@ -43,25 +42,4 @@ class SumProductLayer(Layer):
         for param in self.parameters():
             nn.init.uniform_(param, 0.01, 0.99)
 
-    # TODO: find a better way to do this override
-    # TODO: what about abstract?
-    @abstractmethod
-    # pylint: disable-next=arguments-differ
-    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
-        """Compute the main einsum operation of the layer.
-
-        Do SumProductLayer forward pass.
-
-        We assume that all parameters are in the correct range (no checks done).
-
-        Skeleton for each SumProductLayer (options Xa and Xb are mutual exclusive \
-            and follows an a-path o b-path)
-        1) Go To exp-space (with maximum subtraction) -> NON SPECIFIC
-        2a) Do the einsum operation and go to the log space || 2b) Do the einsum operation
-        3a) do the sum                                      || 3b) do the product
-        4a) go to exp space do the einsum and back to log   || 4b) do the einsum operation [OPT]
-        5a) do nothing                                      || 5b) back to log space
-
-        :param inputs: the input tensor.
-        :return: result of the left operations, in log-space.
-        """
+    # forward keeps abstract

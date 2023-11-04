@@ -62,11 +62,13 @@ class TuckerLayer(SumProductLayer):
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         return torch.einsum("pib,pjb,pijo->pob", left, right, self.params())
 
-    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
-        """Compute the main Einsum operation of the layer.
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
 
-        :param inputs: value in log space for left child.
-        :return: result of the left operations, in log-space.
+        Args:
+            x (Tensor): The input to this layer.
+
+        Returns:
+            Tensor: The output of this layer.
         """
-        log_left, log_right = inputs[:, 0], inputs[:, 1]
-        return log_func_exp(log_left, log_right, func=self._forward_linear, dim=1, keepdim=True)
+        return log_func_exp(x[:, 0], x[:, 1], func=self._forward_linear, dim=1, keepdim=True)

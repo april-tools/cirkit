@@ -45,15 +45,11 @@ class ConstantLayer(InputLayer):
         """
         raise NotImplementedError("The integration of constants functions is not implemented")
 
-    def forward(self, *args: Tensor, **kwargs: Tensor) -> Tensor:
-        """Compute the output of the layer.
-
-        Args:
-            *args: Unused.
-            **kwargs: Unused.
+    def forward(self, _: Tensor) -> Tensor:
+        """Run forward pass.
 
         Returns:
-            A tensor.
+            Tensor: The output of this layer.
         """
         if callable(self._value):
             return self._value()

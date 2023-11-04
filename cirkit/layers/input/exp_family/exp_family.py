@@ -84,8 +84,7 @@ class ExpFamilyLayer(InputLayer):
             device=self.params.device,
         )
 
-    # pylint: disable-next=arguments-differ
-    def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, x: Tensor) -> Tensor:
         """Compute the factorized leaf densities. We are doing the computation \
             in the log-domain, so this is actually \
             computing sums over densities.

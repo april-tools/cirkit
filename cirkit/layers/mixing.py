@@ -98,17 +98,15 @@ class MixingLayer(Layer):
         weight = self.params() if self.fold_mask is None else self.params() * self.fold_mask
         return torch.einsum("fck,fckb->fkb", weight, x)
 
-    # TODO: make forward return something
-    # pylint: disable-next=arguments-differ
-    def forward(self, log_input: Tensor) -> Tensor:  # type: ignore[override]
-        """Do the forward.
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
 
         Args:
-            log_input (Tensor): The input.
+            x (Tensor): The input to this layer.
 
         Returns:
-            Tensor: the output.
+            Tensor: The output of this layer.
         """
-        return log_func_exp(log_input, func=self._forward_linear, dim=1, keepdim=False)
+        return log_func_exp(x, func=self._forward_linear, dim=1, keepdim=False)
 
     # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack

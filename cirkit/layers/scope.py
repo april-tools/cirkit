@@ -41,9 +41,8 @@ class ScopeLayer(Layer):
         This layer does not have any parameters.
         """
 
-    # pylint: disable-next=arguments-differ
-    def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]
-        """Forward pass of the scope layer.
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
 
         Args:
             x (Tensor): The input units activations.
