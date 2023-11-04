@@ -15,6 +15,8 @@ class Layer(nn.Module, ABC):
 
     _fold_mask: Optional[Tensor]
 
+    # TODO: design kwarg-only. We mostly call by Layer(**kwargs)
+    # TODO: design what info is saved in which class (e.g. K_in and K_out can be here?)
     def __init__(
         self,
         num_folds: int = 1,

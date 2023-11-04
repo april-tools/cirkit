@@ -5,7 +5,12 @@ from typing import Type
 import pytest
 import torch
 
-from cirkit.layers.sum_product import CPLayer, SharedCPLayer, SumProductLayer, UncollapsedCPLayer
+from cirkit.layers.sum_product import (
+    BaseCPLayer,
+    CollapsedCPLayer,
+    SharedCPLayer,
+    UncollapsedCPLayer,
+)
 from cirkit.models.functional import integrate
 from cirkit.reparams.leaf import ReparamExp, ReparamSoftmax
 from cirkit.utils import RandomCtx
@@ -14,14 +19,10 @@ from tests.models.pcs.tensorized_pcs.test_utils import get_pc_5_sparse
 
 @pytest.mark.parametrize(
     "normalized,layer_cls",
-    list(
-        itertools.product(
-            [False, True], [CPLayer, UncollapsedCPLayer, SharedCPLayer]  # type: ignore[misc]
-        )
-    ),
+    list(itertools.product([False, True], [CollapsedCPLayer, UncollapsedCPLayer, SharedCPLayer])),
 )
 @RandomCtx(42)
-def test_pc_sparse_folding(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
+def test_pc_sparse_folding(normalized: bool, layer_cls: Type[BaseCPLayer]) -> None:
     reparam = ReparamSoftmax if normalized else ReparamExp  # TODO: pass in class instead of flag?
     pc = get_pc_5_sparse(reparam, layer_cls=layer_cls)
     assert any(should_pad for (should_pad, _, __) in pc.bookkeeping)

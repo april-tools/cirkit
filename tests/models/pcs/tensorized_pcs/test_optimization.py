@@ -9,7 +9,12 @@ import torch
 from torch import Tensor
 
 from cirkit.layers import MixingLayer
-from cirkit.layers.sum_product import CPLayer, SharedCPLayer, SumProductLayer, UncollapsedCPLayer
+from cirkit.layers.sum_product import (
+    BaseCPLayer,
+    CollapsedCPLayer,
+    SharedCPLayer,
+    UncollapsedCPLayer,
+)
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
 from cirkit.reparams.leaf import ReparamExp, ReparamSoftmax
@@ -45,19 +50,16 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
                 assert torch.all(torch.isfinite(non_masked_params))
             else:
                 assert torch.all(torch.isfinite(params()))
-        elif isinstance(layer, SharedCPLayer):  # type: ignore[misc]
-            params = layer.params
-            if layer.fold_mask is not None:
-                non_masked_params = torch.where(
-                    layer.fold_mask[0].bool(), params(), torch.zeros(())
-                )
-                assert torch.all(torch.isfinite(non_masked_params))
-            else:
-                assert torch.all(torch.isfinite(params()))
-        elif isinstance(layer, CPLayer):  # type: ignore[misc]
+        elif isinstance(layer, BaseCPLayer):
+            assert layer.params_in is not None
             params = layer.params_in
             if layer.fold_mask is not None:
-                non_masked_params = torch.where(layer.fold_mask.bool(), params(), torch.zeros(()))
+                mask = (
+                    layer.fold_mask[0].bool()
+                    if isinstance(layer, SharedCPLayer)
+                    else layer.fold_mask.bool()
+                )
+                non_masked_params = torch.where(mask, params(), torch.zeros(()))
                 assert torch.all(torch.isfinite(non_masked_params))
             else:
                 assert torch.all(torch.isfinite(params()))
@@ -68,14 +70,10 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
 @torch.set_grad_enabled(True)
 @pytest.mark.parametrize(
     "normalized,layer_cls",
-    list(
-        itertools.product(
-            [False, True], [CPLayer, UncollapsedCPLayer, SharedCPLayer]  # type: ignore[misc]
-        )
-    ),
+    list(itertools.product([False, True], [CollapsedCPLayer, UncollapsedCPLayer, SharedCPLayer])),
 )
 @RandomCtx(42)
-def test_pc_dense_backprop(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
+def test_pc_dense_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> None:
     reparam = ReparamSoftmax if normalized else ReparamExp
     pc = get_pc_2x2_dense(reparam, layer_cls, num_units=2)
     data = torch.tensor(list(itertools.product([0, 1], repeat=4)))  # type: ignore[misc]
@@ -86,14 +84,10 @@ def test_pc_dense_backprop(normalized: bool, layer_cls: Type[SumProductLayer]) -
 @torch.set_grad_enabled(True)
 @pytest.mark.parametrize(
     "normalized,layer_cls",
-    list(
-        itertools.product(
-            [False, True], [CPLayer, UncollapsedCPLayer, SharedCPLayer]  # type: ignore[misc]
-        )
-    ),
+    list(itertools.product([False, True], [CollapsedCPLayer, UncollapsedCPLayer, SharedCPLayer])),
 )
 @RandomCtx(42)
-def test_pc_sparse_backprop(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
+def test_pc_sparse_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> None:
     reparam = ReparamSoftmax if normalized else ReparamExp
     pc = get_pc_5_sparse(reparam, layer_cls, num_units=2)
     data = torch.tensor(list(itertools.product([0, 1], repeat=5)))  # type: ignore[misc]

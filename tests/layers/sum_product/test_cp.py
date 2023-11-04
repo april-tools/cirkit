@@ -40,7 +40,7 @@ def test_cp_layer(
         arity=arity,
         num_folds=num_folds,
         reparam=reparam,
-        uncollapsed=uncollapsed,
+        collapsed=not uncollapsed,
         rank=rank,
     )
 
