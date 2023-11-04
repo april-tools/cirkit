@@ -35,8 +35,8 @@ def test_cp_layer(
 
     rank = 5
     layer = CPLayer(
-        num_input_units,
-        num_output_units,
+        num_input_units=num_input_units,
+        num_output_units=num_output_units,
         arity=arity,
         num_folds=num_folds,
         reparam=reparam,

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Optional
 
 import torch
 from torch import Tensor
@@ -8,52 +8,50 @@ from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
-# TODO: rework docstrings
-
 
 class TuckerLayer(SumProductLayer):
     """Tucker (2) layer."""
 
-    # TODO: better way to call init by base class?
-    # TODO: better default value
-    # pylint: disable-next=too-many-arguments
-    def __init__(  # type: ignore[misc]
+    def __init__(  # pylint: disable=too-many-arguments
         self,
+        *,
         num_input_units: int,
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
-        *,
         reparam: ReparamFactory = ReparamIdentity,
-        **_: Any,
     ) -> None:
         """Init class.
 
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            arity (int): The arity of the product units.
-            num_folds (int): The number of folds.
-            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
-            reparam: The reparameterization function.
-            prod_exp (bool): Whether to compute products in linear space rather than in log-space.
+            arity (int, optional): The arity of the layer. Defaults to 2.
+            num_folds (int, optional): The number of folds. Defaults to 1.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
+        if arity != 2:
+            raise NotImplementedError("Tucker layers only implemented binary product units.")
+        assert fold_mask is None, "Input for Tucker layer should not be masked."
         super().__init__(
-            num_input_units, num_output_units, num_folds=num_folds, fold_mask=fold_mask
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
+            reparam=reparam,
         )
-        assert arity > 0
-        if arity != 2 or fold_mask is not None:
-            raise NotImplementedError("Tucker layers can only compute binary product units")
 
         self.params = reparam(
-            (self.num_folds, num_input_units, num_input_units, num_output_units), dim=(1, 2)
+            (num_folds, num_input_units, num_input_units, num_output_units), dim=(1, 2)
         )
 
         self.reset_parameters()
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
-        return torch.einsum("pib,pjb,pijo->pob", left, right, self.params())
+        return torch.einsum("fib,fjb,fijo->fob", left, right, self.params())
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

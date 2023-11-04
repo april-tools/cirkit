@@ -1,60 +1,77 @@
 from abc import ABC, abstractmethod
+from functools import cached_property
 from typing import Any, Optional
 
-import torch
 from torch import Tensor, nn
 
-# TODO: rework docstrings
+from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.utils.type_aliases import ReparamFactory
 
 
-# TODO: what interface do we need in this very generic class?
 class Layer(nn.Module, ABC):
-    """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""
+    """The abstract base class for all layers.
 
-    _fold_mask: Optional[Tensor]
+    Here saves the basic properties for layers and provide interface for the functionalities that \
+    each layer should implement.
+    """
 
-    # TODO: design kwarg-only. We mostly call by Layer(**kwargs)
-    # TODO: design what info is saved in which class (e.g. K_in and K_out can be here?)
-    def __init__(
+    fold_mask: Optional[Tensor]
+
+    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
         self,
+        *,
+        num_input_units: int,
+        num_output_units: int,
+        arity: int = 2,
         num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
+        reparam: ReparamFactory = ReparamIdentity,  # pylint: disable=unused-argument
+        **_: Any,
     ) -> None:
-        """Initialize a layer.
+        """Initialize the layer.
 
         Args:
-            num_folds: The number of folds that the layer computes.
-            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
+            num_input_units (int): The number of input units.
+            num_output_units (int): The number of output units.
+            arity (int, optional): The arity of the layer. Defaults to 2.
+            num_folds (int, optional): The number of folds. Defaults to 1.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
         super().__init__()
+        # num_input_units can be 0 -- input layers
+        assert num_output_units > 0
+        assert arity > 0
         assert num_folds > 0
+        self.num_input_units = num_input_units
+        self.num_output_units = num_output_units
+        self.arity = arity
         self.num_folds = num_folds
-        if fold_mask is not None:
-            if fold_mask.dtype == torch.bool:
-                fold_mask = fold_mask.to(torch.get_default_dtype())
-        self.register_buffer("_fold_mask", fold_mask)
+        self.register_buffer("fold_mask", fold_mask)
+        # reparam is not used here, but is commonly used and therefore added to Layer.__init__
 
-    @property
+    # expected to be fixed, so use cached to avoid recalc
+    @cached_property
     def num_params(self) -> int:
-        """Get the number of params.
+        """Get the number of params in this layer.
 
         Returns:
             int: The number of params.
         """
         return sum(param.numel() for param in self.parameters())
 
-    @property
-    def fold_mask(self) -> Optional[Tensor]:
-        """Get the fold mask.
+    @cached_property
+    def num_buffers(self) -> int:
+        """Get the number of buffers in this layer.
 
         Returns:
-            Tensor: The fold mask.
+            int: The number of buffers.
         """
-        return self._fold_mask
+        return sum(buffer.numel() for buffer in self.buffers())
 
     @abstractmethod
     def reset_parameters(self) -> None:
-        """Reset parameters to default initialization."""
+        """Reset parameters with default initialization."""
 
     # TODO: temp solution to accomodate IntegralInputLayer
     def __call__(self, x: Tensor, *_: Any) -> Tensor:  # type: ignore[misc]
@@ -80,12 +97,12 @@ class Layer(nn.Module, ABC):
         """
 
     # TODO: need to implement relevant things
-    # TODO: should be abstract but for now NO to prevent blocking downstream
-    def backtrack(self, *args: Any, **kwargs: Any) -> Tensor:  # type: ignore[misc]
-        """Define routines for backtracking in EiNets, for sampling and MPE approximation.
+    # @abstractmethod
+    # def backtrack(self, *args: Any, **kwargs: Any) -> Tensor:  # type: ignore[misc]
+    #     """Define routines for backtracking in EiNets, for sampling and MPE approximation.
 
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        raise NotImplementedError
+    #     :param args:
+    #     :param kwargs:
+    #     :return:
+    #     """
+    #     raise NotImplementedError

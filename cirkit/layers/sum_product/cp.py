@@ -12,17 +12,14 @@ from cirkit.utils.type_aliases import ReparamFactory
 class BaseCPLayer(SumProductLayer):
     """Candecomp Parafac (decomposition) layer."""
 
-    # TODO: better way to call init by base class?
-    # TODO: better default value
-    # pylint: disable-next=too-many-arguments
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
+        *,
         num_input_units: int,
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
-        *,
         reparam: ReparamFactory = ReparamIdentity,
         rank: int = 0,
         params_in_dim_name: str = "",
@@ -44,13 +41,16 @@ class BaseCPLayer(SumProductLayer):
                 output, in einsum notation. Leave default no einsum on output. Defaults to "".
         """
         super().__init__(
-            num_input_units, num_output_units, num_folds=num_folds, fold_mask=fold_mask
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
+            reparam=reparam,
         )
         params_in_dim_name = params_in_dim_name.lower()
         params_out_dim_name = params_out_dim_name.lower()
-        assert arity > 0
         assert rank > 0 or "r" not in params_in_dim_name + params_out_dim_name
-        self.arity = arity
         self.rank = rank  # unused if "r" not in params_in_dim_name + params_out_dim_name
 
         assert (
@@ -132,15 +132,14 @@ class BaseCPLayer(SumProductLayer):
 class CollapsedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, with matrix C collapsed."""
 
-    # pylint: disable-next=too-many-arguments
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
+        *,
         num_input_units: int,
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
-        *,
         reparam: ReparamFactory = ReparamIdentity,
     ) -> None:
         """Init class.
@@ -167,15 +166,14 @@ class CollapsedCPLayer(BaseCPLayer):
 class UncollapsedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, without collapsing."""
 
-    # pylint: disable-next=too-many-arguments
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
+        *,
         num_input_units: int,
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
-        *,
         reparam: ReparamFactory = ReparamIdentity,
         rank: int = 1,
     ) -> None:
@@ -206,17 +204,14 @@ class UncollapsedCPLayer(BaseCPLayer):
 class SharedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, with parameter sharing and matrix C collapsed."""
 
-    # TODO: better way to call init by base class?
-    # TODO: better default value
-    # pylint: disable-next=too-many-arguments
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
+        *,
         num_input_units: int,
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
-        *,
         reparam: ReparamFactory = ReparamIdentity,
     ) -> None:
         """Init class.
@@ -241,14 +236,14 @@ class SharedCPLayer(BaseCPLayer):
 
 
 def CPLayer(  # pylint: disable=invalid-name,too-many-arguments
+    *,
     num_input_units: int,
     num_output_units: int,
     arity: int = 2,
     num_folds: int = 1,
     fold_mask: Optional[Tensor] = None,
-    *,
-    rank: int = 1,
     reparam: ReparamFactory = ReparamIdentity,
+    rank: int = 1,
     collapsed: bool = True,
     shared: bool = False,
 ) -> BaseCPLayer:
@@ -287,8 +282,8 @@ def CPLayer(  # pylint: disable=invalid-name,too-many-arguments
             arity=arity,
             num_folds=num_folds,
             fold_mask=fold_mask,
-            rank=rank,
             reparam=reparam,
+            rank=rank,
         )
     if shared and collapsed:
         return SharedCPLayer(

@@ -141,7 +141,6 @@ class ExpFamilyLayer(InputLayer):
         return log_probs
 
     # TODO: how to fix?
-    # pylint: disable-next=arguments-differ
     def backtrack(  # type: ignore[misc]
         self,
         dist_idx: Sequence[Sequence[int]],  # TODO: can be iterable?
