@@ -101,7 +101,8 @@ class CPLayer(SumProductLayer):
         x = _cp_einsum(x, params_in)  # (F, H, J, B)
         x = torch.log(x) + m
         if self.fold_mask is not None:
-            x = x * self.fold_mask  # pylint: disable=consider-using-augmented-assign
+            # TODO: locally it warns consider-using-augmented-assign but not on github
+            x = x * self.fold_mask
         x = torch.sum(x, dim=1)  # (F, J, B)
         if not self.uncollapsed:
             return x
@@ -216,5 +217,5 @@ class SharedCPLayer(SumProductLayer):
             x = _cp_einsum(x, params)  # (F, H, K, B)
         x = torch.log(x) + m
         if self.fold_mask is not None:
-            x = x * self.fold_mask  # pylint: disable=consider-using-augmented-assign
+            x = x * self.fold_mask
         return torch.sum(x, dim=1)  # (F, K, B)
