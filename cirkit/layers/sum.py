@@ -11,7 +11,7 @@ from cirkit.utils.type_aliases import ReparamFactory
 # TODO: rework docstrings
 
 
-class MixingLayer(Layer):
+class SumLayer(Layer):
     # TODO: how we fold line here?
     r"""Implement the Mixing Layer, in order to handle sum nodes with multiple children.
 

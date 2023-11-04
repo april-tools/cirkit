@@ -10,8 +10,8 @@ from cirkit.layers.input import InputLayer
 from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.layers.input.integral import IntegralInputLayer
 from cirkit.layers.layer import Layer
-from cirkit.layers.mixing import MixingLayer
 from cirkit.layers.scope import ScopeLayer
+from cirkit.layers.sum import SumLayer
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.reparams.leaf import ReparamIdentity
@@ -271,7 +271,7 @@ class TensorizedPC(nn.Module):
             # Build the actual mixing layer
             # TODO: add shape analysis for unsqueeze
             fold_mask = (fold_indices < num_folds[-2]).unsqueeze(dim=-1) if should_pad else None
-            mixing_layer = MixingLayer(
+            mixing_layer = SumLayer(
                 max_num_input_partitions,
                 num_outputs,
                 num_folds=num_folds[-1],

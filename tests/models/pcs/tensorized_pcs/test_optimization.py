@@ -8,7 +8,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from cirkit.layers import MixingLayer
+from cirkit.layers import SumLayer
 from cirkit.layers.sum_product import (
     BaseCPLayer,
     CollapsedCPLayer,
@@ -43,7 +43,7 @@ def _optimization_steps(pc: TensorizedPC, data: Tensor, num_steps: int = 5) -> N
 def _check_parameters_sanity(pc: TensorizedPC) -> None:
     # Sanity check on the parameters, by taking into account the folding mask
     for layer in pc.inner_layers:
-        if isinstance(layer, MixingLayer):
+        if isinstance(layer, SumLayer):
             params = layer.params
             if layer.fold_mask is not None:
                 non_masked_params = torch.where(layer.fold_mask.bool(), params(), torch.zeros(()))
