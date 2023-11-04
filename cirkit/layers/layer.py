@@ -53,6 +53,7 @@ class Layer(nn.Module, ABC):
         """
         return self._fold_mask
 
+    @abstractmethod
     def reset_parameters(self) -> None:
         """Reset parameters to default initialization."""
 

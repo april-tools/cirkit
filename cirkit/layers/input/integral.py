@@ -18,6 +18,12 @@ class IntegralInputLayer(InputLayer):
         super().__init__(in_layer.rg_nodes)
         self._in_layer = in_layer
 
+    def reset_parameters(self) -> None:
+        """Do nothing.
+
+        This layer does not have any parameters.
+        """
+
     def integrate(self) -> Tensor:
         """Return the definite integral of units activations over the variables domain.
 

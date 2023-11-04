@@ -35,6 +35,12 @@ class ScopeLayer(Layer):
             scope[list(node.scope), node.get_replica_idx(), i] = 1  # type: ignore[misc]
         self.register_buffer("scope", scope)
 
+    def reset_parameters(self) -> None:
+        """Do nothing.
+
+        This layer does not have any parameters.
+        """
+
     # pylint: disable-next=arguments-differ
     def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]
         """Forward pass of the scope layer.

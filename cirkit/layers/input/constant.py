@@ -29,6 +29,12 @@ class ConstantLayer(InputLayer):
             else value
         )
 
+    def reset_parameters(self) -> None:
+        """Do nothing.
+
+        This layer does not have any parameters.
+        """
+
     def integrate(self) -> Tensor:
         """Return the definite integral of units activations over the variables domain.
 
