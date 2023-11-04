@@ -1,11 +1,12 @@
 from typing import List, Union
 
 import torch
+from torch import Tensor
 
 
 def one_hot_variables(
     num_vars: int, ivars: Union[List[int], List[List[int]]], device: torch.device
-) -> torch.Tensor:
+) -> Tensor:
     """Return a one-hot encoding mask of a batch of list of variables.
 
     Args:
@@ -14,7 +15,7 @@ def one_hot_variables(
         device: Device where to create the mask
 
     Returns:
-        torch.Tensor: A floating-point mask M of shape (batch_size, num_vars)
+        Tensor: A floating-point mask M of shape (batch_size, num_vars)
          such that M[i,j] = 1 iff j is in ivars[i]. If ivars is a list then batch_size is 1.
     """
     assert len(ivars) > 0

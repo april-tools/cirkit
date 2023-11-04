@@ -1,4 +1,4 @@
-import torch
+from torch import Tensor
 
 from cirkit.layers.input import InputLayer
 
@@ -18,20 +18,18 @@ class IntegralInputLayer(InputLayer):
         super().__init__(in_layer.rg_nodes)
         self._in_layer = in_layer
 
-    def integrate(self) -> torch.Tensor:
+    def integrate(self) -> Tensor:
         """Return the definite integral of units activations over the variables domain.
 
         In case of discrete variables this computes a sum.
 
         Returns:
-            torch.Tensor: The integration of the layer over all variables.
+            Tensor: The integration of the layer over all variables.
         """
         raise NotImplementedError("The integration of integrated functions is not implemented")
 
     # pylint: disable-next=arguments-differ
-    def forward(  # type: ignore[override]
-        self, x: torch.Tensor, in_mask: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, x: Tensor, in_mask: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the output of the layer.
 
         Args:

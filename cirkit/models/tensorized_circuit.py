@@ -349,7 +349,7 @@ class TensorizedPC(nn.Module):
         in_outputs = self.scope_layer(self.input_layer(x))  # type: ignore[arg-type]
         return self._eval_layers(in_outputs)
 
-    def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> torch.Tensor:
+    def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> Tensor:
         """Evaluate an integral of the circuit over some variables.
 
         Args:

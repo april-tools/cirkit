@@ -72,11 +72,11 @@ class ExpFamilyLayer(InputLayer):
         """Reset parameters to default initialization: N(0, 1)."""
         nn.init.normal_(self.params)
 
-    def integrate(self) -> torch.Tensor:
+    def integrate(self) -> Tensor:
         """Return the integation, which is a zero tensor for this layer (in log-space).
 
         Returns:
-            torch.Tensor: A zero tensor of shape (1, num_vars, num_units, num_replicas).
+            Tensor: A zero tensor of shape (1, num_vars, num_units, num_replicas).
         """
         return torch.zeros(
             size=(1, self.num_vars, self.num_units, self.num_replicas),

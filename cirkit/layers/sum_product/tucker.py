@@ -23,7 +23,7 @@ class TuckerLayer(SumProductLayer):
         num_output_units: int,
         arity: int = 2,
         num_folds: int = 1,
-        fold_mask: Optional[torch.Tensor] = None,
+        fold_mask: Optional[Tensor] = None,
         *,
         reparam: ReparamFactory = ReparamIdentity,
         **_: Any,
@@ -35,7 +35,7 @@ class TuckerLayer(SumProductLayer):
             num_output_units (int): The number of output units.
             arity (int): The arity of the product units.
             num_folds (int): The number of folds.
-            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
             reparam: The reparameterization function.
             prod_exp (bool): Whether to compute products in linear space rather than in log-space.
         """
@@ -62,7 +62,7 @@ class TuckerLayer(SumProductLayer):
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
         return torch.einsum("pib,pjb,pijo->pob", left, right, self.params())
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+    def forward(self, inputs: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the main Einsum operation of the layer.
 
         :param inputs: value in log space for left child.

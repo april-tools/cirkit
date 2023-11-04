@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Any, List
 
-import torch
+from torch import Tensor
 
 from cirkit.layers import Layer
 from cirkit.region_graph import RegionNode
@@ -22,11 +22,11 @@ class InputLayer(Layer):
         self.num_vars = len(set(v for n in rg_nodes for v in n.scope))
 
     @abstractmethod
-    def integrate(self) -> torch.Tensor:
+    def integrate(self) -> Tensor:
         """Return the definite integral of units activations over the variables domain.
 
         In case of discrete variables this computes a sum.
 
         Returns:
-            torch.Tensor: The integration of the layer over all variables.
+            Tensor: The integration of the layer over all variables.
         """

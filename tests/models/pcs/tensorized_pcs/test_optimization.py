@@ -6,6 +6,7 @@ from typing import Type
 import numpy as np
 import pytest
 import torch
+from torch import Tensor
 
 from cirkit.layers import MixingLayer
 from cirkit.layers.sum_product import CPLayer, SharedCPLayer, SumProductLayer, UncollapsedCPLayer
@@ -16,7 +17,7 @@ from cirkit.utils import RandomCtx
 from tests.models.pcs.tensorized_pcs.test_utils import get_pc_2x2_dense, get_pc_5_sparse
 
 
-def _optimization_steps(pc: TensorizedPC, data: torch.Tensor, num_steps: int = 5) -> None:
+def _optimization_steps(pc: TensorizedPC, data: Tensor, num_steps: int = 5) -> None:
     # Optimize a loss a bit
     opt = torch.optim.SGD(pc.parameters(), lr=0.1)
     pc_pf = integrate(pc)

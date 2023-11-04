@@ -13,18 +13,18 @@ from cirkit.utils.type_aliases import ClampBounds
 class Layer(nn.Module, ABC):
     """Abstract layer class. Specifies functionality every layer in an EiNet should implement."""
 
-    _fold_mask: Optional[torch.Tensor]
+    _fold_mask: Optional[Tensor]
 
     def __init__(
         self,
         num_folds: int = 1,
-        fold_mask: Optional[torch.Tensor] = None,
+        fold_mask: Optional[Tensor] = None,
     ) -> None:
         """Initialize a layer.
 
         Args:
             num_folds: The number of folds that the layer computes.
-            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
         """
         super().__init__()
         assert num_folds > 0
@@ -45,11 +45,11 @@ class Layer(nn.Module, ABC):
         return sum(param.numel() for param in self.parameters())
 
     @property
-    def fold_mask(self) -> Optional[torch.Tensor]:
+    def fold_mask(self) -> Optional[Tensor]:
         """Get the fold mask.
 
         Returns:
-            torch.Tensor: The fold mask.
+            Tensor: The fold mask.
         """
         return self._fold_mask
 

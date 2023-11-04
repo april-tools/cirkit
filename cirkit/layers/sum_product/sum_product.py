@@ -1,7 +1,6 @@
 from abc import abstractmethod
 from typing import Any, Optional
 
-import torch
 from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
@@ -21,7 +20,7 @@ class SumProductLayer(Layer):
         num_input_units: int,
         num_output_units: int,
         num_folds: int = 1,
-        fold_mask: Optional[torch.Tensor] = None,
+        fold_mask: Optional[Tensor] = None,
         **kwargs: Any,
     ) -> None:
         """Init class.
@@ -30,7 +29,7 @@ class SumProductLayer(Layer):
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
             num_folds (int): The number of folds.
-            fold_mask (Optional[torch.Tensor]): The mask to apply to the folded parameter tensors.
+            fold_mask (Optional[Tensor]): The mask to apply to the folded parameter tensors.
             kwargs (Any): Passed to subclasses.
         """
         super().__init__(num_folds=num_folds, fold_mask=fold_mask)
