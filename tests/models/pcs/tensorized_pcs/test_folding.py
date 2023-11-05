@@ -1,5 +1,4 @@
 # pylint: disable=missing-function-docstring
-import functools
 import itertools
 from typing import Type
 
@@ -8,8 +7,8 @@ import torch
 
 from cirkit.layers.sum_product import CPLayer, SharedCPLayer, SumProductLayer, UncollapsedCPLayer
 from cirkit.models.functional import integrate
+from cirkit.reparams.leaf import ReparamExp, ReparamSoftmax
 from cirkit.utils import RandomCtx
-from cirkit.utils.reparams import reparam_exp, reparam_softmax
 from tests.models.pcs.tensorized_pcs.test_utils import get_pc_5_sparse
 
 
@@ -23,8 +22,8 @@ from tests.models.pcs.tensorized_pcs.test_utils import get_pc_5_sparse
 )
 @RandomCtx(42)
 def test_pc_sparse_folding(normalized: bool, layer_cls: Type[SumProductLayer]) -> None:
-    reparam = functools.partial(reparam_softmax, dim=-2) if normalized else reparam_exp
-    pc = get_pc_5_sparse(reparam, layer_cls=layer_cls)  # type: ignore[arg-type]
+    reparam = ReparamSoftmax if normalized else ReparamExp  # TODO: pass in class instead of flag?
+    pc = get_pc_5_sparse(reparam, layer_cls=layer_cls)
     assert any(should_pad for (should_pad, _, __) in pc.bookkeeping)
     assert any(not should_pad for (should_pad, _, _) in pc.bookkeeping)
     data = torch.tensor(list(itertools.product([0, 1], repeat=5)))  # type: ignore[misc]

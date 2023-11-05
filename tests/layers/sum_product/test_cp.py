@@ -6,8 +6,9 @@ import pytest
 import torch
 
 from cirkit.layers.sum_product import CPLayer
+from cirkit.reparams.leaf import ReparamClamp, ReparamSoftmax
 from cirkit.utils import RandomCtx
-from cirkit.utils.reparams import reparam_positive, reparam_softmax
+from cirkit.utils.type_aliases import ReparamFactory
 
 
 @pytest.mark.parametrize(
@@ -24,10 +25,11 @@ def test_cp_layer(
     uncollapsed: bool,
     reparam_name: str,
 ) -> None:
+    reparam: ReparamFactory
     if reparam_name == "softmax":
-        reparam = functools.partial(reparam_softmax, dim=-2)
+        reparam = ReparamSoftmax
     elif reparam_name == "positive":
-        reparam = functools.partial(reparam_positive, eps=1e-7)
+        reparam = functools.partial(ReparamClamp, min=1e-7)  # type: ignore[misc]
     else:
         assert False
 

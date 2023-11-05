@@ -1,14 +1,14 @@
-# pylint: disable=missing-function-docstring,missing-return-doc
+# pylint: disable=missing-function-docstring
 import functools
 import itertools
-from typing import Optional
 
 import pytest
 import torch
 
 from cirkit.layers.sum_product import TuckerLayer
+from cirkit.reparams.leaf import ReparamClamp, ReparamSoftmax
 from cirkit.utils import RandomCtx
-from cirkit.utils.reparams import reparam_positive, reparam_softmax
+from cirkit.utils.type_aliases import ReparamFactory
 
 
 @pytest.mark.parametrize(
@@ -19,14 +19,11 @@ from cirkit.utils.reparams import reparam_positive, reparam_softmax
 def test_tucker_layer(
     num_input_units: int, num_output_units: int, num_folds: int, arity: int, reparam_name: str
 ) -> None:
+    reparam: ReparamFactory
     if reparam_name == "softmax":
-        reparam_func = functools.partial(reparam_softmax, dim=-2)
-
-        def reparam(w: torch.Tensor, _: Optional[torch.Tensor]) -> torch.Tensor:
-            return reparam_func(w.view(w.shape[0], -1, w.shape[3])).view(*w.shape)
-
+        reparam = ReparamSoftmax
     elif reparam_name == "positive":
-        reparam = functools.partial(reparam_positive, eps=1e-7)
+        reparam = functools.partial(ReparamClamp, min=1e-7)  # type: ignore[misc]
     else:
         assert False
 

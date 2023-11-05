@@ -14,8 +14,9 @@ from cirkit.layers.mixing import MixingLayer
 from cirkit.layers.scope import ScopeLayer
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
-from cirkit.utils.reparams import ReparamFunction, reparam_id
+from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils.scope import one_hot_variables
+from cirkit.utils.type_aliases import ReparamFactory
 
 # TODO: rework docstrings
 
@@ -33,7 +34,7 @@ class TensorizedPC(nn.Module):
         *,
         layer_kwargs: Optional[Dict[str, Any]] = None,
         efamily_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: ReparamFunction = reparam_id,
+        reparam: ReparamFactory = ReparamIdentity,
         num_inner_units: int = 2,
         num_input_units: int = 2,
         num_channels: int = 1,
@@ -147,7 +148,7 @@ class TensorizedPC(nn.Module):
         rg_layers: List[Tuple[List[PartitionNode], List[RegionNode]]],
         layer_cls: Type[SumProductLayer],
         layer_kwargs: Dict[str, Any],
-        reparam: ReparamFunction,
+        reparam: ReparamFactory,
         num_inner_units: int,
         num_input_units: int,
         num_classes: int = 1,
@@ -227,7 +228,12 @@ class TensorizedPC(nn.Module):
             # Build the actual layer
             num_outputs = num_inner_units if rg_layer_idx < len(rg_layers) - 1 else num_classes
             num_inputs = num_input_units if rg_layer_idx == 1 else num_inner_units
-            fold_mask = fold_indices < cumulative_idx[-1] if should_pad else None
+            # TODO: add shape analysis for unsqueeze
+            fold_mask = (
+                (fold_indices < cumulative_idx[-1]).unsqueeze(dim=-1).unsqueeze(dim=-1)
+                if should_pad
+                else None
+            )
             layer = layer_cls(
                 num_inputs,
                 num_outputs,
@@ -263,7 +269,8 @@ class TensorizedPC(nn.Module):
             bookkeeping.append(book_entry)
 
             # Build the actual mixing layer
-            fold_mask = fold_indices < num_folds[-2] if should_pad else None
+            # TODO: add shape analysis for unsqueeze
+            fold_mask = (fold_indices < num_folds[-2]).unsqueeze(dim=-1) if should_pad else None
             mixing_layer = MixingLayer(
                 max_num_input_partitions,
                 num_outputs,
