@@ -1,16 +1,19 @@
 from typing import Optional
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
-from cirkit.layers.sum_product.sum_product import SumProductLayer
+from cirkit.layers.layer import Layer
 from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
 
-class TuckerLayer(SumProductLayer):
-    """Tucker (2) layer."""
+class SumLayer(Layer):
+    """The layer of sum units.
+
+    Can be used as general sum layer or to complement sum-product layers.
+    """
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -32,9 +35,7 @@ class TuckerLayer(SumProductLayer):
             fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
-        if arity != 2:
-            raise NotImplementedError("Tucker layers only implemented binary product units.")
-        assert fold_mask is None, "Input for Tucker layer should not be masked."
+        assert num_input_units == num_output_units
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
@@ -44,14 +45,25 @@ class TuckerLayer(SumProductLayer):
             reparam=reparam,
         )
 
-        self.params = reparam(
-            (num_folds, num_input_units, num_input_units, num_output_units), dim=(1, 2)
-        )
+        self.params = reparam((num_folds, arity, num_output_units), dim=1, mask=fold_mask)
 
         self.reset_parameters()
 
-    def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
-        return torch.einsum("fib,fjb,fijo->fob", left, right, self.params())
+    @torch.no_grad()
+    def reset_parameters(self) -> None:
+        """Reset parameters to default: U(0.01, 0.99) with normalization."""
+        # TODO: is this still correct with reparam and fold_mask?
+        for param in self.parameters():
+            nn.init.uniform_(param, 0.01, 0.99)
+            # TODO: pylint bug?
+            # pylint: disable-next=redefined-loop-name
+            param /= param.sum(dim=1, keepdim=True)  # type: ignore[misc]
+
+    # TODO: too many `self.fold_mask is None` checks across the repo
+    #       can use apply_mask method?
+    def _forward_linear(self, x: Tensor) -> Tensor:
+        weight = self.params() if self.fold_mask is None else self.params() * self.fold_mask
+        return torch.einsum("fck,fckb->fkb", weight, x)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -62,4 +74,6 @@ class TuckerLayer(SumProductLayer):
         Returns:
             Tensor: The output of this layer.
         """
-        return log_func_exp(x[:, 0], x[:, 1], func=self._forward_linear, dim=1, keepdim=True)
+        return log_func_exp(x, func=self._forward_linear, dim=1, keepdim=False)
+
+    # TODO: see commit 084a3685c6c39519e42c24a65d7eb0c1b0a1cab1 for backtrack

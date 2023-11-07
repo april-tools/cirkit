@@ -1,4 +1,4 @@
-import torch
+from torch import Tensor
 
 from cirkit.layers.input import InputLayer
 
@@ -18,20 +18,38 @@ class IntegralInputLayer(InputLayer):
         super().__init__(in_layer.rg_nodes)
         self._in_layer = in_layer
 
-    def integrate(self) -> torch.Tensor:
+    def reset_parameters(self) -> None:
+        """Do nothing.
+
+        This layer does not have any parameters.
+        """
+
+    def integrate(self) -> Tensor:
         """Return the definite integral of units activations over the variables domain.
 
         In case of discrete variables this computes a sum.
 
         Returns:
-            torch.Tensor: The integration of the layer over all variables.
+            Tensor: The integration of the layer over all variables.
         """
         raise NotImplementedError("The integration of integrated functions is not implemented")
 
+    def __call__(self, x: Tensor, in_mask: Tensor) -> Tensor:  # type: ignore[override]
+        """Invoke forward function.
+
+        Args:
+            x: The input tensor of shape (batch_size, num_vars, num_channels).
+            in_mask: The mask of variables to integrate of shape
+             (batch_size, num_vars) or (1, num_vars).
+
+        Returns:
+            Tensor: The integration output.
+        """
+        return super().__call__(x, in_mask)
+
+    # TODO: consider change interface -- among all Layer subclasses only this is different
     # pylint: disable-next=arguments-differ
-    def forward(  # type: ignore[override]
-        self, x: torch.Tensor, in_mask: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, x: Tensor, in_mask: Tensor) -> Tensor:  # type: ignore[override]
         """Compute the output of the layer.
 
         Args:

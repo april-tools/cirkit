@@ -10,8 +10,8 @@ from cirkit.layers.input import InputLayer
 from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.layers.input.integral import IntegralInputLayer
 from cirkit.layers.layer import Layer
-from cirkit.layers.mixing import MixingLayer
 from cirkit.layers.scope import ScopeLayer
+from cirkit.layers.sum import SumLayer
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.reparams.leaf import ReparamIdentity
@@ -235,8 +235,8 @@ class TensorizedPC(nn.Module):
                 else None
             )
             layer = layer_cls(
-                num_inputs,
-                num_outputs,
+                num_input_units=num_inputs,
+                num_output_units=num_outputs,
                 arity=max_num_input_regions,
                 num_folds=num_folds[-1],
                 fold_mask=fold_mask,
@@ -271,9 +271,10 @@ class TensorizedPC(nn.Module):
             # Build the actual mixing layer
             # TODO: add shape analysis for unsqueeze
             fold_mask = (fold_indices < num_folds[-2]).unsqueeze(dim=-1) if should_pad else None
-            mixing_layer = MixingLayer(
-                max_num_input_partitions,
-                num_outputs,
+            mixing_layer = SumLayer(
+                num_input_units=num_outputs,
+                num_output_units=num_outputs,
+                arity=max_num_input_partitions,
                 num_folds=num_folds[-1],
                 fold_mask=fold_mask,
                 reparam=reparam,
@@ -349,7 +350,7 @@ class TensorizedPC(nn.Module):
         in_outputs = self.scope_layer(self.input_layer(x))  # type: ignore[arg-type]
         return self._eval_layers(in_outputs)
 
-    def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> torch.Tensor:
+    def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> Tensor:
         """Evaluate an integral of the circuit over some variables.
 
         Args:

@@ -1,6 +1,7 @@
 from typing import List
 
 import torch
+from torch import Tensor
 
 from cirkit.layers import Layer
 from cirkit.region_graph import RegionNode
@@ -12,7 +13,7 @@ class ScopeLayer(Layer):
     It re-orders unit activations such that they belong to the inputs of a circuit.
     """
 
-    scope: torch.Tensor  # To be registered as buffer
+    scope: Tensor  # To be registered as buffer
 
     def __init__(self, rg_nodes: List[RegionNode]):
         """Initialize a scope tensor.
@@ -20,7 +21,8 @@ class ScopeLayer(Layer):
         Args:
             rg_nodes: The list of region nodes on which it is defined.
         """
-        super().__init__()
+        # TODO: what should be here?
+        super().__init__(num_input_units=1, num_output_units=1)
         self.num_vars = len(set(v for n in rg_nodes for v in n.scope))
 
         replica_indices = set(n.get_replica_idx() for n in rg_nodes)
@@ -34,15 +36,20 @@ class ScopeLayer(Layer):
             scope[list(node.scope), node.get_replica_idx(), i] = 1  # type: ignore[misc]
         self.register_buffer("scope", scope)
 
-    # pylint: disable-next=arguments-differ
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
-        """Forward pass of the scope layer.
+    def reset_parameters(self) -> None:
+        """Do nothing.
+
+        This layer does not have any parameters.
+        """
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
 
         Args:
-            x (torch.Tensor): The input units activations.
+            x (Tensor): The input units activations.
 
         Returns:
-            torch.Tensor: A folded tensor consisting of re-ordered unit activations.
+            Tensor: A folded tensor consisting of re-ordered unit activations.
         """
         # x: (batch_size, num_vars, num_units, num_replicas)
         # self.scope: (num_vars, num_replicas, num_folds)

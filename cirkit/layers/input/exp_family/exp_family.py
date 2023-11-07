@@ -72,11 +72,11 @@ class ExpFamilyLayer(InputLayer):
         """Reset parameters to default initialization: N(0, 1)."""
         nn.init.normal_(self.params)
 
-    def integrate(self) -> torch.Tensor:
+    def integrate(self) -> Tensor:
         """Return the integation, which is a zero tensor for this layer (in log-space).
 
         Returns:
-            torch.Tensor: A zero tensor of shape (1, num_vars, num_units, num_replicas).
+            Tensor: A zero tensor of shape (1, num_vars, num_units, num_replicas).
         """
         return torch.zeros(
             size=(1, self.num_vars, self.num_units, self.num_replicas),
@@ -84,8 +84,7 @@ class ExpFamilyLayer(InputLayer):
             device=self.params.device,
         )
 
-    # pylint: disable-next=arguments-differ
-    def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]
+    def forward(self, x: Tensor) -> Tensor:
         """Compute the factorized leaf densities. We are doing the computation \
             in the log-domain, so this is actually \
             computing sums over densities.
@@ -142,7 +141,6 @@ class ExpFamilyLayer(InputLayer):
         return log_probs
 
     # TODO: how to fix?
-    # pylint: disable-next=arguments-differ
     def backtrack(  # type: ignore[misc]
         self,
         dist_idx: Sequence[Sequence[int]],  # TODO: can be iterable?

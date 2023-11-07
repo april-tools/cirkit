@@ -146,7 +146,7 @@ def main() -> None:
 
     pc = TensorizedPC.from_region_graph(
         RegionGraph.load(args.region_graph),
-        layer_cls=UncollapsedCPLayer,  # type: ignore[misc]
+        layer_cls=UncollapsedCPLayer,
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1},  # type: ignore[misc]
         efamily_kwargs={"num_categories": 256},  # type: ignore[misc]

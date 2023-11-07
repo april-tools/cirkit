@@ -30,11 +30,19 @@ def test_tucker_layer(
     if arity != 2:
         with pytest.raises(NotImplementedError):
             TuckerLayer(
-                num_input_units, num_output_units, arity=arity, num_folds=num_folds, reparam=reparam
+                num_input_units=num_input_units,
+                num_output_units=num_output_units,
+                arity=arity,
+                num_folds=num_folds,
+                reparam=reparam,
             )
         return
     layer = TuckerLayer(
-        num_input_units, num_output_units, arity=arity, num_folds=num_folds, reparam=reparam
+        num_input_units=num_input_units,
+        num_output_units=num_output_units,
+        arity=arity,
+        num_folds=num_folds,
+        reparam=reparam,
     )
 
     batch_size = 16

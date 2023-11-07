@@ -29,7 +29,7 @@ def get_deep_pc(  # type: ignore[misc]
     rg = rg_cls(**kwargs)
     pc = TensorizedPC.from_region_graph(
         rg,
-        layer_cls=UncollapsedCPLayer,  # type: ignore[misc]
+        layer_cls=UncollapsedCPLayer,
         efamily_cls=CategoricalLayer,
         layer_kwargs={"rank": 1},  # type: ignore[misc]
         efamily_kwargs={"num_categories": 2},  # type: ignore[misc]
