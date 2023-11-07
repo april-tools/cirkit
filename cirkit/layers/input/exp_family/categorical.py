@@ -5,7 +5,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from cirkit.region_graph import RegionNode
-from cirkit.reparams.leaf import ReparamSoftmax
+from cirkit.reparams.leaf import ReparamLogSoftmax
 from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
@@ -23,7 +23,7 @@ class CategoricalLayer(ExpFamilyLayer):
         num_units: int,
         *,
         num_categories: int,
-        reparam: ReparamFactory = ReparamSoftmax,
+        reparam: ReparamFactory = ReparamLogSoftmax,
     ):
         """Init class.
 
@@ -53,13 +53,11 @@ class CategoricalLayer(ExpFamilyLayer):
             Tensor: The natural parameters eta, shape (D, K, P, S).
         """
         # TODO: not sure what will happen with C>1
-        # TODO: how to directly make use of reparam to normalize?
         # TODO: x.unflatten is not typed
         theta = torch.unflatten(
             theta, dim=-1, sizes=(self.num_channels, self.num_categories)
         )  # shape (D, K, P, C, cat)
-        theta = theta / theta.sum(dim=-1, keepdim=True)
-        theta = torch.log(theta)
+        theta = theta - theta.logsumexp(dim=-1, keepdim=True)
         return theta.flatten(start_dim=-2)  # shape (D, K, P, S=C*cat)
 
     def sufficient_stats(self, x: Tensor) -> Tensor:
