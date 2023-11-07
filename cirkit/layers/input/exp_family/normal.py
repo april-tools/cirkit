@@ -1,5 +1,5 @@
 import math
-from typing import Any, List
+from typing import List
 
 import torch
 from torch import Tensor
@@ -9,13 +9,6 @@ from cirkit.region_graph import RegionNode
 from .exp_family import ExpFamilyLayer
 
 # TODO: rework docstrings
-
-
-# TODO: better way to permute?
-def _shift_last_axis_to(x: Tensor, i: int) -> Tensor:
-    """Take the last axis of tensor x and inserts it at position i."""
-    num_axes = len(x.shape)
-    return x.permute(tuple(range(i)) + (num_axes - 1,) + tuple(range(i, num_axes - 1)))
 
 
 class NormalLayer(ExpFamilyLayer):
@@ -119,24 +112,3 @@ class NormalLayer(ExpFamilyLayer):
             Tensor: The log_h.
         """
         return self._log_h.to(x)
-
-    # TODO: for now inherit parent docstring
-    def _sample(  # type: ignore[misc]
-        self, num_samples: int, params: Tensor, std_correction: float = 1.0, **_: Any
-    ) -> Tensor:
-        # TODO: no_grad on decorator?
-        with torch.no_grad():
-            mu = params[..., : self.num_channels]
-            # TODO: is this a mypy bug?
-            std = torch.sqrt(params[..., self.num_channels :] - mu**2)  # type: ignore[misc]
-            # TODO: same dtype device idiom?
-            samples = mu.unsqueeze(0) + std_correction * std.unsqueeze(0) * torch.randn(
-                num_samples, *mu.shape, dtype=mu.dtype, device=mu.device
-            )
-            return _shift_last_axis_to(samples, 2)
-
-    # TODO: do we allow explicit any?
-    def _argmax(self, params: Tensor, **_: Any) -> Tensor:  # type: ignore[misc]
-        with torch.no_grad():
-            mu = params[..., : self.num_channels]
-            return _shift_last_axis_to(mu, 1)

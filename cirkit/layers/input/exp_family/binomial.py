@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import List
 
 import torch
 from torch import Tensor
@@ -7,7 +7,6 @@ from torch.nn import functional as F
 from cirkit.region_graph import RegionNode
 
 from .exp_family import ExpFamilyLayer
-from .normal import _shift_last_axis_to
 
 # TODO: rework docstrings
 
@@ -98,30 +97,3 @@ class BinomialLayer(ExpFamilyLayer):
         if len(x.shape) == 3:
             log_h = log_h.sum(dim=-1)
         return log_h
-
-    def _sample(  # type: ignore[misc]
-        self,
-        num_samples: int,
-        params: Tensor,
-        dtype: torch.dtype = torch.float32,
-        memory_efficient_binomial_sampling: bool = True,
-        **_: Any,
-    ) -> Tensor:
-        # TODO: make function no_grad
-        with torch.no_grad():
-            if memory_efficient_binomial_sampling:
-                samples = torch.zeros(num_samples, *params.shape, dtype=dtype, device=params.device)
-                for __ in range(self.n):
-                    rand = torch.rand(num_samples, *params.shape, device=params.device)
-                    samples += (rand < params / self.n).to(dtype)
-            else:
-                rand = torch.rand(num_samples, *params.shape, self.n, device=params.device)
-                samples = torch.sum(rand < (params / self.n).unsqueeze(-1), dim=-1).to(dtype)
-            return _shift_last_axis_to(samples, 2)
-
-    def _argmax(  # type: ignore[misc]
-        self, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
-    ) -> Tensor:
-        with torch.no_grad():
-            mode = torch.clamp(torch.floor((self.n + 1) * params / self.n), 0, self.n).to(dtype)
-            return _shift_last_axis_to(mode, 1)

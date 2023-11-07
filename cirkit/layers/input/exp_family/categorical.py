@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import torch
 from torch import Tensor
@@ -7,7 +7,6 @@ from torch.nn import functional as F
 from cirkit.region_graph import RegionNode
 
 from .exp_family import ExpFamilyLayer
-from .normal import _shift_last_axis_to
 
 # TODO: rework docstrings
 
@@ -111,30 +110,3 @@ class CategoricalLayer(ExpFamilyLayer):
             Tensor: The output.
         """
         return torch.zeros(()).to(x)
-
-    def _sample(  # type: ignore[misc]
-        self, num_samples: int, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
-    ) -> Tensor:
-        with torch.no_grad():
-            # TODO: save shape
-            array_shape = self.params.shape[1:3]
-            dist = params.reshape(
-                self.num_vars, *array_shape, self.num_channels, self.num_categories
-            )
-            cum_sum = torch.cumsum(dist[..., :-1], dim=-1)  # TODO: why slice to -1?
-            rand = torch.rand(num_samples, *cum_sum.shape[:-1], 1, device=cum_sum.device)
-            samples = torch.sum(rand > cum_sum, dim=-1).to(dtype)
-            return _shift_last_axis_to(samples, 2)
-
-    # TODO: why pass in dtype instead of cast outside?
-    def _argmax(  # type: ignore[misc]
-        self, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
-    ) -> Tensor:
-        with torch.no_grad():
-            # TODO: save shape
-            array_shape = self.params.shape[1:3]
-            dist = params.reshape(
-                self.num_vars, *array_shape, self.num_channels, self.num_categories
-            )
-            mode = torch.argmax(dist, dim=-1).to(dtype)
-            return _shift_last_axis_to(mode, 1)

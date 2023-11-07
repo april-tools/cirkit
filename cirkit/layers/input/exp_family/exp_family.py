@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, List, Literal, Sequence
+from typing import List
 
 import torch
 from torch import Tensor, nn
@@ -140,88 +140,6 @@ class ExpFamilyLayer(InputLayer):
         log_probs = log_h + theta_suff_stats - log_normalizer
         return log_probs
 
-    # TODO: how to fix?
-    def backtrack(  # type: ignore[misc]
-        self,
-        dist_idx: Sequence[Sequence[int]],  # TODO: can be iterable?
-        node_idx: Sequence[Sequence[int]],
-        *_: Any,
-        mode: Literal["sample", "argmax"] = "sample",
-        **kwargs: Any,
-    ) -> Tensor:
-        """Backtrackng mechanism for EiNets.
-
-        :param dist_idx: list of N indices into the distribution vectors, which shall be sampled.
-        :param node_idx: list of N indices into the leaves, which shall be sampled.
-        :param mode: 'sample' or 'argmax'; for sampling or MPE approximation, respectively.
-        :param _: ignored
-        :param kwargs: keyword arguments
-        :return: samples (Tensor). Of shape (N, self.num_vars, self.num_channels).
-        """
-        assert len(dist_idx) == len(node_idx), "Invalid input."
-
-        with torch.no_grad():
-            big_n = len(dist_idx)  # TODO: a better name
-            ef_values = (
-                self.sample(big_n, **kwargs)  # type: ignore[misc]
-                if mode == "sample"
-                else self.argmax(**kwargs)  # type: ignore[misc]
-            )
-
-            values = torch.zeros(
-                big_n,
-                self.num_vars,
-                self.num_channels,
-                device=ef_values.device,
-                dtype=ef_values.dtype,
-            )
-
-            # TODO: use enumerate?
-            for n in range(big_n):
-                cur_value = torch.zeros(
-                    self.num_vars, self.num_channels, device=ef_values.device, dtype=ef_values.dtype
-                )
-                assert len(dist_idx[n]) == len(node_idx[n]), "Invalid input."
-                for c, k in enumerate(node_idx[n]):
-                    scope = list(self.rg_nodes[k].scope)
-                    rep: int = self.rg_nodes[k].get_replica_idx()
-                    cur_value[scope, :] = (
-                        ef_values[n, scope, :, dist_idx[n][c], rep]
-                        if mode == "sample"
-                        else ef_values[scope, :, dist_idx[n][c], rep]
-                    )
-                values[n, :, :] = cur_value  # TODO: directly slice this
-
-            return values
-
-    def sample(self, num_samples: int = 1, **kwargs: Any) -> Tensor:  # type: ignore[misc]
-        """Sample the dist.
-
-        Args:
-            num_samples (int, optional): Number of samples. Defaults to 1.
-            kwargs (Any, optional): Any kwargs.
-
-        Returns:
-            Tensor: The sample.
-        """
-        # TODO: maybe the function should be no_grad?
-        with torch.no_grad():
-            params = self.reparam(self.params)
-        return self._sample(num_samples, params, **kwargs)  # type: ignore[misc]
-
-    def argmax(self, **kwargs: Any) -> Tensor:  # type: ignore[misc]
-        """Get the argmax.
-
-        Args:
-            kwargs (Any, optional): Any kwargs.
-
-        Returns:
-            Tensor: The argmax.
-        """
-        with torch.no_grad():
-            params = self.reparam(self.params)
-        return self._argmax(params, **kwargs)  # type: ignore[misc]
-
     @abstractmethod
     def sufficient_statistics(self, x: Tensor) -> Tensor:
         """Get sufficient statistics for the implemented exponential \
@@ -285,29 +203,4 @@ class ExpFamilyLayer(InputLayer):
             and returns re-parametrized parameters.
         """
 
-    @abstractmethod
-    def _sample(  # type: ignore[misc]
-        self, num_samples: int, params: Tensor, **kwargs: Any
-    ) -> Tensor:
-        """Is helper function for sampling the exponential family.
-
-        :param num_samples: number of samples to be produced
-        :param params: expectation parameters (phi) of the exponential family, of shape
-                       (num_vars, *self.array_shape, num_stats)
-        :param kwargs: keyword arguments
-               Depending on the implementation, kwargs can also contain further arguments.
-        :return: i.i.d. samples of the exponential family (Tensor).
-                 Should be of shape (num_samples, num_vars, num_channels, *self.array_shape)
-        """
-
-    @abstractmethod
-    def _argmax(self, params: Tensor, **kwargs: Any) -> Tensor:  # type: ignore[misc]
-        """Is helper function for getting the argmax of the exponential family.
-
-        :param params: expectation parameters (phi) of the exponential family, of shape
-                       (self.num_vars, *self.array_shape, self.num_stats)
-        :param kwargs: keyword arguments
-               Depending on the implementation, kwargs can also contain further arguments.
-        :return: argmax of the exponential family (Tensor).
-                 Should be of shape (self.num_vars, self.num_channels, *self.array_shape)
-        """
+    # TODO: see 241d46a43f59c1df23b5136a45b5f18b9f116671 for backtrack
