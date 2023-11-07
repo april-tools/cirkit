@@ -35,6 +35,79 @@ class ExpFamilyLayer(InputLayer):
         computation) together in forward(...).
     """
 
+    # TODO: keep the natural_params and calc the inverse mapping for params
+    @abstractmethod
+    def natural_params(self, theta: Tensor) -> Tensor:
+        """Calculate natural parameters eta from parameters theta.
+
+        Args:
+            theta (Tensor): The parameters theta, shape (D, K, P, S).
+
+        Returns:
+            Tensor: The natural parameters eta, shape (D, K, P, S).
+        """
+
+    @abstractmethod
+    def sufficient_stats(self, x: Tensor) -> Tensor:
+        """Calculate sufficient statistics T from input x.
+
+        Args:
+            x (Tensor): The input x, shape (B, D, C).
+
+        Returns:
+            Tensor: The sufficient statistics T, shape (B, D, S).
+        """
+
+    @abstractmethod
+    def log_base_measure(self, x: Tensor) -> Tensor:
+        """Calculate log base measure log_h from input x.
+
+        Args:
+            x (Tensor): The input x, shape (B, D, C).
+
+        Returns:
+            Tensor: The natural parameters eta, shape (B, D).
+        """
+
+    @abstractmethod
+    def log_partition(self, eta: Tensor) -> Tensor:
+        """Calculate log partition function A from natural parameters eta.
+
+        Args:
+            eta (Tensor): The natural parameters eta, shape (D, K, P, S).
+
+        Returns:
+            Tensor: The log partition function A, shape (D, K, P).
+        """
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
+
+        Args:
+            x (Tensor): The input to this layer, shape (B, D, C).
+
+        Returns:
+            Tensor: The output of this layer, shape (B, D, K, P).
+        """
+        # TODO: this does not work for more than 1 batch dims
+        if x.ndim == 2:
+            x = x.unsqueeze(dim=-1)
+
+        eta = self.natural_params(self.params())  # shape (D, K, P, S)
+        suff_stats = self.sufficient_stats(x)  # shape (B, D, S)
+        log_h = self.log_base_measure(x)  # shape (B, D)
+        log_part = self.log_partition(eta)  # shape (D, K, P)
+        return (
+            torch.einsum("dkps,bds->bdkp", eta, suff_stats)  # shape (B, D, K, P)
+            + log_h.unsqueeze(dim=-1).unsqueeze(dim=-1)  # shape (B, D, 1, 1)
+            - log_part.unsqueeze(dim=0)  # shape (1, D, K, P)
+        )  # shape (B, D, K, P)
+
+    ###################################################################
+    ###################################################################
+    ###################################################################
+    ###################################################################
+
     def __init__(  # pylint: disable=too-many-arguments
         self,
         rg_nodes: List[RegionNode],
@@ -87,109 +160,5 @@ class ExpFamilyLayer(InputLayer):
             requires_grad=False,
             device=self.params().device,  # TODO: this is not good
         )
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Compute the factorized leaf densities. We are doing the computation \
-            in the log-domain, so this is actually \
-            computing sums over densities.
-
-        We first pass the data x into self.ef_array, which computes a tensor of shape
-            (batch_size, num_vars, num_dist, num_replica). This is best interpreted \
-            as vectors of length num_dist, for each \
-            sample in the batch and each RV. Since some leaves have overlapping \
-            scope, we need to compute "enough" leaves, \
-            hence the num_replica dimension. The assignment of these log-densities \
-            to leaves is represented with \
-            self.scope_tensor.
-        In the end, the factorization (sum in log-domain) is realized with a single einsum.
-
-        :param x: input data (Tensor).
-                  If self.num_channels == 1, this can be either of shape \
-                    (batch_size, self.num_vars, 1) or
-                  (batch_size, self.num_vars).
-                  If self.num_channels > 1, this must be of shape \
-                    (batch_size, self.num_vars, self.num_channels).
-        :return: log-density vectors of leaves
-                 Will be of shape (batch_size, num_dist, len(self.rg_nodes))
-                 Note: num_dist is K in the paper, len(self.rg_nodes) is the number of PC leaves
-        """
-        # Re-parametrize first
-        # TODO: no_grad? the deleted self.reparam==None branch have no_grad
-        phi = self.params()
-
-        # Convert to natural parameters
-        # theta: (num_vars, num_units, num_replicas, num_stats)
-        theta = self.expectation_to_natural(phi)
-
-        # Compute sufficient statistics
-        # suff_stats: (batch_size, num_vars, num_stats)
-        suff_stats = self.sufficient_statistics(x)
-
-        # Compute the log normalizer
-        # log_normalizer: (num_vars, num_units, num_replicas)
-        log_normalizer = self.log_normalizer(theta)
-
-        # Compute the log h(x) values
-        # log_h: scalar or (batch_size, num_vars, 1, 1)
-        log_h = self.log_h(x)
-        if len(log_h.shape) > 0:
-            log_h = log_h.unsqueeze(dim=2).unsqueeze(dim=3)
-
-        # Compute the product of natural parameters and sufficient statistics.
-        # Moreover, sum over channel dimensions, which translates to naive factorization
-        theta_suff_stats = torch.einsum("dipj,bdj->bdip", theta, suff_stats)
-
-        # Finally compute the log-likelihoods
-        # log_probs: (batch_size, num_vars, num_units, num_replicas)
-        log_probs = log_h + theta_suff_stats - log_normalizer
-        return log_probs
-
-    @abstractmethod
-    def sufficient_statistics(self, x: Tensor) -> Tensor:
-        """Get sufficient statistics for the implemented exponential \
-            family (called T(x) in the paper).
-
-        :param x: observed data (Tensor).
-                  If self.num_channels == 1, this can be either of shape \
-                    (batch_size, self.num_vars, 1) or
-                  (batch_size, self.num_vars).
-                  If self.num_channels > 1, this must be of shape \
-                    (batch_size, self.num_vars, self.num_channels).
-        :return: sufficient statistics of the implemented exponential family (Tensor).
-                 Must be of shape (batch_size, self.num_vars, self.num_stats)
-        """
-
-    @abstractmethod
-    def log_normalizer(self, theta: Tensor) -> Tensor:
-        """Log-normalizer of the implemented exponential family (called A(theta) in the paper).
-
-        :param theta: natural parameters (Tensor). Must be of shape \
-            (self.num_vars, *self.array_shape, self.num_stats).
-        :return: log-normalizer (Tensor). Must be of shape (self.num_vars, *self.array_shape).
-        """
-
-    @abstractmethod
-    def log_h(self, x: Tensor) -> Tensor:
-        """Get the log of the base measure (called h(x) in the paper).
-
-        :param x: observed data (Tensor).
-                  If self.num_channels == 1, this can be either of shape \
-                    (batch_size, self.num_vars, 1) or
-                  (batch_size, self.num_vars).
-                  If self.num_channels > 1, this must be of shape \
-                    (batch_size, self.num_vars, self.num_channels).
-        :return: log(h) of the implemented exponential family (Tensor).
-                 Can either be a scalar or must be of shape (batch_size, self.num_vars)
-        """
-
-    @abstractmethod
-    def expectation_to_natural(self, phi: Tensor) -> Tensor:
-        """Conversion from expectations parameters phi to natural parameters \
-            theta, for the implemented exponential family.
-
-        :param phi: expectation parameters (Tensor). Must be of shape \
-            (self.num_vars, *self.array_shape, self.num_stats).
-        :return: natural parameters theta (Tensor). Same shape as phi.
-        """
 
     # TODO: see 241d46a43f59c1df23b5136a45b5f18b9f116671 for backtrack

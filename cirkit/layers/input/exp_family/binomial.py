@@ -42,67 +42,60 @@ class BinomialLayer(ExpFamilyLayer):
             num_channels,
             num_units,
             num_stats=num_channels,
-            reparam=functools.partial(reparam, scale=n),  # TODO: this is not good, find a better
+            reparam=reparam,  # TODO: meaning of param/natural_param changed. check if correct
         )
         self.n = n
 
-    def sufficient_statistics(self, x: Tensor) -> Tensor:
-        """Get sufficient statistics.
+    def natural_params(self, theta: Tensor) -> Tensor:
+        """Calculate natural parameters eta from parameters theta.
 
         Args:
-            x (Tensor): The input.
+            theta (Tensor): The parameters theta, shape (D, K, P, S).
 
         Returns:
-            Tensor: The stats.
+            Tensor: The natural parameters eta, shape (D, K, P, S).
         """
-        assert len(x.shape) == 2 or len(x.shape) == 3, "Input must be 2 or 3 dimensional tensor."
-        return x.unsqueeze(-1) if len(x.shape) == 2 else x
+        # TODO: torch __rsub__ issue
+        return torch.log(theta) - torch.log(1 - theta)  # type: ignore[misc]
 
-    # TODO: properly doc x, phi, theta...?
-    def expectation_to_natural(self, phi: Tensor) -> Tensor:
-        """Get expectation to natural.
+    def sufficient_stats(self, x: Tensor) -> Tensor:
+        """Calculate sufficient statistics T from input x.
 
         Args:
-            phi (Tensor): The input.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: The expectation.
+            Tensor: The sufficient statistics T, shape (B, D, S).
         """
-        theta = torch.clamp(phi / self.n, 1e-6, 1 - 1e-6)
-        # TODO: is this a mypy bug?
-        theta = torch.log(theta) - torch.log(1 - theta)  # type: ignore[misc]
-        return theta
+        # TODO: confirm dtype compatibility for long/float input and output
+        return x  # shape (B, D, S=C)
 
-    def log_normalizer(self, theta: Tensor) -> Tensor:
-        """Get normalizer.
+    def log_base_measure(self, x: Tensor) -> Tensor:
+        """Calculate log base measure log_h from input x.
 
         Args:
-            theta (Tensor): The input.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: The normalizer.
+            Tensor: The natural parameters eta, shape (B, D).
         """
-        # TODO: issue with pylint on torch?
-        return torch.sum(F.softplus(theta), dim=-1)  # pylint: disable=not-callable
-
-    def log_h(self, x: Tensor) -> Tensor:
-        """Get log h.
-
-        Args:
-            x (Tensor): the input.
-
-        Returns:
-            Tensor: The output.
-        """
-        if self.n == 1:
-            return torch.zeros(()).to(x)
-
+        # h(x)=C(n,x)=n!/x!(n-x)!, log(n!)=l[og]gamma(n+1)
         log_h = (
             torch.lgamma(torch.tensor(self.n + 1).to(x))
             - torch.lgamma(x + 1)
-            # TODO: is this a mypy bug?
-            - torch.lgamma(self.n + 1 - x)  # type: ignore[misc]
+            - torch.lgamma(self.n - x + 1)  # type: ignore[misc]  # TODO: torch __rsub__ issue
         )
-        if len(x.shape) == 3:
-            log_h = log_h.sum(dim=-1)
-        return log_h
+        return log_h.sum(dim=-1)
+
+    def log_partition(self, eta: Tensor) -> Tensor:
+        """Calculate log partition function A from natural parameters eta.
+
+        Args:
+            eta (Tensor): The natural parameters eta, shape (D, K, P, S).
+
+        Returns:
+            Tensor: The log partition function A, shape (D, K, P).
+        """
+        # TODO: I doubt if this correct, need to check both n==1 and n>1, S=C>1
+        # TODO: issue with pylint on torch?
+        return self.n * F.softplus(eta).sum(dim=-1)  # pylint: disable=not-callable

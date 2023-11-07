@@ -43,64 +43,59 @@ class CategoricalLayer(ExpFamilyLayer):
         )
         self.num_categories = num_categories
 
-    def sufficient_statistics(self, x: Tensor) -> Tensor:
-        """Get sufficient statistics.
+    def natural_params(self, theta: Tensor) -> Tensor:
+        """Calculate natural parameters eta from parameters theta.
 
         Args:
-            x (Tensor): The input.
+            theta (Tensor): The parameters theta, shape (D, K, P, S).
 
         Returns:
-            Tensor: The stats.
+            Tensor: The natural parameters eta, shape (D, K, P, S).
         """
-        # TODO: do we put this assert in super()?
-        assert len(x.shape) == 2 or len(x.shape) == 3, "Input must be 2 or 3 dimensional tensor."
+        # TODO: not sure what will happen with C>1
+        # TODO: how to directly make use of reparam to normalize?
+        # TODO: x.unflatten is not typed
+        theta = torch.unflatten(
+            theta, dim=-1, sizes=(self.num_channels, self.num_categories)
+        )  # shape (D, K, P, C, cat)
+        theta = theta / theta.sum(dim=-1, keepdim=True)
+        theta = torch.log(theta)
+        return theta.flatten(start_dim=-2)  # shape (D, K, P, S=C*cat)
 
+    def sufficient_stats(self, x: Tensor) -> Tensor:
+        """Calculate sufficient statistics T from input x.
+
+        Args:
+            x (Tensor): The input x, shape (B, D, C).
+
+        Returns:
+            Tensor: The sufficient statistics T, shape (B, D, S).
+        """
         if x.is_floating_point():
             x = x.long()
         # TODO: pylint issue?
-        stats = F.one_hot(x, self.num_categories).float()  # pylint: disable=not-callable
-        return (
-            stats.reshape(-1, self.num_channels * self.num_categories)
-            if len(x.shape) == 3
-            else stats
-        )
+        # pylint: disable-next=not-callable
+        suff_stats = F.one_hot(x, self.num_categories).float()  # shape (B, D, C, cat)
+        return suff_stats.flatten(start_dim=-2)  # shape (B, D, S=C*cat)
 
-    def expectation_to_natural(self, phi: Tensor) -> Tensor:
-        """Get expectation to natural.
+    def log_base_measure(self, x: Tensor) -> Tensor:
+        """Calculate log base measure log_h from input x.
 
         Args:
-            phi (Tensor): The input.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: The expectation.
+            Tensor: The natural parameters eta, shape (B, D).
         """
-        # TODO: how to save the shape
-        array_shape = self.params.shape[1:3]
-        theta = torch.clamp(phi, 1e-12, 1)
-        theta = theta.reshape(self.num_vars, *array_shape, self.num_channels, self.num_categories)
-        theta /= theta.sum(dim=-1, keepdim=True)
-        theta = theta.reshape(self.num_vars, *array_shape, self.num_channels * self.num_categories)
-        theta = torch.log(theta)
-        return theta
+        return torch.zeros(()).to(x).expand_as(x[..., 0])
 
-    def log_normalizer(self, theta: Tensor) -> Tensor:
-        """Get normalizer.
+    def log_partition(self, eta: Tensor) -> Tensor:
+        """Calculate log partition function A from natural parameters eta.
 
         Args:
-            theta (Tensor): The input.
+            eta (Tensor): The natural parameters eta, shape (D, K, P, S).
 
         Returns:
-            Tensor: The normalizer.
+            Tensor: The log partition function A, shape (D, K, P).
         """
-        return torch.zeros(()).to(theta)
-
-    def log_h(self, x: Tensor) -> Tensor:
-        """Get log h.
-
-        Args:
-            x (Tensor): the input.
-
-        Returns:
-            Tensor: The output.
-        """
-        return torch.zeros(()).to(x)
+        return torch.zeros(()).to(eta).expand_as(eta[..., 0])
