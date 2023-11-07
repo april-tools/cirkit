@@ -139,6 +139,46 @@ class ReparamClamp(ReparamLeaf):
         return torch.clamp(self.param, **self.clamp_bounds)
 
 
+class ReparamSigmoid(ReparamLeaf):
+    """Sigmoid (with temperature) reparametrization.
+
+    Range: (offset, offset+scale), as provided.
+
+    Calculates scale*sigmoid(x/temp)+offset.
+    """
+
+    def __init__(  # type: ignore[misc]
+        self,
+        size: Sequence[int],
+        /,
+        *,
+        temperature: float = 1,
+        scale: float = 1,
+        offset: float = 0,
+        **kwargs: Any,  # hold dim/mask/log_mask, but irrelevant here.
+    ) -> None:
+        """Init class.
+
+        Args:
+            size (Sequence[int]): The size of the parameter.
+            temperature (float, optional): The temperature for sigmoid. Defaults to 1.
+            scale (float, optional): The scale for sigmoid. Defaults to 1.
+            offset (float, optional): The offset for sigmoid. Defaults to 0.
+        """
+        super().__init__(size, **kwargs)  # type: ignore[misc]
+        self.temperature = temperature
+        self.scale = scale
+        self.offset = offset
+
+    def forward(self) -> Tensor:
+        """Get the reparameterized params.
+
+        Returns:
+            Tensor: The params after reparameterizaion.
+        """
+        return self.scale * torch.sigmoid(self.param / self.temperature) + self.offset
+
+
 class ReparamSoftmax(ReparamLeaf):
     """Softmax reparametrization.
 
@@ -179,3 +219,46 @@ class ReparamLogSoftmax(ReparamLeaf):
         # redundant projection of -inf to stop gradients
         # although by default +inf is projected to max_finite, we don't have positive values here
         return torch.nan_to_num(param, neginf=float("-inf"))
+
+
+# TODO: this is not good -- too specific
+class ReparamEFNormal(ReparamLeaf):
+    """Reparametrization for ExpFamily -- Normal.
+
+    Range: ???.
+    """
+
+    def __init__(  # type: ignore[misc]
+        self,
+        size: Sequence[int],
+        /,
+        *,
+        min_var: float = 0.0001,
+        max_var: float = 10.0,
+        **kwargs: Any,  # hold dim/mask/log_mask, but irrelevant here.
+    ) -> None:
+        """Init class.
+
+        Args:
+            size (Sequence[int]): The size of the parameter.
+            min_var (float, optional): The min variance. Defaults to 0.0001.
+            max_var (float, optional): The max variance. Defaults to 10.0.
+        """
+        super().__init__(size, **kwargs)  # type: ignore[misc]
+        self.min_var = min_var
+        self.max_var = max_var
+
+    def forward(self) -> Tensor:
+        """Get the reparameterized params.
+
+        Returns:
+            Tensor: The params after reparameterizaion.
+        """
+        num_channels = self.param.shape[-1] // 2
+        mu = self.param[..., :num_channels]
+        var = (
+            torch.sigmoid(self.param[..., num_channels:]) * (self.max_var - self.min_var)
+            + self.min_var
+        )
+        # TODO: is this a mypy bug?
+        return torch.cat((mu, var + mu**2), dim=-1)  # type: ignore[misc]

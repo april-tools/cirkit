@@ -5,6 +5,8 @@ import torch
 from torch import Tensor
 
 from cirkit.region_graph import RegionNode
+from cirkit.reparams.leaf import ReparamEFNormal
+from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
 
@@ -14,14 +16,13 @@ from .exp_family import ExpFamilyLayer
 class NormalLayer(ExpFamilyLayer):
     """Implementation of Normal distribution."""
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(
         self,
         nodes: List[RegionNode],
         num_channels: int,
         num_units: int,
         *,
-        min_var: float = 0.0001,
-        max_var: float = 10.0,
+        reparam: ReparamFactory = ReparamEFNormal,
     ):
         """Init class.
 
@@ -29,30 +30,12 @@ class NormalLayer(ExpFamilyLayer):
             nodes (List[RegionNode]): Passed to super.
             num_channels (int): Number of dims.
             num_units (int): Number of units.
-            min_var (float, optional): Min var. Defaults to 0.0001.
-            max_var (float, optional): Max var. Defaults to 10.0.
+            reparam (ReparamFactory): reparam.
         """
-        super().__init__(nodes, num_channels, num_units, num_stats=2 * num_channels)
-        self.min_var = min_var
-        self.max_var = max_var
-        self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_channels)
-
-    def reparam_function(self, params: Tensor) -> Tensor:
-        """Get reparamed params.
-
-        Args:
-            params (Tensor): Params.
-
-        Returns:
-            Tensor: Re-params.
-        """
-        mu = params[..., : self.num_channels]
-        var = (
-            torch.sigmoid(params[..., self.num_channels :]) * (self.max_var - self.min_var)
-            + self.min_var
+        super().__init__(
+            nodes, num_channels, num_units, num_stats=2 * num_channels, reparam=reparam
         )
-        # TODO: is this a mypy bug?
-        return torch.cat((mu, var + mu**2), dim=-1)  # type: ignore[misc]
+        self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_channels)
 
     def sufficient_statistics(self, x: Tensor) -> Tensor:
         """Get sufficient statistics.

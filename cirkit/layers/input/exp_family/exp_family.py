@@ -6,6 +6,7 @@ from torch import Tensor, nn
 
 from cirkit.layers.input import InputLayer
 from cirkit.region_graph.rg_node import RegionNode
+from cirkit.utils.type_aliases import ReparamFactory
 
 # TODO: find a good way to doc tensor shape
 # TODO: rework docstrings
@@ -34,12 +35,14 @@ class ExpFamilyLayer(InputLayer):
         computation) together in forward(...).
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         rg_nodes: List[RegionNode],
         num_channels: int,
         num_units: int,
         num_stats: int = 1,
+        *,
+        reparam: ReparamFactory,
     ):
         """Init class.
 
@@ -48,6 +51,7 @@ class ExpFamilyLayer(InputLayer):
         :param num_channels: dimensionality of RVs (int)
         :param num_units: The number of units (int).
         :param num_stats: number of sufficient statistics of exponential family (int)
+        :param reparam: reparams (ReparamFactory)
         """
         super().__init__(rg_nodes)
         self.num_channels = num_channels
@@ -60,17 +64,17 @@ class ExpFamilyLayer(InputLayer):
             range(self.num_replicas)
         ), "Replica indices should be consecutive, starting with 0."
 
-        params_shape = (self.num_vars, self.num_units, self.num_replicas, self.num_stats)
-        self.params = nn.Parameter(torch.empty(params_shape))
+        self.params = reparam(
+            (self.num_vars, self.num_units, self.num_replicas, self.num_stats), dim=-1
+        )
 
-        # if em is switched off, we re-parametrize the expectation parameters
-        # self.reparam holds the function object for this task
-        self.reparam = self.reparam_function
         self.reset_parameters()
 
+    @torch.no_grad()
     def reset_parameters(self) -> None:
-        """Reset parameters to default initialization: N(0, 1)."""
-        nn.init.normal_(self.params)
+        """Reset parameters to default: N(0, 1)."""
+        for param in self.parameters():
+            nn.init.normal_(param, 0, 1)
 
     def integrate(self) -> Tensor:
         """Return the integation, which is a zero tensor for this layer (in log-space).
@@ -81,7 +85,7 @@ class ExpFamilyLayer(InputLayer):
         return torch.zeros(
             size=(1, self.num_vars, self.num_units, self.num_replicas),
             requires_grad=False,
-            device=self.params.device,
+            device=self.params().device,  # TODO: this is not good
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -111,7 +115,7 @@ class ExpFamilyLayer(InputLayer):
         """
         # Re-parametrize first
         # TODO: no_grad? the deleted self.reparam==None branch have no_grad
-        phi = self.reparam(self.params)
+        phi = self.params()
 
         # Convert to natural parameters
         # theta: (num_vars, num_units, num_replicas, num_stats)
@@ -186,21 +190,6 @@ class ExpFamilyLayer(InputLayer):
         :param phi: expectation parameters (Tensor). Must be of shape \
             (self.num_vars, *self.array_shape, self.num_stats).
         :return: natural parameters theta (Tensor). Same shape as phi.
-        """
-
-    @abstractmethod
-    def reparam_function(self, params: Tensor) -> Tensor:
-        """Re-parameterize parameters, in order that they stay in their constrained domain.
-
-        When we are not using the EM, we need to transform unconstrained \
-            (real-valued) parameters to the constrained set \
-            of the expectation parameter. This function should return such a \
-            function (i.e. the return value should not be \
-            a projection, but a function which does the projection).
-
-        :param params: I don't know
-        :return: function object f which takes as input unconstrained parameters (Tensor) \
-            and returns re-parametrized parameters.
         """
 
     # TODO: see 241d46a43f59c1df23b5136a45b5f18b9f116671 for backtrack

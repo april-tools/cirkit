@@ -5,6 +5,8 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from cirkit.region_graph import RegionNode
+from cirkit.reparams.leaf import ReparamSoftmax
+from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
 
@@ -14,13 +16,14 @@ from .exp_family import ExpFamilyLayer
 class CategoricalLayer(ExpFamilyLayer):
     """Implementation of Categorical distribution."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         rg_nodes: List[RegionNode],
         num_channels: int,
         num_units: int,
         *,
         num_categories: int,
+        reparam: ReparamFactory = ReparamSoftmax,
     ):
         """Init class.
 
@@ -29,20 +32,16 @@ class CategoricalLayer(ExpFamilyLayer):
             num_channels (int): Number of dims.
             num_units (int): Number of input units,
             num_categories (int): k for category.
+            reparam (ReparamFactory): reparam.
         """
-        super().__init__(rg_nodes, num_channels, num_units, num_stats=num_channels * num_categories)
+        super().__init__(
+            rg_nodes,
+            num_channels,
+            num_units,
+            num_stats=num_channels * num_categories,
+            reparam=reparam,
+        )
         self.num_categories = num_categories
-
-    def reparam_function(self, params: Tensor) -> Tensor:
-        """Do reparam.
-
-        Args:
-            params (Tensor): The params.
-
-        Returns:
-            Tensor: Reparams.
-        """
-        return torch.softmax(params, dim=-1)
 
     def sufficient_statistics(self, x: Tensor) -> Tensor:
         """Get sufficient statistics.

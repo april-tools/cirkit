@@ -15,7 +15,7 @@ from tests.models.pcs.tensorized_pcs.test_utils import get_pc_2x2_dense
 
 def _get_pc_2x2_param_shapes() -> Dict[str, Tuple[int, ...]]:
     return {
-        "input_layer.params": (4, 1, 1, 2),
+        "input_layer.params.param": (4, 1, 1, 2),
         "inner_layers.0.params_in.param": (4, 2, 1, 1),
         "inner_layers.0.params_out.param": (4, 1, 1),
         "inner_layers.1.params_in.param": (2, 2, 1, 1),
@@ -28,7 +28,7 @@ def _set_pc_2x2_params(pc: TensorizedPC) -> None:
     state_dict = pc.state_dict()  # type: ignore[misc]
     state_dict.update(  # type: ignore[misc]
         {  # type: ignore[misc]
-            "input_layer.params": torch.tensor(
+            "input_layer.params.param": torch.tensor(
                 # TODO: source of Any not identified
                 [  # type: ignore[misc]
                     [0, 0],  # type: ignore[misc]  # 1/2, 1/2

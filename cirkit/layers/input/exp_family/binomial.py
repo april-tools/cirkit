@@ -1,3 +1,4 @@
+import functools
 from typing import List
 
 import torch
@@ -5,6 +6,8 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from cirkit.region_graph import RegionNode
+from cirkit.reparams.leaf import ReparamSigmoid
+from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
 
@@ -14,7 +17,17 @@ from .exp_family import ExpFamilyLayer
 class BinomialLayer(ExpFamilyLayer):
     """Implementation of Binomial distribution."""
 
-    def __init__(self, nodes: List[RegionNode], num_channels: int, num_units: int, *, n: int):
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        nodes: List[RegionNode],
+        num_channels: int,
+        num_units: int,
+        *,
+        n: int,
+        reparam: ReparamFactory = functools.partial(
+            ReparamSigmoid, temperature=10  # type: ignore[misc]
+        ),
+    ):
         """Init class.
 
         Args:
@@ -22,20 +35,16 @@ class BinomialLayer(ExpFamilyLayer):
             num_channels (int): Number of dims.
             num_units (int): The number of units.
             n (int): n for binomial.
+            reparam (int): reparam.
         """
-        super().__init__(nodes, num_channels, num_units, num_stats=num_channels)
+        super().__init__(
+            nodes,
+            num_channels,
+            num_units,
+            num_stats=num_channels,
+            reparam=functools.partial(reparam, scale=n),  # TODO: this is not good, find a better
+        )
         self.n = n
-
-    def reparam_function(self, params: Tensor) -> Tensor:
-        """Do reparam.
-
-        Args:
-            params (Tensor): The params.
-
-        Returns:
-            Tensor: Reparams.
-        """
-        return torch.sigmoid(params * 0.1) * self.n
 
     def sufficient_statistics(self, x: Tensor) -> Tensor:
         """Get sufficient statistics.
