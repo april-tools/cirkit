@@ -81,11 +81,13 @@ class TensorizedPC(nn.Module):
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
         rg_layers = rg.topological_layers(bottom_up=False)
 
+        # TODO: beautify len(set(...))
         # Initialize input layer
         input_layer = efamily_cls(
-            rg_layers[0][1],
-            num_channels,
-            num_input_units,
+            num_vars=len(set(v for n in rg_layers[0][1] for v in n.scope)),
+            num_channels=num_channels,
+            num_replicas=len(set(n.get_replica_idx() for n in rg_layers[0][1])),
+            num_output_units=num_input_units,
             **efamily_kwargs,  # type: ignore[misc]
         )
 

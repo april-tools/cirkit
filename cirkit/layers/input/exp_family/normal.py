@@ -1,39 +1,58 @@
 import math
-from typing import List, cast
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
-from cirkit.region_graph import RegionNode
 from cirkit.reparams.leaf import ReparamEFNormal
 from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
 
-# TODO: rework docstrings
-
 
 class NormalLayer(ExpFamilyLayer):
-    """Implementation of Normal distribution."""
+    """Normal distribution layer."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
-        nodes: List[RegionNode],
-        num_channels: int,
-        num_units: int,
         *,
+        num_vars: int,
+        num_channels: int = 1,
+        num_replicas: int = 1,
+        num_input_units: Literal[1] = 1,
+        num_output_units: int,
+        arity: Literal[1] = 1,
+        num_folds: Literal[-1] = -1,
+        fold_mask: None = None,
         reparam: ReparamFactory = ReparamEFNormal,
-    ):
+    ) -> None:
         """Init class.
 
         Args:
-            nodes (List[RegionNode]): Passed to super.
-            num_channels (int): Number of dims.
-            num_units (int): Number of units.
-            reparam (ReparamFactory): reparam.
+            num_vars (int): The number of variables of the circuit.
+            num_channels (int, optional): The number of channels of each variable. Defaults to 1.
+            num_replicas (int, optional): The number of replicas for each variable. Defaults to 1.
+            num_input_units (Literal[1], optional): The number of input units, must be 1. \
+                Defaults to 1.
+            num_output_units (int): The number of output units.
+            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
+                should be num_vars*num_replicas. Defaults to -1.
+            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamEFNormal.
+            num_categories (int, optional): The number of categories for categorical distribution.
         """
         super().__init__(
-            nodes, num_channels, num_units, num_stats=2 * num_channels, reparam=reparam
+            num_vars=num_vars,
+            num_channels=num_channels,
+            num_replicas=num_replicas,
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
+            reparam=reparam,
+            num_suff_stats=2 * num_channels,
         )
 
     def natural_params(self, theta: Tensor) -> Tensor:

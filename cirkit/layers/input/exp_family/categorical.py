@@ -1,45 +1,61 @@
-from typing import List
+from typing import Literal
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from cirkit.region_graph import RegionNode
 from cirkit.reparams.leaf import ReparamLogSoftmax
 from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
 
-# TODO: rework docstrings
-
 
 class CategoricalLayer(ExpFamilyLayer):
-    """Implementation of Categorical distribution."""
+    """Categorical distribution layer."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        rg_nodes: List[RegionNode],
-        num_channels: int,
-        num_units: int,
         *,
-        num_categories: int,
+        num_vars: int,
+        num_channels: int = 1,
+        num_replicas: int = 1,
+        num_input_units: Literal[1] = 1,
+        num_output_units: int,
+        arity: Literal[1] = 1,
+        num_folds: Literal[-1] = -1,
+        fold_mask: None = None,
         reparam: ReparamFactory = ReparamLogSoftmax,
-    ):
+        num_categories: int,
+    ) -> None:
         """Init class.
 
         Args:
-            rg_nodes (List[RegionNode]): Passed to super.
-            num_channels (int): Number of dims.
-            num_units (int): Number of input units,
-            num_categories (int): k for category.
-            reparam (ReparamFactory): reparam.
+            num_vars (int): The number of variables of the circuit.
+            num_channels (int, optional): The number of channels of each variable. Defaults to 1.
+            num_replicas (int, optional): The number of replicas for each variable. Defaults to 1.
+            num_input_units (Literal[1], optional): The number of input units, must be 1. \
+                Defaults to 1.
+            num_output_units (int): The number of output units.
+            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
+                should be num_vars*num_replicas. Defaults to -1.
+            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. \
+                Defaults to ReparamLogSoftmax.
+            num_categories (int, optional): The number of categories for categorical distribution.
         """
+        assert num_categories > 0
         super().__init__(
-            rg_nodes,
-            num_channels,
-            num_units,
-            num_stats=num_channels * num_categories,
+            num_vars=num_vars,
+            num_channels=num_channels,
+            num_replicas=num_replicas,
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
             reparam=reparam,
+            num_suff_stats=num_channels * num_categories,
         )
         self.num_categories = num_categories
 

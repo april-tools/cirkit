@@ -14,9 +14,7 @@ def integrate(circuit: TensorizedPC) -> TensorizedPC:
     Returns:
         TensorizedPC: A tensorized circuit that computes its integral.
     """
-    constant_layer = ConstantLayer(
-        circuit.input_layer.rg_nodes, value=circuit.input_layer.integrate
-    )
+    constant_layer = ConstantLayer(value=circuit.input_layer.integrate)
     new_circuit = TensorizedPC(
         input_layer=constant_layer,
         scope_layer=circuit.scope_layer,

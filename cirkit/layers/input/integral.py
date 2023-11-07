@@ -2,6 +2,8 @@ from torch import Tensor
 
 from cirkit.layers.input import InputLayer
 
+# TODO: rework interface and docstring, all tensors should be properly shaped
+
 
 class IntegralInputLayer(InputLayer):
     """The integral layer.
@@ -15,7 +17,8 @@ class IntegralInputLayer(InputLayer):
         Args:
             in_layer: The input layer on which integration is applied.
         """
-        super().__init__(in_layer.rg_nodes)
+        # TODO: what should be here? none of them is used so current all 1s
+        super().__init__(num_vars=1, num_output_units=1)
         self._in_layer = in_layer
 
     def reset_parameters(self) -> None:

@@ -1,20 +1,17 @@
-from typing import Callable, List, Union
+from typing import Callable, Union
 
 import torch
 from torch import Tensor
 
 from cirkit.layers.input import InputLayer
-from cirkit.region_graph import RegionNode
+
+# TODO: rework interface and docstring, the const value should be properly shaped
 
 
 class ConstantLayer(InputLayer):
     """The constant layer, i.e., an input layer that returns constant values."""
 
-    def __init__(
-        self,
-        rg_nodes: List[RegionNode],
-        value: Union[float, Tensor, Callable[[], Tensor]],
-    ):
+    def __init__(self, value: Union[float, Tensor, Callable[[], Tensor]]):
         """Initialize the constant layer.
 
         Args:
@@ -22,7 +19,8 @@ class ConstantLayer(InputLayer):
             value: It can be either a float (which is wrapped in a tensor of shape (1,)),
              a tensor, or a function without arguments that returns a tensor.
         """
-        super().__init__(rg_nodes)
+        # TODO: what should be here? none of them is used so current all 1s
+        super().__init__(num_vars=1, num_output_units=1)
         self._value: Union[Tensor, Callable[[], Tensor]] = (
             torch.tensor([value], requires_grad=False)  # type: ignore[misc]
             if isinstance(value, float)

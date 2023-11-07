@@ -1,39 +1,77 @@
 from abc import abstractmethod
-from typing import List
+from typing import Literal
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.layers.input import InputLayer
-from cirkit.region_graph.rg_node import RegionNode
+from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils.type_aliases import ReparamFactory
 
-# TODO: find a good way to doc tensor shape
-# TODO: rework docstrings
 
-
-# TODO: but we don't have a non-factorized one
 class ExpFamilyLayer(InputLayer):
-    """Computes all EiNet leaves in parallel, where each leaf is a vector of \
-        factorized distributions, where factors are from exponential families.
+    """The abstract base for Exponential Family distribution input layers.
 
-    In FactorizedLeafLayer, we generate an ExponentialFamilyArray with \
-        array_shape = (num_dist, num_replica), where
-        num_dist is the vector length of the vectorized distributions \
-            (K in the paper), and
-        num_replica is picked large enough such that "we compute enough \
-            leaf densities". At the moment we rely that
-        the PC structure (see Class Graph) provides the necessary information \
-            to determine num_replica.
-        In the future, it would be convenient to have an automatic allocation \
-            of leaves to replica, without requiring
-        the user to specify this.
-    The generate ExponentialFamilyArray has shape (batch_size, num_vars, \
-        num_dist, num_replica). This array of densities
-        will contain all densities over single RVs, which are then multiplied \
-        (actually summed, due to log-domain
-        computation) together in forward(...).
+    Calculates f(x|theta) = exp(eta(theta) dot T(x) - log_h(x) + A(eta)).
+    Ref: https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions
     """
+
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        *,
+        num_vars: int,
+        num_channels: int = 1,
+        num_replicas: int = 1,
+        num_input_units: Literal[1] = 1,
+        num_output_units: int,
+        arity: Literal[1] = 1,
+        num_folds: Literal[-1] = -1,
+        fold_mask: None = None,
+        reparam: ReparamFactory = ReparamIdentity,
+        num_suff_stats: int = -1,
+    ) -> None:
+        """Init class.
+
+        Args:
+            num_vars (int): The number of variables of the circuit.
+            num_channels (int, optional): The number of channels of each variable. Defaults to 1.
+            num_replicas (int, optional): The number of replicas for each variable. Defaults to 1.
+            num_input_units (Literal[1], optional): The number of input units, must be 1. \
+                Defaults to 1.
+            num_output_units (int): The number of output units.
+            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
+                should be num_vars*num_replicas. Defaults to -1.
+            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
+            num_suff_stats (int, optional): The number of sufficient statistics, as required by \
+                each implementation. Defaults to -1.
+        """
+        assert num_suff_stats > 0
+        super().__init__(
+            num_vars=num_vars,
+            num_channels=num_channels,
+            num_replicas=num_replicas,
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
+            reparam=reparam,
+        )
+        self.num_suff_stats = num_suff_stats
+
+        self.params = reparam(
+            (self.num_vars, self.num_output_units, self.num_replicas, self.num_suff_stats), dim=-1
+        )
+
+        self.reset_parameters()
+
+    @torch.no_grad()
+    def reset_parameters(self) -> None:
+        """Reset parameters to default: N(0, 1)."""
+        for param in self.parameters():
+            nn.init.normal_(param, 0, 1)
 
     # TODO: keep the natural_params and calc the inverse mapping for params
     @abstractmethod
@@ -103,52 +141,6 @@ class ExpFamilyLayer(InputLayer):
             - log_part.unsqueeze(dim=0)  # shape (1, D, K, P)
         )  # shape (B, D, K, P)
 
-    ###################################################################
-    ###################################################################
-    ###################################################################
-    ###################################################################
-
-    def __init__(  # pylint: disable=too-many-arguments
-        self,
-        rg_nodes: List[RegionNode],
-        num_channels: int,
-        num_units: int,
-        num_stats: int = 1,
-        *,
-        reparam: ReparamFactory,
-    ):
-        """Init class.
-
-        :param rg_nodes: list of PC leaves (DistributionVector, see Graph.py)
-        :param num_vars: number of random variables (int)
-        :param num_channels: dimensionality of RVs (int)
-        :param num_units: The number of units (int).
-        :param num_stats: number of sufficient statistics of exponential family (int)
-        :param reparam: reparams (ReparamFactory)
-        """
-        super().__init__(rg_nodes)
-        self.num_channels = num_channels
-        self.num_units = num_units
-        self.num_stats = num_stats
-
-        replica_indices = set(n.get_replica_idx() for n in rg_nodes)
-        self.num_replicas = len(replica_indices)
-        assert replica_indices == set(
-            range(self.num_replicas)
-        ), "Replica indices should be consecutive, starting with 0."
-
-        self.params = reparam(
-            (self.num_vars, self.num_units, self.num_replicas, self.num_stats), dim=-1
-        )
-
-        self.reset_parameters()
-
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        """Reset parameters to default: N(0, 1)."""
-        for param in self.parameters():
-            nn.init.normal_(param, 0, 1)
-
     def integrate(self) -> Tensor:
         """Return the integation, which is a zero tensor for this layer (in log-space).
 
@@ -156,7 +148,7 @@ class ExpFamilyLayer(InputLayer):
             Tensor: A zero tensor of shape (1, num_vars, num_units, num_replicas).
         """
         return torch.zeros(
-            size=(1, self.num_vars, self.num_units, self.num_replicas),
+            size=(1, self.num_vars, self.num_output_units, self.num_replicas),
             requires_grad=False,
             device=self.params().device,  # TODO: this is not good
         )
