@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 import torch
 from torch import Tensor
@@ -9,14 +9,6 @@ from cirkit.region_graph import RegionNode
 from .exp_family import ExpFamilyLayer
 
 # TODO: rework docstrings
-
-
-@torch.no_grad()
-def _one_hot(x: Tensor, k: int, dtype: Optional[torch.dtype] = None) -> Tensor:
-    """One hot encoding."""
-    ind = torch.zeros(*x.shape, k, dtype=dtype, device=x.device)
-    ind.scatter_(dim=-1, index=x.unsqueeze(-1), value=1)
-    return ind
 
 
 class CategoricalLayer(ExpFamilyLayer):
@@ -50,7 +42,7 @@ class CategoricalLayer(ExpFamilyLayer):
         Returns:
             Tensor: Reparams.
         """
-        return F.softmax(params, dim=-1)
+        return torch.softmax(params, dim=-1)
 
     def sufficient_statistics(self, x: Tensor) -> Tensor:
         """Get sufficient statistics.
@@ -64,7 +56,10 @@ class CategoricalLayer(ExpFamilyLayer):
         # TODO: do we put this assert in super()?
         assert len(x.shape) == 2 or len(x.shape) == 3, "Input must be 2 or 3 dimensional tensor."
 
-        stats = _one_hot(x.long(), self.num_categories)
+        if x.is_floating_point():
+            x = x.long()
+        # TODO: pylint issue?
+        stats = F.one_hot(x, self.num_categories).float()  # pylint: disable=not-callable
         return (
             stats.reshape(-1, self.num_channels * self.num_categories)
             if len(x.shape) == 3
