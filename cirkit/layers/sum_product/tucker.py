@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal
 
 import torch
 from torch import Tensor
@@ -17,9 +17,9 @@ class TuckerLayer(SumProductLayer):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: int = 2,
+        arity: Literal[2] = 2,
         num_folds: int = 1,
-        fold_mask: Optional[Tensor] = None,
+        fold_mask: None = None,
         reparam: ReparamFactory = ReparamIdentity,
     ) -> None:
         """Init class.
@@ -27,9 +27,9 @@ class TuckerLayer(SumProductLayer):
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer. Defaults to 2.
+            arity (Literal[2], optional): The arity of the layer, must be 2. Defaults to 2.
             num_folds (int, optional): The number of folds. Defaults to 1.
-            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
         if arity != 2:

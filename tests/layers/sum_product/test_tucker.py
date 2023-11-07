@@ -32,7 +32,7 @@ def test_tucker_layer(
             TuckerLayer(
                 num_input_units=num_input_units,
                 num_output_units=num_output_units,
-                arity=arity,
+                arity=arity,  # type: ignore[arg-type]
                 num_folds=num_folds,
                 reparam=reparam,
             )
@@ -40,7 +40,7 @@ def test_tucker_layer(
     layer = TuckerLayer(
         num_input_units=num_input_units,
         num_output_units=num_output_units,
-        arity=arity,
+        # arity=2,
         num_folds=num_folds,
         reparam=reparam,
     )

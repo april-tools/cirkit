@@ -22,8 +22,8 @@ class Layer(nn.Module, ABC):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: int = 2,
-        num_folds: int = 1,
+        arity: int,
+        num_folds: int,
         fold_mask: Optional[Tensor] = None,
         reparam: ReparamFactory = ReparamIdentity,  # pylint: disable=unused-argument
         **_: Any,
@@ -33,13 +33,13 @@ class Layer(nn.Module, ABC):
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer. Defaults to 2.
-            num_folds (int, optional): The number of folds. Defaults to 1.
+            arity (int): The arity of the layer.
+            num_folds (int): The number of folds.
             fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
         super().__init__()
-        # num_input_units can be 0 -- input layers
+        assert num_input_units > 0
         assert num_output_units > 0
         assert arity > 0
         assert num_folds > 0

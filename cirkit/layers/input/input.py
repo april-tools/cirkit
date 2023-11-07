@@ -18,7 +18,7 @@ class InputLayer(Layer):
             **kwargs: Unused.
         """
         # TODO: what should be here?
-        super().__init__(num_input_units=1, num_output_units=1)
+        super().__init__(num_input_units=1, num_output_units=1, arity=1, num_folds=1)
         self.rg_nodes = rg_nodes
         self.num_vars = len(set(v for n in rg_nodes for v in n.scope))
 
