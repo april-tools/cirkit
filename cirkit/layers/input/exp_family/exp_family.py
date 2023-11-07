@@ -12,8 +12,11 @@ from cirkit.utils.type_aliases import ReparamFactory
 class ExpFamilyLayer(InputLayer):
     """The abstract base for Exponential Family distribution input layers.
 
-    Calculates f(x|theta) = exp(eta(theta) dot T(x) - log_h(x) + A(eta)).
+    Exponential Family: f(x|theta) = exp(eta(theta) dot T(x) - log_h(x) + A(eta)).
     Ref: https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions
+
+    However here we don't parameterize theta but directly use eta instead.
+    Subclasses define properties to provide parameter theta based on its implementation.
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -73,18 +76,6 @@ class ExpFamilyLayer(InputLayer):
         for param in self.parameters():
             nn.init.normal_(param, 0, 1)
 
-    # TODO: keep the natural_params and calc the inverse mapping for params
-    @abstractmethod
-    def natural_params(self, theta: Tensor) -> Tensor:
-        """Calculate natural parameters eta from parameters theta.
-
-        Args:
-            theta (Tensor): The parameters theta, shape (D, K, P, S).
-
-        Returns:
-            Tensor: The natural parameters eta, shape (D, K, P, S).
-        """
-
     @abstractmethod
     def sufficient_stats(self, x: Tensor) -> Tensor:
         """Calculate sufficient statistics T from input x.
@@ -131,7 +122,7 @@ class ExpFamilyLayer(InputLayer):
         if x.ndim == 2:
             x = x.unsqueeze(dim=-1)
 
-        eta = self.natural_params(self.params())  # shape (D, K, P, S)
+        eta = self.params()  # shape (D, K, P, S)
         suff_stats = self.sufficient_stats(x)  # shape (B, D, S)
         log_h = self.log_base_measure(x)  # shape (B, D)
         log_part = self.log_partition(eta)  # shape (D, K, P)

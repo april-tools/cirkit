@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from cirkit.reparams.leaf import ReparamSigmoid
+from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
@@ -24,7 +24,7 @@ class BinomialLayer(ExpFamilyLayer):
         arity: Literal[1] = 1,
         num_folds: Literal[-1] = -1,
         fold_mask: None = None,
-        reparam: ReparamFactory = ReparamSigmoid,
+        reparam: ReparamFactory = ReparamIdentity,
         n: int,
     ) -> None:
         """Init class.
@@ -40,7 +40,7 @@ class BinomialLayer(ExpFamilyLayer):
             num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
                 should be num_vars*num_replicas. Defaults to -1.
             fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
-            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamSigmoid.
+            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
             n (int, optional): The n for bimonial distribution.
         """
         assert n > 0
@@ -57,18 +57,6 @@ class BinomialLayer(ExpFamilyLayer):
             num_suff_stats=num_channels,
         )
         self.n = n
-
-    def natural_params(self, theta: Tensor) -> Tensor:
-        """Calculate natural parameters eta from parameters theta.
-
-        Args:
-            theta (Tensor): The parameters theta, shape (D, K, P, S).
-
-        Returns:
-            Tensor: The natural parameters eta, shape (D, K, P, S).
-        """
-        # TODO: torch __rsub__ issue
-        return torch.log(theta) - torch.log(1 - theta)  # type: ignore[misc]
 
     def sufficient_stats(self, x: Tensor) -> Tensor:
         """Calculate sufficient statistics T from input x.
@@ -111,3 +99,12 @@ class BinomialLayer(ExpFamilyLayer):
         # TODO: I doubt if this correct, need to check both n==1 and n>1, S=C>1
         # TODO: issue with pylint on torch?
         return self.n * F.softplus(eta).sum(dim=-1)  # pylint: disable=not-callable
+
+    @property
+    def p(self) -> Tensor:
+        """Get parameter p for bimonial distribution.
+
+        Returns:
+            Tensor: The parameter p, shape (D, K, P, C).
+        """
+        return torch.sigmoid(self.params())

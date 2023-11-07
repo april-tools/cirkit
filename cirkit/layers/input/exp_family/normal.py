@@ -4,7 +4,7 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from cirkit.reparams.leaf import ReparamEFNormal
+from cirkit.reparams.exp_family import ReparamEFNormal
 from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
@@ -55,23 +55,6 @@ class NormalLayer(ExpFamilyLayer):
             num_suff_stats=2 * num_channels,
         )
 
-    def natural_params(self, theta: Tensor) -> Tensor:
-        """Calculate natural parameters eta from parameters theta.
-
-        Args:
-            theta (Tensor): The parameters theta, shape (D, K, P, S).
-
-        Returns:
-            Tensor: The natural parameters eta, shape (D, K, P, S).
-        """
-        mu = theta[..., : self.num_channels]  # shape (D, K, P, C)
-        # TODO: torch __pow__ issue
-        var = theta[..., self.num_channels :] - cast(Tensor, mu**2)  # shape (D, K, P, C)
-        eta = torch.stack(
-            (mu, torch.tensor(-0.5).to(mu).expand_as(mu)), dim=-2
-        )  # shape (D, K, P, 2, C)
-        return (eta / var.unsqueeze(dim=-2)).flatten(start_dim=-2)  # shape (D, K, P, S=2*C)
-
     def sufficient_stats(self, x: Tensor) -> Tensor:
         """Calculate sufficient statistics T from input x.
 
@@ -113,3 +96,24 @@ class NormalLayer(ExpFamilyLayer):
         # TODO: torch __pow__ issue
         log_normalizer = -0.25 * cast(Tensor, eta1**2) / (eta2) - 0.5 * torch.log(-2 * eta2)
         return log_normalizer.sum(dim=-1)
+
+    @property
+    def mu(self) -> Tensor:
+        """Get parameter mu for normal distribution.
+
+        Returns:
+            Tensor: The parameter mu, shape (D, K, P, C).
+        """
+        param = self.params()
+        return -0.5 * param[..., : self.num_channels] / param[..., self.num_channels :]
+
+    @property
+    def variance(self) -> Tensor:
+        """Get parameter sigma^2 (variance) for normal distribution.
+
+        Returns:
+            Tensor: The parameter sigma^2, shape (D, K, P, C).
+        """
+        param = self.params()
+        # TODO: pytorch __rdiv__ issue
+        return -0.5 / param[..., self.num_channels :]  # type: ignore[no-any-return,misc]
