@@ -35,7 +35,6 @@ class SumProductLayer(Layer):
             fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
-        assert num_input_units > 0
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,

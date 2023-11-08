@@ -1,127 +1,110 @@
-from typing import Any, List
+from typing import Literal
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from cirkit.region_graph import RegionNode
+from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
-from .normal import _shift_last_axis_to
-
-# TODO: rework docstrings
 
 
 class BinomialLayer(ExpFamilyLayer):
-    """Implementation of Binomial distribution."""
+    """Binomial distribution layer."""
 
-    def __init__(self, nodes: List[RegionNode], num_channels: int, num_units: int, *, n: int):
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        *,
+        num_vars: int,
+        num_channels: int = 1,
+        num_replicas: int = 1,
+        num_input_units: Literal[1] = 1,
+        num_output_units: int,
+        arity: Literal[1] = 1,
+        num_folds: Literal[-1] = -1,
+        fold_mask: None = None,
+        reparam: ReparamFactory = ReparamIdentity,
+        n: int,
+    ) -> None:
         """Init class.
 
         Args:
-            nodes (List[RegionNode]): Passed to super.
-            num_channels (int): Number of dims.
-            num_units (int): The number of units.
-            n (int): n for binomial.
+            num_vars (int): The number of variables of the circuit.
+            num_channels (int, optional): The number of channels of each variable. Defaults to 1.
+            num_replicas (int, optional): The number of replicas for each variable. Defaults to 1.
+            num_input_units (Literal[1], optional): The number of input units, must be 1. \
+                Defaults to 1.
+            num_output_units (int): The number of output units.
+            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
+                should be num_vars*num_replicas. Defaults to -1.
+            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
+            n (int, optional): The n for bimonial distribution.
         """
-        super().__init__(nodes, num_channels, num_units, num_stats=num_channels)
+        assert n > 0
+        super().__init__(
+            num_vars=num_vars,
+            num_channels=num_channels,
+            num_replicas=num_replicas,
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
+            reparam=reparam,
+            num_suff_stats=num_channels,
+        )
         self.n = n
 
-    def reparam_function(self, params: Tensor) -> Tensor:
-        """Do reparam.
+    def sufficient_stats(self, x: Tensor) -> Tensor:
+        """Calculate sufficient statistics T from input x.
 
         Args:
-            params (Tensor): The params.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: Reparams.
+            Tensor: The sufficient statistics T, shape (B, D, S).
         """
-        return torch.sigmoid(params * 0.1) * self.n
+        # TODO: confirm dtype compatibility for long/float input and output
+        return x  # shape (B, D, S=C)
 
-    def sufficient_statistics(self, x: Tensor) -> Tensor:
-        """Get sufficient statistics.
+    def log_base_measure(self, x: Tensor) -> Tensor:
+        """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: The stats.
+            Tensor: The natural parameters eta, shape (B, D).
         """
-        assert len(x.shape) == 2 or len(x.shape) == 3, "Input must be 2 or 3 dimensional tensor."
-        return x.unsqueeze(-1) if len(x.shape) == 2 else x
-
-    # TODO: properly doc x, phi, theta...?
-    def expectation_to_natural(self, phi: Tensor) -> Tensor:
-        """Get expectation to natural.
-
-        Args:
-            phi (Tensor): The input.
-
-        Returns:
-            Tensor: The expectation.
-        """
-        theta = torch.clamp(phi / self.n, 1e-6, 1 - 1e-6)
-        # TODO: is this a mypy bug?
-        theta = torch.log(theta) - torch.log(1 - theta)  # type: ignore[misc]
-        return theta
-
-    def log_normalizer(self, theta: Tensor) -> Tensor:
-        """Get normalizer.
-
-        Args:
-            theta (Tensor): The input.
-
-        Returns:
-            Tensor: The normalizer.
-        """
-        # TODO: issue with pylint on torch?
-        return torch.sum(F.softplus(theta), dim=-1)  # pylint: disable=not-callable
-
-    def log_h(self, x: Tensor) -> Tensor:
-        """Get log h.
-
-        Args:
-            x (Tensor): the input.
-
-        Returns:
-            Tensor: The output.
-        """
-        if self.n == 1:
-            return torch.zeros(()).to(x)
-
+        # h(x)=C(n,x)=n!/x!(n-x)!, log(n!)=l[og]gamma(n+1)
         log_h = (
             torch.lgamma(torch.tensor(self.n + 1).to(x))
             - torch.lgamma(x + 1)
-            # TODO: is this a mypy bug?
-            - torch.lgamma(self.n + 1 - x)  # type: ignore[misc]
+            - torch.lgamma(self.n - x + 1)  # type: ignore[misc]  # TODO: torch __rsub__ issue
         )
-        if len(x.shape) == 3:
-            log_h = log_h.sum(dim=-1)
-        return log_h
+        return log_h.sum(dim=-1)
 
-    def _sample(  # type: ignore[misc]
-        self,
-        num_samples: int,
-        params: Tensor,
-        dtype: torch.dtype = torch.float32,
-        memory_efficient_binomial_sampling: bool = True,
-        **_: Any,
-    ) -> Tensor:
-        # TODO: make function no_grad
-        with torch.no_grad():
-            if memory_efficient_binomial_sampling:
-                samples = torch.zeros(num_samples, *params.shape, dtype=dtype, device=params.device)
-                for __ in range(self.n):
-                    rand = torch.rand(num_samples, *params.shape, device=params.device)
-                    samples += (rand < params / self.n).to(dtype)
-            else:
-                rand = torch.rand(num_samples, *params.shape, self.n, device=params.device)
-                samples = torch.sum(rand < (params / self.n).unsqueeze(-1), dim=-1).to(dtype)
-            return _shift_last_axis_to(samples, 2)
+    def log_partition(self, eta: Tensor) -> Tensor:
+        """Calculate log partition function A from natural parameters eta.
 
-    def _argmax(  # type: ignore[misc]
-        self, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
-    ) -> Tensor:
-        with torch.no_grad():
-            mode = torch.clamp(torch.floor((self.n + 1) * params / self.n), 0, self.n).to(dtype)
-            return _shift_last_axis_to(mode, 1)
+        Args:
+            eta (Tensor): The natural parameters eta, shape (D, K, P, S).
+
+        Returns:
+            Tensor: The log partition function A, shape (D, K, P).
+        """
+        # TODO: I doubt if this correct, need to check both n==1 and n>1, S=C>1
+        # TODO: issue with pylint on torch?
+        return self.n * F.softplus(eta).sum(dim=-1)  # pylint: disable=not-callable
+
+    @property
+    def p(self) -> Tensor:
+        """Get parameter p for bimonial distribution.
+
+        Returns:
+            Tensor: The parameter p, shape (D, K, P, C).
+        """
+        return torch.sigmoid(self.params())

@@ -21,8 +21,8 @@ class ScopeLayer(Layer):
         Args:
             rg_nodes: The list of region nodes on which it is defined.
         """
-        # TODO: what should be here?
-        super().__init__(num_input_units=1, num_output_units=1)
+        # TODO: what should be here? none of them is used so current all 1s
+        super().__init__(num_input_units=1, num_output_units=1, arity=1, num_folds=1)
         self.num_vars = len(set(v for n in rg_nodes for v in n.scope))
 
         replica_indices = set(n.get_replica_idx() for n in rg_nodes)

@@ -1,142 +1,119 @@
 import math
-from typing import Any, List
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
-from cirkit.region_graph import RegionNode
+from cirkit.reparams.exp_family import ReparamEFNormal
+from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
 
-# TODO: rework docstrings
-
-
-# TODO: better way to permute?
-def _shift_last_axis_to(x: Tensor, i: int) -> Tensor:
-    """Take the last axis of tensor x and inserts it at position i."""
-    num_axes = len(x.shape)
-    return x.permute(tuple(range(i)) + (num_axes - 1,) + tuple(range(i, num_axes - 1)))
-
 
 class NormalLayer(ExpFamilyLayer):
-    """Implementation of Normal distribution."""
+    """Normal distribution layer."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        nodes: List[RegionNode],
-        num_channels: int,
-        num_units: int,
         *,
-        min_var: float = 0.0001,
-        max_var: float = 10.0,
-    ):
+        num_vars: int,
+        num_channels: int = 1,
+        num_replicas: int = 1,
+        num_input_units: Literal[1] = 1,
+        num_output_units: int,
+        arity: Literal[1] = 1,
+        num_folds: Literal[-1] = -1,
+        fold_mask: None = None,
+        reparam: ReparamFactory = ReparamEFNormal,
+    ) -> None:
         """Init class.
 
         Args:
-            nodes (List[RegionNode]): Passed to super.
-            num_channels (int): Number of dims.
-            num_units (int): Number of units.
-            min_var (float, optional): Min var. Defaults to 0.0001.
-            max_var (float, optional): Max var. Defaults to 10.0.
+            num_vars (int): The number of variables of the circuit.
+            num_channels (int, optional): The number of channels of each variable. Defaults to 1.
+            num_replicas (int, optional): The number of replicas for each variable. Defaults to 1.
+            num_input_units (Literal[1], optional): The number of input units, must be 1. \
+                Defaults to 1.
+            num_output_units (int): The number of output units.
+            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
+                should be num_vars*num_replicas. Defaults to -1.
+            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamEFNormal.
+            num_categories (int, optional): The number of categories for categorical distribution.
         """
-        super().__init__(nodes, num_channels, num_units, num_stats=2 * num_channels)
-        self.min_var = min_var
-        self.max_var = max_var
-        self._log_h = torch.tensor(-0.5 * math.log(2 * math.pi) * self.num_channels)
-
-    def reparam_function(self, params: Tensor) -> Tensor:
-        """Get reparamed params.
-
-        Args:
-            params (Tensor): Params.
-
-        Returns:
-            Tensor: Re-params.
-        """
-        mu = params[..., : self.num_channels]
-        var = (
-            torch.sigmoid(params[..., self.num_channels :]) * (self.max_var - self.min_var)
-            + self.min_var
+        super().__init__(
+            num_vars=num_vars,
+            num_channels=num_channels,
+            num_replicas=num_replicas,
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
+            reparam=reparam,
+            num_suff_stats=2 * num_channels,
         )
-        # TODO: is this a mypy bug?
-        return torch.cat((mu, var + mu**2), dim=-1)  # type: ignore[misc]
 
-    def sufficient_statistics(self, x: Tensor) -> Tensor:
-        """Get sufficient statistics.
+    def sufficient_stats(self, x: Tensor) -> Tensor:
+        """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: The stats.
+            Tensor: The sufficient statistics T, shape (B, D, S).
         """
-        assert len(x.shape) == 2 or len(x.shape) == 3, "Input must be 2 or 3 dimensional tensor."
-        if len(x.shape) == 2:
-            x = x.unsqueeze(-1)
-        # TODO: is this a mypy bug?
-        return torch.cat((x, x**2), dim=-1)  # type: ignore[misc]
+        # TODO: torch __pow__ issue
+        return torch.cat((x, x**2), dim=-1)  # type: ignore[misc]  # shape (B, D, S=2*C)
 
-    def expectation_to_natural(self, phi: Tensor) -> Tensor:
-        """Get expectation.
+    def log_base_measure(self, x: Tensor) -> Tensor:
+        """Calculate log base measure log_h from input x.
 
         Args:
-            phi (Tensor): The phi? I don't know.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: The expectation.
+            Tensor: The natural parameters eta, shape (B, D).
         """
-        # TODO: is this a mypy bug?
-        var: Tensor = phi[..., : self.num_channels] ** 2
-        var = phi[..., self.num_channels :] - var
-        theta1 = phi[..., : self.num_channels] / var
-        # TODO: another mypy bug? 2*var is ok, but -1/() is Any
-        theta2: Tensor = -1 / (2 * var)
-        return torch.cat((theta1, theta2), dim=-1)
+        return (
+            torch.tensor(-0.5 * self.num_channels * math.log(2 * math.pi))
+            .to(x)
+            .expand_as(x[..., 0])
+        )
 
-    def log_normalizer(self, theta: Tensor) -> Tensor:
-        """Get the norm for log.
+    def log_partition(self, eta: Tensor) -> Tensor:
+        """Calculate log partition function A from natural parameters eta.
 
         Args:
-            theta (Tensor): The input.
+            eta (Tensor): The natural parameters eta, shape (D, K, P, S).
 
         Returns:
-            Tensor: The normalizer.
+            Tensor: The log partition function A, shape (D, K, P).
         """
-        # TODO: is this a mypy bug?
-        log_normalizer: Tensor = theta[..., : self.num_channels] ** 2 / (  # type: ignore[misc]
-            -4 * theta[..., self.num_channels :]
-        ) - 0.5 * torch.log(-2 * theta[..., self.num_channels :])
-        log_normalizer = torch.sum(log_normalizer, dim=-1)
-        return log_normalizer
+        eta1 = eta[..., : self.num_channels]  # shape (D, K, P, C)
+        eta2 = eta[..., self.num_channels :]  # shape (D, K, P, C)
+        # TODO: torch __pow__ issue
+        log_normalizer = -0.25 * cast(Tensor, eta1**2) / (eta2) - 0.5 * torch.log(-2 * eta2)
+        return log_normalizer.sum(dim=-1)
 
-    def log_h(self, x: Tensor) -> Tensor:
-        """Get log h.
-
-        Args:
-            x (Tensor): The input.
+    @property
+    def mu(self) -> Tensor:
+        """Get parameter mu for normal distribution.
 
         Returns:
-            Tensor: The log_h.
+            Tensor: The parameter mu, shape (D, K, P, C).
         """
-        return self._log_h.to(x)
+        param = self.params()
+        return -0.5 * param[..., : self.num_channels] / param[..., self.num_channels :]
 
-    # TODO: for now inherit parent docstring
-    def _sample(  # type: ignore[misc]
-        self, num_samples: int, params: Tensor, std_correction: float = 1.0, **_: Any
-    ) -> Tensor:
-        # TODO: no_grad on decorator?
-        with torch.no_grad():
-            mu = params[..., : self.num_channels]
-            # TODO: is this a mypy bug?
-            std = torch.sqrt(params[..., self.num_channels :] - mu**2)  # type: ignore[misc]
-            # TODO: same dtype device idiom?
-            samples = mu.unsqueeze(0) + std_correction * std.unsqueeze(0) * torch.randn(
-                num_samples, *mu.shape, dtype=mu.dtype, device=mu.device
-            )
-            return _shift_last_axis_to(samples, 2)
+    @property
+    def variance(self) -> Tensor:
+        """Get parameter sigma^2 (variance) for normal distribution.
 
-    # TODO: do we allow explicit any?
-    def _argmax(self, params: Tensor, **_: Any) -> Tensor:  # type: ignore[misc]
-        with torch.no_grad():
-            mu = params[..., : self.num_channels]
-            return _shift_last_axis_to(mu, 1)
+        Returns:
+            Tensor: The parameter sigma^2, shape (D, K, P, C).
+        """
+        param = self.params()
+        # TODO: pytorch __rdiv__ issue
+        return -0.5 / param[..., self.num_channels :]  # type: ignore[no-any-return,misc]

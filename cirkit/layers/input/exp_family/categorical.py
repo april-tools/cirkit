@@ -1,140 +1,111 @@
-from typing import Any, List, Optional
+import functools
+from typing import Literal
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from cirkit.region_graph import RegionNode
+from cirkit.reparams.exp_family import ReparamEFCategorical
+from cirkit.utils.type_aliases import ReparamFactory
 
 from .exp_family import ExpFamilyLayer
-from .normal import _shift_last_axis_to
-
-# TODO: rework docstrings
-
-
-@torch.no_grad()
-def _one_hot(x: Tensor, k: int, dtype: Optional[torch.dtype] = None) -> Tensor:
-    """One hot encoding."""
-    ind = torch.zeros(*x.shape, k, dtype=dtype, device=x.device)
-    ind.scatter_(dim=-1, index=x.unsqueeze(-1), value=1)
-    return ind
 
 
 class CategoricalLayer(ExpFamilyLayer):
-    """Implementation of Categorical distribution."""
+    """Categorical distribution layer."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
-        rg_nodes: List[RegionNode],
-        num_channels: int,
-        num_units: int,
         *,
+        num_vars: int,
+        num_channels: int = 1,
+        num_replicas: int = 1,
+        num_input_units: Literal[1] = 1,
+        num_output_units: int,
+        arity: Literal[1] = 1,
+        num_folds: Literal[-1] = -1,
+        fold_mask: None = None,
+        reparam: ReparamFactory = ReparamEFCategorical,
         num_categories: int,
-    ):
+    ) -> None:
         """Init class.
 
         Args:
-            rg_nodes (List[RegionNode]): Passed to super.
-            num_channels (int): Number of dims.
-            num_units (int): Number of input units,
-            num_categories (int): k for category.
+            num_vars (int): The number of variables of the circuit.
+            num_channels (int, optional): The number of channels of each variable. Defaults to 1.
+            num_replicas (int, optional): The number of replicas for each variable. Defaults to 1.
+            num_input_units (Literal[1], optional): The number of input units, must be 1. \
+                Defaults to 1.
+            num_output_units (int): The number of output units.
+            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
+                should be num_vars*num_replicas. Defaults to -1.
+            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
+            reparam (ReparamFactory, optional): The reparameterization. \
+                Defaults to ReparamEFCategorical.
+            num_categories (int, optional): The number of categories for categorical distribution.
         """
-        super().__init__(rg_nodes, num_channels, num_units, num_stats=num_channels * num_categories)
+        assert num_categories > 0
+        super().__init__(
+            num_vars=num_vars,
+            num_channels=num_channels,
+            num_replicas=num_replicas,
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            num_folds=num_folds,
+            fold_mask=fold_mask,
+            reparam=functools.partial(reparam, num_categories=num_categories),
+            num_suff_stats=num_channels * num_categories,
+        )
         self.num_categories = num_categories
 
-    def reparam_function(self, params: Tensor) -> Tensor:
-        """Do reparam.
+    def sufficient_stats(self, x: Tensor) -> Tensor:
+        """Calculate sufficient statistics T from input x.
 
         Args:
-            params (Tensor): The params.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: Reparams.
+            Tensor: The sufficient statistics T, shape (B, D, S).
         """
-        return F.softmax(params, dim=-1)
+        if x.is_floating_point():
+            x = x.long()
+        # TODO: pylint issue?
+        # pylint: disable-next=not-callable
+        suff_stats = F.one_hot(x, self.num_categories).float()  # shape (B, D, C, cat)
+        return suff_stats.flatten(start_dim=-2)  # shape (B, D, S=C*cat)
 
-    def sufficient_statistics(self, x: Tensor) -> Tensor:
-        """Get sufficient statistics.
+    def log_base_measure(self, x: Tensor) -> Tensor:
+        """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input.
+            x (Tensor): The input x, shape (B, D, C).
 
         Returns:
-            Tensor: The stats.
+            Tensor: The natural parameters eta, shape (B, D).
         """
-        # TODO: do we put this assert in super()?
-        assert len(x.shape) == 2 or len(x.shape) == 3, "Input must be 2 or 3 dimensional tensor."
+        return torch.zeros(()).to(x).expand_as(x[..., 0])
 
-        stats = _one_hot(x.long(), self.num_categories)
-        return (
-            stats.reshape(-1, self.num_channels * self.num_categories)
-            if len(x.shape) == 3
-            else stats
+    def log_partition(self, eta: Tensor) -> Tensor:
+        """Calculate log partition function A from natural parameters eta.
+
+        Args:
+            eta (Tensor): The natural parameters eta, shape (D, K, P, S).
+
+        Returns:
+            Tensor: The log partition function A, shape (D, K, P).
+        """
+        return torch.zeros(()).to(eta).expand_as(eta[..., 0])
+
+    @property
+    def probs(self) -> Tensor:
+        """Get parameter p[...] (prob of each category) for categorical distribution.
+
+        Returns:
+            Tensor: The parameter probs, shape (D, K, P, C, cat).
+        """
+        # TODO: x.unflatten is not typed
+        return torch.unflatten(
+            torch.exp(self.params()), dim=-1, sizes=(self.num_channels, self.num_categories)
         )
-
-    def expectation_to_natural(self, phi: Tensor) -> Tensor:
-        """Get expectation to natural.
-
-        Args:
-            phi (Tensor): The input.
-
-        Returns:
-            Tensor: The expectation.
-        """
-        # TODO: how to save the shape
-        array_shape = self.params.shape[1:3]
-        theta = torch.clamp(phi, 1e-12, 1)
-        theta = theta.reshape(self.num_vars, *array_shape, self.num_channels, self.num_categories)
-        theta /= theta.sum(dim=-1, keepdim=True)
-        theta = theta.reshape(self.num_vars, *array_shape, self.num_channels * self.num_categories)
-        theta = torch.log(theta)
-        return theta
-
-    def log_normalizer(self, theta: Tensor) -> Tensor:
-        """Get normalizer.
-
-        Args:
-            theta (Tensor): The input.
-
-        Returns:
-            Tensor: The normalizer.
-        """
-        return torch.zeros(()).to(theta)
-
-    def log_h(self, x: Tensor) -> Tensor:
-        """Get log h.
-
-        Args:
-            x (Tensor): the input.
-
-        Returns:
-            Tensor: The output.
-        """
-        return torch.zeros(()).to(x)
-
-    def _sample(  # type: ignore[misc]
-        self, num_samples: int, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
-    ) -> Tensor:
-        with torch.no_grad():
-            # TODO: save shape
-            array_shape = self.params.shape[1:3]
-            dist = params.reshape(
-                self.num_vars, *array_shape, self.num_channels, self.num_categories
-            )
-            cum_sum = torch.cumsum(dist[..., :-1], dim=-1)  # TODO: why slice to -1?
-            rand = torch.rand(num_samples, *cum_sum.shape[:-1], 1, device=cum_sum.device)
-            samples = torch.sum(rand > cum_sum, dim=-1).to(dtype)
-            return _shift_last_axis_to(samples, 2)
-
-    # TODO: why pass in dtype instead of cast outside?
-    def _argmax(  # type: ignore[misc]
-        self, params: Tensor, dtype: torch.dtype = torch.float32, **_: Any
-    ) -> Tensor:
-        with torch.no_grad():
-            # TODO: save shape
-            array_shape = self.params.shape[1:3]
-            dist = params.reshape(
-                self.num_vars, *array_shape, self.num_channels, self.num_categories
-            )
-            mode = torch.argmax(dist, dim=-1).to(dtype)
-            return _shift_last_axis_to(mode, 1)
