@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Literal
+from typing import Any, Literal
 
 from torch import Tensor
 
@@ -54,6 +54,32 @@ class InputLayer(Layer):
         self.num_vars = num_vars
         self.num_channels = num_channels
         self.num_replicas = num_replicas
+
+    # TODO: any good way to sync the docstring?
+    # TODO: temp solution to accomodate IntegralInputLayer
+    # useless-parent-delegation is only to change docstring
+    # pylint: disable-next=useless-parent-delegation
+    def __call__(self, x: Tensor, *_: Any) -> Tensor:  # type: ignore[misc]
+        """Invoke the forward function.
+
+        Args:
+            x (Tensor): The input to this layer, shape (B, D, C).
+
+        Returns:
+            Tensor: The output of this layer, shape (B, D, K, P).
+        """
+        return super().__call__(x, *_)  # type: ignore[misc]
+
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
+
+        Args:
+            x (Tensor): The input to this layer, shape (B, D, C).
+
+        Returns:
+            Tensor: The output of this layer, shape (B, D, K, P).
+        """
 
     # TODO: integrate() interface and docstring is not checked.
     # TODO: this should be in Layer? for some layers it's no-op but interface should exist

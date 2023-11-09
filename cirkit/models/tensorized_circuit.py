@@ -302,36 +302,35 @@ class TensorizedPC(nn.Module):
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     def _eval_layers(self, x: Tensor) -> Tensor:
-        """Eval the layers of the circuit.
+        """Eval the inner layers of the circuit.
 
         Args:
-            x: The folded inputs to be passed to the sequence of layers having shape
-             (num_folds, num_units, batch_size).
+            x (Tensor): The folded inputs to be passed to the sequence of layers, shape (F, K, B).
 
         Returns:
-            Tensor: The output of the circuit.
+            Tensor: The output of the circuit, shape (K, B).
         """
         layer_outputs: List[Tensor] = [x]
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
-            if len(in_layer_ids) == 1:
-                # (F, K, B)
-                (in_layer_id,) = in_layer_ids
-                inputs = layer_outputs[in_layer_id]
+            # TODO: before ternary we first consider fusing pad into cat to save a copy
+            if len(in_layer_ids) == 1:  # pylint: disable=consider-ternary-expression
+                inputs = layer_outputs[in_layer_ids[0]]  # shape (F, K, B)
             else:
-                # (F_1 + ... + F_n, K, B)
-                inputs = torch.cat([layer_outputs[i] for i in in_layer_ids], dim=0)
+                inputs = torch.cat(
+                    [layer_outputs[i] for i in in_layer_ids], dim=0
+                )  # shape (sum(F), K, B)
             if should_pad:
                 # TODO: The padding value depends on the computation space.
                 #  It should be the neutral element of a group.
                 #  For now computations are in log-space, thus 0 is our pad value.
                 # TODO: issue with pylint on torch?
                 inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=0)  # pylint: disable=not-callable
-            inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
-            outputs = layer(inputs)  # outputs: (F, K, B)
+            inputs = inputs[fold_idx]  # shape (F, H, K, B)
+            outputs = layer(inputs)  # shape (F, K, B)
             layer_outputs.append(outputs)
 
-        return layer_outputs[-1][0].T  # (B, K)
+        return layer_outputs[-1].squeeze(dim=0)  # shape (1, K, B) -> (K, B)
 
     def forward(self, x: Tensor) -> Tensor:
         """Evaluate the circuit in a feed forward way.
@@ -342,8 +341,9 @@ class TensorizedPC(nn.Module):
         Returns:
             Tensor: The output of the circuit, shape (B, K).
         """
-        in_outputs = self.scope_layer(self.input_layer(x))  # shape (F, B, K)
-        return self._eval_layers(in_outputs)
+        x = self.input_layer(x)  # shape (B, D, K, P)
+        x = self.scope_layer(x)  # shape (F, K, B)
+        return self._eval_layers(x).T  # shape (K, B) -> (B, K)
 
     def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> Tensor:
         """Evaluate an integral of the circuit over some variables.
@@ -363,4 +363,4 @@ class TensorizedPC(nn.Module):
         #  Perhaps we can hash in_vars and construct a cache for them in this class.
         in_mask = one_hot_variables(self.num_vars, in_vars, device=x.device)
         in_outputs = self.scope_layer(self.integral_input_layer(x, in_mask))
-        return self._eval_layers(in_outputs)
+        return self._eval_layers(in_outputs).T

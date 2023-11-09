@@ -70,10 +70,10 @@ class Layer(nn.Module, ABC):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer.
+            x (Tensor): The input to this layer, shape (F, H, K, B).
 
         Returns:
-            Tensor: The output of this layer.
+            Tensor: The output of this layer, shape (F, K, B).
         """
         return super().__call__(x, *_)  # type: ignore[no-any-return,misc]
 
@@ -82,19 +82,8 @@ class Layer(nn.Module, ABC):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer.
+            x (Tensor): The input to this layer, shape (F, H, K, B).
 
         Returns:
-            Tensor: The output of this layer.
+            Tensor: The output of this layer, shape (F, K, B).
         """
-
-    # TODO: need to implement relevant things
-    # @abstractmethod
-    # def backtrack(self, *args: Any, **kwargs: Any) -> Tensor:  # type: ignore[misc]
-    #     """Define routines for backtracking in EiNets, for sampling and MPE approximation.
-
-    #     :param args:
-    #     :param kwargs:
-    #     :return:
-    #     """
-    #     raise NotImplementedError

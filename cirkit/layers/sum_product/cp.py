@@ -100,32 +100,38 @@ class BaseCPLayer(SumProductLayer):
         return tuple(mapping[name] for name in dim_names)
 
     def _forward_in_linear(self, x: Tensor) -> Tensor:
-        assert self.params_in is not None and self._einsum_in
         # TODO: pylint issue
+        assert self.params_in is not None and self._einsum_in
+        # shape (F, H, K, B) -> (F, H, K, B)
         return torch.einsum(self._einsum_in, self.params_in(), x)  # pylint: disable=not-callable
 
     def _forward_reduce_log(self, x: Tensor) -> Tensor:
         x = x if self.fold_mask is None else x * self.fold_mask
-        return torch.sum(x, dim=1)
+        return torch.sum(x, dim=1)  # shape (F, H, K, B) -> (F, K, B)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
         assert self.params_out is not None and self._einsum_out
+        # shape (F, K, B) -> (F, K, B)
         return torch.einsum(self._einsum_out, self.params_out(), x)  # pylint: disable=not-callable
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer.
+            x (Tensor): The input to this layer, shape (F, H, K, B).
 
         Returns:
-            Tensor: The output of this layer.
+            Tensor: The output of this layer, shape (F, K, B).
         """
         if self.params_in is not None:
-            x = log_func_exp(x, func=self._forward_in_linear, dim=2, keepdim=True)  # (F, H, K, B)
-        x = self._forward_reduce_log(x)  # (F, K, B)
+            x = log_func_exp(
+                x, func=self._forward_in_linear, dim=2, keepdim=True
+            )  # shape (F, H, K, B)
+        x = self._forward_reduce_log(x)  # shape (F, K, B)
         if self.params_out is not None:
-            x = log_func_exp(x, func=self._forward_out_linear, dim=1, keepdim=True)  # (F, K, B)
+            x = log_func_exp(
+                x, func=self._forward_out_linear, dim=1, keepdim=True
+            )  # shape (F, K, B)
         return x
 
 

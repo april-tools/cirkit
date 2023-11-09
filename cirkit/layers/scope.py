@@ -14,6 +14,7 @@ class ScopeLayer(Layer):
     """
 
     scope: Tensor  # To be registered as buffer
+    """The scope ordering, shape (D, P, F)."""
 
     def __init__(self, rg_nodes: List[RegionNode]):
         """Initialize a scope tensor.
@@ -42,16 +43,26 @@ class ScopeLayer(Layer):
         This layer does not have any parameters.
         """
 
+    # TODO: any good way to sync the docstring?
+    # TODO: override is due to integral layer
+    def __call__(self, x: Tensor) -> Tensor:  # type: ignore[override]
+        """Invoke the forward function.
+
+        Args:
+            x (Tensor): The input to this layer, shape (B, D, K, P).
+
+        Returns:
+            Tensor: The output of this layer, shape (F, K, B).
+        """
+        return super().__call__(x)
+
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input units activations.
+            x (Tensor): The input to this layer, shape (B, D, K, P).
 
         Returns:
-            Tensor: A folded tensor consisting of re-ordered unit activations.
+            Tensor: The output of this layer, shape (F, K, B).
         """
-        # x: (batch_size, num_vars, num_units, num_replicas)
-        # self.scope: (num_vars, num_replicas, num_folds)
-        # output: (num_folds, num_units, batch_size)
-        return torch.einsum("bdip,dpf->fib", x, self.scope)
+        return torch.einsum("bdkp,dpf->fkb", x, self.scope)

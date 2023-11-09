@@ -57,9 +57,9 @@ class TuckerLayer(SumProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer.
+            x (Tensor): The input to this layer, shape (F, H, K, B).
 
         Returns:
-            Tensor: The output of this layer.
+            Tensor: The output of this layer, shape (F, K, B).
         """
         return log_func_exp(x[:, 0], x[:, 1], func=self._forward_linear, dim=1, keepdim=True)

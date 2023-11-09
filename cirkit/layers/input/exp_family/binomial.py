@@ -84,8 +84,8 @@ class BinomialLayer(ExpFamilyLayer):
             torch.lgamma(torch.tensor(self.n + 1).to(x))
             - torch.lgamma(x + 1)
             - torch.lgamma(self.n - x + 1)  # type: ignore[misc]  # TODO: torch __rsub__ issue
-        )
-        return log_h.sum(dim=-1)
+        )  # shape (B, D, C)
+        return log_h.sum(dim=-1)  # shape (B, D)
 
     def log_partition(self, eta: Tensor) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
@@ -98,9 +98,10 @@ class BinomialLayer(ExpFamilyLayer):
         """
         # TODO: I doubt if this correct, need to check both n==1 and n>1, S=C>1
         # TODO: issue with pylint on torch?
-        return self.n * F.softplus(eta).sum(dim=-1)  # pylint: disable=not-callable
+        # pylint: disable-next=not-callable
+        return self.n * F.softplus(eta).sum(dim=-1)  # shape (D, K, P, S) -> (D, K, P)
 
     @property
     def p(self) -> Tensor:
         """The parameter p for bimonial distribution, shape (D, K, P, C)."""
-        return torch.sigmoid(self.params())
+        return torch.sigmoid(self.params())  # shape (D, K, P, C=S)

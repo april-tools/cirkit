@@ -95,7 +95,7 @@ class NormalLayer(ExpFamilyLayer):
         eta2 = eta[..., self.num_channels :]  # shape (D, K, P, C)
         # TODO: torch __pow__ issue
         log_normalizer = -0.25 * cast(Tensor, eta1**2) / (eta2) - 0.5 * torch.log(-2 * eta2)
-        return log_normalizer.sum(dim=-1)
+        return log_normalizer.sum(dim=-1)  # shape (D, K, P)
 
     @property
     def mean(self) -> Tensor:
