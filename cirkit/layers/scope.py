@@ -25,7 +25,7 @@ class ScopeLayer(Layer):
         super().__init__(num_input_units=1, num_output_units=1, arity=1, num_folds=1)
         self.num_vars = len(set(v for n in rg_nodes for v in n.scope))
 
-        replica_indices = set(n.get_replica_idx() for n in rg_nodes)
+        replica_indices = set(n.replica_idx for n in rg_nodes)
         num_replicas = len(replica_indices)
         assert replica_indices == set(
             range(num_replicas)
@@ -33,7 +33,7 @@ class ScopeLayer(Layer):
 
         scope = torch.zeros(self.num_vars, num_replicas, len(rg_nodes))
         for i, node in enumerate(rg_nodes):
-            scope[list(node.scope), node.get_replica_idx(), i] = 1  # type: ignore[misc]
+            scope[list(node.scope), node.replica_idx, i] = 1  # type: ignore[misc]
         self.register_buffer("scope", scope)
 
     def reset_parameters(self) -> None:

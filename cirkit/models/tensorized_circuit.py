@@ -172,9 +172,10 @@ class TensorizedPC(nn.Module):
         #   (i) its index in the corresponding fold, and
         #   (ii) the id of the layer that computes such fold
         #        (0 for the input layer and > 0 for inner layers)
+        # TODO: do we really need node_id? or just object itself? or id()?
         region_id_fold: Dict[int, Tuple[int, int]] = {}
         for i, region in enumerate(rg_layers[0][1]):
-            region_id_fold[region.get_id()] = (i, 0)
+            region_id_fold[region.node_id] = (i, 0)
 
         # A list mapping layer ids to the number of folds in the output tensor
         num_folds = [len(rg_layers[0][1])]
@@ -187,7 +188,7 @@ class TensorizedPC(nn.Module):
             max_num_input_regions = max(num_input_regions)
 
             # Retrieve which folds need to be concatenated
-            input_regions_ids = [list(r.get_id() for r in ins) for ins in input_regions]
+            input_regions_ids = [list(r.node_id for r in ins) for ins in input_regions]
             input_layers_ids = [
                 list(region_id_fold[i][1] for i in ids) for ids in input_regions_ids
             ]
@@ -203,7 +204,7 @@ class TensorizedPC(nn.Module):
             for regions in input_regions:
                 region_indices = []
                 for r in regions:
-                    fold_idx, layer_id = region_id_fold[r.get_id()]
+                    fold_idx, layer_id = region_id_fold[r.node_id]
                     region_indices.append(base_layer_idx[layer_id] + fold_idx)
                 if len(regions) < max_num_input_regions:
                     should_pad = True
@@ -221,9 +222,9 @@ class TensorizedPC(nn.Module):
                 assert len(p.outputs) == 1, "Each partition must belong to exactly one region"
                 out_region = p.outputs[0]
                 if len(out_region.inputs) == 1:
-                    region_id_fold[out_region.get_id()] = (i, len(inner_layers) + 1)
+                    region_id_fold[out_region.node_id] = (i, len(inner_layers) + 1)
                 else:
-                    region_mixing_indices[out_region.get_id()].append(i)
+                    region_mixing_indices[out_region.node_id].append(i)
             num_folds.append(len(lpartitions))
 
             # Build the actual layer
@@ -256,14 +257,14 @@ class TensorizedPC(nn.Module):
             input_partition_indices = []  # (F, H)
             for i, region in enumerate(non_unary_regions):
                 num_input_partitions = len(region.inputs)
-                partition_indices = region_mixing_indices[region.get_id()]
+                partition_indices = region_mixing_indices[region.node_id]
                 if max_num_input_partitions > num_input_partitions:
                     should_pad = True
                     partition_indices.extend(
                         [num_folds[-1]] * (max_num_input_partitions - num_input_partitions)
                     )
                 input_partition_indices.append(partition_indices)
-                region_id_fold[region.get_id()] = (i, len(inner_layers) + 1)
+                region_id_fold[region.node_id] = (i, len(inner_layers) + 1)
             num_folds.append(len(non_unary_regions))
             fold_indices = torch.tensor(input_partition_indices)
             book_entry = (should_pad, [len(inner_layers)], fold_indices)
@@ -329,6 +330,7 @@ class TensorizedPC(nn.Module):
                 # TODO: The padding value depends on the computation space.
                 #  It should be the neutral element of a group.
                 #  For now computations are in log-space, thus 0 is our pad value.
+                # TODO: issue with pylint on torch?
                 inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=0)  # pylint: disable=not-callable
             inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
             outputs = layer(inputs)  # outputs: (F, K, B)

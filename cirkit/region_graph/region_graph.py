@@ -112,7 +112,7 @@ class RegionGraph:
     @cached_property
     def num_replicas(self) -> int:
         """Get the number of variables the region graph is defined on."""
-        return len(set(node.get_replica_idx() for node in self.input_nodes))
+        return len(set(node.replica_idx for node in self.input_nodes))
 
     ##########################    Structural properties    #########################
 
