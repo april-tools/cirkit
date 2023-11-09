@@ -58,7 +58,7 @@ def test_pc_nonneg_reparams(
         assert False
 
     pc = get_deep_pc(rg_cls, kwargs, reparam_func=reparam)  # type: ignore[misc]
-    num_vars = pc.num_variables
+    num_vars = pc.num_vars
 
     # Generate all possible combinations of 16 integers from the list of possible values
     possible_values = [0, 1]

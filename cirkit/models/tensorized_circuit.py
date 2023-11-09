@@ -286,12 +286,8 @@ class TensorizedPC(nn.Module):
         return bookkeeping, inner_layers
 
     @property
-    def num_variables(self) -> int:
-        """Return the number of variables the circuit is defined on.
-
-        Returns:
-            int: The number of variables.
-        """
+    def num_vars(self) -> int:
+        """The number of variables the circuit is defined on."""
         return self.input_layer.num_vars
 
     def __call__(self, x: Optional[Tensor] = None) -> Tensor:
@@ -369,7 +365,7 @@ class TensorizedPC(nn.Module):
 
         # TODO: cache the construction of the integration mask here.
         #  Perhaps we can hash in_vars and construct a cache for them in this class.
-        in_mask = one_hot_variables(self.num_variables, in_vars, device=x.device)
+        in_mask = one_hot_variables(self.num_vars, in_vars, device=x.device)
         in_outputs = self.scope_layer(self.integral_input_layer(x, in_mask))
         return self._eval_layers(in_outputs)
 

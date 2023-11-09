@@ -47,11 +47,7 @@ class ReparamLeaf(Reparameterizaion):
 
     @property
     def dtype(self) -> torch.dtype:
-        """Get the dtype of param.
-
-        Returns:
-            torch.dtype: The dtype of the param.
-        """
+        """The dtype of the output param."""
         return self.param.dtype
 
 

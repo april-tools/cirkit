@@ -53,20 +53,12 @@ class Layer(nn.Module, ABC):
     # expected to be fixed, so use cached to avoid recalc
     @cached_property
     def num_params(self) -> int:
-        """Get the number of params in this layer.
-
-        Returns:
-            int: The number of params.
-        """
+        """The number of params."""
         return sum(param.numel() for param in self.parameters())
 
     @cached_property
     def num_buffers(self) -> int:
-        """Get the number of buffers in this layer.
-
-        Returns:
-            int: The number of buffers.
-        """
+        """The number of buffers."""
         return sum(buffer.numel() for buffer in self.buffers())
 
     @abstractmethod

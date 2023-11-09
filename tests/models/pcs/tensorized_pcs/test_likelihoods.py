@@ -67,7 +67,7 @@ def test_pc_likelihoods(
             NOTE: we don't know if it's correct, but it guarantees reproducibility.
     """
     pc = get_deep_pc(rg_cls, kwargs)  # type: ignore[misc]
-    num_vars = pc.num_variables
+    num_vars = pc.num_vars
 
     # Generate all possible combinations of 16 integers from the list of possible values
     possible_values = [0, 1]

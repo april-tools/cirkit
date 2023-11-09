@@ -68,11 +68,7 @@ class Reparameterizaion(nn.Module, ABC):
     @property
     @abstractmethod
     def dtype(self) -> torch.dtype:
-        """Get the dtype of param.
-
-        Returns:
-            torch.dtype: The dtype of the param.
-        """
+        """The dtype of the output param."""
 
     def __call__(self) -> Tensor:
         """Get the reparameterized params.

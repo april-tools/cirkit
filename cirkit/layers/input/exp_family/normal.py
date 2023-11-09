@@ -98,22 +98,14 @@ class NormalLayer(ExpFamilyLayer):
         return log_normalizer.sum(dim=-1)
 
     @property
-    def mu(self) -> Tensor:
-        """Get parameter mu for normal distribution.
-
-        Returns:
-            Tensor: The parameter mu, shape (D, K, P, C).
-        """
+    def mean(self) -> Tensor:
+        """The parameter mu (mean) for normal distribution, shape (D, K, P, C)."""
         param = self.params()
         return -0.5 * param[..., : self.num_channels] / param[..., self.num_channels :]
 
     @property
     def variance(self) -> Tensor:
-        """Get parameter sigma^2 (variance) for normal distribution.
-
-        Returns:
-            Tensor: The parameter sigma^2, shape (D, K, P, C).
-        """
+        """The parameter sigma^2 (variance) for normal distribution, shape (D, K, P, C)."""
         param = self.params()
         # TODO: pytorch __rdiv__ issue
         return -0.5 / param[..., self.num_channels :]  # type: ignore[no-any-return,misc]

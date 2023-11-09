@@ -64,7 +64,7 @@ def _get_pc_2x2_output() -> Tensor:
 def test_pc_instantiation() -> None:
     pc = get_pc_2x2_dense(layer_cls=UncollapsedCPLayer)
     param_shapes = {name: tuple(param.shape) for name, param in pc.named_parameters()}
-    assert pc.num_variables == 4
+    assert pc.num_vars == 4
     assert param_shapes == _get_pc_2x2_param_shapes()
 
 

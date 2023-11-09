@@ -100,11 +100,8 @@ class CategoricalLayer(ExpFamilyLayer):
 
     @property
     def probs(self) -> Tensor:
-        """Get parameter p[...] (prob of each category) for categorical distribution.
-
-        Returns:
-            Tensor: The parameter probs, shape (D, K, P, C, cat).
-        """
+        """The parameter probs of each category for categorical distribution, \
+        shape (D, K, P, C, cat)."""
         # TODO: x.unflatten is not typed
         return torch.unflatten(
             torch.exp(self.params()), dim=-1, sizes=(self.num_channels, self.num_categories)

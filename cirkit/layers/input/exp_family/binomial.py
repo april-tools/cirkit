@@ -102,9 +102,5 @@ class BinomialLayer(ExpFamilyLayer):
 
     @property
     def p(self) -> Tensor:
-        """Get parameter p for bimonial distribution.
-
-        Returns:
-            Tensor: The parameter p, shape (D, K, P, C).
-        """
+        """The parameter p for bimonial distribution, shape (D, K, P, C)."""
         return torch.sigmoid(self.params())
