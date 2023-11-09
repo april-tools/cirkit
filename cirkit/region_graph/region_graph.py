@@ -98,12 +98,21 @@ class RegionGraph:
         """Get inner (non-input) region nodes in the graph."""
         return (node for node in self.region_nodes if node.inputs)
 
-    ##############################   Miscellaneous   ###############################
+    ############################    Basic properties    ############################
 
-    @property
-    def num_variables(self) -> int:
+    # The RG is expected to be immutable after construction. Also, each of these properties is
+    # simply a int, which is cheap to save. Therefore, we use cached_property to save computation.
+
+    @cached_property
+    def num_vars(self) -> int:
         """Get the number of variables the region graph is defined on."""
         return len(set(v for node in self.output_nodes for v in node.scope))
+
+    # TODO: remove replicas from RG
+    @cached_property
+    def num_replicas(self) -> int:
+        """Get the number of variables the region graph is defined on."""
+        return len(set(node.get_replica_idx() for node in self.input_nodes))
 
     ##########################    Structural properties    #########################
 
