@@ -68,7 +68,7 @@ def test_pc_nonneg_reparams(
 
     # Instantiate the integral of the PC, i.e., computing the partition function
     pc_pf = integrate(pc)
-    log_z = pc_pf()
+    log_z = pc_pf(all_data)
     assert log_z.shape == (1, 1)
 
     # Compute outputs

@@ -67,7 +67,7 @@ class Layer(nn.Module, ABC):
 
     # TODO: temp solution to accomodate IntegralInputLayer
     def __call__(self, x: Tensor, *_: Any) -> Tensor:  # type: ignore[misc]
-        """Invoke forward function.
+        """Invoke the forward function.
 
         Args:
             x (Tensor): The input to this layer.

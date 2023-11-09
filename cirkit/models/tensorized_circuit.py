@@ -290,16 +290,15 @@ class TensorizedPC(nn.Module):
         """The number of variables the circuit is defined on."""
         return self.input_layer.num_vars
 
-    def __call__(self, x: Optional[Tensor] = None) -> Tensor:
-        """Invoke the forward.
+    def __call__(self, x: Tensor) -> Tensor:
+        """Invoke the forward function.
 
         Args:
-            x (Tensor): The input.
+            x (Tensor): The input to the circuit, shape (B, D, C).
 
         Returns:
-            Tensor: The output.
+            Tensor: The output of the circuit, shape (B, K).
         """
-        # TODO: why do we need this?
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     def _eval_layers(self, x: Tensor) -> Tensor:
@@ -334,19 +333,16 @@ class TensorizedPC(nn.Module):
 
         return layer_outputs[-1][0].T  # (B, K)
 
-    def forward(self, x: Optional[Tensor] = None) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         """Evaluate the circuit in a feed forward way.
 
         Args:
-            x (Tensor): The input having shape (batch_size, num_vars, num_channels).
-             It can be None if the input layer does not need an input.
+            x (Tensor): The input to the circuit, shape (B, D, C).
 
         Returns:
-            Tensor: The output of the circuit.
+            Tensor: The output of the circuit, shape (B, K).
         """
-        # TODO: a better way to handle circuits obtained from integrate()
-        #  not requiring an input as they encode a constant?
-        in_outputs = self.scope_layer(self.input_layer(x))  # type: ignore[arg-type]
+        in_outputs = self.scope_layer(self.input_layer(x))  # shape (F, B, K)
         return self._eval_layers(in_outputs)
 
     def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> Tensor:
@@ -368,41 +364,3 @@ class TensorizedPC(nn.Module):
         in_mask = one_hot_variables(self.num_vars, in_vars, device=x.device)
         in_outputs = self.scope_layer(self.integral_input_layer(x, in_mask))
         return self._eval_layers(in_outputs)
-
-    # TODO: and what's the meaning of this?
-    # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
-    # TODO: there's actually nothing to doc
-    # pylint: disable-next=missing-param-doc
-    def backtrack(self, *_: Any, **__: Any) -> None:  # type: ignore[misc]
-        """Raise an error.
-
-        Raises:
-            NotImplementedError: Not implemented.
-        """
-        raise NotImplementedError
-
-    # pylint: disable-next=missing-param-doc
-    def sample(  # type: ignore[misc]
-        self, num_samples: int = 1, class_idx: int = 0, x: Optional[Tensor] = None, **_: Any
-    ) -> None:
-        """Cause an error anyway.
-
-        Args:
-            num_samples (int, optional): I don't know/care now. Defaults to 1.
-            class_idx (int, optional): I don't know/care now. Defaults to 0.
-            x (Optional[Tensor], optional): I don't know/care now. Defaults to None.
-        """
-        self.backtrack(num_samples=num_samples, class_idx=class_idx, x=x, mode="sample")
-
-    # pylint: disable-next=missing-param-doc
-    def mpe(  # type: ignore[misc]
-        self, num_samples: int = 1, class_idx: int = 0, x: Optional[Tensor] = None, **_: Any
-    ) -> None:
-        """Cause an error anyway.
-
-        Args:
-            num_samples (int, optional):  I don't know/care now. Defaults to 1.
-            class_idx (int, optional):  I don't know/care now. Defaults to 0.
-            x (Optional[Tensor], optional):  I don't know/care now. Defaults to None.
-        """
-        self.backtrack(num_samples=num_samples, class_idx=class_idx, x=x, mode="argmax")

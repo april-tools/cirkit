@@ -28,7 +28,7 @@ def _optimization_steps(pc: TensorizedPC, data: Tensor, num_steps: int = 5) -> N
     pc_pf = integrate(pc)
     loss = np.inf
     for _ in range(num_steps):
-        log_z = pc_pf()
+        log_z = pc_pf(data)
         log_scores = pc(data)
         lls = log_scores - log_z
         next_loss = -torch.mean(lls)
