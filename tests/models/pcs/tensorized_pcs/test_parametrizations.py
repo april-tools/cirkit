@@ -64,7 +64,7 @@ def test_pc_nonneg_reparams(
     possible_values = [0, 1]
     all_data = torch.tensor(
         list(itertools.product(possible_values, repeat=num_vars))  # type: ignore[misc]
-    )
+    ).unsqueeze(dim=-1)
 
     # Instantiate the integral of the PC, i.e., computing the partition function
     pc_pf = integrate(pc)

@@ -76,7 +76,9 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
 def test_pc_dense_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> None:
     reparam = ReparamSoftmax if normalized else ReparamExp
     pc = get_pc_2x2_dense(reparam, layer_cls, num_units=2)
-    data = torch.tensor(list(itertools.product([0, 1], repeat=4)))  # type: ignore[misc]
+    data = torch.tensor(list(itertools.product([0, 1], repeat=4))).unsqueeze(  # type: ignore[misc]
+        dim=-1
+    )
     _optimization_steps(pc, data)
     _check_parameters_sanity(pc)
 
@@ -90,6 +92,8 @@ def test_pc_dense_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> No
 def test_pc_sparse_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> None:
     reparam = ReparamSoftmax if normalized else ReparamExp
     pc = get_pc_5_sparse(reparam, layer_cls, num_units=2)
-    data = torch.tensor(list(itertools.product([0, 1], repeat=5)))  # type: ignore[misc]
+    data = torch.tensor(list(itertools.product([0, 1], repeat=5))).unsqueeze(  # type: ignore[misc]
+        dim=-1
+    )
     _optimization_steps(pc, data)
     _check_parameters_sanity(pc)

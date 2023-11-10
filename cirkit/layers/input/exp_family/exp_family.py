@@ -118,10 +118,6 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, D, K, P).
         """
-        # TODO: this does not work for more than 1 batch dims
-        if x.ndim == 2:
-            x = x.unsqueeze(dim=-1)
-
         eta = self.params()  # shape (D, K, P, S)
         suff_stats = self.sufficient_stats(x)  # shape (*B, D, S)
         log_h = self.log_base_measure(x)  # shape (*B, D)
