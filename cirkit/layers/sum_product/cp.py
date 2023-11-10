@@ -107,7 +107,7 @@ class BaseCPLayer(SumProductLayer):
 
     def _forward_reduce_log(self, x: Tensor) -> Tensor:
         x = x if self.fold_mask is None else x * self.fold_mask
-        return torch.sum(x, dim=1)  # shape (F, H, K, B) -> (F, K, B)
+        return x.sum(dim=1)  # shape (F, H, K, B) -> (F, K, B)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
         assert self.params_out is not None and self._einsum_out

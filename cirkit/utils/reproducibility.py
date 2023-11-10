@@ -7,7 +7,6 @@ from typing_extensions import ParamSpec  # TODO: in typing from 3.10
 
 import numpy as np
 import torch
-import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor
 
 # TODO: build a unified reproducibility handler

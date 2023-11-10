@@ -7,7 +7,7 @@ from cirkit.reparams.reparam import Reparameterizaion
 # Here're all the type defs and aliases shared across the lib.
 # For private types that is only used in one file, can be defined there.
 
-# TODO: move other commonly used here
+# TODO: move other commonly used here, r.g. RG definition
 
 
 class ClampBounds(TypedDict, total=False):

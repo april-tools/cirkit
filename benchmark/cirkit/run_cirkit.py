@@ -6,7 +6,6 @@ from typing import List, Tuple
 
 import numpy as np
 import torch
-import torch.backends.cudnn  # TODO: this is not exported
 from torch import Tensor, optim
 from torch.utils.data import DataLoader, TensorDataset
 

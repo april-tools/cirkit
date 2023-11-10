@@ -5,7 +5,6 @@ from typing import Dict, FrozenSet, Iterable, List, Set, Tuple, TypedDict, final
 
 from .rg_node import PartitionNode, RegionNode, RGNode
 
-# TODO: unify what names to use: sum/region, product/partition, leaf/input
 # TODO: rework docstrings??
 
 

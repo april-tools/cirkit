@@ -7,8 +7,6 @@ from cirkit.utils.type_aliases import ClampBounds
 
 from .reparam import Reparameterizaion
 
-# TODO: input layers should also use these reparams
-
 
 class ReparamLeaf(Reparameterizaion):
     """A leaf in reparameterizaion that holds the parameter instance and does simple transforms.

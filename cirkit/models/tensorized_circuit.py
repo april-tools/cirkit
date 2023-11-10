@@ -310,7 +310,7 @@ class TensorizedPC(nn.Module):
         Returns:
             Tensor: The output of the circuit, shape (K, B).
         """
-        layer_outputs: List[Tensor] = [x]
+        layer_outputs = [x]
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
             # TODO: before ternary we first consider fusing pad into cat to save a copy

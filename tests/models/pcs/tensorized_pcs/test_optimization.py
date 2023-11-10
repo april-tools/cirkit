@@ -31,7 +31,7 @@ def _optimization_steps(pc: TensorizedPC, data: Tensor, num_steps: int = 5) -> N
         log_z = pc_pf(data)
         log_scores = pc(data)
         lls = log_scores - log_z
-        next_loss = -torch.mean(lls)
+        next_loss = -lls.mean()
         assert torch.isfinite(next_loss)
         next_loss.backward()  # type: ignore[no-untyped-call]
         opt.step()
