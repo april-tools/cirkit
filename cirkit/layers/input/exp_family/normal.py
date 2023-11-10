@@ -59,22 +59,22 @@ class NormalLayer(ExpFamilyLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (B, D, S).
+            Tensor: The sufficient statistics T, shape (*B, D, S).
         """
         # TODO: torch __pow__ issue
-        return torch.cat((x, x**2), dim=-1)  # type: ignore[misc]  # shape (B, D, S=2*C)
+        return torch.cat((x, x**2), dim=-1)  # type: ignore[misc]  # shape (*B, D, S=2*C)
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The natural parameters eta, shape (B, D).
+            Tensor: The natural parameters eta, shape (*B, D).
         """
         return (
             torch.tensor(-0.5 * self.num_channels * math.log(2 * math.pi))

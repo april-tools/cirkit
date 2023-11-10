@@ -59,7 +59,9 @@ class BaseCPLayer(SumProductLayer):
             and params_in_dim_name[-1] in "or"
         )
         self._einsum_in = (
-            f"{params_in_dim_name},fhib->fh{params_in_dim_name[-1]}b" if params_in_dim_name else ""
+            f"{params_in_dim_name},fhi...->fh{params_in_dim_name[-1]}..."
+            if params_in_dim_name
+            else ""
         )
         self.params_in = (  # only params_in can see the folds and need mask
             reparam(self._infer_shape(params_in_dim_name), dim=-2, mask=fold_mask)
@@ -72,7 +74,9 @@ class BaseCPLayer(SumProductLayer):
             and params_out_dim_name[-1] == "o"
         )
         self._einsum_out = (
-            f"{params_out_dim_name},f{params_out_dim_name[-2]}b->fob" if params_out_dim_name else ""
+            f"{params_out_dim_name},f{params_out_dim_name[-2]}...->fo..."
+            if params_out_dim_name
+            else ""
         )
         self.params_out = (
             reparam(self._infer_shape(params_out_dim_name), dim=-2) if params_out_dim_name else None
@@ -102,36 +106,36 @@ class BaseCPLayer(SumProductLayer):
     def _forward_in_linear(self, x: Tensor) -> Tensor:
         # TODO: pylint issue
         assert self.params_in is not None and self._einsum_in
-        # shape (F, H, K, B) -> (F, H, K, B)
+        # shape (F, H, K, *B) -> (F, H, K, *B)
         return torch.einsum(self._einsum_in, self.params_in(), x)  # pylint: disable=not-callable
 
     def _forward_reduce_log(self, x: Tensor) -> Tensor:
         x = x if self.fold_mask is None else x * self.fold_mask
-        return x.sum(dim=1)  # shape (F, H, K, B) -> (F, K, B)
+        return x.sum(dim=1)  # shape (F, H, K, *B) -> (F, K, *B)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
         assert self.params_out is not None and self._einsum_out
-        # shape (F, K, B) -> (F, K, B)
+        # shape (F, K, *B) -> (F, K, *B)
         return torch.einsum(self._einsum_out, self.params_out(), x)  # pylint: disable=not-callable
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, K, B).
+            x (Tensor): The input to this layer, shape (F, H, K, *B).
 
         Returns:
-            Tensor: The output of this layer, shape (F, K, B).
+            Tensor: The output of this layer, shape (F, K, *B).
         """
         if self.params_in is not None:
             x = log_func_exp(
                 x, func=self._forward_in_linear, dim=2, keepdim=True
-            )  # shape (F, H, K, B)
-        x = self._forward_reduce_log(x)  # shape (F, K, B)
+            )  # shape (F, H, K, *B)
+        x = self._forward_reduce_log(x)  # shape (F, K, *B)
         if self.params_out is not None:
             x = log_func_exp(
                 x, func=self._forward_out_linear, dim=1, keepdim=True
-            )  # shape (F, K, B)
+            )  # shape (F, K, *B)
         return x
 
 

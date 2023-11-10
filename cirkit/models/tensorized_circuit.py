@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from cirkit.layers.input import InputLayer
@@ -294,10 +293,10 @@ class TensorizedPC(nn.Module):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to the circuit, shape (B, D, C).
+            x (Tensor): The input to the circuit, shape (*B, D, C).
 
         Returns:
-            Tensor: The output of the circuit, shape (B, K).
+            Tensor: The output of the circuit, shape (*B, K).
         """
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
@@ -305,45 +304,42 @@ class TensorizedPC(nn.Module):
         """Eval the inner layers of the circuit.
 
         Args:
-            x (Tensor): The folded inputs to be passed to the sequence of layers, shape (F, K, B).
+            x (Tensor): The folded inputs to be passed to the sequence of layers, shape (F, K, *B).
 
         Returns:
-            Tensor: The output of the circuit, shape (K, B).
+            Tensor: The output of the circuit, shape (K, *B).
         """
-        layer_outputs = [x]
+        layer_outputs = [x]  # list of shape (F, K, *B)
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
-            # TODO: before ternary we first consider fusing pad into cat to save a copy
-            if len(in_layer_ids) == 1:  # pylint: disable=consider-ternary-expression
-                inputs = layer_outputs[in_layer_ids[0]]  # shape (F, K, B)
-            else:
-                inputs = torch.cat(
-                    [layer_outputs[i] for i in in_layer_ids], dim=0
-                )  # shape (sum(F), K, B)
+            layer_inputs = [layer_outputs[i] for i in in_layer_ids]  # list of shape (F, K, *B)
             if should_pad:
                 # TODO: The padding value depends on the computation space.
                 #  It should be the neutral element of a group.
                 #  For now computations are in log-space, thus 0 is our pad value.
-                # TODO: issue with pylint on torch?
-                inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=0)  # pylint: disable=not-callable
-            inputs = inputs[fold_idx]  # shape (F, H, K, B)
-            outputs = layer(inputs)  # shape (F, K, B)
+                layer_inputs.append(
+                    torch.zeros(()).to(layer_inputs[0]).expand_as(layer_inputs[0][0:1])
+                )  # shape (1, K, *B)
+            inputs = torch.cat(layer_inputs, dim=0)  # shape (sum(F), K, *B)
+            # fold_idx shape (F, H)
+            inputs = inputs[fold_idx]  # shape (F, H, K, *B)
+            outputs = layer(inputs)  # shape (F, K, *B)
             layer_outputs.append(outputs)
 
-        return layer_outputs[-1].squeeze(dim=0)  # shape (1, K, B) -> (K, B)
+        return layer_outputs[-1].squeeze(dim=0)  # shape (F=1, K, *B) -> (K, *B)
 
     def forward(self, x: Tensor) -> Tensor:
         """Evaluate the circuit in a feed forward way.
 
         Args:
-            x (Tensor): The input to the circuit, shape (B, D, C).
+            x (Tensor): The input to the circuit, shape (*B, D, C).
 
         Returns:
-            Tensor: The output of the circuit, shape (B, K).
+            Tensor: The output of the circuit, shape (*B, K).
         """
-        x = self.input_layer(x)  # shape (B, D, K, P)
-        x = self.scope_layer(x)  # shape (F, K, B)
-        return self._eval_layers(x).T  # shape (K, B) -> (B, K)
+        x = self.input_layer(x)  # shape (*B, D, K, P)
+        x = self.scope_layer(x)  # shape (F, K, *B)
+        return self._eval_layers(x).movedim(source=0, destination=-1)  # shape (K, *B) -> (*B, K)
 
     def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> Tensor:
         """Evaluate an integral of the circuit over some variables.
@@ -363,4 +359,4 @@ class TensorizedPC(nn.Module):
         #  Perhaps we can hash in_vars and construct a cache for them in this class.
         in_mask = one_hot_variables(self.num_vars, in_vars, device=x.device)
         in_outputs = self.scope_layer(self.integral_input_layer(x, in_mask))
-        return self._eval_layers(in_outputs).T
+        return self._eval_layers(in_outputs).movedim(source=0, destination=-1)

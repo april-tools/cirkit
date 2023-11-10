@@ -49,10 +49,10 @@ class ScopeLayer(Layer):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, K, P).
+            x (Tensor): The input to this layer, shape (*B, D, K, P).
 
         Returns:
-            Tensor: The output of this layer, shape (F, K, B).
+            Tensor: The output of this layer, shape (F, K, *B).
         """
         return super().__call__(x)
 
@@ -60,9 +60,9 @@ class ScopeLayer(Layer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, K, P).
+            x (Tensor): The input to this layer, shape (*B, D, K, P).
 
         Returns:
-            Tensor: The output of this layer, shape (F, K, B).
+            Tensor: The output of this layer, shape (F, K, *B).
         """
-        return torch.einsum("bdkp,dpf->fkb", x, self.scope)
+        return torch.einsum("...dkp,dpf->fk...", x, self.scope)

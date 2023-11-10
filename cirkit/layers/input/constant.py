@@ -47,10 +47,10 @@ class ConstantLayer(InputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, C).
+            x (Tensor): The input to this layer, shape (*B, D, C).
 
         Returns:
-            Tensor: The output of this layer, shape (B, D, K, P).
+            Tensor: The output of this layer, shape (*B, D, K, P).
         """
         # TODO: shape of x should be carried to output
         if callable(self._value):

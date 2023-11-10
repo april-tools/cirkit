@@ -42,11 +42,11 @@ class IntegralInputLayer(InputLayer):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, C).
-            in_mask (Tensor): The mask of variables to integrate, shape (B, D).
+            x (Tensor): The input to this layer, shape (*B, D, C).
+            in_mask (Tensor): The mask of variables to integrate, shape (*B, D).
 
         Returns:
-            Tensor: The output of this layer, shape (B, D, K, P).
+            Tensor: The output of this layer, shape (*B, D, K, P).
         """
         return super().__call__(x, in_mask)
 
@@ -56,14 +56,14 @@ class IntegralInputLayer(InputLayer):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, C).
-            in_mask (Tensor): The mask of variables to integrate, shape (B, D).
+            x (Tensor): The input to this layer, shape (*B, D, C).
+            in_mask (Tensor): The mask of variables to integrate, shape (*B, D).
 
         Returns:
-            Tensor: The output of this layer, shape (B, D, K, P).
+            Tensor: The output of this layer, shape (*B, D, K, P).
         """
-        in_mask = in_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)  # shape (B, D, 1, 1)
-        y = self._in_layer(x)  # shape (B, D, K, P)
-        z = self._in_layer.integrate()  # shape (B, D, K, P)
+        in_mask = in_mask.unsqueeze(dim=-1).unsqueeze(dim=-1)  # shape (*B, D, 1, 1)
+        y = self._in_layer(x)  # shape (*B, D, K, P)
+        z = self._in_layer.integrate()  # shape (*B, D, K, P)
         # TODO: torch __rsub__ issue
-        return y * cast(Tensor, 1 - in_mask) + z * in_mask  # shape (B, D, K, P)
+        return y * cast(Tensor, 1 - in_mask) + z * in_mask  # shape (*B, D, K, P)

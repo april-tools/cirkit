@@ -51,15 +51,15 @@ class TuckerLayer(SumProductLayer):
         self.reset_parameters()
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
-        return torch.einsum("fib,fjb,fijo->fob", left, right, self.params())
+        return torch.einsum("fi...,fj...,fijo->fo...", left, right, self.params())
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, K, B).
+            x (Tensor): The input to this layer, shape (F, H, K, *B).
 
         Returns:
-            Tensor: The output of this layer, shape (F, K, B).
+            Tensor: The output of this layer, shape (F, K, *B).
         """
         return log_func_exp(x[:, 0], x[:, 1], func=self._forward_linear, dim=1, keepdim=True)

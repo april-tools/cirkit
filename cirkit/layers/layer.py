@@ -70,10 +70,10 @@ class Layer(nn.Module, ABC):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, K, B).
+            x (Tensor): The input to this layer, shape (F, H, K, *B).
 
         Returns:
-            Tensor: The output of this layer, shape (F, K, B).
+            Tensor: The output of this layer, shape (F, K, *B).
         """
         return super().__call__(x, *_)  # type: ignore[no-any-return,misc]
 
@@ -82,8 +82,8 @@ class Layer(nn.Module, ABC):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, K, B).
+            x (Tensor): The input to this layer, shape (F, H, K, *B).
 
         Returns:
-            Tensor: The output of this layer, shape (F, K, B).
+            Tensor: The output of this layer, shape (F, K, *B).
         """

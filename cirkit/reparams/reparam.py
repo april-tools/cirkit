@@ -103,6 +103,7 @@ class Reparameterizaion(nn.Module, ABC):
             + self.dims
             + tuple(d for d in range(self.dims[0], len(self.shape)) if d not in self.dims)
         )
+        # TODO: consider torch.movedim?
         # flatten end_dim is inclusive
         return x.permute(perm).flatten(
             start_dim=self.dims[0], end_dim=self.dims[0] + len(self.dims) - 1

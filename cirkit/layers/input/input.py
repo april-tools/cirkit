@@ -63,10 +63,10 @@ class InputLayer(Layer):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, C).
+            x (Tensor): The input to this layer, shape (*B, D, C).
 
         Returns:
-            Tensor: The output of this layer, shape (B, D, K, P).
+            Tensor: The output of this layer, shape (*B, D, K, P).
         """
         return super().__call__(x, *_)  # type: ignore[misc]
 
@@ -75,10 +75,10 @@ class InputLayer(Layer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, C).
+            x (Tensor): The input to this layer, shape (*B, D, C).
 
         Returns:
-            Tensor: The output of this layer, shape (B, D, K, P).
+            Tensor: The output of this layer, shape (*B, D, K, P).
         """
 
     # TODO: integrate() interface and docstring is not checked.

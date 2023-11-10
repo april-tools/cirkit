@@ -62,30 +62,30 @@ class BinomialLayer(ExpFamilyLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (B, D, S).
+            Tensor: The sufficient statistics T, shape (*B, D, S).
         """
         # TODO: confirm dtype compatibility for long/float input and output
-        return x  # shape (B, D, S=C)
+        return x  # shape (*B, D, S=C)
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The natural parameters eta, shape (B, D).
+            Tensor: The natural parameters eta, shape (*B, D).
         """
         # h(x)=C(n,x)=n!/x!(n-x)!, log(n!)=l[og]gamma(n+1)
         log_h = (
             torch.lgamma(torch.tensor(self.n + 1).to(x))
             - torch.lgamma(x + 1)
             - torch.lgamma(self.n - x + 1)  # type: ignore[misc]  # TODO: torch __rsub__ issue
-        )  # shape (B, D, C)
-        return log_h.sum(dim=-1)  # shape (B, D)
+        )  # shape (*B, D, C)
+        return log_h.sum(dim=-1)  # shape (*B, D)
 
     def log_partition(self, eta: Tensor) -> Tensor:
         """Calculate log partition function A from natural parameters eta.

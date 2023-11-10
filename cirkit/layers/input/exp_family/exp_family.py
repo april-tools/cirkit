@@ -81,10 +81,10 @@ class ExpFamilyLayer(InputLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (B, D, S).
+            Tensor: The sufficient statistics T, shape (*B, D, S).
         """
 
     @abstractmethod
@@ -92,10 +92,10 @@ class ExpFamilyLayer(InputLayer):
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The natural parameters eta, shape (B, D).
+            Tensor: The natural parameters eta, shape (*B, D).
         """
 
     @abstractmethod
@@ -113,24 +113,24 @@ class ExpFamilyLayer(InputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (B, D, C).
+            x (Tensor): The input to this layer, shape (*B, D, C).
 
         Returns:
-            Tensor: The output of this layer, shape (B, D, K, P).
+            Tensor: The output of this layer, shape (*B, D, K, P).
         """
         # TODO: this does not work for more than 1 batch dims
         if x.ndim == 2:
             x = x.unsqueeze(dim=-1)
 
         eta = self.params()  # shape (D, K, P, S)
-        suff_stats = self.sufficient_stats(x)  # shape (B, D, S)
-        log_h = self.log_base_measure(x)  # shape (B, D)
+        suff_stats = self.sufficient_stats(x)  # shape (*B, D, S)
+        log_h = self.log_base_measure(x)  # shape (*B, D)
         log_part = self.log_partition(eta)  # shape (D, K, P)
         return (
-            torch.einsum("dkps,bds->bdkp", eta, suff_stats)  # shape (B, D, K, P)
-            + log_h.unsqueeze(dim=-1).unsqueeze(dim=-1)  # shape (B, D, 1, 1)
-            - log_part.unsqueeze(dim=0)  # shape (1, D, K, P)
-        )  # shape (B, D, K, P)
+            torch.einsum("dkps,...ds->...dkp", eta, suff_stats)  # shape (*B, D, K, P)
+            + log_h.unsqueeze(dim=-1).unsqueeze(dim=-1)  # shape (*B, D, 1, 1)
+            - log_part  # shape (*1, D, K, P), 1s automatically prepended
+        )  # shape (*B, D, K, P)
 
     def integrate(self) -> Tensor:
         """Return the integation, which is a zero tensor for this layer (in log-space).
@@ -138,6 +138,8 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             Tensor: A zero tensor of shape (1, num_vars, num_units, num_replicas).
         """
+        # TODO: return an expanded zeros?
+        # TODO: output shape should be (*B, D, K, P)
         return torch.zeros(
             size=(1, self.num_vars, self.num_output_units, self.num_replicas),
             requires_grad=False,

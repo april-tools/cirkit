@@ -65,16 +65,16 @@ class SumLayer(Layer):
     #       can use apply_mask method?
     def _forward_linear(self, x: Tensor) -> Tensor:
         weight = self.params() if self.fold_mask is None else self.params() * self.fold_mask
-        return torch.einsum("fhk,fhkb->fkb", weight, x)
+        return torch.einsum("fhk,fhk...->fk...", weight, x)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, K, B).
+            x (Tensor): The input to this layer, shape (F, H, K, *B).
 
         Returns:
-            Tensor: The output of this layer, shape (F, K, B).
+            Tensor: The output of this layer, shape (F, K, *B).
         """
         return log_func_exp(x, func=self._forward_linear, dim=1, keepdim=False)
 

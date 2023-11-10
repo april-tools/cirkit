@@ -64,26 +64,26 @@ class CategoricalLayer(ExpFamilyLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (B, D, S).
+            Tensor: The sufficient statistics T, shape (*B, D, S).
         """
         if x.is_floating_point():
             x = x.long()
         # TODO: pylint issue?
         # pylint: disable-next=not-callable
-        suff_stats = F.one_hot(x, self.num_categories).float()  # shape (B, D, C, cat)
-        return suff_stats.flatten(start_dim=-2)  # shape (B, D, S=C*cat)
+        suff_stats = F.one_hot(x, self.num_categories).float()  # shape (*B, D, C, cat)
+        return suff_stats.flatten(start_dim=-2)  # shape (*B, D, S=C*cat)
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (B, D, C).
+            x (Tensor): The input x, shape (*B, D, C).
 
         Returns:
-            Tensor: The natural parameters eta, shape (B, D).
+            Tensor: The natural parameters eta, shape (*B, D).
         """
         return torch.zeros(()).to(x).expand_as(x[..., 0])
 
