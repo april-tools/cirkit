@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 from torch import Tensor, nn
@@ -15,11 +15,12 @@ class ExpFamilyLayer(InputLayer):
     Exponential Family: f(x|theta) = exp(eta(theta) dot T(x) - log_h(x) + A(eta)).
     Ref: https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions
 
-    However here we don't parameterize theta but directly use eta instead.
-    Subclasses define properties to provide parameter theta based on its implementation.
+    However here we don't parameterize theta but directly use eta instead. It's the duty of \
+    subclasses to define properties to provide parameter theta (or different components of theta) \
+    based on its implementation.
     """
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
         self,
         *,
         num_vars: int,
@@ -28,10 +29,11 @@ class ExpFamilyLayer(InputLayer):
         num_input_units: Literal[1] = 1,
         num_output_units: int,
         arity: Literal[1] = 1,
-        num_folds: Literal[-1] = -1,
+        num_folds: Literal[0] = 0,
         fold_mask: None = None,
         reparam: ReparamFactory = ReparamIdentity,
         num_suff_stats: int = -1,
+        **_: Any,
     ) -> None:
         """Init class.
 
@@ -43,14 +45,15 @@ class ExpFamilyLayer(InputLayer):
                 Defaults to 1.
             num_output_units (int): The number of output units.
             arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
-            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
-                should be num_vars*num_replicas. Defaults to -1.
+            num_folds (Literal[0], optional): The number of folds. Should not be provided and will \
+                be calculated as num_vars*num_replicas. Defaults to 0.
             fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
             num_suff_stats (int, optional): The number of sufficient statistics, as required by \
-                each implementation. Defaults to -1.
+                each implementation. The default value is not valid, but only a hint for \
+                not-required as it does not appear in subclasses. Defaults to -1.
         """
-        assert num_suff_stats > 0
+        assert num_suff_stats > 0, "The number of sufficient statistics must be positive."
         super().__init__(
             num_vars=num_vars,
             num_channels=num_channels,

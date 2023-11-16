@@ -8,6 +8,8 @@ from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
+# TODO: do we support arity>2 (and fold_mask not None)? it's possible but may not be useful
+
 
 class TuckerLayer(SumProductLayer):
     """Tucker (2) layer."""
@@ -31,16 +33,19 @@ class TuckerLayer(SumProductLayer):
             num_folds (int, optional): The number of folds. Defaults to 1.
             fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
+
+        Raises:
+            NotImplementedError: When arity is not 2.
         """
         if arity != 2:
-            raise NotImplementedError("Tucker layers only implemented binary product units.")
+            raise NotImplementedError("Tucker layers only implements binary product units.")
         assert fold_mask is None, "Input for Tucker layer should not be masked."
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
             num_folds=num_folds,
-            fold_mask=fold_mask,
+            fold_mask=None,
             reparam=reparam,
         )
 
@@ -51,6 +56,7 @@ class TuckerLayer(SumProductLayer):
         self.reset_parameters()
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
+        # shape (F, I, *B), (F, J ,*B) -> (F, O, *B)
         return torch.einsum("fi...,fj...,fijo->fo...", left, right, self.params())
 
     def forward(self, x: Tensor) -> Tensor:

@@ -11,7 +11,7 @@ from .exp_family import ExpFamilyLayer
 
 
 class BinomialLayer(ExpFamilyLayer):
-    """Binomial distribution layer."""
+    """The binomial distribution layer."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -22,7 +22,7 @@ class BinomialLayer(ExpFamilyLayer):
         num_input_units: Literal[1] = 1,
         num_output_units: int,
         arity: Literal[1] = 1,
-        num_folds: Literal[-1] = -1,
+        num_folds: Literal[0] = 0,
         fold_mask: None = None,
         reparam: ReparamFactory = ReparamIdentity,
         n: int,
@@ -37,13 +37,13 @@ class BinomialLayer(ExpFamilyLayer):
                 Defaults to 1.
             num_output_units (int): The number of output units.
             arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
-            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
-                should be num_vars*num_replicas. Defaults to -1.
+            num_folds (Literal[0], optional): The number of folds. Should not be provided and will \
+                be calculated as num_vars*num_replicas. Defaults to 0.
             fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
-            n (int, optional): The n for bimonial distribution.
+            n (int): The parameter n for bimonial distribution.
         """
-        assert n > 0
+        assert n > 0, "The parameter n for bimonial distribution must be positive."
         super().__init__(
             num_vars=num_vars,
             num_channels=num_channels,

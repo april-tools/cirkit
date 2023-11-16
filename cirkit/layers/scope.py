@@ -6,6 +6,8 @@ from torch import Tensor
 from cirkit.layers import Layer
 from cirkit.region_graph import RegionNode
 
+# TODO: rework docstring, but do we put this into bookkeeping?
+
 
 class ScopeLayer(Layer):
     """The scope layer.

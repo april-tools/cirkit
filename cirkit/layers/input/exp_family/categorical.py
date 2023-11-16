@@ -12,7 +12,7 @@ from .exp_family import ExpFamilyLayer
 
 
 class CategoricalLayer(ExpFamilyLayer):
-    """Categorical distribution layer."""
+    """The categorical distribution layer."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -23,7 +23,7 @@ class CategoricalLayer(ExpFamilyLayer):
         num_input_units: Literal[1] = 1,
         num_output_units: int,
         arity: Literal[1] = 1,
-        num_folds: Literal[-1] = -1,
+        num_folds: Literal[0] = 0,
         fold_mask: None = None,
         reparam: ReparamFactory = ReparamEFCategorical,
         num_categories: int,
@@ -38,14 +38,16 @@ class CategoricalLayer(ExpFamilyLayer):
                 Defaults to 1.
             num_output_units (int): The number of output units.
             arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
-            num_folds (Literal[-1], optional): The number of folds, unused. The number of folds \
-                should be num_vars*num_replicas. Defaults to -1.
+            num_folds (Literal[0], optional): The number of folds. Should not be provided and will \
+                be calculated as num_vars*num_replicas. Defaults to 0.
             fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. \
                 Defaults to ReparamEFCategorical.
-            num_categories (int, optional): The number of categories for categorical distribution.
+            num_categories (int): The number of categories for categorical distribution.
         """
-        assert num_categories > 0
+        assert (
+            num_categories > 0
+        ), "The number of categories for categorical distribution must be positive."
         super().__init__(
             num_vars=num_vars,
             num_channels=num_channels,

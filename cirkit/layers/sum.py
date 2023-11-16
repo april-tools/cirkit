@@ -10,9 +10,9 @@ from cirkit.utils.type_aliases import ReparamFactory
 
 
 class SumLayer(Layer):
-    """The layer of sum units.
+    """The sum layer.
 
-    Can be used as general sum layer or to complement sum-product layers.
+    TODO: currently this is only a sum for mixing, but not generic sum layer.
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -35,7 +35,10 @@ class SumLayer(Layer):
             fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
-        assert num_input_units == num_output_units
+        # TODO: can we lift this constraint?
+        assert (
+            num_input_units == num_output_units
+        ), "The sum layer cannot change the number of units."
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
@@ -64,8 +67,9 @@ class SumLayer(Layer):
     # TODO: too many `self.fold_mask is None` checks across the repo
     #       can use apply_mask method?
     def _forward_linear(self, x: Tensor) -> Tensor:
-        weight = self.params() if self.fold_mask is None else self.params() * self.fold_mask
-        return torch.einsum("fhk,fhk...->fk...", weight, x)
+        x = x if self.fold_mask is None else x * self.fold_mask
+        # shape (F, H, K, *B) -> (F, K, *B)
+        return torch.einsum("fhk,fhk...->fk...", self.params(), x)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

@@ -22,8 +22,8 @@ class Layer(nn.Module, ABC):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: int,
-        num_folds: int,
+        arity: int = 1,
+        num_folds: int = 1,
         fold_mask: Optional[Tensor] = None,
         reparam: ReparamFactory = ReparamIdentity,  # pylint: disable=unused-argument
         **_: Any,
@@ -33,29 +33,31 @@ class Layer(nn.Module, ABC):
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            arity (int): The arity of the layer.
-            num_folds (int): The number of folds.
+            arity (int, optional): The arity of the layer. Defaults to 1.
+            num_folds (int, optional): The number of folds. Defaults to 1.
             fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
         super().__init__()
-        assert num_input_units > 0
-        assert num_output_units > 0
-        assert arity > 0
-        assert num_folds > 0
+        assert num_input_units > 0, "The number of input units must be positive."
+        assert num_output_units > 0, "The number of output units must be positive."
+        assert arity > 0, "The arity must be positive."
+        assert num_folds > 0, "The number of folds must be positive."
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
         self.num_folds = num_folds
         self.register_buffer("fold_mask", fold_mask)
-        # reparam is not used here, but is commonly used and therefore added to Layer.__init__
+        # Kwarg reparam is not used here but only in layers with params. Yet it is commonly used
+        # and therefore added to Layer.__init__ interface.
 
-    # expected to be fixed, so use cached to avoid recalc
+    # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property
     def num_params(self) -> int:
         """The number of params."""
         return sum(param.numel() for param in self.parameters())
 
+    # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property
     def num_buffers(self) -> int:
         """The number of buffers."""
@@ -65,7 +67,11 @@ class Layer(nn.Module, ABC):
     def reset_parameters(self) -> None:
         """Reset parameters with default initialization."""
 
-    # TODO: temp solution to accomodate IntegralInputLayer
+    # NOTE We should run forward with layer(x) instead of layer.forward(x).
+    #      In torch.nn.Module, the typing and docstring for forward is not auto copied to __call__.
+    #      Therefore we override __call__ here to provide typing and docstring for layer(x) calling.
+    # TODO: if pytorch finds a way to sync forward and __call__, we can remove this
+    # TODO: `*_: Any` is the temp solution to accomodate IntegralInputLayer, we should refactor that
     def __call__(self, x: Tensor, *_: Any) -> Tensor:  # type: ignore[misc]
         """Invoke the forward function.
 
