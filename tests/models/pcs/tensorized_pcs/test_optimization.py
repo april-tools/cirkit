@@ -46,7 +46,11 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
         if isinstance(layer, SumLayer):
             params = layer.params
             if layer.fold_mask is not None:
-                non_masked_params = torch.where(layer.fold_mask.bool(), params(), torch.zeros(()))
+                # TODO: fold_mask issue
+                fold_mask = layer.fold_mask.view(
+                    layer.fold_mask.shape + (1,) * (len(params.shape) - layer.fold_mask.ndim)
+                )
+                non_masked_params = torch.where(fold_mask.bool(), params(), torch.zeros(()))
                 assert torch.all(torch.isfinite(non_masked_params))
             else:
                 assert torch.all(torch.isfinite(params()))
@@ -54,11 +58,10 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
             assert layer.params_in is not None
             params = layer.params_in
             if layer.fold_mask is not None:
-                mask = (
-                    layer.fold_mask[0].bool()
-                    if isinstance(layer, SharedCPLayer)
-                    else layer.fold_mask.bool()
+                fold_mask = layer.fold_mask.view(
+                    layer.fold_mask.shape + (1,) * (len(params.shape) - layer.fold_mask.ndim)
                 )
+                mask = fold_mask[0].bool() if isinstance(layer, SharedCPLayer) else fold_mask.bool()
                 non_masked_params = torch.where(mask, params(), torch.zeros(()))
                 assert torch.all(torch.isfinite(non_masked_params))
             else:

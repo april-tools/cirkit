@@ -230,11 +230,7 @@ class TensorizedPC(nn.Module):
             num_outputs = num_inner_units if rg_layer_idx < len(rg_layers) - 1 else num_classes
             num_inputs = num_input_units if rg_layer_idx == 1 else num_inner_units
             # TODO: add shape analysis for unsqueeze
-            fold_mask = (
-                (fold_indices < cumulative_idx[-1]).unsqueeze(dim=-1).unsqueeze(dim=-1)
-                if should_pad
-                else None
-            )
+            fold_mask = (fold_indices < cumulative_idx[-1]) if should_pad else None
             layer = layer_cls(
                 num_input_units=num_inputs,
                 num_output_units=num_outputs,
@@ -271,7 +267,7 @@ class TensorizedPC(nn.Module):
 
             # Build the actual mixing layer
             # TODO: add shape analysis for unsqueeze
-            fold_mask = (fold_indices < num_folds[-2]).unsqueeze(dim=-1) if should_pad else None
+            fold_mask = (fold_indices < num_folds[-2]) if should_pad else None
             mixing_layer = SumLayer(
                 num_input_units=num_outputs,
                 num_output_units=num_outputs,

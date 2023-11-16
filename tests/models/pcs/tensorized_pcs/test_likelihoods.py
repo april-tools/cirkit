@@ -102,6 +102,7 @@ def test_pc_likelihoods(
     assert torch.allclose(sum_lls, mar_lls, rtol=1e-6, atol=torch.finfo(torch.float32).eps)
 
 
+# TODO: is fold_mask with multi-batch properly covered?
 @pytest.mark.parametrize(  # type: ignore[misc]
     "rg_cls,kwargs",
     [

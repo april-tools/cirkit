@@ -33,7 +33,8 @@ class BaseCPLayer(SumProductLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 2.
             num_folds (int, optional): The number of folds. Defaults to 1.
-            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds, shape (F, H). \
+                Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
             rank (int, optional): The rank of decomposition, i.e., the number of intermediate \
                 units. Unused if in collapsed version. Defaults to 0.
@@ -67,9 +68,17 @@ class BaseCPLayer(SumProductLayer):
             i, o = tuple(params_in_dim_name[-2:])
             assert i == "i" and o == ("r" if params_out_dim_name else "o")
             self._einsum_in = f"{params_in_dim_name},fh{i}...->fh{o}..."
+            # TODO: currently we can only support this. any elegant impl?
+            assert params_in_dim_name[:2] == "fh" or fold_mask is None
             # Only params_in can see the folds and need mask.
             self.params_in: Optional[Reparameterizaion] = reparam(
-                self._infer_shape(params_in_dim_name), dim=-2, mask=fold_mask
+                self._infer_shape(params_in_dim_name),
+                dim=-2,
+                mask=fold_mask.view(
+                    fold_mask.shape + (1,) * (len(params_in_dim_name) - fold_mask.ndim)
+                )
+                if fold_mask is not None
+                else None,
             )
         else:
             self._einsum_in = ""
@@ -113,7 +122,15 @@ class BaseCPLayer(SumProductLayer):
         return torch.einsum(self._einsum_in, self.params_in(), x)
 
     def _forward_reduce_log(self, x: Tensor) -> Tensor:
-        x = x if self.fold_mask is None else x * self.fold_mask
+        x = (
+            x
+            if self.fold_mask is None
+            else x
+            * self.fold_mask.view(self.fold_mask.shape + (1,) * (x.ndim - self.fold_mask.ndim))
+        )
+        # TODO: is it better to fuse the above mul with the below sum into a matmul/einsum?
+        #       Same also appear at other places
+        # TODO: double check how we mask things. do we x or params_in?
         return x.sum(dim=1)  # shape (F, H, K, *B) -> (F, K, *B)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
@@ -162,7 +179,8 @@ class CollapsedCPLayer(BaseCPLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 2.
             num_folds (int, optional): The number of folds. Defaults to 1.
-            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds, shape (F, H). \
+                Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
         super().__init__(
@@ -197,7 +215,8 @@ class UncollapsedCPLayer(BaseCPLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 2.
             num_folds (int, optional): The number of folds. Defaults to 1.
-            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds, shape (F, H). \
+                Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
             rank (int, optional): The rank of decomposition, i.e., the number of intermediate \
                 units. Unused if in collapsed version. Defaults to 1.
@@ -235,7 +254,8 @@ class SharedCPLayer(BaseCPLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 2.
             num_folds (int, optional): The number of folds. Defaults to 1.
-            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds, unused here. \
+                Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
         # SharedCPLayer does not use fold_mask, but it might be provided through the generic
@@ -273,7 +293,8 @@ def CPLayer(  # pylint: disable=invalid-name,too-many-arguments
         num_output_units (int): The number of output units.
         arity (int, optional): The arity of the layer. Defaults to 2.
         num_folds (int, optional): The number of folds. Defaults to 1.
-        fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+        fold_mask (Optional[Tensor], optional): The mask of valid folds, shape (F, H). \
+            Defaults to None.
         reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         rank (int, optional): The rank of decomposition, i.e., the number of intermediate units. \
             Unused if in collapsed version. Defaults to 0.
