@@ -5,6 +5,7 @@ from torch import Tensor
 
 from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.reparams.reparam import Reparameterizaion
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
@@ -13,6 +14,9 @@ from cirkit.utils.type_aliases import ReparamFactory
 
 class TuckerLayer(SumProductLayer):
     """Tucker (2) layer."""
+
+    params: Reparameterizaion
+    """The reparameterizaion that gives the parameters for sum units, shape (F, I, J, O)."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,

@@ -13,6 +13,14 @@ from cirkit.utils.type_aliases import ReparamFactory
 class BaseCPLayer(SumProductLayer):
     """Candecomp Parafac (decomposition) layer."""
 
+    params_in: Optional[Reparameterizaion]
+    """The reparameterizaion that gives the parameters for sum units on input, shape as given by \
+    dim names, e.g., (F, H, I, O). Can be None to disable this part of computation."""
+
+    params_out: Optional[Reparameterizaion]
+    """The reparameterizaion that gives the parameters for sum units on output, shape as given by \
+    dim names, e.g., (F, I, O). Can be None to disable this part of computation."""
+
     def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
@@ -71,7 +79,7 @@ class BaseCPLayer(SumProductLayer):
             # TODO: currently we can only support this. any elegant impl?
             assert params_in_dim_name[:2] == "fh" or fold_mask is None
             # Only params_in can see the folds and need mask.
-            self.params_in: Optional[Reparameterizaion] = reparam(
+            self.params_in = reparam(
                 self._infer_shape(params_in_dim_name),
                 dim=-2,
                 mask=fold_mask.view(
@@ -88,9 +96,7 @@ class BaseCPLayer(SumProductLayer):
             i, o = tuple(params_out_dim_name[-2:])
             assert i == ("r" if params_in_dim_name else "i") and o == "o"
             self._einsum_out = f"{params_out_dim_name},f{i}...->f{o}..."
-            self.params_out: Optional[Reparameterizaion] = reparam(
-                self._infer_shape(params_out_dim_name), dim=-2
-            )
+            self.params_out = reparam(self._infer_shape(params_out_dim_name), dim=-2)
         else:
             self._einsum_out = ""
             self.params_out = None
@@ -162,6 +168,13 @@ class BaseCPLayer(SumProductLayer):
 class CollapsedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, with matrix C collapsed."""
 
+    params_in: Reparameterizaion
+    """The reparameterizaion that gives the parameters for sum units on input, \
+    shape (F, H, I, O)."""
+
+    params_out: None
+    """CollapsedCPLayer does not have sum units on output."""
+
     def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
@@ -196,6 +209,13 @@ class CollapsedCPLayer(BaseCPLayer):
 
 class UncollapsedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, without collapsing."""
+
+    params_in: Reparameterizaion
+    """The reparameterizaion that gives the parameters for sum units on input, \
+    shape (F, H, I, R)."""
+
+    params_out: Reparameterizaion
+    """The reparameterizaion that gives the parameters for sum units on output, shape (F, R, O)."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -236,6 +256,12 @@ class UncollapsedCPLayer(BaseCPLayer):
 
 class SharedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, with parameter sharing and matrix C collapsed."""
+
+    params_in: Reparameterizaion
+    """The reparameterizaion that gives the parameters for sum units on input, shape (H, I, O)."""
+
+    params_out: None
+    """SharedCPLayer does not have sum units on output."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,

@@ -5,6 +5,7 @@ from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
 from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.reparams.reparam import Reparameterizaion
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
@@ -14,6 +15,9 @@ class SumLayer(Layer):
 
     TODO: currently this is only a sum for mixing, but not generic sum layer.
     """
+
+    params: Reparameterizaion
+    """The reparameterizaion that gives the parameters for sum units, shape (F, H, K)."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -49,7 +53,6 @@ class SumLayer(Layer):
             reparam=reparam,
         )
 
-        # TODO: how to annotate shapes for reparams?
         # TODO: better way to handle fold_mask shape? too many None checks
         self.params = reparam(
             (num_folds, arity, num_output_units),
