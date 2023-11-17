@@ -5,10 +5,10 @@ from torch import Tensor, nn
 
 from cirkit.utils.type_aliases import ClampBounds
 
-from .reparam import Reparameterizaion
+from .reparam import Reparameterization
 
 
-class ReparamLeaf(Reparameterizaion):
+class ReparamLeaf(Reparameterization):
     """A leaf in reparameterizaion that holds the parameter instance and does simple transforms.
 
     There's no param initialization here. That's the responsibility of Layers.

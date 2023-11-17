@@ -5,7 +5,7 @@ from torch import Tensor
 
 from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.reparams.leaf import ReparamIdentity
-from cirkit.reparams.reparam import Reparameterizaion
+from cirkit.reparams.reparam import Reparameterization
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
@@ -13,11 +13,11 @@ from cirkit.utils.type_aliases import ReparamFactory
 class BaseCPLayer(SumProductLayer):
     """Candecomp Parafac (decomposition) layer."""
 
-    params_in: Optional[Reparameterizaion]
+    params_in: Optional[Reparameterization]
     """The reparameterizaion that gives the parameters for sum units on input, shape as given by \
     dim names, e.g., (F, H, I, O). Can be None to disable this part of computation."""
 
-    params_out: Optional[Reparameterizaion]
+    params_out: Optional[Reparameterization]
     """The reparameterizaion that gives the parameters for sum units on output, shape as given by \
     dim names, e.g., (F, I, O). Can be None to disable this part of computation."""
 
@@ -74,10 +74,14 @@ class BaseCPLayer(SumProductLayer):
             # TODO: convert to tuple currently required to unpack str, but will be changed in a
             #       future version of mypy. see https://github.com/python/mypy/pull/15511
             i, o = tuple(params_in_dim_name[-2:])
-            assert i == "i" and o == ("r" if params_out_dim_name else "o")
+            assert i == "i" and o == (
+                "r" if params_out_dim_name else "o"
+            ), f"Unexpected {params_in_dim_name=} (with {params_out_dim_name=})."
             self._einsum_in = f"{params_in_dim_name},fh{i}...->fh{o}..."
             # TODO: currently we can only support this. any elegant impl?
-            assert params_in_dim_name[:2] == "fh" or fold_mask is None
+            assert (
+                params_in_dim_name[:2] == "fh" or fold_mask is None
+            ), f"Unexpected {params_in_dim_name=} with fold_mask."
             # Only params_in can see the folds and need mask.
             self.params_in = reparam(
                 self._infer_shape(params_in_dim_name),
@@ -94,7 +98,9 @@ class BaseCPLayer(SumProductLayer):
 
         if params_out_dim_name:
             i, o = tuple(params_out_dim_name[-2:])
-            assert i == ("r" if params_in_dim_name else "i") and o == "o"
+            assert (
+                i == ("r" if params_in_dim_name else "i") and o == "o"
+            ), f"Unexpected {params_out_dim_name=} (with {params_in_dim_name=})."
             self._einsum_out = f"{params_out_dim_name},f{i}...->f{o}..."
             self.params_out = reparam(self._infer_shape(params_out_dim_name), dim=-2)
         else:
@@ -123,7 +129,7 @@ class BaseCPLayer(SumProductLayer):
         return tuple(mapping[name] for name in dim_names)
 
     def _forward_in_linear(self, x: Tensor) -> Tensor:
-        assert self.params_in is not None and self._einsum_in
+        assert self.params_in is not None and self._einsum_in, "This should not happen."
         # shape (F, H, K, *B) -> (F, H, K, *B)
         return torch.einsum(self._einsum_in, self.params_in(), x)
 
@@ -140,7 +146,7 @@ class BaseCPLayer(SumProductLayer):
         return x.sum(dim=1)  # shape (F, H, K, *B) -> (F, K, *B)
 
     def _forward_out_linear(self, x: Tensor) -> Tensor:
-        assert self.params_out is not None and self._einsum_out
+        assert self.params_out is not None and self._einsum_out, "This should not happen."
         # shape (F, K, *B) -> (F, K, *B)
         return torch.einsum(self._einsum_out, self.params_out(), x)
 
@@ -168,7 +174,7 @@ class BaseCPLayer(SumProductLayer):
 class CollapsedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, with matrix C collapsed."""
 
-    params_in: Reparameterizaion
+    params_in: Reparameterization
     """The reparameterizaion that gives the parameters for sum units on input, \
     shape (F, H, I, O)."""
 
@@ -210,11 +216,11 @@ class CollapsedCPLayer(BaseCPLayer):
 class UncollapsedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, without collapsing."""
 
-    params_in: Reparameterizaion
+    params_in: Reparameterization
     """The reparameterizaion that gives the parameters for sum units on input, \
     shape (F, H, I, R)."""
 
-    params_out: Reparameterizaion
+    params_out: Reparameterization
     """The reparameterizaion that gives the parameters for sum units on output, shape (F, R, O)."""
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -257,7 +263,7 @@ class UncollapsedCPLayer(BaseCPLayer):
 class SharedCPLayer(BaseCPLayer):
     """Candecomp Parafac (decomposition) layer, with parameter sharing and matrix C collapsed."""
 
-    params_in: Reparameterizaion
+    params_in: Reparameterization
     """The reparameterizaion that gives the parameters for sum units on input, shape (H, I, O)."""
 
     params_out: None

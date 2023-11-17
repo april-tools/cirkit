@@ -6,7 +6,7 @@ from torch import Tensor, nn
 
 from cirkit.layers.input import InputLayer
 from cirkit.reparams.leaf import ReparamIdentity
-from cirkit.reparams.reparam import Reparameterizaion
+from cirkit.reparams.reparam import Reparameterization
 from cirkit.utils.type_aliases import ReparamFactory
 
 
@@ -21,7 +21,7 @@ class ExpFamilyLayer(InputLayer):
     based on its implementation.
     """
 
-    params: Reparameterizaion
+    params: Reparameterization
     """The reparameterizaion that gives the natural parameters eta, shape (D, K, P, S)."""
 
     def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments

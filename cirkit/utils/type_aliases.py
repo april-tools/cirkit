@@ -2,7 +2,7 @@ from typing import Optional, Protocol, Sequence, TypedDict, Union
 
 from torch import Tensor
 
-from cirkit.reparams.reparam import Reparameterizaion
+from cirkit.reparams.reparam import Reparameterization
 
 # Here're all the type defs and aliases shared across the lib.
 # For private types that is only used in one file, can be defined there.
@@ -21,7 +21,7 @@ class ClampBounds(TypedDict, total=False):
 
 
 class ReparamFactory(Protocol):  # pylint: disable=too-few-public-methods
-    """Protocol for Callable that mimics Reparameterizaion constructor."""
+    """Protocol for Callable that mimics Reparameterization constructor."""
 
     def __call__(
         self,
@@ -31,7 +31,7 @@ class ReparamFactory(Protocol):  # pylint: disable=too-few-public-methods
         dim: Union[int, Sequence[int]],
         mask: Optional[Tensor] = None,
         log_mask: Optional[Tensor] = None,
-    ) -> Reparameterizaion:
-        """Construct a Reparameterizaion object."""
+    ) -> Reparameterization:
+        """Construct a Reparameterization object."""
         # TODO: pylance issue, ellipsis is required here
         ...  # pylint:disable=unnecessary-ellipsis

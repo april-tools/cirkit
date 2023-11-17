@@ -11,11 +11,11 @@ from .leaf import ReparamLeaf
 # This is just Indentity, optionally we can add a scaling factor but currently not implemented.
 ##
 # class ReparamEFBinomial(ReparamLeaf):
-#     """Reparametrization for ExpFamily -- Binomial."""
+#     """Reparameterization for ExpFamily -- Binomial."""
 
 
 class ReparamEFCategorical(ReparamLeaf):
-    """Reparametrization for ExpFamily -- Categorical."""
+    """Reparameterization for ExpFamily -- Categorical."""
 
     def __init__(  # type: ignore[misc]
         self,
@@ -51,7 +51,7 @@ class ReparamEFCategorical(ReparamLeaf):
 
 
 class ReparamEFNormal(ReparamLeaf):
-    """Reparametrization for ExpFamily -- Normal."""
+    """Reparameterization for ExpFamily -- Normal."""
 
     def __init__(  # type: ignore[misc]
         self,
