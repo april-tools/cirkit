@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, nn
 
 
-class Reparameterizaion(nn.Module, ABC):
+class Reparameterization(nn.Module, ABC):
     """The base class for all reparameterizaions."""
 
     log_mask: Optional[Tensor]  # to be registered as buffer
@@ -52,11 +52,11 @@ class Reparameterizaion(nn.Module, ABC):
             assert -len(size) <= dim < len(size), f"dim={dim} out of range for {len(size)}-d."
             self.dims = (dim if dim >= 0 else dim + len(size),)
 
-        assert mask is None or log_mask is None, "mask/log_mask may not be supplied together."
+        assert mask is None or log_mask is None, "mask and log_mask may not be supplied together."
 
         # Currently only saves log_mask. We can add mask if useful
         if mask is not None:
-            # broadcast_to raises RuntimeError is not broadcastable
+            # broadcast_to raises RuntimeError when not broadcastable
             mask.broadcast_to(size)
             self.register_buffer("log_mask", torch.log(mask))
         elif log_mask is not None:
@@ -68,11 +68,7 @@ class Reparameterizaion(nn.Module, ABC):
     @property
     @abstractmethod
     def dtype(self) -> torch.dtype:
-        """Get the dtype of param.
-
-        Returns:
-            torch.dtype: The dtype of the param.
-        """
+        """The dtype of the output param."""
 
     def __call__(self) -> Tensor:
         """Get the reparameterized params.
@@ -107,6 +103,7 @@ class Reparameterizaion(nn.Module, ABC):
             + self.dims
             + tuple(d for d in range(self.dims[0], len(self.shape)) if d not in self.dims)
         )
+        # TODO: consider torch.movedim?
         # flatten end_dim is inclusive
         return x.permute(perm).flatten(
             start_dim=self.dims[0], end_dim=self.dims[0] + len(self.dims) - 1

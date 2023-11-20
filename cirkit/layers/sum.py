@@ -5,15 +5,19 @@ from torch import Tensor, nn
 
 from cirkit.layers.layer import Layer
 from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.reparams.reparam import Reparameterization
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
 
 
 class SumLayer(Layer):
-    """The layer of sum units.
+    """The sum layer.
 
-    Can be used as general sum layer or to complement sum-product layers.
+    TODO: currently this is only a sum for mixing, but not generic sum layer.
     """
+
+    params: Reparameterization
+    """The reparameterizaion that gives the parameters for sum units, shape (F, H, K)."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -32,10 +36,14 @@ class SumLayer(Layer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 2.
             num_folds (int, optional): The number of folds. Defaults to 1.
-            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds, shape (F, H). \
+                Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
-        assert num_input_units == num_output_units
+        # TODO: can we lift this constraint?
+        assert (
+            num_input_units == num_output_units
+        ), "The sum layer cannot change the number of units."
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
@@ -45,8 +53,14 @@ class SumLayer(Layer):
             reparam=reparam,
         )
 
-        self.params = reparam((num_folds, arity, num_output_units), dim=1, mask=fold_mask)
+        # TODO: better way to handle fold_mask shape? too many None checks
+        self.params = reparam(
+            (num_folds, arity, num_output_units),
+            dim=1,
+            mask=fold_mask.unsqueeze(dim=-1) if fold_mask is not None else None,
+        )
 
+        # TODO: should not init if reparam is composed from other reparams?
         self.reset_parameters()
 
     @torch.no_grad()
@@ -62,17 +76,24 @@ class SumLayer(Layer):
     # TODO: too many `self.fold_mask is None` checks across the repo
     #       can use apply_mask method?
     def _forward_linear(self, x: Tensor) -> Tensor:
-        weight = self.params() if self.fold_mask is None else self.params() * self.fold_mask
-        return torch.einsum("fck,fckb->fkb", weight, x)
+        # TODO: problem with batch dims at the end. any better solution?
+        x = (
+            x
+            if self.fold_mask is None
+            else x
+            * self.fold_mask.view(self.fold_mask.shape + (1,) * (x.ndim - self.fold_mask.ndim))
+        )
+        # shape (F, H, K, *B) -> (F, K, *B)
+        return torch.einsum("fhk,fhk...->fk...", self.params(), x)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer.
+            x (Tensor): The input to this layer, shape (F, H, K, *B).
 
         Returns:
-            Tensor: The output of this layer.
+            Tensor: The output of this layer, shape (F, K, *B).
         """
         return log_func_exp(x, func=self._forward_linear, dim=1, keepdim=False)
 

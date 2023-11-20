@@ -64,15 +64,17 @@ def _get_pc_2x2_output() -> Tensor:
 def test_pc_instantiation() -> None:
     pc = get_pc_2x2_dense(layer_cls=UncollapsedCPLayer)
     param_shapes = {name: tuple(param.shape) for name, param in pc.named_parameters()}
-    assert pc.num_variables == 4
+    assert pc.num_vars == 4
     assert param_shapes == _get_pc_2x2_param_shapes()
 
 
 def test_pc_output() -> None:
     pc = get_pc_2x2_dense(layer_cls=UncollapsedCPLayer)
     _set_pc_2x2_params(pc)
-    all_inputs = list(itertools.product([0, 1], repeat=4))
-    output = pc(torch.tensor(all_inputs))
+    all_inputs = torch.tensor(
+        list(itertools.product([0, 1], repeat=4))  # type: ignore[misc]
+    ).unsqueeze(dim=-1)
+    output = pc(all_inputs)
     assert output.shape == (16, 1)
     assert torch.allclose(output, _get_pc_2x2_output(), rtol=0, atol=torch.finfo(torch.float32).eps)
 
@@ -82,4 +84,4 @@ def test_pc_partition_function() -> None:
     _set_pc_2x2_params(pc)
     # part_func should be 1, log is 0
     pc_pf = integrate(pc)
-    assert torch.allclose(pc_pf(), torch.zeros(()), atol=0, rtol=0)
+    assert torch.allclose(pc_pf(torch.zeros(())), torch.zeros(()), atol=0, rtol=0)

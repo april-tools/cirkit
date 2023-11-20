@@ -5,12 +5,10 @@ from torch import Tensor, nn
 
 from cirkit.utils.type_aliases import ClampBounds
 
-from .reparam import Reparameterizaion
-
-# TODO: input layers should also use these reparams
+from .reparam import Reparameterization
 
 
-class ReparamLeaf(Reparameterizaion):
+class ReparamLeaf(Reparameterization):
     """A leaf in reparameterizaion that holds the parameter instance and does simple transforms.
 
     There's no param initialization here. That's the responsibility of Layers.
@@ -47,11 +45,7 @@ class ReparamLeaf(Reparameterizaion):
 
     @property
     def dtype(self) -> torch.dtype:
-        """Get the dtype of param.
-
-        Returns:
-            torch.dtype: The dtype of the param.
-        """
+        """The dtype of the output param."""
         return self.param.dtype
 
 

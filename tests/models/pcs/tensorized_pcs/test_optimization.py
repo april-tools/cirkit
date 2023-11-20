@@ -28,10 +28,10 @@ def _optimization_steps(pc: TensorizedPC, data: Tensor, num_steps: int = 5) -> N
     pc_pf = integrate(pc)
     loss = np.inf
     for _ in range(num_steps):
-        log_z = pc_pf()
+        log_z = pc_pf(data)
         log_scores = pc(data)
         lls = log_scores - log_z
-        next_loss = -torch.mean(lls)
+        next_loss = -lls.mean()
         assert torch.isfinite(next_loss)
         next_loss.backward()  # type: ignore[no-untyped-call]
         opt.step()
@@ -46,7 +46,11 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
         if isinstance(layer, SumLayer):
             params = layer.params
             if layer.fold_mask is not None:
-                non_masked_params = torch.where(layer.fold_mask.bool(), params(), torch.zeros(()))
+                # TODO: fold_mask issue
+                fold_mask = layer.fold_mask.view(
+                    layer.fold_mask.shape + (1,) * (len(params.shape) - layer.fold_mask.ndim)
+                )
+                non_masked_params = torch.where(fold_mask.bool(), params(), torch.zeros(()))
                 assert torch.all(torch.isfinite(non_masked_params))
             else:
                 assert torch.all(torch.isfinite(params()))
@@ -54,11 +58,10 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
             assert layer.params_in is not None
             params = layer.params_in
             if layer.fold_mask is not None:
-                mask = (
-                    layer.fold_mask[0].bool()
-                    if isinstance(layer, SharedCPLayer)
-                    else layer.fold_mask.bool()
+                fold_mask = layer.fold_mask.view(
+                    layer.fold_mask.shape + (1,) * (len(params.shape) - layer.fold_mask.ndim)
                 )
+                mask = fold_mask[0].bool() if isinstance(layer, SharedCPLayer) else fold_mask.bool()
                 non_masked_params = torch.where(mask, params(), torch.zeros(()))
                 assert torch.all(torch.isfinite(non_masked_params))
             else:
@@ -76,7 +79,9 @@ def _check_parameters_sanity(pc: TensorizedPC) -> None:
 def test_pc_dense_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> None:
     reparam = ReparamSoftmax if normalized else ReparamExp
     pc = get_pc_2x2_dense(reparam, layer_cls, num_units=2)
-    data = torch.tensor(list(itertools.product([0, 1], repeat=4)))  # type: ignore[misc]
+    data = torch.tensor(list(itertools.product([0, 1], repeat=4))).unsqueeze(  # type: ignore[misc]
+        dim=-1
+    )
     _optimization_steps(pc, data)
     _check_parameters_sanity(pc)
 
@@ -90,6 +95,8 @@ def test_pc_dense_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> No
 def test_pc_sparse_backprop(normalized: bool, layer_cls: Type[BaseCPLayer]) -> None:
     reparam = ReparamSoftmax if normalized else ReparamExp
     pc = get_pc_5_sparse(reparam, layer_cls, num_units=2)
-    data = torch.tensor(list(itertools.product([0, 1], repeat=5)))  # type: ignore[misc]
+    data = torch.tensor(list(itertools.product([0, 1], repeat=5))).unsqueeze(  # type: ignore[misc]
+        dim=-1
+    )
     _optimization_steps(pc, data)
     _check_parameters_sanity(pc)

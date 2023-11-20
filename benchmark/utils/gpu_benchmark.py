@@ -1,7 +1,6 @@
 from typing import Callable, Tuple, TypeVar
 
 import torch
-import torch.backends.cudnn  # TODO: this is not exported
 
 T = TypeVar("T")
 

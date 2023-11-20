@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from cirkit.layers.input import InputLayer
@@ -67,7 +66,7 @@ class TensorizedPC(nn.Module):
         ), "Currently only circuits with single root region node are supported."
 
         # TODO: return a list instead?
-        num_variables = rg.num_variables
+        num_variables = rg.num_vars
         output_node = list(rg.output_nodes)[0]
         assert output_node.scope == set(
             range(num_variables)
@@ -81,12 +80,11 @@ class TensorizedPC(nn.Module):
         # Algorithm 1 in the paper -- organize the PC in layers  NOT BOTTOM UP !!!
         rg_layers = rg.topological_layers(bottom_up=False)
 
-        # TODO: beautify len(set(...))
         # Initialize input layer
         input_layer = efamily_cls(
-            num_vars=len(set(v for n in rg_layers[0][1] for v in n.scope)),
+            num_vars=rg.num_vars,
             num_channels=num_channels,
-            num_replicas=len(set(n.get_replica_idx() for n in rg_layers[0][1])),
+            num_replicas=rg.num_replicas,
             num_output_units=num_input_units,
             **efamily_kwargs,  # type: ignore[misc]
         )
@@ -173,9 +171,10 @@ class TensorizedPC(nn.Module):
         #   (i) its index in the corresponding fold, and
         #   (ii) the id of the layer that computes such fold
         #        (0 for the input layer and > 0 for inner layers)
+        # TODO: do we really need node_id? or just object itself? or id()?
         region_id_fold: Dict[int, Tuple[int, int]] = {}
         for i, region in enumerate(rg_layers[0][1]):
-            region_id_fold[region.get_id()] = (i, 0)
+            region_id_fold[region.node_id] = (i, 0)
 
         # A list mapping layer ids to the number of folds in the output tensor
         num_folds = [len(rg_layers[0][1])]
@@ -188,7 +187,7 @@ class TensorizedPC(nn.Module):
             max_num_input_regions = max(num_input_regions)
 
             # Retrieve which folds need to be concatenated
-            input_regions_ids = [list(r.get_id() for r in ins) for ins in input_regions]
+            input_regions_ids = [list(r.node_id for r in ins) for ins in input_regions]
             input_layers_ids = [
                 list(region_id_fold[i][1] for i in ids) for ids in input_regions_ids
             ]
@@ -204,7 +203,7 @@ class TensorizedPC(nn.Module):
             for regions in input_regions:
                 region_indices = []
                 for r in regions:
-                    fold_idx, layer_id = region_id_fold[r.get_id()]
+                    fold_idx, layer_id = region_id_fold[r.node_id]
                     region_indices.append(base_layer_idx[layer_id] + fold_idx)
                 if len(regions) < max_num_input_regions:
                     should_pad = True
@@ -222,20 +221,16 @@ class TensorizedPC(nn.Module):
                 assert len(p.outputs) == 1, "Each partition must belong to exactly one region"
                 out_region = p.outputs[0]
                 if len(out_region.inputs) == 1:
-                    region_id_fold[out_region.get_id()] = (i, len(inner_layers) + 1)
+                    region_id_fold[out_region.node_id] = (i, len(inner_layers) + 1)
                 else:
-                    region_mixing_indices[out_region.get_id()].append(i)
+                    region_mixing_indices[out_region.node_id].append(i)
             num_folds.append(len(lpartitions))
 
             # Build the actual layer
             num_outputs = num_inner_units if rg_layer_idx < len(rg_layers) - 1 else num_classes
             num_inputs = num_input_units if rg_layer_idx == 1 else num_inner_units
             # TODO: add shape analysis for unsqueeze
-            fold_mask = (
-                (fold_indices < cumulative_idx[-1]).unsqueeze(dim=-1).unsqueeze(dim=-1)
-                if should_pad
-                else None
-            )
+            fold_mask = (fold_indices < cumulative_idx[-1]) if should_pad else None
             layer = layer_cls(
                 num_input_units=num_inputs,
                 num_output_units=num_outputs,
@@ -257,14 +252,14 @@ class TensorizedPC(nn.Module):
             input_partition_indices = []  # (F, H)
             for i, region in enumerate(non_unary_regions):
                 num_input_partitions = len(region.inputs)
-                partition_indices = region_mixing_indices[region.get_id()]
+                partition_indices = region_mixing_indices[region.node_id]
                 if max_num_input_partitions > num_input_partitions:
                     should_pad = True
                     partition_indices.extend(
                         [num_folds[-1]] * (max_num_input_partitions - num_input_partitions)
                     )
                 input_partition_indices.append(partition_indices)
-                region_id_fold[region.get_id()] = (i, len(inner_layers) + 1)
+                region_id_fold[region.node_id] = (i, len(inner_layers) + 1)
             num_folds.append(len(non_unary_regions))
             fold_indices = torch.tensor(input_partition_indices)
             book_entry = (should_pad, [len(inner_layers)], fold_indices)
@@ -272,7 +267,7 @@ class TensorizedPC(nn.Module):
 
             # Build the actual mixing layer
             # TODO: add shape analysis for unsqueeze
-            fold_mask = (fold_indices < num_folds[-2]).unsqueeze(dim=-1) if should_pad else None
+            fold_mask = (fold_indices < num_folds[-2]) if should_pad else None
             mixing_layer = SumLayer(
                 num_input_units=num_outputs,
                 num_output_units=num_outputs,
@@ -286,71 +281,61 @@ class TensorizedPC(nn.Module):
         return bookkeeping, inner_layers
 
     @property
-    def num_variables(self) -> int:
-        """Return the number of variables the circuit is defined on.
-
-        Returns:
-            int: The number of variables.
-        """
+    def num_vars(self) -> int:
+        """The number of variables the circuit is defined on."""
         return self.input_layer.num_vars
 
-    def __call__(self, x: Optional[Tensor] = None) -> Tensor:
-        """Invoke the forward.
+    def __call__(self, x: Tensor) -> Tensor:
+        """Invoke the forward function.
 
         Args:
-            x (Tensor): The input.
+            x (Tensor): The input to the circuit, shape (*B, D, C).
 
         Returns:
-            Tensor: The output.
+            Tensor: The output of the circuit, shape (*B, K).
         """
-        # TODO: why do we need this?
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     def _eval_layers(self, x: Tensor) -> Tensor:
-        """Eval the layers of the circuit.
+        """Eval the inner layers of the circuit.
 
         Args:
-            x: The folded inputs to be passed to the sequence of layers having shape
-             (num_folds, num_units, batch_size).
+            x (Tensor): The folded inputs to be passed to the sequence of layers, shape (F, K, *B).
 
         Returns:
-            Tensor: The output of the circuit.
+            Tensor: The output of the circuit, shape (K, *B).
         """
-        layer_outputs: List[Tensor] = [x]
+        layer_outputs = [x]  # list of shape (F, K, *B)
 
         for layer, (should_pad, in_layer_ids, fold_idx) in zip(self.inner_layers, self.bookkeeping):
-            if len(in_layer_ids) == 1:
-                # (F, K, B)
-                (in_layer_id,) = in_layer_ids
-                inputs = layer_outputs[in_layer_id]
-            else:
-                # (F_1 + ... + F_n, K, B)
-                inputs = torch.cat([layer_outputs[i] for i in in_layer_ids], dim=0)
+            layer_inputs = [layer_outputs[i] for i in in_layer_ids]  # list of shape (F, K, *B)
             if should_pad:
                 # TODO: The padding value depends on the computation space.
                 #  It should be the neutral element of a group.
                 #  For now computations are in log-space, thus 0 is our pad value.
-                inputs = F.pad(inputs, [0, 0, 0, 0, 0, 1], value=0)  # pylint: disable=not-callable
-            inputs = inputs[fold_idx]  # inputs: (F, H, K, B)
-            outputs = layer(inputs)  # outputs: (F, K, B)
+                layer_inputs.append(
+                    torch.zeros(()).to(layer_inputs[0]).expand_as(layer_inputs[0][0:1])
+                )  # shape (1, K, *B)
+            inputs = torch.cat(layer_inputs, dim=0)  # shape (sum(F), K, *B)
+            # fold_idx shape (F, H)
+            inputs = inputs[fold_idx]  # shape (F, H, K, *B)
+            outputs = layer(inputs)  # shape (F, K, *B)
             layer_outputs.append(outputs)
 
-        return layer_outputs[-1][0].T  # (B, K)
+        return layer_outputs[-1].squeeze(dim=0)  # shape (F=1, K, *B) -> (K, *B)
 
-    def forward(self, x: Optional[Tensor] = None) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         """Evaluate the circuit in a feed forward way.
 
         Args:
-            x (Tensor): The input having shape (batch_size, num_vars, num_channels).
-             It can be None if the input layer does not need an input.
+            x (Tensor): The input to the circuit, shape (*B, D, C).
 
         Returns:
-            Tensor: The output of the circuit.
+            Tensor: The output of the circuit, shape (*B, K).
         """
-        # TODO: a better way to handle circuits obtained from integrate()
-        #  not requiring an input as they encode a constant?
-        in_outputs = self.scope_layer(self.input_layer(x))  # type: ignore[arg-type]
-        return self._eval_layers(in_outputs)
+        x = self.input_layer(x)  # shape (*B, D, K, P)
+        x = self.scope_layer(x)  # shape (F, K, *B)
+        return self._eval_layers(x).movedim(source=0, destination=-1)  # shape (K, *B) -> (*B, K)
 
     def integrate(self, x: Tensor, in_vars: Union[List[int], List[List[int]]]) -> Tensor:
         """Evaluate an integral of the circuit over some variables.
@@ -368,44 +353,6 @@ class TensorizedPC(nn.Module):
 
         # TODO: cache the construction of the integration mask here.
         #  Perhaps we can hash in_vars and construct a cache for them in this class.
-        in_mask = one_hot_variables(self.num_variables, in_vars, device=x.device)
+        in_mask = one_hot_variables(self.num_vars, in_vars, device=x.device)
         in_outputs = self.scope_layer(self.integral_input_layer(x, in_mask))
-        return self._eval_layers(in_outputs)
-
-    # TODO: and what's the meaning of this?
-    # def backtrack(self, num_samples=1, class_idx=0, x=None, mode='sampling', **kwargs):
-    # TODO: there's actually nothing to doc
-    # pylint: disable-next=missing-param-doc
-    def backtrack(self, *_: Any, **__: Any) -> None:  # type: ignore[misc]
-        """Raise an error.
-
-        Raises:
-            NotImplementedError: Not implemented.
-        """
-        raise NotImplementedError
-
-    # pylint: disable-next=missing-param-doc
-    def sample(  # type: ignore[misc]
-        self, num_samples: int = 1, class_idx: int = 0, x: Optional[Tensor] = None, **_: Any
-    ) -> None:
-        """Cause an error anyway.
-
-        Args:
-            num_samples (int, optional): I don't know/care now. Defaults to 1.
-            class_idx (int, optional): I don't know/care now. Defaults to 0.
-            x (Optional[Tensor], optional): I don't know/care now. Defaults to None.
-        """
-        self.backtrack(num_samples=num_samples, class_idx=class_idx, x=x, mode="sample")
-
-    # pylint: disable-next=missing-param-doc
-    def mpe(  # type: ignore[misc]
-        self, num_samples: int = 1, class_idx: int = 0, x: Optional[Tensor] = None, **_: Any
-    ) -> None:
-        """Cause an error anyway.
-
-        Args:
-            num_samples (int, optional):  I don't know/care now. Defaults to 1.
-            class_idx (int, optional):  I don't know/care now. Defaults to 0.
-            x (Optional[Tensor], optional):  I don't know/care now. Defaults to None.
-        """
-        self.backtrack(num_samples=num_samples, class_idx=class_idx, x=x, mode="argmax")
+        return self._eval_layers(in_outputs).movedim(source=0, destination=-1)

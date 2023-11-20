@@ -58,17 +58,17 @@ def test_pc_nonneg_reparams(
         assert False
 
     pc = get_deep_pc(rg_cls, kwargs, reparam_func=reparam)  # type: ignore[misc]
-    num_vars = pc.num_variables
+    num_vars = pc.num_vars
 
     # Generate all possible combinations of 16 integers from the list of possible values
     possible_values = [0, 1]
     all_data = torch.tensor(
         list(itertools.product(possible_values, repeat=num_vars))  # type: ignore[misc]
-    )
+    ).unsqueeze(dim=-1)
 
     # Instantiate the integral of the PC, i.e., computing the partition function
     pc_pf = integrate(pc)
-    log_z = pc_pf()
+    log_z = pc_pf(all_data)
     assert log_z.shape == (1, 1)
 
     # Compute outputs

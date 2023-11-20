@@ -5,7 +5,6 @@ from typing import Dict, FrozenSet, Iterable, List, Set, Tuple, TypedDict, final
 
 from .rg_node import PartitionNode, RegionNode, RGNode
 
-# TODO: unify what names to use: sum/region, product/partition, leaf/input
 # TODO: rework docstrings??
 
 
@@ -70,40 +69,49 @@ class RegionGraph:
 
     @property
     def nodes(self) -> Iterable[RGNode]:
-        """Get all the nodes in the graph."""
+        """All nodes in the graph."""
         return iter(self._nodes)
 
     @property
     def region_nodes(self) -> Iterable[RegionNode]:
-        """Get region nodes in the graph."""
+        """Region nodes in the graph."""
         return (node for node in self.nodes if isinstance(node, RegionNode))
 
     @property
     def partition_nodes(self) -> Iterable[PartitionNode]:
-        """Get partition nodes in the graph."""
+        """Partition nodes in the graph, which are always inner nodes."""
         return (node for node in self.nodes if isinstance(node, PartitionNode))
 
     @property
     def input_nodes(self) -> Iterable[RegionNode]:
-        """Get input nodes of the graph, which are guaranteed to be regions."""
+        """Input nodes of the graph, which are guaranteed to be regions."""
         return (node for node in self.region_nodes if not node.inputs)
 
     @property
     def output_nodes(self) -> Iterable[RegionNode]:
-        """Get output nodes of the graph, which are guaranteed to be regions."""
+        """Output nodes of the graph, which are guaranteed to be regions."""
         return (node for node in self.region_nodes if not node.outputs)
 
     @property
     def inner_region_nodes(self) -> Iterable[RegionNode]:
-        """Get inner (non-input) region nodes in the graph."""
+        """Inner (non-input) region nodes in the graph."""
         return (node for node in self.region_nodes if node.inputs)
 
-    ##############################   Miscellaneous   ###############################
+    ############################    Basic properties    ############################
 
-    @property
-    def num_variables(self) -> int:
-        """Get the number of variables the region graph is defined on."""
+    # The RG is expected to be immutable after construction. Also, each of these properties is
+    # simply a int, which is cheap to save. Therefore, we use cached_property to save computation.
+
+    @cached_property
+    def num_vars(self) -> int:
+        """The number of variables the region graph is defined on."""
         return len(set(v for node in self.output_nodes for v in node.scope))
+
+    # TODO: remove replicas from RG
+    @cached_property
+    def num_replicas(self) -> int:
+        """The number of variables the region graph is defined on."""
+        return len(set(node.replica_idx for node in self.input_nodes))
 
     ##########################    Structural properties    #########################
 

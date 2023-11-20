@@ -27,9 +27,11 @@ def test_pc_sparse_folding(normalized: bool, layer_cls: Type[BaseCPLayer]) -> No
     pc = get_pc_5_sparse(reparam, layer_cls=layer_cls)
     assert any(should_pad for (should_pad, _, __) in pc.bookkeeping)
     assert any(not should_pad for (should_pad, _, _) in pc.bookkeeping)
-    data = torch.tensor(list(itertools.product([0, 1], repeat=5)))  # type: ignore[misc]
+    data = torch.tensor(list(itertools.product([0, 1], repeat=5))).unsqueeze(  # type: ignore[misc]
+        dim=-1
+    )
     pc_pf = integrate(pc)
-    log_z = pc_pf()
+    log_z = pc_pf(data)
     log_scores = pc(data)
     lls = log_scores - log_z
     # TODO: atol is quite large here, I think it has to do with how we

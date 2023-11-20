@@ -27,8 +27,8 @@ class RGNode(ABC):
         self.inputs: List[Any] = []  # type: ignore[misc]
         self.outputs: List[Any] = []  # type: ignore[misc]
 
-        self._node_id = next(RGNode._id_counter)
-        self._sort_key = (tuple(sorted(self.scope)), self._node_id)
+        self.node_id = next(RGNode._id_counter)
+        self._sort_key = (tuple(sorted(self.scope)), self.node_id)
 
         self._metadata: Dict[str, Any] = {}  # type: ignore[misc]
 
@@ -41,17 +41,9 @@ class RGNode(ABC):
         # TODO: it's better to be abstract. but do we really need this?
         return self._sort_key < other._sort_key
 
-    def get_id(self) -> int:
-        """Get the ID of the region graph node.
-
-        Returns:
-            int: The ID.
-        """
-        return self._node_id
-
 
 # TODO: do we need to enforce num public methods?
-class RegionNode(RGNode):
+class RegionNode(RGNode):  # pylint: disable=too-few-public-methods
     """Represents either a vectorized leaf or a vectorized sum node in the PC.
 
     To construct a PC, we simply use the DiGraph (directed graph) class of networkx.
@@ -69,22 +61,14 @@ class RegionNode(RGNode):
              By default, every region node will be of the same replica, i.e., with index 0.
         """
         super().__init__(scope)
-        self._replica_idx = replica_idx
-
-    def get_replica_idx(self) -> int:
-        """Get the replica index.
-
-        Returns:
-            int: The replica index.
-        """
-        return self._replica_idx
+        self.replica_idx = replica_idx
 
     def __lt__(self, other: RGNode) -> bool:
         """Compare the node with the other. A region is always smaller."""
         return isinstance(other, PartitionNode) or super().__lt__(other)
 
 
-class PartitionNode(RGNode):
+class PartitionNode(RGNode):  # pylint: disable=too-few-public-methods
     """Represents a (cross-)product in the PC.
 
     To construct a PC, we simply use the DiGraph (directed graph) class of networkx.

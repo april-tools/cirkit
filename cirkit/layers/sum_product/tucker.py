@@ -5,12 +5,18 @@ from torch import Tensor
 
 from cirkit.layers.sum_product.sum_product import SumProductLayer
 from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.reparams.reparam import Reparameterization
 from cirkit.utils.log_trick import log_func_exp
 from cirkit.utils.type_aliases import ReparamFactory
+
+# TODO: do we support arity>2 (and fold_mask not None)? it's possible but may not be useful
 
 
 class TuckerLayer(SumProductLayer):
     """Tucker (2) layer."""
+
+    params: Reparameterization
+    """The reparameterizaion that gives the parameters for sum units, shape (F, I, J, O)."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -31,16 +37,19 @@ class TuckerLayer(SumProductLayer):
             num_folds (int, optional): The number of folds. Defaults to 1.
             fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
+
+        Raises:
+            NotImplementedError: When arity is not 2.
         """
         if arity != 2:
-            raise NotImplementedError("Tucker layers only implemented binary product units.")
+            raise NotImplementedError("Tucker layers only implement binary product units.")
         assert fold_mask is None, "Input for Tucker layer should not be masked."
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
             num_folds=num_folds,
-            fold_mask=fold_mask,
+            fold_mask=None,
             reparam=reparam,
         )
 
@@ -51,15 +60,16 @@ class TuckerLayer(SumProductLayer):
         self.reset_parameters()
 
     def _forward_linear(self, left: Tensor, right: Tensor) -> Tensor:
-        return torch.einsum("fib,fjb,fijo->fob", left, right, self.params())
+        # shape (F, I, *B), (F, J ,*B) -> (F, O, *B)
+        return torch.einsum("fi...,fj...,fijo->fo...", left, right, self.params())
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer.
+            x (Tensor): The input to this layer, shape (F, H, K, *B).
 
         Returns:
-            Tensor: The output of this layer.
+            Tensor: The output of this layer, shape (F, K, *B).
         """
         return log_func_exp(x[:, 0], x[:, 1], func=self._forward_linear, dim=1, keepdim=True)

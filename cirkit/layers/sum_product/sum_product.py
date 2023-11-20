@@ -11,7 +11,11 @@ from cirkit.utils.type_aliases import ReparamFactory
 class SumProductLayer(Layer):
     """The abstract base for all "fused" sum-product layers.
 
-    reset_parameters is defined here, but subclasses can override, and they should call it.
+    The fusion of sum and product can sometimes save the instantiation of product units, but the \
+    sum units are limited to dense connection along the units dim (the kwarg arity is for product).
+
+    Abstract method Layer.reset_parameters is implemented here but should be called by __init__ of \
+    subclasses. Subclasses may also choose to override with their own param init.
     """
 
     def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
@@ -32,7 +36,8 @@ class SumProductLayer(Layer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 2.
             num_folds (int, optional): The number of folds. Defaults to 1.
-            fold_mask (Optional[Tensor], optional): The mask of valid folds. Defaults to None.
+            fold_mask (Optional[Tensor], optional): The mask of valid folds, shape (F, H). \
+                Defaults to None.
             reparam (ReparamFactory, optional): The reparameterization. Defaults to ReparamIdentity.
         """
         super().__init__(
@@ -50,4 +55,4 @@ class SumProductLayer(Layer):
         for param in self.parameters():
             nn.init.uniform_(param, 0.01, 0.99)
 
-    # forward keeps abstract, should be implemented by subclasses
+    # The forward method stays abstract, to be implemented by subclasses.

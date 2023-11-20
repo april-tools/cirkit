@@ -63,21 +63,21 @@ def test_pc_likelihoods(
     Args:
         rg_cls (Type[RegionGraph]): The class of RG to test.
         kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
-        true_log_z (Optional[float]): The answer of partition func.
+        true_log_z (Optional[float]): The answer of partition func. \
             NOTE: we don't know if it's correct, but it guarantees reproducibility.
     """
     pc = get_deep_pc(rg_cls, kwargs)  # type: ignore[misc]
-    num_vars = pc.num_variables
+    num_vars = pc.num_vars
 
     # Generate all possible combinations of 16 integers from the list of possible values
     possible_values = [0, 1]
     all_data = torch.tensor(
         list(itertools.product(possible_values, repeat=num_vars))  # type: ignore[misc]
-    )
+    ).unsqueeze(dim=-1)
 
     # Instantiate the integral of the PC, i.e., computing the partition function
     pc_pf = integrate(pc)
-    log_z = pc_pf()
+    log_z = pc_pf(all_data)
     assert log_z.shape == (1, 1)
 
     # Compute outputs
@@ -100,3 +100,47 @@ def test_pc_likelihoods(
     sum_lls = torch.logsumexp(lls.view(-1, 4), dim=1, keepdim=True)
     assert mar_lls.shape[0] == lls.shape[0] // 4 and len(mar_lls.shape) == len(lls.shape)
     assert torch.allclose(sum_lls, mar_lls, rtol=1e-6, atol=torch.finfo(torch.float32).eps)
+
+
+# TODO: is fold_mask with multi-batch properly covered?
+@pytest.mark.parametrize(  # type: ignore[misc]
+    "rg_cls,kwargs",
+    [
+        (PoonDomingos, {"shape": [4, 4], "delta": 2}),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": False}),
+        (QuadTree, {"width": 4, "height": 4, "struct_decomp": True}),
+        (RandomBinaryTree, {"num_vars": 16, "depth": 3, "num_repetitions": 2}),
+    ],
+)
+@RandomCtx(42)
+def test_pc_multi_batch(
+    rg_cls: Callable[..., RegionGraph],
+    kwargs: Dict[str, Union[int, bool, List[int]]],
+) -> None:
+    """Tests the creation and EVI probabilistic inference on a PC with mutiple batch dims.
+
+    Args:
+        rg_cls (Type[RegionGraph]): The class of RG to test.
+        kwargs (Dict[str, Union[int, bool, List[int]]]): The args for class to test.
+    """
+    pc = get_deep_pc(rg_cls, kwargs)  # type: ignore[misc]
+    num_vars = pc.num_vars
+
+    # Generate all possible combinations of 16 integers from the list of possible values
+    possible_values = [0, 1]
+    all_data = torch.tensor(
+        list(itertools.product(possible_values, repeat=num_vars))  # type: ignore[misc]
+    ).view(32, 2048, 16, 1)
+
+    # Instantiate the integral of the PC, i.e., computing the partition function
+    pc_pf = integrate(pc)
+    log_z = pc_pf(all_data)
+    assert log_z.shape == (1, 1)  # TODO: is this shape correct? but is currently implemented
+
+    # Compute outputs
+    log_scores = pc(all_data)
+    assert log_scores.shape == (32, 2048, 1)
+
+    # TODO: mypy don't understand batch (iter of Tensor)
+    batched_log_scores = torch.stack([pc(batch) for batch in all_data], dim=0)  # type: ignore[misc]
+    assert torch.all(log_scores == batched_log_scores)
