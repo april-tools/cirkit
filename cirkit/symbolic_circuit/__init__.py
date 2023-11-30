@@ -1,1 +1,1 @@
-from .symbolic_node import SymbolicNode, SymbolicSumNode, SymbolicProductNode, SymbolicInputNode
+from .symbolic_node import SymbolicInputNode, SymbolicNode, SymbolicProductNode, SymbolicSumNode

@@ -1,15 +1,14 @@
 import pytest
 
-from cirkit.symbolic_circuit.symbolic_node import (
-    SymbolicNode,
-    SymbolicSumNode,
-    SymbolicProductNode,
-    SymbolicInputNode,
-)
-
+from cirkit.layers.input.exp_family import CategoricalLayer, ExpFamilyLayer, NormalLayer
+from cirkit.layers.sum_product import CPLayer, TuckerLayer
 from cirkit.reparams.leaf import ReparamExp
-from cirkit.layers.sum_product import TuckerLayer, CPLayer
-from cirkit.layers.input.exp_family import ExpFamilyLayer, NormalLayer, CategoricalLayer
+from cirkit.symbolic_circuit.symbolic_node import (
+    SymbolicInputNode,
+    SymbolicNode,
+    SymbolicProductNode,
+    SymbolicSumNode,
+)
 
 
 def test_symbolic_node() -> None:

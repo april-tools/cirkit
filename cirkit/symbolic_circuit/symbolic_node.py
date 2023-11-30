@@ -1,17 +1,16 @@
 from abc import ABC
 from typing import Any, Dict, Iterable, List, Optional, Type
 
-from cirkit.utils.type_aliases import ReparamFactory
-from cirkit.reparams.reparam import Reparameterization
-from cirkit.reparams.leaf import ReparamIdentity
-
 from cirkit.layers.input.exp_family import (
+    BinomialLayer,
+    CategoricalLayer,
     ExpFamilyLayer,
     NormalLayer,
-    CategoricalLayer,
-    BinomialLayer,
 )
-from cirkit.layers.sum_product import SumProductLayer, TuckerLayer, CPLayer
+from cirkit.layers.sum_product import CPLayer, SumProductLayer, TuckerLayer
+from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.reparams.reparam import Reparameterization
+from cirkit.utils.type_aliases import ReparamFactory
 
 
 class SymbolicNode(ABC):
@@ -93,6 +92,7 @@ class SymbolicSumNode(SymbolicNode):
         # TODO: sum layer (mixing layer)
 
     def __repr__(self) -> str:
+        """Generate the `repr` string of the node."""
         class_name = self.__class__.__name__
         layer_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
         params_shape = getattr(self.params, "shape", None) if hasattr(self, "params") else None
@@ -124,6 +124,7 @@ class SymbolicProductNode(SymbolicNode):
             self.num_output_units = num_input_units**2  # Kronecker product output size
 
     def __repr__(self) -> str:
+        """Generate the `repr` string of the node."""
         class_name = self.__class__.__name__
 
         return (
@@ -144,7 +145,7 @@ class SymbolicInputNode(SymbolicNode):
         scope: Iterable[int],
         num_output_units: int,
         efamily_cls: Type[ExpFamilyLayer],
-        layer_kwargs: Optional[Dict[str, Any]] = None,
+        efamily_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Construct the Symbolic Input Node.
 
@@ -152,12 +153,12 @@ class SymbolicInputNode(SymbolicNode):
             scope (Iterable[int]): The scope of this node.
             num_output_units (int): Number of output units.
             efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
-            layer_kwargs (Optional[Dict[str, Any]]): The parameters for the exponential family class.
+            efamily_kwargs (Optional[Dict[str, Any]]): The parameters for the exponential family class.
         """
         super().__init__(scope)
         self.num_output_units = num_output_units
         self.efamily_cls = efamily_cls
-        self.efamily_kwargs = layer_kwargs
+        self.efamily_kwargs = efamily_kwargs
 
     def set_placeholder_params(
         self,
@@ -186,6 +187,7 @@ class SymbolicInputNode(SymbolicNode):
         self.params = reparam((1, self.num_output_units, num_replicas, num_suff_stats), dim=-1)
 
     def __repr__(self) -> str:
+        """Generate the `repr` string of the node."""
         class_name = self.__class__.__name__
         efamily_cls_name = self.efamily_cls.__name__ if self.efamily_cls else "None"
         params_shape = getattr(self.params, "shape", None) if hasattr(self, "params") else None
