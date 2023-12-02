@@ -34,7 +34,7 @@ dependencies = [
 [project.optional-dependencies]
 lint = [
   "black~=23.0",
-  "mypy==1.6.1",  # should be specific version for stable typing
+  "mypy==1.7.1",  # should be specific version for stable typing
   "pylint~=3.0.0",
   "pydocstyle[toml]~=6.3.0",
   "pytest",  # this is required to lint the test files
@@ -152,30 +152,33 @@ python_version = 3.8
 mypy_path = "3rd-party-stubs"
 follow_imports = "silent"
 follow_imports_for_stubs = true
-# https://mypy.readthedocs.io/en/v1.6.1/command_line.html#config-file
+# https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous
 warn_unused_configs = true
-# https://mypy.readthedocs.io/en/stable/command_line.html#disallow-dynamic-typing
+# https://mypy.readthedocs.io/en/stable/config_file.html#disallow-dynamic-typing
 disallow_any_unimported = true
 disallow_any_expr = true
 disallow_any_decorated = true
 disallow_any_explicit = true
 disallow_any_generics = true
 disallow_subclassing_any = true
-# https://mypy.readthedocs.io/en/stable/command_line.html#untyped-definitions-and-calls
+# https://mypy.readthedocs.io/en/stable/config_file.html#untyped-definitions-and-calls
 disallow_untyped_calls = true
+# untyped_calls_exclude = comma-sep-str
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
 disallow_untyped_decorators = true
-# https://mypy.readthedocs.io/en/stable/command_line.html#configuring-warnings
+# https://mypy.readthedocs.io/en/stable/config_file.html#configuring-warnings
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_return_any = true
 warn_unreachable = true
-# https://mypy.readthedocs.io/en/stable/command_line.html#miscellaneous-strictness-flags
-implicit_reexport = false
+# https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous-strictness-flags
+# implicit_reexport = false  # this breaks torch, from mypy 1.7.0
 strict_equality = true
+# https://mypy.readthedocs.io/en/stable/command_line.html#miscellaneous-strictness-flags
 extra_checks = true
+# https://mypy.readthedocs.io/en/stable/error_code_list2.html#error-codes-for-optional-checks
 enable_error_code = [
   "redundant-self",
   "redundant-expr",
@@ -183,5 +186,5 @@ enable_error_code = [
   "truthy-bool",
   "truthy-iterable",
   "ignore-without-code",
-  # "explicit-override",  # can be useful, introduced in 3.12 and typing_extensions
+  # "explicit-override",  # can be useful, introduced in py3.12 and typing_extensions
 ]
