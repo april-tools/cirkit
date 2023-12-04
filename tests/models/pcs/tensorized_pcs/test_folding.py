@@ -36,6 +36,6 @@ def test_pc_sparse_folding(normalized: bool, layer_cls: Type[BaseCPLayer]) -> No
     lls = log_scores - log_z
     # TODO: atol is quite large here, I think it has to do with how we
     #  initialize the parameters, and for some of them it lose precision in float32
-    assert torch.allclose(torch.logsumexp(lls, dim=0), torch.zeros(()), atol=2e-6)
+    assert torch.allclose(torch.logsumexp(lls, dim=0), torch.zeros(()))
     if normalized:
-        assert torch.allclose(log_z, torch.zeros(()), atol=2e-6)
+        assert torch.allclose(log_z, torch.zeros(()))

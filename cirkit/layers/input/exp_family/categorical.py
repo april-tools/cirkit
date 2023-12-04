@@ -75,7 +75,8 @@ class CategoricalLayer(ExpFamilyLayer):
             x = x.long()
         # TODO: pylint issue?
         # pylint: disable-next=not-callable
-        suff_stats = F.one_hot(x, self.num_categories).float()  # shape (*B, D, C, cat)
+        suff_stats = F.one_hot(x, self.num_categories)  # shape (*B, D, C, cat)
+        suff_stats = suff_stats.to(torch.get_default_dtype())
         return suff_stats.flatten(start_dim=-2)  # shape (*B, D, S=C*cat)
 
     def log_base_measure(self, x: Tensor) -> Tensor:

@@ -54,4 +54,4 @@ def test_cp_layer(
         x = torch.zeros(num_folds, arity, num_input_units, batch_size)  # (F, H, K, B)
         output = layer(x)  # (F, J, B)
         assert output.shape == (num_folds, num_output_units, batch_size)
-        assert torch.allclose(output, torch.zeros(()), atol=2e-7)
+        assert torch.allclose(output, torch.zeros(()))
