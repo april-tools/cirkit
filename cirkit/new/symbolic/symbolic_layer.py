@@ -1,3 +1,5 @@
+# type: ignore
+# pylint: skip-file
 from abc import ABC
 from typing import Any, Dict, Iterable, Optional, Set, Type
 
@@ -19,6 +21,7 @@ from cirkit.utils.type_aliases import ReparamFactory
 
 
 class SymbolicLayer(ABC):
+    # pylint: disable=too-few-public-methods
     """Base class for symbolic nodes in symmbolic circuit."""
 
     def __init__(self, scope: Iterable[int]) -> None:
@@ -57,10 +60,16 @@ class SymbolicSumLayer(SymbolicLayer):
             num_units (int): Number of output units in this node.
             layer_cls (Type[SumProductLayer]): The inner (sum) layer class.
             layer_kwargs (Optional[Dict[str, Any]]): The parameters for the inner layer class.
+
+        Raises:
+            NotImplementedError: If the shared uncollapsed CP is not implemented.
         """
         super().__init__(scope)
         self.num_units = num_units
         self.layer_kwargs = layer_kwargs
+        self.params = None
+        self.params_in = None
+        self.params_out = None
 
         if layer_cls == TuckerLayer:
             self.layer_cls = layer_cls
@@ -91,6 +100,9 @@ class SymbolicSumLayer(SymbolicLayer):
             num_input_units (int): Number of input units.
             num_units (int): Number of output units.
             reparam (ReparamFactory): Reparameterization function.
+
+        Raises:
+            NotImplementedError: If the shared uncollapsed CP is not implemented.
         """
         assert self.num_units == num_units
 
@@ -140,6 +152,7 @@ class SymbolicSumLayer(SymbolicLayer):
 
 
 class SymbolicProductLayer(SymbolicLayer):
+    # pylint: disable=too-few-public-methods
     """Class representing product nodes in the symbolic graph."""
 
     def __init__(
@@ -185,13 +198,14 @@ class SymbolicInputLayer(SymbolicLayer):
             scope (Iterable[int]): The scope of this node.
             num_units (int): Number of output units.
             efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
-            efamily_kwargs (Optional[Dict[str, Any]]): The parameters for 
+            efamily_kwargs (Optional[Dict[str, Any]]): The parameters for
             the exponential family class.
         """
         super().__init__(scope)
         self.num_units = num_units
         self.efamily_cls = efamily_cls
         self.efamily_kwargs = efamily_kwargs
+        self.params = None
 
     def set_placeholder_params(
         self,
@@ -205,6 +219,9 @@ class SymbolicInputLayer(SymbolicLayer):
             num_channels (int): Number of channels.
             num_replicas (int): Number of replicas.
             reparam (ReparamFactory): Reparameterization function.
+
+        Raises:
+            NotImplementedError: Only support Normal, Categorical, and Binomial input layers.
         """
         # Handling different exponential family layer types
         if self.efamily_cls == NormalLayer:
