@@ -3,20 +3,20 @@ from typing import Any, Dict, FrozenSet, Iterable, Iterator, Optional, Set, Type
 from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.layers.sum_product import SumProductLayer
 from cirkit.new.region_graph import RegionGraph, RGNode
+from cirkit.new.reparams import Reparameterization
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
     SymbolicProductLayer,
     SymbolicSumLayer,
 )
-from cirkit.reparams.leaf import ReparamIdentity
-from cirkit.utils.type_aliases import ReparamFactory
 
 
 # Disable: It's designed to have these many attributes.
 class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     """The Symbolic Circuit."""
 
+    # TODO: how to design interface? require kwargs only?
     # TODO: how to deal with too-many?
     # pylint: disable-next=too-many-arguments,too-many-locals
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
@@ -26,10 +26,10 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         efamily_cls: Type[ExpFamilyLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
         efamily_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: ReparamFactory = ReparamIdentity,
+        *,
+        reparam: Reparameterization,  # TODO: how to set default here?
         num_inner_units: int = 2,
         num_input_units: int = 2,
-        num_channels: int = 1,
         num_classes: int = 1,
     ):
         """Construct symbolic circuit from a region graph.
@@ -43,9 +43,7 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
             reparam (ReparamFactory): The reparametrization function.
             num_inner_units (int): Number of units for inner layers.
             num_input_units (int): Number of units for input layers.
-            num_channels (int): Number of channels (e.g., 3 for RGB pixel) for input layers.
             num_classes (int): Number of classes for the PC.
-
         """
         self.region_graph = region_graph
         self.scope = region_graph.scope
@@ -73,7 +71,6 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
                 else:
                     # Construct a symbolic layer from the region node
                     symbolic_layer = self._from_region_node(
-                        prev_symbolic_layer,  # type: ignore[arg-type]
                         rg_node,
                         region_graph,
                         layer_cls,
@@ -83,7 +80,6 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
                         reparam,
                         num_inner_units,
                         num_input_units,
-                        num_channels,
                         num_classes,
                     )
                     existing_symbolic_layers[rg_node] = symbolic_layer
@@ -101,17 +97,15 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     # pylint: disable-next=no-self-use,too-many-arguments,too-many-locals
     def _from_region_node(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
-        prev_symbolic_layer: SymbolicLayer,
         rg_node: RGNode,
         region_graph: RegionGraph,
         layer_cls: Type[SumProductLayer],
         efamily_cls: Type[ExpFamilyLayer],
         layer_kwargs: Optional[Dict[str, Any]],
         efamily_kwargs: Optional[Dict[str, Any]],
-        reparam: ReparamFactory,
+        reparam: Reparameterization,
         num_inner_units: int,
         num_input_units: int,
-        num_channels: int,
         num_classes: int,
     ) -> SymbolicLayer:
         """Create a symbolic layer based on the given region node.
@@ -151,20 +145,10 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
                 if rg_node in region_graph.output_nodes  # type: ignore[operator]
                 else num_inner_units
             )
-            # Ignore: SymbolicInputLayer contains Any.
-            input_units = (
-                num_input_units
-                if any(
-                    isinstance(layer, SymbolicInputLayer)  # type: ignore[misc]
-                    for layer in prev_symbolic_layer.inputs
-                )
-                else num_inner_units
-            )
 
             symbolic_layer = SymbolicSumLayer(
-                scope, output_units, layer_cls, layer_kwargs  # type: ignore[misc]
+                scope, output_units, layer_cls, layer_kwargs, reparam=reparam  # type: ignore[misc]
             )
-            symbolic_layer.set_placeholder_params(input_units, output_units, reparam)
 
         elif rg_node in region_graph.partition_nodes:  # type: ignore[operator]
             assert len(inputs) == 2, "Partition nodes should have exactly two inputs."
@@ -180,13 +164,13 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
             symbolic_layer = SymbolicProductLayer(scope, left_input_units, layer_cls)
 
         elif rg_node in region_graph.input_nodes:  # type: ignore[operator]
-            # TODO: this is removed from RGNode. but we need it until refactor the input layers.
-            num_replicas = 1
-
             symbolic_layer = SymbolicInputLayer(
-                scope, num_input_units, efamily_cls, efamily_kwargs  # type: ignore[misc]
+                scope,
+                num_input_units,
+                efamily_cls,
+                efamily_kwargs,  # type: ignore[misc]
+                reparam=reparam,
             )
-            symbolic_layer.set_placeholder_params(num_channels, num_replicas, reparam)
 
         else:
             raise ValueError("Region node not valid.")
@@ -204,8 +188,6 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         self._layers.add(head)
         tail.outputs.add(head)
         head.inputs.add(tail)
-
-    ##########################    Properties    #########################
 
     #######################################    Properties    #######################################
     # Here are the basic properties and some structural properties of the SymbC. Some of them are
