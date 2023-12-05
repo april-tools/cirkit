@@ -1,9 +1,8 @@
-# pylint: disable=missing-function-docstring
 import pytest
 
-from cirkit.layers.input.exp_family import CategoricalLayer, ExpFamilyLayer
-from cirkit.layers.sum_product import BaseCPLayer, SumProductLayer
-from cirkit.new.symbolic import SymbolicInputLayer, SymbolicProductLayer, SymbolicSumLayer
+from cirkit.layers.input.exp_family import CategoricalLayer
+from cirkit.layers.sum_product import BaseCPLayer
+from cirkit.new.symbolic.symbolic_layer import SymbolicInputLayer, SymbolicProductLayer, SymbolicSumLayer
 from cirkit.new.symbolic.symbolic_circuit import SymbolicCircuit
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode
 from cirkit.region_graph.quad_tree import QuadTree

@@ -1,6 +1,6 @@
 import pytest
 
-from cirkit.layers.input.exp_family import CategoricalLayer, ExpFamilyLayer, NormalLayer
+from cirkit.layers.input.exp_family import CategoricalLayer
 from cirkit.layers.sum_product import BaseCPLayer, TuckerLayer
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
