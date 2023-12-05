@@ -22,3 +22,11 @@ Then install the required dependencies in [development mode](https://setuptools.
 pip install -e .[dev]
 ```
 This will install not only the core dependencies of the library itself (e.g., PyTorch) but also additional dependencies useful for development (e.g., PyTest).
+
+### Local Lint/Test
+
+In the repository root, run the following for linting and testing locally.
+```shell
+./scripts/lint.sh
+./scripts/coverage.sh
+```

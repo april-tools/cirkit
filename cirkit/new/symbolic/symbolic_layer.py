@@ -1,6 +1,4 @@
-# type: ignore
-# pylint: skip-file
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterable, Optional, Set, Type
 
 from cirkit.layers.input.exp_family import (
@@ -17,47 +15,57 @@ from cirkit.layers.sum_product import (
     UncollapsedCPLayer,
 )
 from cirkit.reparams.leaf import ReparamIdentity
+from cirkit.reparams.reparam import Reparameterization
 from cirkit.utils.type_aliases import ReparamFactory
 
+# TODO: double check docs and __repr__
 
-class SymbolicLayer(ABC):
-    # pylint: disable=too-few-public-methods
-    """Base class for symbolic nodes in symmbolic circuit."""
 
+# Disable: It's intended for SymbolicLayer to have only these methods.
+class SymbolicLayer(ABC):  # pylint: disable=too-few-public-methods
+    """The abstract base class for symbolic layers in symbolic circuits."""
+
+    # TODO: Save a RGNode here? allow comparison here?
     def __init__(self, scope: Iterable[int]) -> None:
-        """Construct the Symbolic Node.
+        """Construct the SymbolicLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this node.
+            scope (Iterable[int]): The scope of this layer.
         """
+        super().__init__()
         self.scope = frozenset(scope)
-        assert self.scope, "The scope of a node must be non-empty"
+        assert self.scope, "The scope of a layer in SymbC must be non-empty."
 
-        self.inputs: Set[Any] = set()
-        self.outputs: Set[Any] = set()
+        self.inputs: Set[SymbolicLayer] = set()
+        self.outputs: Set[SymbolicLayer] = set()
 
+    # We require subclasses to implement __repr__ on their own. This also forbids the instantiation
+    # of this abstract class.
+    @abstractmethod
     def __repr__(self) -> str:
-        """Generate the `repr` string of the node."""
-        class_name = self.__class__.__name__
-        scope = repr(set(self.scope))
-        return f"{class_name}:\nScope: {scope}\n"
+        """Generate the repr string of the layer.
+
+        Returns:
+            str: The str representation of the layer.
+        """
 
 
 class SymbolicSumLayer(SymbolicLayer):
-    """Class representing sum nodes in the symbolic circuit."""
+    """The sum layer in symbolic circuits."""
 
-    def __init__(
+    # TODO: how to design interface? require kwargs only?
+    def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
         scope: Iterable[int],
         num_units: int,
         layer_cls: Type[SumProductLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Construct the Symbolic Sum Node.
+        """Construct the SymbolicSumLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this node.
-            num_units (int): Number of output units in this node.
+            scope (Iterable[int]): The scope of this layer.
+            num_units (int): Number of output units in this layer.
             layer_cls (Type[SumProductLayer]): The inner (sum) layer class.
             layer_kwargs (Optional[Dict[str, Any]]): The parameters for the inner layer class.
 
@@ -66,24 +74,24 @@ class SymbolicSumLayer(SymbolicLayer):
         """
         super().__init__(scope)
         self.num_units = num_units
-        self.layer_kwargs = layer_kwargs
-        self.params = None
-        self.params_in = None
-        self.params_out = None
+        # Ignore: Unavoidable for kwargs.
+        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
+        self.params: Optional[Reparameterization] = None
+        self.params_in: Optional[Reparameterization] = None
+        self.params_out: Optional[Reparameterization] = None
 
         if layer_cls == TuckerLayer:
             self.layer_cls = layer_cls
         else:  # CP layer
-            collapsed = (
-                self.layer_kwargs["collapsed"] if ("collapsed" in self.layer_kwargs) else True
-            )
-            shared = self.layer_kwargs["shared"] if ("shared" in self.layer_kwargs) else False
+            # TODO: for unfolded layers we will not need these variants and ignore may be resolved
+            collapsed = layer_kwargs.get("collapsed", True)  # type: ignore[union-attr,misc]
+            shared = layer_kwargs.get("shared", False)  # type: ignore[union-attr,misc]
 
-            if not shared and collapsed:
+            if not shared and collapsed:  # type: ignore[misc]
                 self.layer_cls = CollapsedCPLayer
-            elif not shared and not collapsed:
+            elif not shared and not collapsed:  # type: ignore[misc]
                 self.layer_cls = UncollapsedCPLayer
-            elif shared and collapsed:
+            elif shared and collapsed:  # type: ignore[misc]
                 self.layer_cls = SharedCPLayer
             else:
                 raise NotImplementedError("The shared uncollapsed CP is not implemented.")
@@ -94,7 +102,7 @@ class SymbolicSumLayer(SymbolicLayer):
         num_units: int,
         reparam: ReparamFactory = ReparamIdentity,
     ) -> None:
-        """Set un-initialized parameter placeholders for the symbolic sum node.
+        """Set un-initialized parameter placeholders for the symbolic sum layer.
 
         Args:
             num_input_units (int): Number of input units.
@@ -111,9 +119,11 @@ class SymbolicSumLayer(SymbolicLayer):
             # number of fold = 1
             self.params = reparam((1, num_input_units, num_input_units, num_units), dim=(1, 2))
         else:  # CP layer
-            arity = self.layer_kwargs["arity"] if ("arity" in self.layer_kwargs) else 2
+            # TODO: for unfolded layers we will not need these variants and ignore may be resolved
+            arity: int = self.layer_kwargs.get("arity", 2)  # type: ignore[misc]
             assert (
-                "fold_mask" not in self.layer_kwargs or self.layer_kwargs["A"] is None
+                "fold_mask" not in self.layer_kwargs  # type: ignore[misc]
+                or self.layer_kwargs["A"] is None  # type: ignore[misc]
             ), "Do not support fold_mask yet"
 
             if self.layer_cls == CollapsedCPLayer:
@@ -127,20 +137,21 @@ class SymbolicSumLayer(SymbolicLayer):
                 raise NotImplementedError("The shared uncollapsed CP is not implemented.")
 
     def __repr__(self) -> str:
-        """Generate the `repr` string of the node."""
-        class_name = self.__class__.__name__
-        layer_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
-        params_shape = getattr(self.params, "shape", None) if hasattr(self, "params") else None
+        """Generate the repr string of the layer.
 
-        params_in_shape = (
-            getattr(self.params_in, "shape", None) if hasattr(self, "params_in") else None
-        )
-        params_out_shape = (
-            getattr(self.params_out, "shape", None) if hasattr(self, "params_out") else None
-        )
+        Returns:
+            str: The str representation of the layer.
+        """
+        class_name = self.__class__.__name__
+        layer_cls_name = self.layer_cls.__name__
+        # TODO: review this part when we have a new reparams.
+        params_shape = self.params.shape if self.params is not None else None
+
+        params_in_shape = self.params_in.shape if self.params_in is not None else None
+        params_out_shape = self.params_out.shape if self.params_out is not None else None
 
         return (
-            f"{class_name}:\n"
+            f"{class_name}:\n"  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
             f"Scope: {repr(self.scope)}\n"
             f"Layer Class: {layer_cls_name}\n"
             f"Layer KWArgs: {repr(self.layer_kwargs)}\n"
@@ -151,17 +162,17 @@ class SymbolicSumLayer(SymbolicLayer):
         )
 
 
-class SymbolicProductLayer(SymbolicLayer):
-    # pylint: disable=too-few-public-methods
-    """Class representing product nodes in the symbolic graph."""
+# Disable: It's intended for SymbolicProductLayer to have only these methods.
+class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
+    """The product layer in symbolic circuits."""
 
     def __init__(
         self, scope: Iterable[int], num_units: int, layer_cls: Type[SumProductLayer]
     ) -> None:
-        """Construct the Symbolic Product Node.
+        """Construct the SymbolicProductLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this node.
+            scope (Iterable[int]): The scope of this layer.
             num_units (int): Number of input units.
             layer_cls (Type[SumProductLayer]): The inner (sum) layer class.
         """
@@ -170,9 +181,13 @@ class SymbolicProductLayer(SymbolicLayer):
         self.layer_cls = layer_cls
 
     def __repr__(self) -> str:
-        """Generate the `repr` string of the node."""
+        """Generate the repr string of the layer.
+
+        Returns:
+            str: The str representation of the layer.
+        """
         class_name = self.__class__.__name__
-        layer_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
+        layer_cls_name = self.layer_cls.__name__
 
         return (
             f"{class_name}:\n"
@@ -183,29 +198,31 @@ class SymbolicProductLayer(SymbolicLayer):
 
 
 class SymbolicInputLayer(SymbolicLayer):
-    """Class representing input nodes in the symbolic graph."""
+    """The input layer in symbolic circuits."""
 
-    def __init__(
+    def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
         scope: Iterable[int],
         num_units: int,
-        efamily_cls: Type[ExpFamilyLayer],
-        efamily_kwargs: Optional[Dict[str, Any]] = None,
+        layer_cls: Type[ExpFamilyLayer],
+        layer_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Construct the Symbolic Input Node.
+        """Construct the SymbolicInputLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this node.
+            scope (Iterable[int]): The scope of this layer.
             num_units (int): Number of output units.
-            efamily_cls (Type[ExpFamilyLayer]): The exponential family class.
-            efamily_kwargs (Optional[Dict[str, Any]]): The parameters for
+            layer_cls (Type[ExpFamilyLayer]): The exponential family class.
+            layer_kwargs (Optional[Dict[str, Any]]): The parameters for
             the exponential family class.
         """
+        # TODO: many things can be merged to SymbolicLayer.__init__.
         super().__init__(scope)
         self.num_units = num_units
-        self.efamily_cls = efamily_cls
-        self.efamily_kwargs = efamily_kwargs
-        self.params = None
+        self.layer_cls = layer_cls
+        # Ignore: Unavoidable for kwargs.
+        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
+        self.params: Optional[Reparameterization] = None
 
     def set_placeholder_params(
         self,
@@ -213,7 +230,7 @@ class SymbolicInputLayer(SymbolicLayer):
         num_replicas: int = 1,
         reparam: ReparamFactory = ReparamIdentity,
     ) -> None:
-        """Set un-initialized parameter placeholders for the input node.
+        """Set un-initialized parameter placeholders for the input layer.
 
         Args:
             num_channels (int): Number of channels.
@@ -224,12 +241,13 @@ class SymbolicInputLayer(SymbolicLayer):
             NotImplementedError: Only support Normal, Categorical, and Binomial input layers.
         """
         # Handling different exponential family layer types
-        if self.efamily_cls == NormalLayer:
+        if self.layer_cls == NormalLayer:
             num_suff_stats = 2 * num_channels
-        elif self.efamily_cls == CategoricalLayer:
-            assert "num_categories" in self.efamily_kwargs
-            num_suff_stats = self.efamily_kwargs["num_categories"] * num_channels
-        elif self.efamily_cls == BinomialLayer:
+        elif self.layer_cls == CategoricalLayer:
+            num_suff_stats = (
+                self.layer_kwargs["num_categories"] * num_channels  # type: ignore[misc]
+            )
+        elif self.layer_cls == BinomialLayer:
             num_suff_stats = num_channels
         else:
             raise NotImplementedError("Only support Normal, Categorical, and Binomial input layers")
@@ -237,16 +255,20 @@ class SymbolicInputLayer(SymbolicLayer):
         self.params = reparam((1, self.num_units, num_replicas, num_suff_stats), dim=-1)
 
     def __repr__(self) -> str:
-        """Generate the `repr` string of the node."""
+        """Generate the repr string of the layer.
+
+        Returns:
+            str: The str representation of the layer.
+        """
         class_name = self.__class__.__name__
-        efamily_cls_name = self.efamily_cls.__name__ if self.efamily_cls else "None"
-        params_shape = getattr(self.params, "shape", None) if hasattr(self, "params") else None
+        efamily_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
+        params_shape = self.params.shape if self.params is not None else None
 
         return (
-            f"{class_name}:\n"
+            f"{class_name}:\n"  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
             f"Scope: {repr(self.scope)}\n"
             f"Input Exp Family Class: {efamily_cls_name}\n"
-            f"Layer KWArgs: {repr(self.efamily_kwargs)}\n"
+            f"Layer KWArgs: {repr(self.layer_kwargs)}\n"
             f"Number of Units: {repr(self.num_units)}\n"
             f"Parameter Shape: {repr(params_shape)}\n"
         )
