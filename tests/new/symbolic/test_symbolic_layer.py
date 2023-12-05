@@ -1,3 +1,6 @@
+# type: ignore
+# pylint: skip-file
+
 import pytest
 
 from cirkit.layers.input.exp_family import CategoricalLayer
