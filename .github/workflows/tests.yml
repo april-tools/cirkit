@@ -24,11 +24,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[test]
-      - name: Run PyTest
+      - name: Run Pytest with Coverage
         run: |
-          coverage run --source=cirkit -m pytest
-          coverage xml
-          coverage report -m
+          ./scripts/coverage.sh xml
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
         with:

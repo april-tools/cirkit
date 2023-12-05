@@ -33,13 +33,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[lint]
           bash ./benchmark/install_submodule.sh all
-      - name: Run Black
-        run: black --verbose --check --diff $(git ls-files "*.py")
-      - name: Run Isort
-        run: isort --verbose --check --diff $(git ls-files "*.py")
-      - name: Run Pydocstyle
-        run: pydocstyle --verbose $(git ls-files "*.py")
-      - name: Run Pylint
-        run: pylint --verbose --persistent=n $(git ls-files "*.py")
-      - name: Run Mypy
-        run: mypy $(git ls-files "*.py")
+      - name: Run linters
+        run: |
+          ./scripts/lint.sh --verbose
