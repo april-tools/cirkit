@@ -153,6 +153,9 @@ class SymbolicCircuit:
 
         Returns:
             SymbolicLayer: The constructed symbolic layer.
+
+        Raises:
+            ValueError: If the region node is not valid.
         """
         scope = rg_node.scope
         inputs = rg_node.inputs
@@ -191,6 +194,9 @@ class SymbolicCircuit:
 
             symbolic_layer = SymbolicInputLayer(scope, num_input_units, efamily_cls, efamily_kwargs)
             symbolic_layer.set_placeholder_params(num_channels, num_replicas, reparam)
+
+        else:
+            raise ValueError("Region node not valid.")
 
         return symbolic_layer
 
