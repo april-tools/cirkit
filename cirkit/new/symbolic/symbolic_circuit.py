@@ -1,5 +1,6 @@
 # type: ignore
 # pylint: skip-file
+from functools import cached_property
 from typing import Any, Dict, FrozenSet, Iterable, Optional, Set, Type
 
 from cirkit.layers.input.exp_family import ExpFamilyLayer
@@ -65,6 +66,7 @@ class SymbolicCircuit:
                     symbolic_layer = self._from_region_node(
                         prev_symbolic_layer,
                         rg_node,
+                        region_graph,
                         layer_cls,
                         efamily_cls,
                         layer_kwargs,
