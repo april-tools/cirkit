@@ -36,6 +36,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-few-public-methods
         self.scope = frozenset(scope)
         assert self.scope, "The scope of a layer in SymbC must be non-empty."
 
+        # TODO: should this be a List? what do we need on ordering?
         self.inputs: Set[SymbolicLayer] = set()
         self.outputs: Set[SymbolicLayer] = set()
 
