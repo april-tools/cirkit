@@ -14,6 +14,7 @@ from cirkit.layers.sum_product import (
 from cirkit.models.functional import integrate
 from cirkit.reparams.leaf import ReparamExp, ReparamSoftmax
 from cirkit.utils import RandomCtx
+from tests import floats
 from tests.models.pcs.tensorized_pcs.test_utils import get_pc_5_sparse
 
 
@@ -36,6 +37,6 @@ def test_pc_sparse_folding(normalized: bool, layer_cls: Type[BaseCPLayer]) -> No
     lls = log_scores - log_z
     # TODO: atol is quite large here, I think it has to do with how we
     #  initialize the parameters, and for some of them it lose precision in float32
-    assert torch.allclose(torch.logsumexp(lls, dim=0), torch.zeros(()), atol=2e-6)
+    assert floats.allclose(torch.logsumexp(lls, dim=0), 0.0)
     if normalized:
-        assert torch.allclose(log_z, torch.zeros(()), atol=2e-6)
+        assert floats.allclose(log_z, 0.0)

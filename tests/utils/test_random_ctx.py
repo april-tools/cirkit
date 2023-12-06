@@ -18,6 +18,7 @@ def test_random_ctx() -> None:
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
+    torch.set_default_dtype(torch.float32)  # type: ignore[no-untyped-call]
 
     assert rand() == (0.8444218515250481, 0.5488135039273248, 0.49625658988952637)
 
@@ -28,4 +29,5 @@ def test_random_ctx() -> None:
 
 
 def test_random_ctx_decorator() -> None:
+    torch.set_default_dtype(torch.float32)  # type: ignore[no-untyped-call]
     assert RandomCtx(42)(rand)() == (0.6394267984578837, 0.3745401188473625, 0.8822692632675171)

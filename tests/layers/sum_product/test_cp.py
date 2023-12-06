@@ -9,6 +9,7 @@ from cirkit.layers.sum_product import CPLayer
 from cirkit.reparams.leaf import ReparamClamp, ReparamSoftmax
 from cirkit.utils import RandomCtx
 from cirkit.utils.type_aliases import ReparamFactory
+from tests import floats
 
 
 @pytest.mark.parametrize(
@@ -47,11 +48,11 @@ def test_cp_layer(
     batch_size = 16
     x = torch.randn(num_folds, arity, num_input_units, batch_size)  # (F, H, K, B)
     output = layer(x)  # (F, J, B)
-    assert not torch.allclose(output, torch.zeros(()))
+    assert not floats.allclose(output, 0.0)
     assert output.shape == (num_folds, num_output_units, batch_size)
 
     if reparam_name == "softmax":
         x = torch.zeros(num_folds, arity, num_input_units, batch_size)  # (F, H, K, B)
         output = layer(x)  # (F, J, B)
         assert output.shape == (num_folds, num_output_units, batch_size)
-        assert torch.allclose(output, torch.zeros(()), atol=2e-7)
+        assert floats.allclose(output, 0.0)

@@ -13,6 +13,7 @@ from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 from cirkit.reparams.leaf import ReparamClamp, ReparamExp, ReparamSoftmax, ReparamSquare
 from cirkit.utils import RandomCtx
 from cirkit.utils.type_aliases import ReparamFactory
+from tests import floats
 from tests.models.pcs.tensorized_pcs.test_likelihoods import get_deep_pc
 
 
@@ -75,11 +76,9 @@ def test_pc_nonneg_reparams(
     log_scores = pc(all_data)
 
     # Check the partition function computation
-    assert torch.isclose(
-        log_z, torch.logsumexp(log_scores, dim=0, keepdim=True), rtol=5e-5, atol=1e-6
-    )
+    assert floats.isclose(log_z, torch.logsumexp(log_scores, dim=0, keepdim=True))
 
     # The circuit should be already normalized,
     #  if the re-parameterization is via softmax and using normalized input distributions
     if reparam_name == "softmax":
-        assert torch.allclose(log_z, torch.zeros(()), atol=5e-7)
+        assert floats.allclose(log_z, 0.0)

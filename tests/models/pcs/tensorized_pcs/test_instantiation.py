@@ -10,6 +10,7 @@ from torch import Tensor
 from cirkit.layers.sum_product import UncollapsedCPLayer
 from cirkit.models import TensorizedPC
 from cirkit.models.functional import integrate
+from tests import floats
 from tests.models.pcs.tensorized_pcs.test_utils import get_pc_2x2_dense
 
 
@@ -76,7 +77,7 @@ def test_pc_output() -> None:
     ).unsqueeze(dim=-1)
     output = pc(all_inputs)
     assert output.shape == (16, 1)
-    assert torch.allclose(output, _get_pc_2x2_output(), rtol=0, atol=torch.finfo(torch.float32).eps)
+    assert floats.allclose(output, _get_pc_2x2_output())
 
 
 def test_pc_partition_function() -> None:
@@ -84,4 +85,4 @@ def test_pc_partition_function() -> None:
     _set_pc_2x2_params(pc)
     # part_func should be 1, log is 0
     pc_pf = integrate(pc)
-    assert torch.allclose(pc_pf(torch.zeros(())), torch.zeros(()), atol=0, rtol=0)
+    assert floats.allclose(pc_pf(torch.zeros(())), 0.0)
