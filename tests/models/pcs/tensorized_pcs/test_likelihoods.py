@@ -18,6 +18,7 @@ from cirkit.region_graph.random_binary_tree import RandomBinaryTree
 from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils import RandomCtx
 from cirkit.utils.type_aliases import ReparamFactory
+from tests import floats
 
 
 def get_deep_pc(  # type: ignore[misc]
@@ -85,11 +86,15 @@ def test_pc_likelihoods(
     lls = log_scores - log_z
 
     # Check the partition function computation
-    assert torch.isclose(log_z, torch.logsumexp(log_scores, dim=0, keepdim=True))
+    assert floats.isclose(
+        log_z, torch.logsumexp(log_scores, dim=0, keepdim=True)
+    )  # type: ignore[misc]
 
     # Compare the partition function against the answer, if given
     if true_log_z is not None:
-        assert torch.isclose(log_z, torch.tensor(true_log_z)), f"{log_z.item()}"
+        assert floats.isclose(
+            log_z, torch.tensor(true_log_z)
+        ), f"{log_z.item()}"  # type: ignore[misc]
 
     # Perform variable marginalization on the last two variables
     mar_data = all_data[::4]
@@ -99,7 +104,7 @@ def test_pc_likelihoods(
     # Check the results of marginalization
     sum_lls = torch.logsumexp(lls.view(-1, 4), dim=1, keepdim=True)
     assert mar_lls.shape[0] == lls.shape[0] // 4 and len(mar_lls.shape) == len(lls.shape)
-    assert torch.allclose(sum_lls, mar_lls)
+    assert floats.allclose(sum_lls, mar_lls)
 
 
 # TODO: is fold_mask with multi-batch properly covered?
