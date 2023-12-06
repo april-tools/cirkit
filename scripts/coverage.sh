@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Run coverage and print text report
 coverage run -m pytest
 coverage report
