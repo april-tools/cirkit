@@ -249,8 +249,7 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
                 enumerate(partition1.inputs), enumerate(partition2.inputs)
             ):
                 adj_mat[i, j] = bool(region1.scope & region2.scope)  # I.e., scopes intersect.
-            # Disable: It's wrong to do @= as the shape does not match.
-            adj_mat = adj_mat @ adj_mat.T  # pylint: disable=consider-using-augmented-assign
+            adj_mat = adj_mat @ adj_mat.T
             # Now we have adjencency from inputs1 (of self) to inputs1. An edge means the two
             # regions must be partitioned together.
 

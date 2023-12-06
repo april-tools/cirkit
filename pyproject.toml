@@ -130,7 +130,7 @@ load-plugins = [  # as available in pylint/extensions
 enable= [
   "use-implicit-booleaness-not-comparison-to-string",
   "use-implicit-booleaness-not-comparison-to-zero",
-  "consider-using-augmented-assign",
+  # "consider-using-augmented-assign",  # always inconsistent on github workflow
   "prefer-typing-namedtuple",
   "bad-inline-option",
   "deprecated-pragma",
