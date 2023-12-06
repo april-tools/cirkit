@@ -1,34 +1,46 @@
 #!/bin/bash
 
+failed_linters=()
+
 verbose_diff="" # For black and isort
 verbose=""      # For pydocstyle and pylint
-# No verbost for mypy -- output too much
-if [ "$1" == "--verbose" ]; then
+# No verbose for mypy -- output too much
+if [[ $1 == "--verbose" ]]; then
     verbose_diff="--verbose --diff"
     verbose="--verbose"
     shift
 fi
 
 if [[ $# -gt 0 ]]; then
-    file_args=$@
+    files=$@
 else
-    file_args=$(git ls-files "*.py")
+    files=$(git ls-files "*.py")
 fi
 
+RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-echo -e "${CYAN}Running Black...${NC}"
-black $verbose_diff --check $file_args
-echo
-echo -e "${CYAN}Running Isort...${NC}"
-isort $verbose_diff --check $file_args
-echo
-echo -e "${CYAN}Running Pydocstyle...${NC}"
-pydocstyle $verbose $file_args
-echo
-echo -e "${CYAN}Running Pylint...${NC}"
-pylint $verbose --persistent=n $file_args
-echo
-echo -e "${CYAN}Running Mypy...${NC}"
-mypy $file_args
+run_linter() {
+    linter=$1
+    shift  # remove $linter from args
+    echo -e "${CYAN}Running $linter...${NC}"
+
+    $linter $@ $files
+    if [[ $? -ne 0 ]]; then
+        failed_linters+=("$linter")
+    fi
+
+    echo
+}
+
+run_linter "black" "$verbose_diff" --check
+run_linter "isort" "$verbose_diff" --check
+run_linter "pydocstyle" "$verbose"
+run_linter "pylint" "$verbose" --persistent=n
+run_linter "mypy"
+
+if [[ ${#failed_linters[@]} -gt 0 ]]; then
+    echo -e "${RED}Failed: ${failed_linters[@]}${NC}"
+    exit 1
+fi
