@@ -146,6 +146,7 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
                 if next_node in path:  # Loop to the current path, including next_node==node.
                     return False
                 if next_node in visited:  # Already checked and is OK.
+                    path.remove(node)
                     return True
                 if not _dfs(next_node):  # Found problem in DFS.
                     return False

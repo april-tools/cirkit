@@ -19,6 +19,7 @@ def test_symbolic_circuit() -> None:
     node2 = RegionNode((2,))
     region = RegionNode((1, 2))
     rg.add_partitioning(region, [node1, node2])
+    rg.freeze()
 
     circuit = SymbolicCircuit(
         rg, layer_cls, efamily_cls, layer_kwargs, efamily_kwargs, reparam, 4, 4, 1, 1

@@ -13,7 +13,8 @@ from cirkit.reparams.leaf import ReparamIdentity
 from cirkit.utils.type_aliases import ReparamFactory
 
 
-class SymbolicCircuit:
+# Disable: It's designed to have these many attributes.
+class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     """The Symbolic Circuit."""
 
     # TODO: how to deal with too-many?
@@ -47,6 +48,12 @@ class SymbolicCircuit:
 
         """
         self.region_graph = region_graph
+        self.scope = region_graph.scope
+        self.num_vars = region_graph.num_vars
+        self.is_smooth = region_graph.is_smooth
+        self.is_decomposable = region_graph.is_decomposable
+        self.is_structured_decomposable = region_graph.is_structured_decomposable
+        self.is_omni_compatible = region_graph.is_omni_compatible
 
         self._layers: Set[SymbolicLayer] = set()
 
