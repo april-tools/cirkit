@@ -38,7 +38,8 @@ class CategoricalLayer(ExpFamilyLayer):
         ), "The number of categories for Categorical distribution must be positive."
         self.num_categories = num_categories
         self.suff_stats_shape = (num_input_units, num_categories)
-        # Set self.suff_stats_shape before ExpFamilyLayer.__init__.
+        # Set self.suff_stats_shape before ExpFamilyLayer.__init__. The reparam will be set in
+        # ExpFamilyLayer.__init__ to normalize dim=-1 (cat).
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
