@@ -76,9 +76,7 @@ def test_pc_nonneg_reparams(
     log_scores = pc(all_data)
 
     # Check the partition function computation
-    assert floats.isclose(
-        log_z, torch.logsumexp(log_scores, dim=0, keepdim=True)
-    )  # type: ignore[misc]
+    assert floats.isclose(log_z, torch.logsumexp(log_scores, dim=0, keepdim=True))
 
     # The circuit should be already normalized,
     #  if the re-parameterization is via softmax and using normalized input distributions

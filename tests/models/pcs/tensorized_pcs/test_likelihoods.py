@@ -86,15 +86,11 @@ def test_pc_likelihoods(
     lls = log_scores - log_z
 
     # Check the partition function computation
-    assert floats.isclose(
-        log_z, torch.logsumexp(log_scores, dim=0, keepdim=True)
-    )  # type: ignore[misc]
+    assert floats.isclose(log_z, torch.logsumexp(log_scores, dim=0, keepdim=True))
 
     # Compare the partition function against the answer, if given
     if true_log_z is not None:
-        assert floats.isclose(
-            log_z, torch.tensor(true_log_z)
-        ), f"{log_z.item()}"  # type: ignore[misc]
+        assert floats.isclose(log_z, torch.tensor(true_log_z)), f"{log_z.item()}"
 
     # Perform variable marginalization on the last two variables
     mar_data = all_data[::4]
