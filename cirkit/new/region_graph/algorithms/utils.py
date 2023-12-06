@@ -27,9 +27,7 @@ class HypercubeToScope(Dict[HyperCube, FrozenSet[int]]):
         self.ndims = len(shape)
         self.shape = tuple(shape)
         # We assume it's feasible to save the whole hypercube, since it should be the whole region.
-        self.hypercube: NDArray[np.int64] = np.arange(
-            1, np.prod(shape) + 1, dtype=np.int64
-        ).reshape(shape)
+        self.hypercube: NDArray[np.int64] = np.arange(np.prod(shape), dtype=np.int64).reshape(shape)
 
     def __missing__(self, key: HyperCube) -> FrozenSet[int]:
         """Construct the item when not exist in the dict.
