@@ -33,7 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 lint = [
-  "black~=23.0",
+  "black[jupyter]~=23.0",
   "mypy==1.7.1",  # should be specific version for stable typing
   "pylint~=3.0.0",
   "pydocstyle[toml]~=6.3.0",
@@ -50,13 +50,19 @@ notebooks = [
 [project.urls]
 "Homepage" = "https://github.com/april-tools/cirkit"
 
+# unit test
 [tool.pytest.ini_options]
 pythonpath = "."
 testpaths = ["tests"]
 
+# code coverage
+[tool.coverage.run]
+branch = true
+source = ["cirkit"]
+
 [tool.coverage.report]
-# regex for exclusion
-exclude_also = [
+show_missing = true
+exclude_also = [  # regex for exclusion
   '@overload',
 ]
 
