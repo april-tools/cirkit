@@ -1,14 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterable, Optional, Set, Type
 
-from cirkit.layers.input.exp_family import ExpFamilyLayer
-from cirkit.layers.sum_product import (
-    CollapsedCPLayer,
-    SharedCPLayer,
-    SumProductLayer,
-    TuckerLayer,
-    UncollapsedCPLayer,
-)
+from cirkit.new.layers import InputLayer, SumProductLayer
 from cirkit.new.reparams import Reparameterization
 
 # TODO: double check docs and __repr__
@@ -55,7 +48,7 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
         self,
         scope: Iterable[int],
         num_units: int,
-        layer_cls: Type[SumProductLayer],
+        layer_cls: Type[SumProductLayer],  # TODO: is it correct to use SumProductLayer?
         layer_kwargs: Optional[Dict[str, Any]] = None,
         *,
         reparam: Reparameterization,  # TODO: how to set default here?
@@ -74,27 +67,12 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
         """
         super().__init__(scope)
         self.num_units = num_units
+        self.layer_cls = layer_cls
         # Ignore: Unavoidable for kwargs.
         self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
         self.params = reparam  # TODO: this is not correct, but will be reviewed in new layers.
         self.params_in = reparam
         self.params_out = reparam
-
-        if layer_cls == TuckerLayer:
-            self.layer_cls = layer_cls
-        else:  # CP layer
-            # TODO: for unfolded layers we will not need these variants and ignore may be resolved
-            collapsed = layer_kwargs.get("collapsed", True)  # type: ignore[union-attr,misc]
-            shared = layer_kwargs.get("shared", False)  # type: ignore[union-attr,misc]
-
-            if not shared and collapsed:  # type: ignore[misc]
-                self.layer_cls = CollapsedCPLayer
-            elif not shared and not collapsed:  # type: ignore[misc]
-                self.layer_cls = UncollapsedCPLayer
-            elif shared and collapsed:  # type: ignore[misc]
-                self.layer_cls = SharedCPLayer
-            else:
-                raise NotImplementedError("The shared uncollapsed CP is not implemented.")
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
@@ -118,7 +96,7 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
 class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The product layer in symbolic circuits."""
 
-    def __init__(
+    def __init__(  # TODO: is it correct to use SumProductLayer?
         self, scope: Iterable[int], num_units: int, layer_cls: Type[SumProductLayer]
     ) -> None:
         """Construct the SymbolicProductLayer.
@@ -159,7 +137,7 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
         self,
         scope: Iterable[int],
         num_units: int,
-        layer_cls: Type[ExpFamilyLayer],
+        layer_cls: Type[InputLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
         *,
         reparam: Reparameterization,  # TODO: how to set default here?
@@ -189,12 +167,12 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
             str: The str representation of the layer.
         """
         class_name = self.__class__.__name__
-        efamily_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
+        layer_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
 
         return (
             f"{class_name}:\n"  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
             f"Scope: {repr(self.scope)}\n"
-            f"Input Exp Family Class: {efamily_cls_name}\n"
+            f"Input Exp Family Class: {layer_cls_name}\n"
             f"Layer KWArgs: {repr(self.layer_kwargs)}\n"
             f"Number of Units: {repr(self.num_units)}\n"
         )

@@ -1,6 +1,7 @@
 # pylint: disable=missing-function-docstring
-from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product import BaseCPLayer
+from typing import Dict
+
+from cirkit.new.layers import CategoricalLayer, CPLayer
 from cirkit.new.region_graph import QuadTree, RegionGraph, RegionNode
 from cirkit.new.reparams import ExpReparam
 from cirkit.new.symbolic.symbolic_circuit import SymbolicCircuit
@@ -8,10 +9,10 @@ from cirkit.new.symbolic.symbolic_layer import SymbolicInputLayer, SymbolicSumLa
 
 
 def test_symbolic_circuit() -> None:
-    efamily_cls = CategoricalLayer
-    efamily_kwargs = {"num_categories": 256}
-    layer_cls = BaseCPLayer
-    layer_kwargs = {"rank": 1}
+    input_cls = CategoricalLayer
+    input_kwargs = {"num_categories": 256}
+    layer_cls = CPLayer
+    layer_kwargs: Dict[str, None] = {}
     reparam = ExpReparam()
 
     rg = RegionGraph()
@@ -24,9 +25,9 @@ def test_symbolic_circuit() -> None:
     circuit = SymbolicCircuit(
         rg,
         layer_cls,
-        efamily_cls,
+        input_cls,
         layer_kwargs,
-        efamily_kwargs,
+        input_kwargs,
         reparam=reparam,
         num_inner_units=4,
         num_input_units=4,
@@ -49,9 +50,9 @@ def test_symbolic_circuit() -> None:
     circuit_2 = SymbolicCircuit(
         rg_2,
         layer_cls,
-        efamily_cls,
+        input_cls,
         layer_kwargs,
-        efamily_kwargs,
+        input_kwargs,
         reparam=reparam,
         num_inner_units=4,
         num_input_units=4,

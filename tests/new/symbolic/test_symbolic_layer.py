@@ -1,7 +1,6 @@
 # pylint: disable=missing-function-docstring
 
-from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product import BaseCPLayer, TuckerLayer
+from cirkit.new.layers import CategoricalLayer, CPLayer, TuckerLayer
 from cirkit.new.reparams import ExpReparam
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
@@ -24,10 +23,10 @@ def test_symbolic_sum_layer_cp() -> None:
     scope = [1, 2]
     num_units = 3
     layer_kwargs = {"collapsed": False, "shared": False, "arity": 2}
-    layer = SymbolicSumLayer(scope, num_units, BaseCPLayer, layer_kwargs, reparam=ExpReparam())
+    layer = SymbolicSumLayer(scope, num_units, CPLayer, layer_kwargs, reparam=ExpReparam())
     assert "SymbolicSumLayer" in repr(layer)
     assert "Scope: frozenset({1, 2})" in repr(layer)
-    assert "Layer Class: UncollapsedCPLayer" in repr(layer)
+    assert "Layer Class: CPLayer" in repr(layer)
     assert "Number of Units: 3" in repr(layer)
 
 
@@ -44,9 +43,9 @@ def test_symbolic_product_node() -> None:
 def test_symbolic_input_node() -> None:
     scope = [1, 2]
     num_units = 3
-    efamily_kwargs = {"num_categories": 5}
+    input_kwargs = {"num_categories": 5}
     layer = SymbolicInputLayer(
-        scope, num_units, CategoricalLayer, efamily_kwargs, reparam=ExpReparam()
+        scope, num_units, CategoricalLayer, input_kwargs, reparam=ExpReparam()
     )
     assert "SymbolicInputLayer" in repr(layer)
     assert "Scope: frozenset({1, 2})" in repr(layer)

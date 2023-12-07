@@ -1,7 +1,6 @@
 from typing import Any, Dict, FrozenSet, Iterable, Iterator, Optional, Set, Type
 
-from cirkit.layers.input.exp_family import ExpFamilyLayer
-from cirkit.layers.sum_product import SumProductLayer
+from cirkit.new.layers import InputLayer, SumProductLayer
 from cirkit.new.region_graph import RegionGraph, RGNode
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.symbolic.symbolic_layer import (
@@ -10,6 +9,8 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicProductLayer,
     SymbolicSumLayer,
 )
+
+# TODO: double check docs and __repr__
 
 
 # Disable: It's designed to have these many attributes.
@@ -22,11 +23,12 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
         region_graph: RegionGraph,
-        layer_cls: Type[SumProductLayer],
-        efamily_cls: Type[ExpFamilyLayer],
+        layer_cls: Type[SumProductLayer],  # TODO: is it correct to use SumProductLayer?
+        input_cls: Type[InputLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
-        efamily_kwargs: Optional[Dict[str, Any]] = None,
+        input_kwargs: Optional[Dict[str, Any]] = None,
         *,
+        # TODO: reparam for input and inner?
         reparam: Reparameterization,  # TODO: how to set default here?
         num_inner_units: int = 2,
         num_input_units: int = 2,
@@ -37,9 +39,9 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         Args:
             region_graph (RegionGraph): The region graph to convert.
             layer_cls (Type[SumProductLayer]): The layer class for inner layers.
-            efamily_cls (Type[ExpFamilyLayer]): The layer class for input layers.
+            input_cls (Type[ExpFamilyLayer]): The layer class for input layers.
             layer_kwargs (Optional[Dict[str, Any]]): The parameters for inner layer class.
-            efamily_kwargs (Optional[Dict[str, Any]]): The parameters for input layer class.
+            input_kwargs (Optional[Dict[str, Any]]): The parameters for input layer class.
             reparam (ReparamFactory): The reparametrization function.
             num_inner_units (int): Number of units for inner layers.
             num_input_units (int): Number of units for input layers.
@@ -74,9 +76,9 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
                         rg_node,
                         region_graph,
                         layer_cls,
-                        efamily_cls,
+                        input_cls,
                         layer_kwargs,  # type: ignore[misc]
-                        efamily_kwargs,  # type: ignore[misc]
+                        input_kwargs,  # type: ignore[misc]
                         reparam,
                         num_inner_units,
                         num_input_units,
@@ -100,9 +102,9 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         rg_node: RGNode,
         region_graph: RegionGraph,
         layer_cls: Type[SumProductLayer],
-        efamily_cls: Type[ExpFamilyLayer],
+        input_cls: Type[InputLayer],
         layer_kwargs: Optional[Dict[str, Any]],
-        efamily_kwargs: Optional[Dict[str, Any]],
+        input_kwargs: Optional[Dict[str, Any]],
         reparam: Reparameterization,
         num_inner_units: int,
         num_input_units: int,
@@ -116,9 +118,9 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
             rg_node (RGNode): The current region graph node to convert to symbolic layer.
             region_graph (RegionGraph): The region graph.
             layer_cls (Type[SumProductLayer]): The layer class for inner layers.
-            efamily_cls (Type[ExpFamilyLayer]): The layer class for input layers.
+            input_cls (Type[ExpFamilyLayer]): The layer class for input layers.
             layer_kwargs (Optional[Dict[str, Any]]): The parameters for inner layer class.
-            efamily_kwargs (Optional[Dict[str, Any]]): The parameters for input layer class.
+            input_kwargs (Optional[Dict[str, Any]]): The parameters for input layer class.
             reparam (ReparamFactory): The reparametrization function.
             num_inner_units (int): Number of units for inner layers.
             num_input_units (int): Number of units for input layers.
@@ -167,8 +169,8 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
             symbolic_layer = SymbolicInputLayer(
                 scope,
                 num_input_units,
-                efamily_cls,
-                efamily_kwargs,  # type: ignore[misc]
+                input_cls,
+                input_kwargs,  # type: ignore[misc]
                 reparam=reparam,
             )
 
