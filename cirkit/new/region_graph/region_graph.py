@@ -15,7 +15,7 @@ from cirkit.new.utils.type_aliases import RegionGraphJson
 @final
 class RegionGraph:  # pylint: disable=too-many-instance-attributes
     """The region graph that holds the high-level abstraction of circuit structure.
-    
+
     This class is initiated empty and nodes can be pushed into the graph with edges. It can also \
     serve as a container of RGNode for use in the RG construction algorithms.
     """

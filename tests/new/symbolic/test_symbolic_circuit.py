@@ -2,9 +2,9 @@
 from cirkit.layers.input.exp_family import CategoricalLayer
 from cirkit.layers.sum_product import BaseCPLayer
 from cirkit.new.region_graph import QuadTree, RegionGraph, RegionNode
+from cirkit.new.reparams import ExpReparam
 from cirkit.new.symbolic.symbolic_circuit import SymbolicCircuit
 from cirkit.new.symbolic.symbolic_layer import SymbolicInputLayer, SymbolicSumLayer
-from cirkit.reparams.leaf import ReparamExp
 
 
 def test_symbolic_circuit() -> None:
@@ -12,7 +12,7 @@ def test_symbolic_circuit() -> None:
     efamily_kwargs = {"num_categories": 256}
     layer_cls = BaseCPLayer
     layer_kwargs = {"rank": 1}
-    reparam = ReparamExp
+    reparam = ExpReparam()
 
     rg = RegionGraph()
     node1 = RegionNode((1,))
@@ -22,7 +22,15 @@ def test_symbolic_circuit() -> None:
     rg.freeze()
 
     circuit = SymbolicCircuit(
-        rg, layer_cls, efamily_cls, layer_kwargs, efamily_kwargs, reparam, 4, 4, 1, 1
+        rg,
+        layer_cls,
+        efamily_cls,
+        layer_kwargs,
+        efamily_kwargs,
+        reparam=reparam,
+        num_inner_units=4,
+        num_input_units=4,
+        num_classes=1,
     )
 
     assert len(list(circuit.layers)) == 4
@@ -39,7 +47,15 @@ def test_symbolic_circuit() -> None:
     rg_2 = QuadTree((4, 4), struct_decomp=True)
 
     circuit_2 = SymbolicCircuit(
-        rg_2, layer_cls, efamily_cls, layer_kwargs, efamily_kwargs, reparam, 4, 4, 1, 1
+        rg_2,
+        layer_cls,
+        efamily_cls,
+        layer_kwargs,
+        efamily_kwargs,
+        reparam=reparam,
+        num_inner_units=4,
+        num_input_units=4,
+        num_classes=1,
     )
 
     assert len(list(circuit_2.layers)) == 46

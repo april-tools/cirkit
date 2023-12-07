@@ -1,12 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterable, Optional, Set, Type
 
-from cirkit.layers.input.exp_family import (
-    BinomialLayer,
-    CategoricalLayer,
-    ExpFamilyLayer,
-    NormalLayer,
-)
+from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.layers.sum_product import (
     CollapsedCPLayer,
     SharedCPLayer,
@@ -14,9 +9,7 @@ from cirkit.layers.sum_product import (
     TuckerLayer,
     UncollapsedCPLayer,
 )
-from cirkit.reparams.leaf import ReparamIdentity
-from cirkit.reparams.reparam import Reparameterization
-from cirkit.utils.type_aliases import ReparamFactory
+from cirkit.new.reparams import Reparameterization
 
 # TODO: double check docs and __repr__
 
@@ -36,6 +29,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-few-public-methods
         self.scope = frozenset(scope)
         assert self.scope, "The scope of a layer in SymbC must be non-empty."
 
+        # TODO: should this be a List? what do we need on ordering?
         self.inputs: Set[SymbolicLayer] = set()
         self.outputs: Set[SymbolicLayer] = set()
 
@@ -50,16 +44,21 @@ class SymbolicLayer(ABC):  # pylint: disable=too-few-public-methods
         """
 
 
-class SymbolicSumLayer(SymbolicLayer):
+# Disable: It's intended for SymbolicSumLayer to have only these methods.
+class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The sum layer in symbolic circuits."""
 
     # TODO: how to design interface? require kwargs only?
+    # Disable: This __init__ is designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
         scope: Iterable[int],
         num_units: int,
         layer_cls: Type[SumProductLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
+        *,
+        reparam: Reparameterization,  # TODO: how to set default here?
     ) -> None:
         """Construct the SymbolicSumLayer.
 
@@ -68,6 +67,7 @@ class SymbolicSumLayer(SymbolicLayer):
             num_units (int): Number of output units in this layer.
             layer_cls (Type[SumProductLayer]): The inner (sum) layer class.
             layer_kwargs (Optional[Dict[str, Any]]): The parameters for the inner layer class.
+            reparam (Reparameterization): The reparam.
 
         Raises:
             NotImplementedError: If the shared uncollapsed CP is not implemented.
@@ -76,9 +76,9 @@ class SymbolicSumLayer(SymbolicLayer):
         self.num_units = num_units
         # Ignore: Unavoidable for kwargs.
         self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
-        self.params: Optional[Reparameterization] = None
-        self.params_in: Optional[Reparameterization] = None
-        self.params_out: Optional[Reparameterization] = None
+        self.params = reparam  # TODO: this is not correct, but will be reviewed in new layers.
+        self.params_in = reparam
+        self.params_out = reparam
 
         if layer_cls == TuckerLayer:
             self.layer_cls = layer_cls
@@ -96,46 +96,6 @@ class SymbolicSumLayer(SymbolicLayer):
             else:
                 raise NotImplementedError("The shared uncollapsed CP is not implemented.")
 
-    def set_placeholder_params(
-        self,
-        num_input_units: int,
-        num_units: int,
-        reparam: ReparamFactory = ReparamIdentity,
-    ) -> None:
-        """Set un-initialized parameter placeholders for the symbolic sum layer.
-
-        Args:
-            num_input_units (int): Number of input units.
-            num_units (int): Number of output units.
-            reparam (ReparamFactory): Reparameterization function.
-
-        Raises:
-            NotImplementedError: If the shared uncollapsed CP is not implemented.
-        """
-        assert self.num_units == num_units
-
-        # Handling different layer types
-        if self.layer_cls == TuckerLayer:
-            # number of fold = 1
-            self.params = reparam((1, num_input_units, num_input_units, num_units), dim=(1, 2))
-        else:  # CP layer
-            # TODO: for unfolded layers we will not need these variants and ignore may be resolved
-            arity: int = self.layer_kwargs.get("arity", 2)  # type: ignore[misc]
-            assert (
-                "fold_mask" not in self.layer_kwargs  # type: ignore[misc]
-                or self.layer_kwargs["A"] is None  # type: ignore[misc]
-            ), "Do not support fold_mask yet"
-
-            if self.layer_cls == CollapsedCPLayer:
-                self.params_in = reparam((1, arity, num_input_units, num_units), dim=-2, mask=None)
-            elif self.layer_cls == UncollapsedCPLayer:
-                self.params_in = reparam((1, arity, num_input_units, 1), dim=-2, mask=None)
-                self.params_out = reparam((1, 1, num_units), dim=-2, mask=None)
-            elif self.layer_cls == SharedCPLayer:
-                self.params_in = reparam((arity, num_input_units, num_units), dim=-2, mask=None)
-            else:
-                raise NotImplementedError("The shared uncollapsed CP is not implemented.")
-
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
 
@@ -144,11 +104,6 @@ class SymbolicSumLayer(SymbolicLayer):
         """
         class_name = self.__class__.__name__
         layer_cls_name = self.layer_cls.__name__
-        # TODO: review this part when we have a new reparams.
-        params_shape = self.params.shape if self.params is not None else None
-
-        params_in_shape = self.params_in.shape if self.params_in is not None else None
-        params_out_shape = self.params_out.shape if self.params_out is not None else None
 
         return (
             f"{class_name}:\n"  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
@@ -156,9 +111,6 @@ class SymbolicSumLayer(SymbolicLayer):
             f"Layer Class: {layer_cls_name}\n"
             f"Layer KWArgs: {repr(self.layer_kwargs)}\n"
             f"Number of Units: {repr(self.num_units)}\n"
-            f"Parameter Shape: {repr(params_shape)}\n"
-            f"CP Layer Parameter in Shape: {repr(params_in_shape)}\n"
-            f"CP Layer Parameter out Shape: {repr(params_out_shape)}\n"
         )
 
 
@@ -197,15 +149,20 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
         )
 
 
-class SymbolicInputLayer(SymbolicLayer):
+# Disable: It's intended for SymbolicInputLayer to have only these methods.
+class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The input layer in symbolic circuits."""
 
+    # Disable: This __init__ is designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
         scope: Iterable[int],
         num_units: int,
         layer_cls: Type[ExpFamilyLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
+        *,
+        reparam: Reparameterization,  # TODO: how to set default here?
     ) -> None:
         """Construct the SymbolicInputLayer.
 
@@ -214,7 +171,8 @@ class SymbolicInputLayer(SymbolicLayer):
             num_units (int): Number of output units.
             layer_cls (Type[ExpFamilyLayer]): The exponential family class.
             layer_kwargs (Optional[Dict[str, Any]]): The parameters for
-            the exponential family class.
+                the exponential family class.
+            reparam (Reparameterization): The reparam.
         """
         # TODO: many things can be merged to SymbolicLayer.__init__.
         super().__init__(scope)
@@ -222,37 +180,7 @@ class SymbolicInputLayer(SymbolicLayer):
         self.layer_cls = layer_cls
         # Ignore: Unavoidable for kwargs.
         self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
-        self.params: Optional[Reparameterization] = None
-
-    def set_placeholder_params(
-        self,
-        num_channels: int = 1,
-        num_replicas: int = 1,
-        reparam: ReparamFactory = ReparamIdentity,
-    ) -> None:
-        """Set un-initialized parameter placeholders for the input layer.
-
-        Args:
-            num_channels (int): Number of channels.
-            num_replicas (int): Number of replicas.
-            reparam (ReparamFactory): Reparameterization function.
-
-        Raises:
-            NotImplementedError: Only support Normal, Categorical, and Binomial input layers.
-        """
-        # Handling different exponential family layer types
-        if self.layer_cls == NormalLayer:
-            num_suff_stats = 2 * num_channels
-        elif self.layer_cls == CategoricalLayer:
-            num_suff_stats = (
-                self.layer_kwargs["num_categories"] * num_channels  # type: ignore[misc]
-            )
-        elif self.layer_cls == BinomialLayer:
-            num_suff_stats = num_channels
-        else:
-            raise NotImplementedError("Only support Normal, Categorical, and Binomial input layers")
-
-        self.params = reparam((1, self.num_units, num_replicas, num_suff_stats), dim=-1)
+        self.params = reparam
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
@@ -262,7 +190,6 @@ class SymbolicInputLayer(SymbolicLayer):
         """
         class_name = self.__class__.__name__
         efamily_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
-        params_shape = self.params.shape if self.params is not None else None
 
         return (
             f"{class_name}:\n"  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
@@ -270,5 +197,4 @@ class SymbolicInputLayer(SymbolicLayer):
             f"Input Exp Family Class: {efamily_cls_name}\n"
             f"Layer KWArgs: {repr(self.layer_kwargs)}\n"
             f"Number of Units: {repr(self.num_units)}\n"
-            f"Parameter Shape: {repr(params_shape)}\n"
         )
