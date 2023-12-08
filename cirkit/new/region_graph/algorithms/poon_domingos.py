@@ -1,19 +1,20 @@
 from collections import deque
-from typing import Deque, Dict, FrozenSet, List, Optional, Sequence, Union, cast
+from typing import Deque, Dict, List, Optional, Sequence, Union, cast
 
 from cirkit.new.region_graph.algorithms.utils import HyperCube, HypercubeToScope
 from cirkit.new.region_graph.region_graph import RegionGraph
 from cirkit.new.region_graph.rg_node import RegionNode
+from cirkit.new.utils import Scope
 
 # TODO: test what is constructed here
 
 
-def _get_region_node_by_scope(graph: RegionGraph, scope: FrozenSet[int]) -> RegionNode:
+def _get_region_node_by_scope(graph: RegionGraph, scope: Scope) -> RegionNode:
     """Find a RegionNode with a specific scope in the RG, and construct one if not found.
 
     Args:
         graph (RegionGraph): The region graph to find in.
-        scope (Iterable[int]): The scope to find.
+        scope (Scope): The scope to find.
 
     Returns:
         RegionNode: The RegionNode found or constructed.

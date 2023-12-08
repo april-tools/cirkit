@@ -27,8 +27,8 @@ def _partition_node_randomly(
     Returns:
         List[RegionNode]: The region nodes forming the partitioning.
     """
-    scope = list(node.scope)
-    random.shuffle(scope)
+    scope_list = list(node.scope)
+    random.shuffle(scope_list)
 
     split: NDArray[np.float64]  # Unnormalized split points including 0 and 1.
     if proportions is None:
@@ -39,7 +39,7 @@ def _partition_node_randomly(
 
     # Ignore: Numpy has typing issues.
     split_point: List[int] = (
-        np.around(split / split[-1] * len(scope))  # type: ignore[assignment,misc]
+        np.around(split / split[-1] * len(scope_list))  # type: ignore[assignment,misc]
         .astype(np.int64)
         .tolist()
     )
@@ -47,7 +47,7 @@ def _partition_node_randomly(
     region_nodes: List[RegionNode] = []
     for l, r in zip(split_point[:-1], split_point[1:]):
         if l < r:  # A region must have as least one var, otherwise we skip it.
-            region_node = RegionNode(scope[l:r])
+            region_node = RegionNode(scope_list[l:r])
             region_nodes.append(region_node)
 
     if len(region_nodes) == 1:
