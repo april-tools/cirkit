@@ -3,6 +3,7 @@ from typing import Any, Dict, Iterable, Optional, Set, Type
 
 from cirkit.new.layers import InputLayer, SumProductLayer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils import Scope
 
 # TODO: double check docs and __repr__
 
@@ -19,7 +20,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-few-public-methods
             scope (Iterable[int]): The scope of this layer.
         """
         super().__init__()
-        self.scope = frozenset(scope)
+        self.scope = Scope(scope)
         assert self.scope, "The scope of a layer in SymbC must be non-empty."
 
         # TODO: should this be a List? what do we need on ordering?

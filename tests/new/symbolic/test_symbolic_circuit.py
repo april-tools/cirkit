@@ -4,8 +4,8 @@ from typing import Dict
 from cirkit.new.layers import CategoricalLayer, CPLayer
 from cirkit.new.region_graph import QuadTree, RegionGraph, RegionNode
 from cirkit.new.reparams import ExpReparam
-from cirkit.new.symbolic.symbolic_circuit import SymbolicCircuit
-from cirkit.new.symbolic.symbolic_layer import SymbolicInputLayer, SymbolicSumLayer
+from cirkit.new.symbolic import SymbolicCircuit, SymbolicInputLayer, SymbolicSumLayer
+from cirkit.new.utils import Scope
 
 
 def test_symbolic_circuit() -> None:
@@ -16,9 +16,9 @@ def test_symbolic_circuit() -> None:
     reparam = ExpReparam()
 
     rg = RegionGraph()
-    node1 = RegionNode((1,))
-    node2 = RegionNode((2,))
-    region = RegionNode((1, 2))
+    node1 = RegionNode({0})
+    node2 = RegionNode({1})
+    region = RegionNode({0, 1})
     rg.add_partitioning(region, [node1, node2])
     rg.freeze()
 
@@ -62,4 +62,4 @@ def test_symbolic_circuit() -> None:
     assert len(list(circuit_2.layers)) == 46
     assert len(list(circuit_2.input_layers)) == 16
     assert len(list(circuit_2.output_layers)) == 1
-    assert (circuit_2.scope) == frozenset(range(16))
+    assert circuit_2.scope == Scope(range(16))

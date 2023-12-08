@@ -1,4 +1,4 @@
-from typing import Any, Dict, FrozenSet, Iterable, Iterator, Optional, Set, Type
+from typing import Any, Dict, Iterable, Iterator, Optional, Set, Type
 
 from cirkit.new.layers import InputLayer, SumProductLayer
 from cirkit.new.region_graph import RegionGraph, RGNode
@@ -9,13 +9,14 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicProductLayer,
     SymbolicSumLayer,
 )
+from cirkit.new.utils import Scope
 
 # TODO: double check docs and __repr__
 
 
 # Disable: It's designed to have these many attributes.
 class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
-    """The Symbolic Circuit."""
+    """The symbolic representation of a tensorized circuit."""
 
     # TODO: how to design interface? require kwargs only?
     # TODO: how to deal with too-many?
@@ -156,8 +157,9 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
             assert len(inputs) == 2, "Partition nodes should have exactly two inputs."
             assert len(outputs) > 0, "Partition nodes should have at least one output."
 
-            left_input_units = num_inner_units if inputs[0].inputs else num_input_units
-            right_input_units = num_inner_units if inputs[1].inputs else num_input_units
+            input0, input1 = inputs
+            left_input_units = num_inner_units if input0.inputs else num_input_units
+            right_input_units = num_inner_units if input1.inputs else num_input_units
 
             assert (
                 left_input_units == right_input_units
@@ -196,7 +198,7 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     # simply defined in __init__. Some requires additional treatment and is define below.
     # We list everything here to add "docstrings" to them.
 
-    scope: FrozenSet[int]
+    scope: Scope
     """The scope of the SymbC, i.e., the union of scopes of all output layers."""
 
     num_vars: int
@@ -216,7 +218,7 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     """Whether the SymbC is omni-compatible, i.e., compatible to all circuits of the same scope."""
 
     def is_compatible(
-        self, other: "SymbolicCircuit", scope: Optional[Iterable[int]] = None
+        self, other: "SymbolicCircuit", *, scope: Optional[Iterable[int]] = None
     ) -> bool:
         """Test compatibility with another symbolic circuit over the given scope.
 
@@ -228,7 +230,7 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         Returns:
             bool: Whether the SymbC is compatible to the other.
         """
-        return self.region_graph.is_compatible(other.region_graph, scope)
+        return self.region_graph.is_compatible(other.region_graph, scope=scope)
 
     #######################################    Layer views    ######################################
     # These are iterable views of the nodes in the SymbC. For efficiency, all these views are
