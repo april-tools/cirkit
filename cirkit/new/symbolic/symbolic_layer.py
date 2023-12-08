@@ -1,31 +1,63 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Optional, Set, Type
+from typing import Any, Dict, Iterable, Optional, Type
 
-from cirkit.new.layers import InputLayer, SumProductLayer
+from cirkit.new.layers import InnerLayer, InputLayer, Layer
+from cirkit.new.region_graph import PartitionNode, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils import Scope
+from cirkit.new.utils import OrderedSet
 
-# TODO: double check docs and __repr__
+# TODO: double check __repr__
 
 
-# Disable: It's intended for SymbolicLayer to have only these methods.
-class SymbolicLayer(ABC):  # pylint: disable=too-few-public-methods
+# Disable: It's intended for SymbolicLayer to have these many attrs.
+class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
     """The abstract base class for symbolic layers in symbolic circuits."""
 
-    # TODO: Save a RGNode here? allow comparison here?
-    def __init__(self, scope: Iterable[int]) -> None:
+    # We accept structure as positional args, and layer spec as kw-only.
+    # Disable: This __init__ is designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
+    def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+        self,
+        rg_node: RGNode,
+        layers_in: Iterable["SymbolicLayer"],
+        *,
+        num_units: int,
+        layer_cls: Type[Layer],
+        layer_kwargs: Optional[Dict[str, Any]] = None,
+        reparam: Optional[Reparameterization] = None,
+    ) -> None:
         """Construct the SymbolicLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this layer.
+            rg_node (RGNode): The region graph node corresponding to this layer.
+            layers_in (Iterable[SymbolicLayer]): The input to this layer, empty for input layers.
+            num_units (int): The number of units in this layer.
+            layer_cls (Type[Layer]): The concrete layer class to become.
+            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
+                layer_cls. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The reparameterization for layer \
+                parameters, can be None if layer_cls has no params. Defaults to None.
         """
         super().__init__()
-        self.scope = Scope(scope)
-        assert self.scope, "The scope of a layer in SymbC must be non-empty."
+        self.rg_node = rg_node
+        self.scope = rg_node.scope
 
-        # TODO: should this be a List? what do we need on ordering?
-        self.inputs: Set[SymbolicLayer] = set()
-        self.outputs: Set[SymbolicLayer] = set()
+        # self.inputs is filled using layers_in, while self.outputs is empty until self appears in
+        # another layer's layers_in.
+        self.inputs: OrderedSet[SymbolicLayer] = OrderedSet()
+        self.outputs: OrderedSet[SymbolicLayer] = OrderedSet()
+        for layer_in in layers_in:
+            self.inputs.append(layer_in)
+            layer_in.outputs.append(self)
+        assert len(self.inputs) == len(
+            rg_node.inputs
+        ), "The number of inputs to this layer does not match the RG."
+
+        self.num_units = num_units
+        self.layer_cls = layer_cls
+        # Ignore: Unavoidable for kwargs.
+        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
+        self.reparam = reparam
 
     # We require subclasses to implement __repr__ on their own. This also forbids the instantiation
     # of this abstract class.
@@ -37,43 +69,64 @@ class SymbolicLayer(ABC):  # pylint: disable=too-few-public-methods
             str: The str representation of the layer.
         """
 
+    # __hash__ and __eq__ are defined by default to compare on object identity, i.e.,
+    # (a is b) <=> (a == b) <=> (hash(a) == hash(b)).
+
+    def __lt__(self, other: "SymbolicLayer") -> bool:
+        """Compare the layer with another layer, for < operator implicitly used in sorting.
+
+        SymbolicLayer is compared by the corresponding RGNode, so that SymbolicCircuit obtains the \
+        same ordering as the RegionGraph.
+
+        Args:
+            other (SymbolicLayer): The other layer to compare with.
+
+        Returns:
+            bool: Whether self < other.
+        """
+        return self.rg_node < other.rg_node
+
 
 # Disable: It's intended for SymbolicSumLayer to have only these methods.
 class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The sum layer in symbolic circuits."""
 
-    # TODO: how to design interface? require kwargs only?
+    reparam: Reparameterization  # Sum layer always have params.
+
+    # Note that the typing for layers_in cannot be refined because all layers are mixed in one
+    # container in SymbolicCircuit. Same the following two layers.
     # Disable: This __init__ is designed to have these arguments.
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
-        scope: Iterable[int],
-        num_units: int,
-        layer_cls: Type[SumProductLayer],  # TODO: is it correct to use SumProductLayer?
-        layer_kwargs: Optional[Dict[str, Any]] = None,
+        rg_node: RegionNode,
+        layers_in: Iterable[SymbolicLayer],
         *,
-        reparam: Reparameterization,  # TODO: how to set default here?
+        num_units: int,
+        layer_cls: Type[InnerLayer],  # TODO: more specific?
+        layer_kwargs: Optional[Dict[str, Any]] = None,
+        reparam: Reparameterization,
     ) -> None:
         """Construct the SymbolicSumLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this layer.
-            num_units (int): Number of output units in this layer.
-            layer_cls (Type[SumProductLayer]): The inner (sum) layer class.
-            layer_kwargs (Optional[Dict[str, Any]]): The parameters for the inner layer class.
-            reparam (Reparameterization): The reparam.
-
-        Raises:
-            NotImplementedError: If the shared uncollapsed CP is not implemented.
+            rg_node (RegionNode): The region node corresponding to this layer.
+            layers_in (Iterable[SymbolicLayer]): The input to this layer.
+            num_units (int): The number of units in this layer.
+            layer_cls (Type[InnerLayer]): The concrete layer class to become.
+            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
+                layer_cls. Defaults to None.
+            reparam (Reparameterization): The reparameterization for layer parameters.
         """
-        super().__init__(scope)
-        self.num_units = num_units
-        self.layer_cls = layer_cls
-        # Ignore: Unavoidable for kwargs.
-        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
-        self.params = reparam  # TODO: this is not correct, but will be reviewed in new layers.
-        self.params_in = reparam
-        self.params_out = reparam
+        assert rg_node.inputs, "SymbolicSumLayer must be based on an inner RegionNode."
+        super().__init__(
+            rg_node,
+            layers_in,
+            num_units=num_units,
+            layer_cls=layer_cls,
+            layer_kwargs=layer_kwargs,  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+            reparam=reparam,
+        )
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
@@ -97,19 +150,40 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
 class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The product layer in symbolic circuits."""
 
-    def __init__(  # TODO: is it correct to use SumProductLayer?
-        self, scope: Iterable[int], num_units: int, layer_cls: Type[SumProductLayer]
+    reparam: None  # Product layer has no params.
+
+    # Disable: This __init__ is designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
+    def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+        self,
+        rg_node: PartitionNode,
+        layers_in: Iterable[SymbolicLayer],
+        *,
+        num_units: int,
+        layer_cls: Type[InnerLayer],  # TODO: more specific?
+        layer_kwargs: Optional[Dict[str, Any]] = None,
+        reparam: Optional[Reparameterization] = None,
     ) -> None:
         """Construct the SymbolicProductLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this layer.
-            num_units (int): Number of input units.
-            layer_cls (Type[SumProductLayer]): The inner (sum) layer class.
+            rg_node (PartitionNode): The partition node corresponding to this layer.
+            layers_in (Iterable[SymbolicLayer]): The input to this layer.
+            num_units (int): The number of units in this layer.
+            layer_cls (Type[InnerLayer]): The concrete layer class to become.
+            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
+                layer_cls. Defaults to None.
+            reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
+                Defaults to None.
         """
-        super().__init__(scope)
-        self.num_units = num_units
-        self.layer_cls = layer_cls
+        super().__init__(
+            rg_node,
+            layers_in,
+            num_units=num_units,
+            layer_cls=layer_cls,
+            layer_kwargs=layer_kwargs,  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+            reparam=None,
+        )
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
@@ -136,30 +210,35 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
-        scope: Iterable[int],
+        rg_node: RegionNode,
+        layers_in: Iterable[SymbolicLayer],
+        *,
         num_units: int,
         layer_cls: Type[InputLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
-        *,
-        reparam: Reparameterization,  # TODO: how to set default here?
+        reparam: Optional[Reparameterization] = None,
     ) -> None:
         """Construct the SymbolicInputLayer.
 
         Args:
-            scope (Iterable[int]): The scope of this layer.
-            num_units (int): Number of output units.
-            layer_cls (Type[ExpFamilyLayer]): The exponential family class.
-            layer_kwargs (Optional[Dict[str, Any]]): The parameters for
-                the exponential family class.
-            reparam (Reparameterization): The reparam.
+            rg_node (RegionNode): The region node corresponding to this layer.
+            layers_in (Iterable[SymbolicLayer]): Empty iterable.
+            num_units (int): The number of units in this layer.
+            layer_cls (Type[InputLayer]): The concrete layer class to become.
+            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
+                layer_cls. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The reparameterization for layer \
+                parameters, can be None if layer_cls has no params. Defaults to None.
         """
-        # TODO: many things can be merged to SymbolicLayer.__init__.
-        super().__init__(scope)
-        self.num_units = num_units
-        self.layer_cls = layer_cls
-        # Ignore: Unavoidable for kwargs.
-        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
-        self.params = reparam
+        assert not rg_node.inputs, "SymbolicInputLayer must be based on an input RegionNode."
+        super().__init__(
+            rg_node,
+            layers_in,  # Should be empty, will be tested in super().__init__ by its length.
+            num_units=num_units,
+            layer_cls=layer_cls,
+            layer_kwargs=layer_kwargs,  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+            reparam=reparam,
+        )
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
