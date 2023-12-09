@@ -26,7 +26,17 @@ This will install not only the core dependencies of the library itself (e.g., Py
 ### Local Lint/Test
 
 In the repository root, run the following for linting and testing locally.
+
 ```shell
-./scripts/lint.sh
-./scripts/coverage.sh
+./scripts/lint.sh [--verbose] [file ...]
 ```
+Optionally,
+1. Use the `--verbose` flag to enable more verbose output.
+2. Add files to lint part of the repo.
+
+```shell
+./scripts/coverage.sh [--FORMAT] [pytest_arg ...]
+```
+Optionally,
+1. Use a `--FORMAT` (e.g. `--xml`) flag for exporting converage to file.
+2. Pass additional args to pytest (files to test etc.).
