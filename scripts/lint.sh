@@ -8,7 +8,7 @@ verbose=""      # For pydocstyle and pylint
 if [[ $1 == "--verbose" ]]; then
     verbose_diff="--verbose --diff"
     verbose="--verbose"
-    shift
+    shift  # remove $1
 fi
 
 if [[ $# -gt 0 ]]; then
