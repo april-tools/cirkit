@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
@@ -42,6 +42,20 @@ class TuckerLayer(SumProductLayer):
         self.params.materialize((num_output_units, num_input_units, num_input_units), dim=(1, 2))
 
         self.reset_parameters()
+
+    @classmethod
+    def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> int:
+        """Infer the number of product units in the layer based on given information.
+
+        Args:
+            num_input_units (int): The number of input units.
+            arity (int, optional): The arity of the layer. Defaults to 2.
+
+        Returns:
+            int: The inferred number of product units.
+        """
+        # Cast: int**int is not guaranteed to be int.
+        return cast(int, num_input_units**arity)
 
     def _forward_linear(self, x0: Tensor, x1: Tensor) -> Tensor:
         # shape (*B, I), (*B, J) -> (*B, O).

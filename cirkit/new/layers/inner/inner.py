@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import Optional
 
 from cirkit.new.layers.layer import Layer
@@ -32,3 +33,16 @@ class InnerLayer(Layer):
             arity=arity,
             reparam=reparam,
         )
+
+    @classmethod
+    @abstractmethod
+    def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> int:
+        """Infer the number of product units in the layer based on given information.
+
+        Args:
+            num_input_units (int): The number of input units.
+            arity (int, optional): The arity of the layer. Defaults to 2.
+
+        Returns:
+            int: The inferred number of product units.
+        """
