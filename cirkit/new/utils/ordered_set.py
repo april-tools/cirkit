@@ -1,4 +1,4 @@
-from typing import Any, Collection, Dict, Iterable, Iterator, Literal, Protocol, TypeVar
+from typing import Any, Collection, Dict, Iterable, Iterator, Protocol, TypeVar
 from typing_extensions import Self  # TODO: in typing from 3.11
 
 
@@ -40,8 +40,8 @@ class OrderedSet(Collection[ComparableT]):
         """
         super().__init__()
         # The dict values are unused and always set to True.
-        self._container: Dict[ComparableT, Literal[True]] = {
-            element: True for iterable in iterables for element in iterable
+        self._container: Dict[ComparableT, ComparableT] = {
+            element: element for iterable in iterables for element in iterable
         }
 
     # Ignore: We should only test the element type.
@@ -87,8 +87,20 @@ class OrderedSet(Collection[ComparableT]):
         if element in self:
             return False  # Meaning it's a no-op.
 
-        self._container[element] = True
+        self._container[element] = element
         return True  # Meaning a successful append.
+
+    def extend(self, elements: Iterable[ComparableT]) -> None:
+        """Add elements to the end of the set, for each one in order that does not exist yet; \
+        duplicates are skipped.
+
+        The input iterable should have a deterministic order and the order is preserved.
+
+        Args:
+            elements (Iterable[ComparableT]): The elements to extend.
+        """
+        for element in elements:
+            self.append(element)
 
     def sort(self) -> Self:
         """Sort the set inplace and return self.
@@ -101,5 +113,5 @@ class OrderedSet(Collection[ComparableT]):
             Self: The self object.
         """
         # This relies on that sorted() is stable.
-        self._container = {element: True for element in sorted(self._container)}
+        self._container = {element: element for element in sorted(self._container)}
         return self

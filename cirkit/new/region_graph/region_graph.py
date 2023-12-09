@@ -77,8 +77,9 @@ class RegionGraph:
         # add_node will check for _is_frozen.
         self.add_node(tail)
         self.add_node(head)
-        tail.outputs.append(head)  # TODO: this insertion order may be different from add_node order
-        head.inputs.append(tail)
+        # TODO: this insertion order may be different from add_node order
+        assert tail.outputs.append(head), "The edges in RG should not be repeated."
+        head.inputs.append(tail)  # Only need to check duplicate in one direction.
 
     def add_partitioning(self, region: RegionNode, sub_regions: Iterable[RegionNode]) -> None:
         """Add a partitioning structure to the graph, with a PartitionNode constructed internally.
