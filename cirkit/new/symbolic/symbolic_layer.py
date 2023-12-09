@@ -49,9 +49,6 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
         for layer_in in layers_in:
             self.inputs.append(layer_in)
             layer_in.outputs.append(self)
-        assert len(self.inputs) == len(
-            rg_node.inputs
-        ), "The number of inputs to this layer does not match the RG."
 
         self.arity = len(self.inputs)
         self.num_units = num_units
@@ -85,7 +82,9 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
         Returns:
             bool: Whether self < other.
         """
-        return self.rg_node < other.rg_node
+        return (
+            self.rg_node < other.rg_node or self.rg_node == other.rg_node and self in other.outputs
+        )  # Either the corresponding rg_node precedes, or for same rg_node, self directly precedes.
 
 
 # Disable: It's intended for SymbolicSumLayer to have only these methods.
@@ -121,7 +120,6 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
                 layer_cls. Defaults to None.
             reparam (Reparameterization): The reparameterization for layer parameters.
         """
-        assert rg_node.inputs, "SymbolicSumLayer must be based on an inner RegionNode."
         super().__init__(
             rg_node,
             layers_in,
@@ -130,6 +128,7 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
             layer_kwargs=layer_kwargs,  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
             reparam=reparam,
         )
+        assert self.inputs, "SymbolicSumLayer must be an inner layer of the SymbC."
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
@@ -235,7 +234,6 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
             reparam (Optional[Reparameterization], optional): The reparameterization for layer \
                 parameters, can be None if layer_cls has no params. Defaults to None.
         """
-        assert not rg_node.inputs, "SymbolicInputLayer must be based on an input RegionNode."
         super().__init__(
             rg_node,
             layers_in,  # Should be empty, will be tested in super().__init__ by its length.
@@ -244,6 +242,7 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
             layer_kwargs=layer_kwargs,  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
             reparam=reparam,
         )
+        assert not self.inputs, "SymbolicInputLayer must be an input layer of the SymbC."
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.

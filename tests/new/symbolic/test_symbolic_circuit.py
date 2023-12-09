@@ -11,7 +11,7 @@ def test_symbolic_circuit_simple() -> None:
 
     circuit = get_symbolic_circuit_on_rg(rg)
 
-    assert len(list(circuit.layers)) == 4
+    assert len(list(circuit.layers)) == 6
     # Ignore: SymbolicInputLayer contains Any.
     assert all(
         isinstance(layer, SymbolicInputLayer)  # type: ignore[misc]
@@ -28,7 +28,7 @@ def test_symbolic_circuit_qt() -> None:
 
     circuit = get_symbolic_circuit_on_rg(rg)
 
-    assert len(list(circuit.layers)) == 46
+    assert len(list(circuit.layers)) == 62
     assert len(list(circuit.input_layers)) == 16
     assert len(list(circuit.output_layers)) == 1
     assert circuit.scope == Scope(range(16))

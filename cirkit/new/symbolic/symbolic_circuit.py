@@ -1,6 +1,6 @@
 from typing import Any, Dict, Iterable, Iterator, Optional, Type, Union
 
-from cirkit.new.layers import InputLayer, ProductLayer, SumLayer, SumProductLayer
+from cirkit.new.layers import InputLayer, MixingLayer, ProductLayer, SumLayer, SumProductLayer
 from cirkit.new.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.symbolic.symbolic_layer import (
@@ -9,7 +9,7 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicProductLayer,
     SymbolicSumLayer,
 )
-from cirkit.new.utils import Scope
+from cirkit.new.utils import OrderedSet, Scope
 
 # TODO: double check docs and __repr__
 
@@ -71,23 +71,31 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         self.is_structured_decomposable = region_graph.is_structured_decomposable
         self.is_omni_compatible = region_graph.is_omni_compatible
 
-        node_layer: Dict[RGNode, SymbolicLayer] = {}
+        self._layers: OrderedSet[SymbolicLayer] = OrderedSet()
+        # The RGNode and SymbolicLayer does not map 1-to-1 but 1-to-many. This still leads to a
+        # deterministic order: SymbolicLayer of the same RGNode are adjcent, and ordered based on
+        # the order of edges in the RG.
+
+        node_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.
 
         for rg_node in region_graph.nodes:
-            layers_in = (node_layer[node_in] for node_in in rg_node.inputs)
-            layer: SymbolicLayer
+            # Cannot use a generator as layers_in, because it's used twice.
+            layers_in = [node_layer[node_in] for node_in in rg_node.inputs]
+            layer_out: SymbolicLayer
             # Ignore: Unavoidable for kwargs.
-            if isinstance(rg_node, RegionNode) and not rg_node.inputs:  # Input node.
-                layer = SymbolicInputLayer(
-                    rg_node,
-                    layers_in,
-                    num_units=num_input_units,
-                    layer_cls=input_layer_cls,
-                    layer_kwargs=input_layer_kwargs,  # type: ignore[misc]
-                    reparam=input_reparam,
-                )
-            elif isinstance(rg_node, RegionNode) and rg_node.inputs:  # Inner region node.
-                layer = SymbolicSumLayer(
+            if isinstance(rg_node, RegionNode) and not rg_node.inputs:  # Input region.
+                layers_in = [
+                    SymbolicInputLayer(
+                        rg_node,
+                        (),  # Old layers_in should be empty.
+                        num_units=num_input_units,
+                        layer_cls=input_layer_cls,
+                        layer_kwargs=input_layer_kwargs,  # type: ignore[misc]
+                        reparam=input_reparam,
+                    )
+                ]
+                # This also works when the input is also output, in which case num_classes is used.
+                layer_out = SymbolicSumLayer(
                     rg_node,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
@@ -95,8 +103,40 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
                     layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
                     reparam=sum_reparam,
                 )
-            elif isinstance(rg_node, PartitionNode):  # Partition node.
-                layer = SymbolicProductLayer(
+            elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) == 1:  # Simple inner.
+                # layers_in keeps the same.
+                layer_out = SymbolicSumLayer(
+                    rg_node,
+                    layers_in,
+                    num_units=num_sum_units if rg_node.outputs else num_classes,
+                    layer_cls=sum_layer_cls,
+                    layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
+                    reparam=sum_reparam,
+                )
+            elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) > 1:  # Inner with mixture.
+                # MixingLayer cannot change number of units, so must project early.
+                layers_in = [
+                    SymbolicSumLayer(
+                        rg_node,
+                        (layer_in,),
+                        num_units=num_sum_units if rg_node.outputs else num_classes,
+                        layer_cls=sum_layer_cls,
+                        layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
+                        reparam=sum_reparam,
+                    )
+                    for layer_in in layers_in
+                ]
+                layer_out = SymbolicSumLayer(
+                    rg_node,
+                    layers_in,
+                    num_units=num_sum_units if rg_node.outputs else num_classes,
+                    layer_cls=MixingLayer,
+                    layer_kwargs={},  # type: ignore[misc]
+                    reparam=sum_reparam,  # TODO: use a constant reparam here?
+                )
+            elif isinstance(rg_node, PartitionNode):
+                # layers_in keeps the same.
+                layer_out = SymbolicProductLayer(
                     rg_node,
                     layers_in,
                     num_units=prod_layer_cls._infer_num_prod_units(
@@ -108,9 +148,9 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
                 )
             else:
                 assert False, "This should not happen."
-            node_layer[rg_node] = layer
-
-        self._node_layer = node_layer  # Insertion order is preserved by dict@py3.7+.
+            self._layers.extend(layers_in)  # May be existing layers from node_layer, or new layers.
+            self._layers.append(layer_out)
+            node_layer[rg_node] = layer_out
 
     #######################################    Properties    #######################################
     # Here are the basic properties and some structural properties of the SymbC. Some of them are
@@ -159,7 +199,7 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     @property
     def layers(self) -> Iterator[SymbolicLayer]:
         """All layers in the circuit."""
-        return iter(self._node_layer.values())
+        return iter(self._layers)
 
     @property
     def sum_layers(self) -> Iterator[SymbolicSumLayer]:
