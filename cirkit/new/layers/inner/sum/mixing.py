@@ -6,7 +6,12 @@ from cirkit.new.reparams import Reparameterization
 
 
 class MixingLayer(SumLayer):
-    """The sum layer for mixture among layers."""
+    """The sum layer for mixture among layers.
+
+    It can also be used as a sparse sum within a layer when arity=1.
+    """
+
+    # TODO: do we use another name for another purpose?
 
     def __init__(
         self,

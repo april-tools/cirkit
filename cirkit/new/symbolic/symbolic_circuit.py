@@ -1,6 +1,6 @@
-from typing import Any, Dict, Iterable, Iterator, Optional, Type
+from typing import Any, Dict, Iterable, Iterator, Optional, Type, Union
 
-from cirkit.new.layers import InnerLayer, InputLayer
+from cirkit.new.layers import InputLayer, ProductLayer, SumLayer, SumProductLayer
 from cirkit.new.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.symbolic.symbolic_layer import (
@@ -31,31 +31,37 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         input_layer_cls: Type[InputLayer],
         input_layer_kwargs: Optional[Dict[str, Any]] = None,
         input_reparam: Optional[Reparameterization] = None,
-        sum_layer_cls: Type[InnerLayer],  # TODO: more specific?
+        sum_layer_cls: Type[Union[SumLayer, SumProductLayer]],
         sum_layer_kwargs: Optional[Dict[str, Any]] = None,
         sum_reparam: Reparameterization,
-        prod_layer_cls: Type[InnerLayer],  # TODO: more specific?
+        prod_layer_cls: Type[Union[ProductLayer, SumProductLayer]],
         prod_layer_kwargs: Optional[Dict[str, Any]] = None,
     ):
         """Construct symbolic circuit from a region graph.
 
         Args:
             region_graph (RegionGraph): The region graph to convert.
-            num_input_units (int): _description_
-            num_sum_units (int): _description_
-            num_classes (int, optional): _description_. Defaults to 1.
+            num_input_units (int): The number of units in the input layer.
+            num_sum_units (int): The number of units in the sum layer. Will also be used to infer \
+                the number of product units.
+            num_classes (int, optional): The number of classes of the circuit output, i.e., the \
+                number of units in the output layer. Defaults to 1.
             input_layer_cls (Type[InputLayer]): The layer class for input layers.
             input_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
                 input layer class. Defaults to None.
             input_reparam (Optional[Reparameterization], optional): The reparameterization for \
                 input layer parameters, can be None if it has no params. Defaults to None.
-            sum_layer_cls (Type[InnerLayer]): The layer class for sum layers.
+            sum_layer_cls (Type[Union[SumLayer, SumProductLayer]]): The layer class for sum \
+                layers, can be either just a class of SumLayer, or a class of SumProductLayer to \
+                indicate layer fusion..
             sum_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for sum \
                 layer class. Defaults to None.
             sum_reparam (Reparameterization): The reparameterization for sum layer parameters.
-            prod_layer_cls (Type[InnerLayer]): The layer class for product layers.
+            prod_layer_cls (Type[Union[ProductLayer, SumProductLayer]]): The layer class for \
+                product layers, can be either just a class of ProductLayer, or a class of \
+                SumProductLayer to indicate layer fusion.
             prod_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
-                product layer class. Defaults to None.
+                product layer class, will be ignored if SumProductLayer is used. Defaults to None.
         """
         self.region_graph = region_graph
         self.scope = region_graph.scope

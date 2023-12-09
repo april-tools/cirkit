@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Optional, Type
+from typing import Any, Dict, Iterable, Optional, Type, Union
 
-from cirkit.new.layers import InnerLayer, InputLayer, Layer
+from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer, SumProductLayer
 from cirkit.new.region_graph import PartitionNode, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils import OrderedSet
@@ -53,6 +53,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
             rg_node.inputs
         ), "The number of inputs to this layer does not match the RG."
 
+        self.arity = len(self.inputs)
         self.num_units = num_units
         self.layer_cls = layer_cls
         # Ignore: Unavoidable for kwargs.
@@ -103,7 +104,7 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cls: Type[InnerLayer],  # TODO: more specific?
+        layer_cls: Type[Union[SumLayer, SumProductLayer]],
         layer_kwargs: Optional[Dict[str, Any]] = None,
         reparam: Reparameterization,
     ) -> None:
@@ -113,7 +114,9 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
             rg_node (RegionNode): The region node corresponding to this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[InnerLayer]): The concrete layer class to become.
+            layer_cls (Type[Union[SumLayer, SumProductLayer]]): The concrete layer class to \
+                become, can be either just a class of SumLayer, or a class of SumProductLayer to \
+                indicate layer fusion.
             layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
                 layer_cls. Defaults to None.
             reparam (Reparameterization): The reparameterization for layer parameters.
@@ -160,7 +163,7 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cls: Type[InnerLayer],  # TODO: more specific?
+        layer_cls: Type[Union[ProductLayer, SumProductLayer]],
         layer_kwargs: Optional[Dict[str, Any]] = None,
         reparam: Optional[Reparameterization] = None,
     ) -> None:
@@ -170,7 +173,9 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
             rg_node (PartitionNode): The partition node corresponding to this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[InnerLayer]): The concrete layer class to become.
+            layer_cls (Type[Union[ProductLayer, SumProductLayer]]): The concrete layer class to \
+                become, can be either just a class of ProductLayer, or a class of SumProductLayer \
+                to indicate layer fusion.
             layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
                 layer_cls. Defaults to None.
             reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
