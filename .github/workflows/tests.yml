@@ -26,7 +26,7 @@ jobs:
           pip install -e .[test]
       - name: Run Pytest with Coverage
         run: |
-          ./scripts/coverage.sh xml
+          ./scripts/coverage.sh --xml
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
         with:
