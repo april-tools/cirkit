@@ -15,7 +15,7 @@ from cirkit.new.utils import OrderedSet, Scope
 
 
 # Disable: It's designed to have these many attributes.
-class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
+class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     """The symbolic representation of a tensorized circuit."""
 
     # TODO: how to design interface? require kwargs only?
@@ -76,11 +76,11 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
         # deterministic order: SymbolicLayer of the same RGNode are adjcent, and ordered based on
         # the order of edges in the RG.
 
-        node_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.
+        node_to_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.
 
         for rg_node in region_graph.nodes:
             # Cannot use a generator as layers_in, because it's used twice.
-            layers_in = [node_layer[node_in] for node_in in rg_node.inputs]
+            layers_in = [node_to_layer[node_in] for node_in in rg_node.inputs]
             layer_out: SymbolicLayer
             # Ignore: Unavoidable for kwargs.
             if isinstance(rg_node, RegionNode) and not rg_node.inputs:  # Input region.
@@ -150,7 +150,7 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
                 assert False, "This should not happen."
             self._layers.extend(layers_in)  # May be existing layers from node_layer, or new layers.
             self._layers.append(layer_out)
-            node_layer[rg_node] = layer_out
+            node_to_layer[rg_node] = layer_out
 
     #######################################    Properties    #######################################
     # Here are the basic properties and some structural properties of the SymbC. Some of them are
@@ -176,7 +176,7 @@ class SymbolicCircuit:  # pylint: disable=too-many-instance-attributes
     """Whether the SymbC is omni-compatible, i.e., compatible to all circuits of the same scope."""
 
     def is_compatible(
-        self, other: "SymbolicCircuit", *, scope: Optional[Iterable[int]] = None
+        self, other: "SymbolicTensorizedCircuit", *, scope: Optional[Iterable[int]] = None
     ) -> bool:
         """Test compatibility with another symbolic circuit over the given scope.
 
