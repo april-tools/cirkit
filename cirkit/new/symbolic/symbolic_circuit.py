@@ -148,7 +148,10 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                 )
             else:
                 assert False, "This should not happen."
-            self._layers.extend(layers_in)  # May be existing layers from node_layer, or new layers.
+            # layers_in may be existing layers (from node_layer) which will be de-duplicated by
+            # OrderedSet, or newly constructed layers to be added.
+            self._layers.extend(layers_in)
+            # layer_out is what will be connected to the output of rg_node.
             self._layers.append(layer_out)
             node_to_layer[rg_node] = layer_out
 

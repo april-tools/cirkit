@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Optional, Type, Union
+from typing import Any, Dict, Iterable, List, Optional, Type, Union
 
 from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer, SumProductLayer
 from cirkit.new.region_graph import PartitionNode, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils import OrderedSet
 
 # TODO: double check __repr__
 
@@ -43,9 +42,9 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
         self.scope = rg_node.scope
 
         # self.inputs is filled using layers_in, while self.outputs is empty until self appears in
-        # another layer's layers_in.
-        self.inputs: OrderedSet[SymbolicLayer] = OrderedSet()
-        self.outputs: OrderedSet[SymbolicLayer] = OrderedSet()
+        # another layer's layers_in. No need to de-duplicate, so prefer list over OrderedSet.
+        self.inputs: List[SymbolicLayer] = []
+        self.outputs: List[SymbolicLayer] = []
         for layer_in in layers_in:
             self.inputs.append(layer_in)
             layer_in.outputs.append(self)
