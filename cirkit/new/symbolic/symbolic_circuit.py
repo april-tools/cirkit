@@ -147,6 +147,11 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                     reparam=None,
                 )
             else:
+                # NOTE: In the above if/elif, we made all conditions explicit to make it more
+                #       readable and also easier for static analysis inside the blocks. Yet the
+                #       completeness cannot be inferred and is only guaranteed by larger picture.
+                #       Also, should anything really go wrong, we will hit this guard statement
+                #       instead of going into a wrong branch.
                 assert False, "This should not happen."
             # layers_in may be existing layers (from node_layer) which will be de-duplicated by
             # OrderedSet, or newly constructed layers to be added.
