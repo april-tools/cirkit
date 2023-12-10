@@ -32,6 +32,18 @@ class LogSpace(ComputationSapce):
         return x
 
     @classmethod
+    def from_linear(cls, x: Tensor) -> Tensor:
+        """Convert a value from linear space to the current space.
+
+        Args:
+            x (Tensor): The value in linear space.
+
+        Returns:
+            Tensor: The value in the current space.
+        """
+        return torch.log(x)
+
+    @classmethod
     def sum(
         cls,
         func: Callable[[Unpack[Ts]], Tensor],
