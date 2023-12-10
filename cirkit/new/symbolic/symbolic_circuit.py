@@ -83,6 +83,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
         self.is_decomposable = region_graph.is_decomposable
         self.is_structured_decomposable = region_graph.is_structured_decomposable
         self.is_omni_compatible = region_graph.is_omni_compatible
+        self.num_classes = num_classes
 
         self._layers: OrderedSet[SymbolicLayer] = OrderedSet()
         # The RGNode and SymbolicLayer does not map 1-to-1 but 1-to-many. This still leads to a

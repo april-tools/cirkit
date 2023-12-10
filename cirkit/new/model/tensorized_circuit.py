@@ -1,9 +1,11 @@
+from functools import cached_property
 from typing import Dict, Optional
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.new.layers import InputLayer, Layer, SumProductLayer
+from cirkit.new.model.functional import integrate
 from cirkit.new.symbolic import (
     SymbolicLayer,
     SymbolicProductLayer,
@@ -33,6 +35,8 @@ class TensorizedCircuit(nn.Module):
         self.symb_circuit = symb_circuit
         self.scope = symb_circuit.scope
         self.num_vars = symb_circuit.num_vars
+        self.num_channels = num_channels
+        self.num_classes = symb_circuit.num_classes
 
         self.layers = nn.ModuleList()  # Automatic layer registry, also publically available.
 
@@ -140,3 +144,18 @@ class TensorizedCircuit(nn.Module):
         return torch.stack(
             [layer_outputs[layer_out] for layer_out in self.symb_circuit.output_layers], dim=-2
         )  # shape num_out * (*B, K) -> (*B, num_out, num_cls=K).
+
+    integrate = integrate
+
+    # Use cached_property to lazily construct the circuit for partition function.
+    @cached_property
+    def partition_circuit(self) -> "TensorizedCircuit":
+        """The circuit calculating the partition function."""
+        return self.integrate(scope=self.scope)
+
+    @property
+    def partition_func(self) -> Tensor:  # TODO: is this the correct shape?
+        """The partition function of the circuit, shape (num_out, num_cls)."""
+        # For partition_circuit, the input is irrelevant, so just use zeros.
+        # shape (*B, D, C) -> (*B, num_out, num_cls) where *B = ().
+        return self.partition_circuit(torch.zeros((self.num_vars, self.num_channels)))
