@@ -149,9 +149,33 @@ class Scope(FrozenSet[int]):
         """
         return other < self
 
-    # Ignore: @functools.total_ordering won't work if the base class has defined the following, so
-    #         we simply disable them. Yet the above already lead to a valid total ordering.
-    __le__ = __ge__ = None  # type: ignore[assignment]
+    #############
+    # Subset Test
+    #############
+    # NOTE: Here we abuse the operators: < and > are for ordering, <= and >= are for subset test.
+    # Ignore: We should only compare scopes.
+    def __le__(self, other: "Scope") -> bool:  # type: ignore[override]
+        """Test whether self is a subset (or equal) of other.
+
+        Args:
+            other (Scope): The other scope to test.
+
+        Returns:
+            bool: Whether self ⊆ other.
+        """
+        return super().__le__(other)
+
+    # Ignore: We should only compare scopes.
+    def __ge__(self, other: "Scope") -> bool:  # type: ignore[override]
+        """Test whether self is a superset (or equal) of other.
+
+        Args:
+            other (Scope): The other scope to test.
+
+        Returns:
+            bool: Whether self ⊇ other.
+        """
+        return other <= self
 
     ########################
     # Union and Intersection
