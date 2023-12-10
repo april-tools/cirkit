@@ -83,7 +83,7 @@ class Reparameterization(nn.Module, ABC):
                 Defaults to None.
         """
         # NOTE: Subclasses should never call into this materialize() when is_materialized.
-        assert self.is_materialized, "This reparameterization is already materialized."
+        assert not self.is_materialized, "This reparameterization is already materialized."
 
         self.shape = tuple(shape)
 
