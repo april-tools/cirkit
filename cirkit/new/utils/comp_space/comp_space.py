@@ -1,10 +1,30 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Sequence, Union
-from typing_extensions import TypeVarTuple, Unpack  # TODO: in typing from 3.11
+from typing import Callable, Dict, Optional, Sequence, Type, TypeVar, Union, cast
+from typing_extensions import Self, TypeVarTuple, Unpack  # TODO: in typing from 3.11
 
 from torch import Tensor
 
 Ts = TypeVarTuple("Ts")
+
+CompSpaceT = TypeVar("CompSpaceT", bound=Type["ComputationSapce"])
+
+
+def register_comp_space(cls: CompSpaceT) -> CompSpaceT:
+    """Register a concrete ComputationSapce by its name.
+
+    Args:
+        cls (CompSpaceT): The ComputationSapce subclass to register.
+
+    Returns:
+        CompSpaceT: The class passed in.
+    """
+    # Cast: a cast is needed because __final__ may be undefined.
+    assert cast(
+        bool, getattr(cls, "__final__", False)
+    ), "Subclasses of ComputationSapce should be final."
+    # Disable: Access to _registry is by design.
+    ComputationSapce._registry[cls.name] = cls  # pylint: disable=protected-access
+    return cls
 
 
 class ComputationSapce(ABC):
@@ -15,6 +35,36 @@ class ComputationSapce(ABC):
     computations so that computation can be done in a space suitable to the implementation \
     regardless of the global setting.
     """
+
+    _registry: Dict[str, Type["ComputationSapce"]] = {}
+
+    @staticmethod
+    def get_comp_space_by_name(name: str) -> Type["ComputationSapce"]:
+        """Get a ComputationSapce by its registered name.
+
+        Args:
+            name (str): The name to probe.
+
+        Returns:
+            Type[ComputationSapce]: The retrieved concrete ComputationSapce.
+        """
+        return ComputationSapce._registry[name]
+
+    def __new__(cls) -> Self:  # TODO: NoReturn should be used, but mypy is not happy.
+        """Raise an error when this class is instantiated.
+
+        Raises:
+            TypeError: This is not the type to instantiate.
+
+        Returns:
+            Self: The method never returns.
+        """
+        raise TypeError("This class cannot be instantiated.")
+
+    # NOTE: Subclasses should implement all the following and should be @final.
+
+    name: str
+    """The name to be registered."""
 
     # TODO: currently only from_log is used. if needed, we can also have to_log, to_lin, from_lin.
     @classmethod

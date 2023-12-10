@@ -5,13 +5,13 @@ from typing import Optional, Type
 from torch import Tensor, nn
 
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils import ComputationSapce, LogSpace
+from cirkit.new.utils import ComputationSapce
 
 
 class Layer(nn.Module, ABC):
     """The abstract base class for all layers."""
 
-    comp_space: Type[ComputationSapce] = LogSpace
+    comp_space: Type[ComputationSapce]
 
     # Disable: reparam is not used in the base class. It's only here for the interface.
     def __init__(

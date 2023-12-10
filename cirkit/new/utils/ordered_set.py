@@ -1,4 +1,4 @@
-from typing import Any, Collection, Dict, Iterable, Iterator, Protocol, TypeVar
+from typing import Any, Collection, Dict, Iterable, Iterator, Protocol, TypeVar, final
 from typing_extensions import Self  # TODO: in typing from 3.11
 
 
@@ -17,6 +17,8 @@ ComparableT = TypeVar("ComparableT", bound=_SupportsDunderLT)
 # - Containers can never be contravariant by nature.
 
 
+# There's no need to inherit this.
+@final
 class OrderedSet(Collection[ComparableT]):
     """A mutable container of a set that preserves element ordering when iterated.
 
