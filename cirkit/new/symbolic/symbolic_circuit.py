@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Type, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Type, Union, final
 
 from cirkit.new.layers import (
     DenseLayer,
@@ -10,6 +10,7 @@ from cirkit.new.layers import (
 )
 from cirkit.new.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.symbolic.functional import integrate
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
@@ -21,7 +22,9 @@ from cirkit.new.utils import OrderedSet, Scope
 # TODO: __repr__?
 
 
+# Mark this class final so that __class__ of s SymbC is always SymbolicTensorizedCircuit.
 # Disable: It's designed to have these many attributes.
+@final  # type: ignore[misc]  # Ignore: Caused by kwargs.
 class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     """The symbolic representation of a tensorized circuit."""
 
@@ -258,6 +261,10 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     def inner_layers(self) -> Iterator[SymbolicLayer]:
         """Inner (non-input) layers in the circuit."""
         return (layer for layer in self.layers if layer.inputs)
+
+    #######################################    Functional    #######################################
+
+    integrate = integrate
 
     ####################################    (De)Serialization    ###################################
     # TODO: impl? or just save RG and kwargs of SymbC?

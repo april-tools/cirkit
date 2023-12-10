@@ -93,6 +93,9 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
 class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The sum layer in symbolic circuits."""
 
+    # The following attrs have more specific typing.
+    rg_node: RegionNode
+    layer_cls: Type[Union[SumLayer, SumProductLayer]]
     reparam: Reparameterization  # Sum layer always have params.
 
     # Note that the typing for layers_in cannot be refined because all layers are mixed in one
@@ -150,6 +153,9 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
 class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The product layer in symbolic circuits."""
 
+    # The following attrs have more specific typing.
+    rg_node: PartitionNode
+    layer_cls: Type[Union[ProductLayer, SumProductLayer]]
     reparam: None  # Product layer has no params.
 
     # Disable: This __init__ is designed to have these arguments.
@@ -203,6 +209,11 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
 # Disable: It's intended for SymbolicInputLayer to have only these methods.
 class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The input layer in symbolic circuits."""
+
+    # The following attrs have more specific typing.
+    rg_node: RegionNode
+    layer_cls: Type[InputLayer]
+    reparam: Optional[Reparameterization]  # Input layer may or may not have params.
 
     # Disable: This __init__ is designed to have these arguments.
     # pylint: disable-next=too-many-arguments
