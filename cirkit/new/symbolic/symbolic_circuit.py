@@ -18,7 +18,7 @@ from cirkit.new.symbolic.symbolic_layer import (
 )
 from cirkit.new.utils import OrderedSet, Scope
 
-# TODO: double check docs and __repr__
+# TODO: __repr__?
 
 
 # Disable: It's designed to have these many attributes.

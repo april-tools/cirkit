@@ -32,7 +32,7 @@ class RGNode(ABC):
         Returns:
             str: The str representation of the node.
         """
-        return f"{self.__class__.__name__}({self.scope})"
+        return f"{self.__class__.__name__}@0x{id(self):x}({self.scope})"
 
     # __hash__ and __eq__ are defined by default to compare on object identity, i.e.,
     # (a is b) <=> (a == b) <=> (hash(a) == hash(b)).
