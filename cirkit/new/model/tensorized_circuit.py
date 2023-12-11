@@ -38,12 +38,13 @@ class TensorizedCircuit(nn.Module):
         self.num_channels = num_channels
         self.num_classes = symb_circuit.num_classes
 
-        self.layers = nn.ModuleList()  # Automatic layer registry, also publically available.
+        # Automatic nn.Module registry, also in publicly available children names.
+        self.layers = nn.ModuleList()
 
-        # TODO: or do we store edges in Layer?
-        # The actual internal container for forward.
+        # The actual internal container for forward, preserves insertion order.
         self._symb_to_layers: Dict[SymbolicLayer, Optional[Layer]] = {}
 
+        # Both containers with have a consistent layer order by this loop.
         for symb_layer in symb_circuit.layers:
             layer: Optional[Layer]
             # Ignore: all SymbolicLayer contains Any.

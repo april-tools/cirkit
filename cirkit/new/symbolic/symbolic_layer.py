@@ -39,7 +39,8 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes,too-fe
         self.scope = scope
 
         # self.inputs is filled using layers_in, while self.outputs is empty until self appears in
-        # another layer's layers_in. No need to de-duplicate, so prefer list over OrderedSet.
+        # another layer's layers_in. No need to de-duplicate, so prefer list over OrderedSet. Both
+        # lists automatically gain a consistent ordering with RGNode edge tables by design.
         self.inputs: List[SymbolicLayer] = []
         self.outputs: List[SymbolicLayer] = []
         for layer_in in layers_in:

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, cast
 
 from cirkit.new.utils import OrderedSet, Scope
 
@@ -23,7 +23,7 @@ class RGNode(ABC):
         self.inputs: OrderedSet[RGNode] = OrderedSet()
         self.outputs: OrderedSet[RGNode] = OrderedSet()
 
-        # TODO: we might want to save something, but this is not used yet.
+        # TODO: refine typing to what's actually used?
         self._metadata: Dict[str, Any] = {}  # type: ignore[misc]
 
     def __repr__(self) -> str:
@@ -41,21 +41,18 @@ class RGNode(ABC):
     def __lt__(self, other: "RGNode") -> bool:
         """Compare the node with another node, for < operator implicitly used in sorting.
 
-        TODO: the following is currently NOT correct because the sorting rule is not complete.
-        It is guaranteed that exactly one of a == b, a < b, a > b is True. Can be used for \
-        sorting and order is guaranteed to be always stable.
-        TODO: alternative if we ignore the above todo:
-        Note that a != b does not imply a < b or b < a, as the order within the the same type of \
-        node with the same scope is not defined, in which case a == b, a < b, b < a are all false. \
-        Yet although there's no total ordering, sorting can still be performed.
-
         The comparison between two RGNode is:
         - If they have different scopes, the one with a smaller scope is smaller;
         - With the same scope, PartitionNode is smaller than RegionNode;
-        - For same type of node and same scope, __lt__ is always False, indicating "equality for \
-            the purpose of sorting".
+        - For same type of node and same scope, an extra sort_key can be provided in \
+            self._metadata to define the order;
+        - If the above cannot compare, __lt__ is always False, indicating "equality for the \
+            purpose of sorting".
 
-        This comparison guarantees the topological order in a (smooth and decomposable) RG:
+        With the extra sorting key provided, it is guaranteed to have total ordering, i.e., \
+        exactly one of a == b, a < b, a > b is True, and will lead to a deterministic sorted order.
+
+        This comparison also guarantees the topological order in a (smooth and decomposable) RG:
         - For a RegionNode->PartitionNode edge, Region.scope < Partition.scope;
         - For a PartitionNode->RegionNode edge, they have the same scope and Partition < Region.
 
@@ -67,7 +64,16 @@ class RGNode(ABC):
         """
         # A trick to compare classes: if the class name is equal, then the class is the same;
         # otherwise "P" < "R" and PartitionNode < RegionNode, so comparison of class names works.
-        return (self.scope, self.__class__.__name__) < (other.scope, other.__class__.__name__)
+        # Ignore: Unavoidable for Dict[str, Any].
+        return (
+            self.scope,
+            self.__class__.__name__,
+            cast(int, self._metadata.get("sort_key", -1)),  # type: ignore[misc]
+        ) < (
+            other.scope,
+            other.__class__.__name__,
+            cast(int, other._metadata.get("sort_key", -1)),  # type: ignore[misc]
+        )
 
 
 # Disable: It's intended for RegionNode to only have few methods.

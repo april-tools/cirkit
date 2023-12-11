@@ -87,8 +87,9 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
 
         self._layers: OrderedSet[SymbolicLayer] = OrderedSet()
         # The RGNode and SymbolicLayer does not map 1-to-1 but 1-to-many. This still leads to a
-        # deterministic order: SymbolicLayer of the same RGNode are adjcent, and ordered based on
-        # the order of edges in the RG.
+        # deterministic order: SymbolicLayer of different RGNode will be naturally sorted by the
+        # RGNode order; SymbolicLayer of the same RGNode are adjcent, and ordered based on the order
+        # of edges in the RGNode.
 
         node_to_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.
 

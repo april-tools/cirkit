@@ -77,7 +77,6 @@ class RegionGraph:
         # add_node will check for _is_frozen.
         self.add_node(tail)
         self.add_node(head)
-        # TODO: this insertion order may be different from add_node order
         assert tail.outputs.append(head), "The edges in RG should not be repeated."
         head.inputs.append(tail)  # Only need to check duplicate in one direction.
 
@@ -116,10 +115,18 @@ class RegionGraph:
 
     def _sort_nodes(self) -> None:
         """Sort the OrderedSet of RGNode for node list and edge tables."""
+        # Now rg nodes have no sort_key. With a stable sort, equal nodes keep insertion order.
         self._nodes.sort()
+        # Now the nodes are in an order determined solely by the construction algorithm.
+        for i, node in enumerate(self._nodes):
+            # Ignore: Unavoidable for Dict[str, Any].
+            # Disable: It is designed to be accessed.
+            node._metadata["sort_key"] = i  # type: ignore[misc]  # pylint: disable=protected-access
+        # Now the nodes have total ordering based on the original order.
         for node in self._nodes:
             node.inputs.sort()
             node.outputs.sort()
+        # Now all containers are consistently sorted by the order decided by sort_key.
 
     # TODO: do we need these return? or just assert?
     def _validate(self) -> str:  # pylint: disable=too-many-return-statements
@@ -410,7 +417,6 @@ class RegionGraph:
             regions_in = [idx_region[idx_in] for idx_in in (partition["l"], partition["r"])]
             region_out = idx_region[partition["p"]]
 
-            # TODO: is the order of edge table saved in nodes preserved?
             graph.add_partitioning(region_out, regions_in)
 
         return graph.freeze()
