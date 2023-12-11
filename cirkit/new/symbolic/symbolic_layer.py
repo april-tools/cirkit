@@ -2,12 +2,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterable, List, Optional, Type, Union
 
 from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer, SumProductLayer
-from cirkit.new.region_graph import PartitionNode, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils import Scope
 
 
-# Disable: It's intended for SymbolicLayer to have these many attrs.
-class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
+# Disable: It is designed so.
+class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes,too-few-public-methods
     """The abstract base class for symbolic layers in symbolic circuits."""
 
     # We accept structure as positional args, and layer spec as kw-only.
@@ -15,7 +15,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
-        rg_node: RGNode,
+        scope: Scope,
         layers_in: Iterable["SymbolicLayer"],
         *,
         num_units: int,
@@ -26,7 +26,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
         """Construct the SymbolicLayer.
 
         Args:
-            rg_node (RGNode): The region graph node corresponding to this layer.
+            scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer, empty for input layers.
             num_units (int): The number of units in this layer.
             layer_cls (Type[Layer]): The concrete layer class to become.
@@ -36,8 +36,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
                 parameters, can be None if layer_cls has no params. Defaults to None.
         """
         super().__init__()
-        self.rg_node = rg_node
-        self.scope = rg_node.scope
+        self.scope = scope
 
         # self.inputs is filled using layers_in, while self.outputs is empty until self appears in
         # another layer's layers_in. No need to de-duplicate, so prefer list over OrderedSet.
@@ -72,29 +71,12 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
     # __hash__ and __eq__ are defined by default to compare on object identity, i.e.,
     # (a is b) <=> (a == b) <=> (hash(a) == hash(b)).
 
-    def __lt__(self, other: "SymbolicLayer") -> bool:
-        """Compare the layer with another layer, for < operator implicitly used in sorting.
-
-        SymbolicLayer is compared by the corresponding RGNode, so that SymbolicCircuit obtains the \
-        same ordering as the RegionGraph.
-
-        Args:
-            other (SymbolicLayer): The other layer to compare with.
-
-        Returns:
-            bool: Whether self < other.
-        """
-        return (
-            self.rg_node < other.rg_node or self.rg_node == other.rg_node and self in other.outputs
-        )  # Either the corresponding rg_node precedes, or for same rg_node, self directly precedes.
-
 
 # Disable: It's intended for SymbolicSumLayer to have only these methods.
 class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     """The sum layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
-    rg_node: RegionNode
     layer_cls: Type[Union[SumLayer, SumProductLayer]]
     reparam: Reparameterization  # Sum layer always have params.
 
@@ -104,7 +86,7 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
-        rg_node: RegionNode,
+        scope: Scope,
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
@@ -115,7 +97,7 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
         """Construct the SymbolicSumLayer.
 
         Args:
-            rg_node (RegionNode): The region node corresponding to this layer.
+            scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
             layer_cls (Type[Union[SumLayer, SumProductLayer]]): The concrete layer class to \
@@ -126,7 +108,7 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
             reparam (Reparameterization): The reparameterization for layer parameters.
         """
         super().__init__(
-            rg_node,
+            scope,
             layers_in,
             num_units=num_units,
             layer_cls=layer_cls,
@@ -154,7 +136,6 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
     """The product layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
-    rg_node: PartitionNode
     layer_cls: Type[Union[ProductLayer, SumProductLayer]]
     reparam: None  # Product layer has no params.
 
@@ -162,7 +143,7 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
-        rg_node: PartitionNode,
+        scope: Scope,
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
@@ -173,7 +154,7 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
         """Construct the SymbolicProductLayer.
 
         Args:
-            rg_node (PartitionNode): The partition node corresponding to this layer.
+            scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
             layer_cls (Type[Union[ProductLayer, SumProductLayer]]): The concrete layer class to \
@@ -185,7 +166,7 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
                 Defaults to None.
         """
         super().__init__(
-            rg_node,
+            scope,
             layers_in,
             num_units=num_units,
             layer_cls=layer_cls,
@@ -211,7 +192,6 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
     """The input layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
-    rg_node: RegionNode
     layer_cls: Type[InputLayer]
     reparam: Optional[Reparameterization]  # Input layer may or may not have params.
 
@@ -219,7 +199,7 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
     # pylint: disable-next=too-many-arguments
     def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
         self,
-        rg_node: RegionNode,
+        scope: Scope,
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
@@ -230,7 +210,7 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
         """Construct the SymbolicInputLayer.
 
         Args:
-            rg_node (RegionNode): The region node corresponding to this layer.
+            scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): Empty iterable.
             num_units (int): The number of units in this layer.
             layer_cls (Type[InputLayer]): The concrete layer class to become.
@@ -240,7 +220,7 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
                 parameters, can be None if layer_cls has no params. Defaults to None.
         """
         super().__init__(
-            rg_node,
+            scope,
             layers_in,  # Should be empty, will be tested in super().__init__ by its length.
             num_units=num_units,
             layer_cls=layer_cls,

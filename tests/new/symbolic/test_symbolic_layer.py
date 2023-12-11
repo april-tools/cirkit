@@ -22,7 +22,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
     reparam = ExpReparam()
 
     input_layer0 = SymbolicInputLayer(
-        input_node0,
+        input_node0.scope,
         (),
         num_units=num_units,
         layer_cls=CategoricalLayer,
@@ -36,7 +36,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
     )
 
     input_layer1 = SymbolicInputLayer(
-        input_node1,
+        input_node1.scope,
         (),
         num_units=num_units,
         layer_cls=CategoricalLayer,
@@ -45,7 +45,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
     )
 
     prod_layer = SymbolicProductLayer(
-        partition_node,
+        partition_node.scope,
         (input_layer0, input_layer1),
         num_units=num_units,
         layer_cls=HadamardLayer,
@@ -57,7 +57,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
     )
 
     sum_layer = SymbolicSumLayer(
-        region_node,
+        region_node.scope,
         (prod_layer,),
         num_units=num_units,
         layer_cls=DenseLayer,
@@ -83,7 +83,7 @@ def test_symbolic_layers_sum_prod() -> None:
     reparam = ExpReparam()
 
     input_layer0 = SymbolicInputLayer(
-        input_node0,
+        input_node0.scope,
         (),
         num_units=num_units,
         layer_cls=CategoricalLayer,
@@ -96,7 +96,7 @@ def test_symbolic_layers_sum_prod() -> None:
         ".categorical.CategoricalLayer'>, layer_kwargs={'num_categories': 5}, reparam=ExpReparam("
     )
     input_layer1 = SymbolicInputLayer(
-        input_node1,
+        input_node1.scope,
         (),
         num_units=num_units,
         layer_cls=CategoricalLayer,
@@ -105,7 +105,7 @@ def test_symbolic_layers_sum_prod() -> None:
     )
 
     prod_layer = SymbolicProductLayer(
-        partition_node,
+        partition_node.scope,
         (input_layer0, input_layer1),
         num_units=num_units**2,
         layer_cls=TuckerLayer,
@@ -117,7 +117,7 @@ def test_symbolic_layers_sum_prod() -> None:
     )
 
     sum_layer = SymbolicSumLayer(
-        region_node,
+        region_node.scope,
         (prod_layer,),
         num_units=num_units,
         layer_cls=TuckerLayer,

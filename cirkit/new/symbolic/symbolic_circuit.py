@@ -100,7 +100,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
             if isinstance(rg_node, RegionNode) and not rg_node.inputs:  # Input region.
                 layers_in = [
                     SymbolicInputLayer(
-                        rg_node,
+                        rg_node.scope,
                         (),  # Old layers_in should be empty.
                         num_units=num_input_units,
                         layer_cls=input_layer_cls,
@@ -110,7 +110,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                 ]
                 # This also works when the input is also output, in which case num_classes is used.
                 layer_out = SymbolicSumLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=DenseLayer,  # TODO: can be other sum layer, but how to pass in???
@@ -120,7 +120,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
             elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) == 1:  # Simple inner.
                 # layers_in keeps the same.
                 layer_out = SymbolicSumLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=sum_layer_cls,
@@ -131,7 +131,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                 # MixingLayer cannot change number of units, so must project early.
                 layers_in = [
                     SymbolicSumLayer(
-                        rg_node,
+                        rg_node.scope,
                         (layer_in,),
                         num_units=num_sum_units if rg_node.outputs else num_classes,
                         layer_cls=sum_layer_cls,
@@ -141,7 +141,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                     for layer_in in layers_in
                 ]
                 layer_out = SymbolicSumLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=MixingLayer,
@@ -151,7 +151,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
             elif isinstance(rg_node, PartitionNode):
                 # layers_in keeps the same.
                 layer_out = SymbolicProductLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=prod_layer_cls._infer_num_prod_units(
                         num_sum_units, len(rg_node.inputs)

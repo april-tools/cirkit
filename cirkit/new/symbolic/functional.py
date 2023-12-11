@@ -56,7 +56,7 @@ def integrate(
                 **self_layer.layer_kwargs  # type: ignore[misc]
             )
             integral_layer = SymbolicInputLayer(
-                self_layer.rg_node,
+                self_layer.scope,
                 (),
                 num_units=self_layer.num_units,
                 layer_cls=layer_cls,
@@ -65,7 +65,7 @@ def integrate(
             )
         else:
             integral_layer = self_layer.__class__(
-                self_layer.rg_node,
+                self_layer.scope,
                 (self_to_integral[self_layer_in] for self_layer_in in self_layer.inputs),
                 num_units=self_layer.num_units,
                 layer_cls=self_layer.layer_cls,

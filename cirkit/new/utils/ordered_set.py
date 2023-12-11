@@ -1,5 +1,4 @@
 from typing import Any, Collection, Dict, Iterable, Iterator, Protocol, TypeVar, final
-from typing_extensions import Self  # TODO: in typing from 3.11
 
 
 # TODO: pylint issue? protocol are expected to have few public methods
@@ -10,8 +9,9 @@ class _SupportsDunderLT(Protocol):  # pylint: disable=too-few-public-methods
         ...
 
 
+T = TypeVar("T")
 ComparableT = TypeVar("ComparableT", bound=_SupportsDunderLT)
-# This, to be used as (mutable)Collection[ComparableT], can't be either covariant or contravariant:
+# These, to be used as (mutable) Collection[T], can't be either covariant or contravariant:
 # - Function arguments cannot be covariant, therefore nor mutable generic types;
 #   - See explaination in https://github.com/python/mypy/issues/7049;
 # - Containers can never be contravariant by nature.
@@ -19,10 +19,10 @@ ComparableT = TypeVar("ComparableT", bound=_SupportsDunderLT)
 
 # There's no need to inherit this.
 @final
-class OrderedSet(Collection[ComparableT]):
+class OrderedSet(Collection[T]):
     """A mutable container of a set that preserves element ordering when iterated.
 
-    The elements are required to support __lt__ comparison to make sorting work.
+    The elements are required to support __lt__ comparison to make sort() work.
 
     This is designed for node (edge) lists in the graph data structure (incl. RG, SymbC, ...), but
     does not comply with all standard builtin container (list, set, dict) interface.
@@ -30,39 +30,39 @@ class OrderedSet(Collection[ComparableT]):
     The implementation relies on the order preservation of dict introduced in Python 3.7.
     """
 
-    # NOTE: We can also inherit Reversible[ComparableT] and implement __reversed__ based on
-    #       reverse(dict), but currently this feature is not needed.
+    # NOTE: We can also inherit Reversible[T] and implement __reversed__ based on reverse(dict), but
+    #       currently this feature is not needed.
 
-    def __init__(self, *iterables: Iterable[ComparableT]) -> None:
+    def __init__(self, *iterables: Iterable[T]) -> None:
         """Init class.
 
         Args:
-            *iterables (Iterable[ComparableT]): The initial content, if provided any. Will be \
-                inserted in the order given.
+            *iterables (Iterable[T]): The initial content, if provided any. Will be inserted in \
+                the order given.
         """
         super().__init__()
         # The dict values are unused and always set to True.
-        self._container: Dict[ComparableT, ComparableT] = {
+        self._container: Dict[T, T] = {
             element: element for iterable in iterables for element in iterable
         }
 
     # Ignore: We should only test the element type.
-    def __contains__(self, element: ComparableT) -> bool:  # type: ignore[override]
+    def __contains__(self, element: T) -> bool:  # type: ignore[override]
         """Test whether an element is contained in the set.
 
         Args:
-            element (ComparableT): The element to test.
+            element (T): The element to test.
 
         Returns:
             bool: Whether the element exists.
         """
         return element in self._container
 
-    def __iter__(self) -> Iterator[ComparableT]:
+    def __iter__(self) -> Iterator[T]:
         """Iterate over the set in order.
 
         Returns:
-            Iterator[T_co]: The iterator over the set.
+            Iterator[T]: The iterator over the set.
         """
         return iter(self._container)
 
@@ -74,14 +74,14 @@ class OrderedSet(Collection[ComparableT]):
         """
         return len(self._container)
 
-    def append(self, element: ComparableT) -> bool:
+    def append(self, element: T) -> bool:
         """Add an element to the end of the set, if it does not exist yet; otherwise no-op.
 
         New elements are always added at the end, and the order is preserved. Existing elements \
         will not be moved if appended again.
 
         Args:
-            element (ComparableT): The element to append.
+            element (T): The element to append.
 
         Returns:
             bool: Whether the insertion actually happened at the end.
@@ -92,20 +92,22 @@ class OrderedSet(Collection[ComparableT]):
         self._container[element] = element
         return True  # Meaning a successful append.
 
-    def extend(self, elements: Iterable[ComparableT]) -> None:
+    def extend(self, elements: Iterable[T]) -> None:
         """Add elements to the end of the set, for each one in order that does not exist yet; \
         duplicates are skipped.
 
         The input iterable should have a deterministic order and the order is preserved.
 
         Args:
-            elements (Iterable[ComparableT]): The elements to extend.
+            elements (Iterable[T]): The elements to extend.
         """
         for element in elements:
             self.append(element)
 
-    def sort(self) -> Self:
+    def sort(self: "OrderedSet[ComparableT]") -> "OrderedSet[ComparableT]":
         """Sort the set inplace and return self.
+
+        The elements must support __lt__ comparison.
 
         It stably sorts the elements from the insertion order to the comparison order:
         - If a < b, a always precedes b in the sorted order;
