@@ -35,9 +35,8 @@ class DenseLayer(SumLayer):
         )
 
         self.params = reparam
-        self.params.materialize((num_output_units, num_input_units), dim=1)
-
-        self.reset_parameters()
+        if self.params.materialize((num_output_units, num_input_units), dim=1):
+            self.reset_parameters()  # Only reset if newly materialized.
 
     def _forward_linear(self, x: Tensor) -> Tensor:
         return torch.einsum("oi,...i->...o", self.params(), x)  # shape (*B, Ki) -> (*B, Ko).

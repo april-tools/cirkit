@@ -40,9 +40,8 @@ class MixingLayer(SumLayer):
         )
 
         self.params = reparam
-        self.params.materialize((num_output_units, arity), dim=1)
-
-        self.reset_parameters()
+        if self.params.materialize((num_output_units, arity), dim=1):
+            self.reset_parameters()  # Only reset if newly materialized.
 
     def _forward_linear(self, x: Tensor) -> Tensor:
         return torch.einsum("kh,h...k->...k", self.params(), x)  # shape (H, *B, K) -> (*B, K).

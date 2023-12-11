@@ -29,8 +29,12 @@ class LeafReparam(Reparameterization):
         """The device of the output parameter."""
         return self.param.device
 
-    def materialize(self, shape: Sequence[int], /, **_kwargs: Unpack[MaterializeKwargs]) -> None:
+    def materialize(self, shape: Sequence[int], /, **_kwargs: Unpack[MaterializeKwargs]) -> bool:
         """Materialize the internal parameter tensors with given shape.
+
+        If it is already materialized, False will be returned to indicate no materialization. \
+        However, a second call to materialize must give the same config, so that the underlying \
+        params can indeed be reused.
 
         The initial value of the parameter after materialization is not guaranteed, and explicit \
         initialization is expected.
@@ -38,9 +42,15 @@ class LeafReparam(Reparameterization):
         Args:
             shape (Sequence[int]): The shape of the output parameter.
             **_kwargs (Unpack[MaterializeKwargs]): Unused. See Reparameterization.materialize().
+
+        Returns:
+            bool: Whether the materialization is done.
         """
-        super().materialize(shape, dim=())
+        if not super().materialize(shape, dim=()):
+            return False
+        # Not materialized before, i.e., self.param is still nn.UninitializedParameter.
         self.param.materialize(self.shape)
+        return True
 
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
         """Initialize the internal parameter tensors with the given initializer.

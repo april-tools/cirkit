@@ -73,7 +73,8 @@ class CPLayer(SumProductLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
-        return self.sum(self.prod(x))  # shape (H, *B, K) -> (*B, K) -> (*B, K).
+        # shape (H, *B, K) -> (*B, K) -> (H, *B, K) -> (*B, K).
+        return self.sum(self.prod(x).unsqueeze(dim=0))
 
 
 # TODO: Uncollapsed?

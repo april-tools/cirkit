@@ -57,9 +57,8 @@ class ExpFamilyLayer(InputLayer):
         )
 
         self.params = reparam
-        self.params.materialize((arity, num_output_units, *self.suff_stats_shape), dim=-1)
-
-        self.reset_parameters()
+        if self.params.materialize((arity, num_output_units, *self.suff_stats_shape), dim=-1):
+            self.reset_parameters()  # Only reset if newly materialized.
 
     @torch.no_grad()
     def reset_parameters(self) -> None:
