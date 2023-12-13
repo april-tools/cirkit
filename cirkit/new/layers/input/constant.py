@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Optional
 from typing_extensions import Self  # TODO: in typing from 3.11
 
 import torch
@@ -18,7 +18,7 @@ class ConstantLayer(InputLayer):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: Literal[1] = 1,
+        arity: int = 1,
         reparam: Optional[Reparameterization] = None,
         const_value: float,
     ) -> None:
@@ -27,7 +27,8 @@ class ConstantLayer(InputLayer):
         Args:
             num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
-            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
+                Defaults to 1.
             reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
                 Defaults to None.
             const_value (float): The constant value, in linear space.

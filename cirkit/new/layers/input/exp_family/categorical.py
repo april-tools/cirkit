@@ -1,5 +1,3 @@
-from typing import Literal
-
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -20,7 +18,7 @@ class CategoricalLayer(ExpFamilyLayer):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: Literal[1] = 1,
+        arity: int = 1,
         reparam: Reparameterization,
         num_categories: int,
     ) -> None:
@@ -29,7 +27,8 @@ class CategoricalLayer(ExpFamilyLayer):
         Args:
             num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
-            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
+                Defaults to 1.
             reparam (Reparameterization): The reparameterization for layer parameters.
             num_categories (int): The number of categories for Categorical distribution.
         """

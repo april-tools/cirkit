@@ -47,7 +47,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes,too-fe
             self.inputs.append(layer_in)
             layer_in.outputs.append(self)
 
-        self.arity = len(self.inputs) if self.inputs else 1  # InputLayer is defined with artiy=1.
+        self.arity = len(self.inputs)
         self.num_units = num_units
         self.layer_cls = layer_cls
         # Ignore: Unavoidable for kwargs.

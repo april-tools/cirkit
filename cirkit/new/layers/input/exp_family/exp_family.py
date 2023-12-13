@@ -1,6 +1,6 @@
 import functools
 from abc import abstractmethod
-from typing import Literal, Tuple
+from typing import Tuple
 from typing_extensions import Self  # TODO: in typing from 3.11
 
 import torch
@@ -22,6 +22,10 @@ class ExpFamilyLayer(InputLayer):
     However here we directly parameterize eta instead of theta:
         f(x|eta) = exp(eta · T(x) - log_h(x) + A(eta)).
     Implemtations provide inverse mapping from eta to theta.
+
+    This implementation is fully factorized over the variables if used as multivariate, i.e., \
+    equivalent to num_vars (arity) univariate EF distributions followed by a Hadamard product of \
+    the same arity.
     """
 
     suff_stats_shape: Tuple[int, ...]
@@ -33,7 +37,7 @@ class ExpFamilyLayer(InputLayer):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: Literal[1] = 1,
+        arity: int = 1,
         reparam: Reparameterization,
     ) -> None:
         """Init class.
@@ -41,7 +45,8 @@ class ExpFamilyLayer(InputLayer):
         Args:
             num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
-            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
+                Defaults to 1.
             reparam (Reparameterization): The reparameterization for layer parameters.
         """
         # NOTE: suff_stats_shape should not be part of the interface for users, but should be set by
@@ -86,8 +91,6 @@ class ExpFamilyLayer(InputLayer):
         log_part = self.log_partition(eta)  # shape (H, K).
         # We need to flatten because we cannot have two ... in einsum for suff_stats as (*B, H, *S).
         eta = eta.flatten(start_dim=-len(self.suff_stats_shape))  # shape (H, K, S).
-        # TODO: when we extend to H>1:
-        #       this part still works as fully factorized input layer by summing dim=-2 (H dim).
         log_p = torch.sum(
             torch.einsum("hks,...hs->...hk", eta, suff_stats)  # shape (*B, H, K).
             + log_h.unsqueeze(dim=-1)  # shape (*B, H, 1).

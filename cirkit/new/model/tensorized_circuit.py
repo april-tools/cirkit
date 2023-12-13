@@ -69,9 +69,9 @@ class TensorizedCircuit(nn.Module):
             elif issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicSumLayer  # type: ignore[misc]
             ):  # Sum-product fusion at sum: just run checks and fill a placeholder.
-                prev_layer = symb_layer.inputs[0]  # There should be at exactly SymbProd input.
+                prev_layer = symb_layer.inputs[0]  # There should be exactly one SymbProd input.
                 assert (
-                    len(symb_layer.inputs) == 1  # I.e., symb_layer.arity == 1.
+                    symb_layer.arity == 1
                     and isinstance(prev_layer, SymbolicProductLayer)  # type: ignore[misc]
                     and prev_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
@@ -83,7 +83,9 @@ class TensorizedCircuit(nn.Module):
                         symb_layer.inputs[0].num_units if symb_layer.inputs else num_channels
                     ),
                     num_output_units=symb_layer.num_units,
-                    arity=symb_layer.arity,
+                    arity=(  # Reusing arity to contain num_vars for InputLayer.
+                        symb_layer.arity if symb_layer.arity else len(symb_layer.scope)
+                    ),
                     reparam=symb_layer.reparam,
                     **symb_layer.layer_kwargs,  # type: ignore[misc]
                 )
@@ -125,7 +127,7 @@ class TensorizedCircuit(nn.Module):
         for symb_layer, layer in self._symb_to_layers.items():
             if layer is None:
                 assert (
-                    len(symb_layer.inputs) == 1
+                    symb_layer.arity == 1
                 ), "Only symbolic layers with arity=1 can be implemented by a place-holder."
                 layer_outputs[symb_layer] = layer_outputs[symb_layer.inputs[0]]
                 continue

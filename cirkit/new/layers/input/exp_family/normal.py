@@ -1,5 +1,5 @@
 import math
-from typing import Literal, cast
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -19,7 +19,7 @@ class NormalLayer(ExpFamilyLayer):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: Literal[1] = 1,
+        arity: int = 1,
         reparam: Reparameterization,
     ) -> None:
         """Init class.
@@ -27,7 +27,8 @@ class NormalLayer(ExpFamilyLayer):
         Args:
             num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
-            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
+                Defaults to 1.
             reparam (Reparameterization): The reparameterization for layer parameters. Expected to \
                 be EFNormalReparam.
             num_categories (int): The number of categories for Categorical distribution.
