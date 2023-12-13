@@ -1,11 +1,12 @@
+import functools
 from functools import cached_property
-from typing import Dict, Optional
+from typing import Dict, Optional, final
 
 import torch
 from torch import Tensor, nn
 
+import cirkit.new.model.functional as TCF  # TensorizedCircuit functional.
 from cirkit.new.layers import InputLayer, Layer, SumProductLayer
-from cirkit.new.model.functional import integrate
 from cirkit.new.symbolic import (
     SymbolicLayer,
     SymbolicProductLayer,
@@ -14,6 +15,9 @@ from cirkit.new.symbolic import (
 )
 
 
+# TODO: this final may not be wanted for user customization, but use of __class__ in TCF require it.
+# Mark this class final so that __class__ of a TensC is always TensorizedCircuit.
+@final
 class TensorizedCircuit(nn.Module):
     """The tensorized circuit with concrete computational graph in PyTorch.
     
@@ -147,7 +151,7 @@ class TensorizedCircuit(nn.Module):
             [layer_outputs[layer_out] for layer_out in self.symb_circuit.output_layers], dim=-2
         )  # shape num_out * (*B, K) -> (*B, num_out, num_cls=K).
 
-    integrate = integrate
+    integrate = TCF.integrate
 
     # Use cached_property to lazily construct the circuit for partition function.
     @cached_property
@@ -161,3 +165,9 @@ class TensorizedCircuit(nn.Module):
         # For partition_circuit, the input is irrelevant, so just use zeros.
         # shape (*B, D, C) -> (*B, num_out, num_cls) where *B = ().
         return self.partition_circuit(torch.zeros((self.num_vars, self.num_channels)))
+
+    differentiate = TCF.differentiate
+
+    # NOTE: partialmethod is not suitable here as it does not have __call__ but __get__.
+    grad_circuit = cached_property(functools.partial(differentiate, order=1))
+    """The circuit calculating the gradient."""
