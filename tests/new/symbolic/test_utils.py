@@ -22,7 +22,7 @@ def get_symbolic_circuit_on_rg(rg: RegionGraph) -> SymbolicTensorizedCircuit:
     input_kwargs = {"num_categories": 256}
     inner_cls = CPLayer
     inner_kwargs: Dict[str, None] = {}  # Avoid Any.
-    reparam = ExpReparam()
+    reparam = ExpReparam
 
     return SymbolicTensorizedCircuit(
         rg,

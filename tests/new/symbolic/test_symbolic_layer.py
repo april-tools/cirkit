@@ -29,11 +29,12 @@ def test_symbolic_layers_sum_and_prod() -> None:
         layer_kwargs=input_kwargs,
         reparam=reparam,
     )
-    assert "SymbolicInputLayer" in repr(input_layer0)
-    assert "Scope: Scope({0})" in repr(input_layer0)
-    assert "Input Exp Family Class: CategoricalLayer" in repr(input_layer0)
-    assert "Layer KWArgs: {'num_categories': 5}" in repr(input_layer0)
-    assert "Number of Units: 3" in repr(input_layer0)
+    assert (
+        repr(input_layer0).splitlines()[0] == f"SymbolicInputLayer@0x{id(input_layer0):x}("
+        "scope=Scope({0}), num_units=3, layer_cls=<class 'cirkit.new.layers.input.exp_family"
+        ".categorical.CategoricalLayer'>, layer_kwargs={'num_categories': 5}, reparam=ExpReparam("
+    )
+
     input_layer1 = SymbolicInputLayer(
         input_node1,
         (),
@@ -49,10 +50,11 @@ def test_symbolic_layers_sum_and_prod() -> None:
         num_units=num_units,
         layer_cls=HadamardLayer,
     )
-    assert "SymbolicProductLayer" in repr(prod_layer)
-    assert "Scope: Scope({0, 1})" in repr(prod_layer)
-    assert "Layer Class: HadamardLayer" in repr(prod_layer)
-    assert "Number of Units: 3" in repr(prod_layer)
+    assert (
+        repr(prod_layer).splitlines()[0] == f"SymbolicProductLayer@0x{id(prod_layer):x}("
+        "scope=Scope({0, 1}), arity=2, num_units=3, layer_cls=<class 'cirkit.new.layers.inner"
+        ".product.hadamard.HadamardLayer'>, layer_kwargs={})"
+    )
 
     sum_layer = SymbolicSumLayer(
         region_node,
@@ -62,10 +64,11 @@ def test_symbolic_layers_sum_and_prod() -> None:
         layer_kwargs=sum_kwargs,
         reparam=reparam,
     )
-    assert "SymbolicSumLayer" in repr(sum_layer)
-    assert "Scope: Scope({0, 1})" in repr(sum_layer)
-    assert "Layer Class: DenseLayer" in repr(sum_layer)
-    assert "Number of Units: 3" in repr(sum_layer)
+    assert (
+        repr(sum_layer).splitlines()[0] == f"SymbolicSumLayer@0x{id(sum_layer):x}("
+        "scope=Scope({0, 1}), arity=1, num_units=3, layer_cls=<class 'cirkit.new.layers.inner"
+        ".sum.dense.DenseLayer'>, layer_kwargs={}, reparam=ExpReparam("
+    )
 
 
 def test_symbolic_layers_sum_prod() -> None:
@@ -87,11 +90,11 @@ def test_symbolic_layers_sum_prod() -> None:
         layer_kwargs=input_kwargs,
         reparam=reparam,
     )
-    assert "SymbolicInputLayer" in repr(input_layer0)
-    assert "Scope: Scope({0})" in repr(input_layer0)
-    assert "Input Exp Family Class: CategoricalLayer" in repr(input_layer0)
-    assert "Layer KWArgs: {'num_categories': 5}" in repr(input_layer0)
-    assert "Number of Units: 3" in repr(input_layer0)
+    assert (
+        repr(input_layer0).splitlines()[0] == f"SymbolicInputLayer@0x{id(input_layer0):x}("
+        "scope=Scope({0}), num_units=3, layer_cls=<class 'cirkit.new.layers.input.exp_family"
+        ".categorical.CategoricalLayer'>, layer_kwargs={'num_categories': 5}, reparam=ExpReparam("
+    )
     input_layer1 = SymbolicInputLayer(
         input_node1,
         (),
@@ -107,10 +110,11 @@ def test_symbolic_layers_sum_prod() -> None:
         num_units=num_units**2,
         layer_cls=TuckerLayer,
     )
-    assert "SymbolicProductLayer" in repr(prod_layer)
-    assert "Scope: Scope({0, 1})" in repr(prod_layer)
-    assert "Layer Class: TuckerLayer" in repr(prod_layer)
-    assert "Number of Units: 9" in repr(prod_layer)
+    assert (
+        repr(prod_layer).splitlines()[0] == f"SymbolicProductLayer@0x{id(prod_layer):x}("
+        "scope=Scope({0, 1}), arity=2, num_units=9, layer_cls=<class 'cirkit.new.layers.inner"
+        ".sum_product.tucker.TuckerLayer'>, layer_kwargs={})"
+    )
 
     sum_layer = SymbolicSumLayer(
         region_node,
@@ -120,7 +124,8 @@ def test_symbolic_layers_sum_prod() -> None:
         layer_kwargs=sum_kwargs,
         reparam=reparam,
     )
-    assert "SymbolicSumLayer" in repr(sum_layer)
-    assert "Scope: Scope({0, 1})" in repr(sum_layer)
-    assert "Layer Class: TuckerLayer" in repr(sum_layer)
-    assert "Number of Units: 3" in repr(sum_layer)
+    assert (
+        repr(sum_layer).splitlines()[0] == f"SymbolicSumLayer@0x{id(sum_layer):x}("
+        "scope=Scope({0, 1}), arity=1, num_units=3, layer_cls=<class 'cirkit.new.layers.inner"
+        ".sum_product.tucker.TuckerLayer'>, layer_kwargs={}, reparam=ExpReparam("
+    )

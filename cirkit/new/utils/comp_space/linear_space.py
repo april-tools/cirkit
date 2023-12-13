@@ -1,18 +1,23 @@
 import functools
 from typing import Callable, Optional, Sequence, Union
-from typing_extensions import TypeVarTuple, Unpack  # TODO: in typing from 3.11
+from typing_extensions import TypeVarTuple, Unpack, final  # TODO: in typing from 3.11
 
 import torch
 from torch import Tensor
 
-from cirkit.new.utils.comp_space.comp_space import ComputationSapce
+from cirkit.new.utils.comp_space.comp_space import ComputationSapce, register_comp_space
 from cirkit.new.utils.flatten import flatten_dims, unflatten_dims
 
 Ts = TypeVarTuple("Ts")
 
 
+# TODO: ignore is bug?
+@register_comp_space
+@final  # type: ignore[misc]  # NOTE: Starting in 3.11, final sets __final__ for runtime check.
 class LinearSpace(ComputationSapce):
     """The linear space computation."""
+
+    name = "linear"
 
     @classmethod
     def from_log(cls, x: Tensor) -> Tensor:

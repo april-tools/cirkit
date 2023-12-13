@@ -5,8 +5,6 @@ from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer, SumProd
 from cirkit.new.region_graph import PartitionNode, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
 
-# TODO: double check __repr__
-
 
 # Disable: It's intended for SymbolicLayer to have these many attrs.
 class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
@@ -56,15 +54,20 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes
         self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
         self.reparam = reparam
 
-    # We require subclasses to implement __repr__ on their own. This also forbids the instantiation
-    # of this abstract class.
-    @abstractmethod
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
 
         Returns:
             str: The str representation of the layer.
         """
+        repr_kv = ", ".join(f"{k}={v}" for k, v in self._repr_dict.items())
+        return f"{self.__class__.__name__}@0x{id(self):x}({repr_kv})"
+
+    # We use an abstract instead of direct attribute so that this class includes an abstract method.
+    @property
+    @abstractmethod
+    def _repr_dict(self) -> Dict[str, object]:  # Use object to avoid Any.
+        """The dict of key-value pairs used in __repr__."""
 
     # __hash__ and __eq__ are defined by default to compare on object identity, i.e.,
     # (a is b) <=> (a == b) <=> (hash(a) == hash(b)).
@@ -129,22 +132,18 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
         )
         assert self.inputs, "SymbolicSumLayer must be an inner layer of the SymbC."
 
-    def __repr__(self) -> str:
-        """Generate the repr string of the layer.
-
-        Returns:
-            str: The str representation of the layer.
-        """
-        class_name = self.__class__.__name__
-        layer_cls_name = self.layer_cls.__name__
-
-        return (
-            f"{class_name}:\n"  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
-            f"Scope: {repr(self.scope)}\n"
-            f"Layer Class: {layer_cls_name}\n"
-            f"Layer KWArgs: {repr(self.layer_kwargs)}\n"
-            f"Number of Units: {repr(self.num_units)}\n"
-        )
+    @property
+    def _repr_dict(self) -> Dict[str, object]:
+        """The dict of key-value pairs used in __repr__."""
+        # Ignore: Unavoidable for kwargs.
+        return {
+            "scope": self.scope,
+            "arity": self.arity,
+            "num_units": self.num_units,
+            "layer_cls": self.layer_cls,
+            "layer_kwargs": self.layer_kwargs,  # type: ignore[misc]
+            "reparam": self.reparam,  # TODO: repr of reparam
+        }
 
 
 # Disable: It's intended for SymbolicProductLayer to have only these methods.
@@ -188,21 +187,17 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
             reparam=None,
         )
 
-    def __repr__(self) -> str:
-        """Generate the repr string of the layer.
-
-        Returns:
-            str: The str representation of the layer.
-        """
-        class_name = self.__class__.__name__
-        layer_cls_name = self.layer_cls.__name__
-
-        return (
-            f"{class_name}:\n"
-            f"Scope: {repr(self.scope)}\n"
-            f"Layer Class: {layer_cls_name}\n"
-            f"Number of Units: {repr(self.num_units)}\n"
-        )
+    @property
+    def _repr_dict(self) -> Dict[str, object]:
+        """The dict of key-value pairs used in __repr__."""
+        # Ignore: Unavoidable for kwargs.
+        return {
+            "scope": self.scope,
+            "arity": self.arity,
+            "num_units": self.num_units,
+            "layer_cls": self.layer_cls,
+            "layer_kwargs": self.layer_kwargs,  # type: ignore[misc]
+        }
 
 
 # Disable: It's intended for SymbolicInputLayer to have only these methods.
@@ -243,19 +238,14 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
         )
         assert not self.inputs, "SymbolicInputLayer must be an input layer of the SymbC."
 
-    def __repr__(self) -> str:
-        """Generate the repr string of the layer.
-
-        Returns:
-            str: The str representation of the layer.
-        """
-        class_name = self.__class__.__name__
-        layer_cls_name = self.layer_cls.__name__ if self.layer_cls else "None"
-
-        return (
-            f"{class_name}:\n"  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
-            f"Scope: {repr(self.scope)}\n"
-            f"Input Exp Family Class: {layer_cls_name}\n"
-            f"Layer KWArgs: {repr(self.layer_kwargs)}\n"
-            f"Number of Units: {repr(self.num_units)}\n"
-        )
+    @property
+    def _repr_dict(self) -> Dict[str, object]:
+        """The dict of key-value pairs used in __repr__."""
+        # Ignore: Unavoidable for kwargs.
+        return {
+            "scope": self.scope,
+            "num_units": self.num_units,
+            "layer_cls": self.layer_cls,
+            "layer_kwargs": self.layer_kwargs,  # type: ignore[misc]
+            "reparam": self.reparam,  # TODO: repr of reparam
+        }

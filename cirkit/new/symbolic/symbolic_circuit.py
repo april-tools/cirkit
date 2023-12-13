@@ -1,6 +1,13 @@
-from typing import Any, Dict, Iterable, Iterator, Optional, Type, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Type, Union
 
-from cirkit.new.layers import InputLayer, MixingLayer, ProductLayer, SumLayer, SumProductLayer
+from cirkit.new.layers import (
+    DenseLayer,
+    InputLayer,
+    MixingLayer,
+    ProductLayer,
+    SumLayer,
+    SumProductLayer,
+)
 from cirkit.new.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.symbolic.symbolic_layer import (
@@ -11,13 +18,14 @@ from cirkit.new.symbolic.symbolic_layer import (
 )
 from cirkit.new.utils import OrderedSet, Scope
 
-# TODO: double check docs and __repr__
+# TODO: __repr__?
 
 
 # Disable: It's designed to have these many attributes.
 class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     """The symbolic representation of a tensorized circuit."""
 
+    # TODO: is this the best way to provide reparam? or give a layer-wise mapping?
     # TODO: how to design interface? require kwargs only?
     # TODO: how to deal with too-many?
     # pylint: disable-next=too-many-arguments,too-many-locals
@@ -30,10 +38,10 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
         num_classes: int = 1,
         input_layer_cls: Type[InputLayer],
         input_layer_kwargs: Optional[Dict[str, Any]] = None,
-        input_reparam: Optional[Reparameterization] = None,
+        input_reparam: Callable[[], Optional[Reparameterization]] = lambda: None,
         sum_layer_cls: Type[Union[SumLayer, SumProductLayer]],
         sum_layer_kwargs: Optional[Dict[str, Any]] = None,
-        sum_reparam: Reparameterization,
+        sum_reparam: Callable[[], Reparameterization],
         prod_layer_cls: Type[Union[ProductLayer, SumProductLayer]],
         prod_layer_kwargs: Optional[Dict[str, Any]] = None,
     ):
@@ -49,14 +57,16 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
             input_layer_cls (Type[InputLayer]): The layer class for input layers.
             input_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
                 input layer class. Defaults to None.
-            input_reparam (Optional[Reparameterization], optional): The reparameterization for \
-                input layer parameters, can be None if it has no params. Defaults to None.
+            input_reparam (Callable[[], Optional[Reparameterization]], optional): The factory to \
+                construct reparameterizations for input layer parameters, can produce None if no \
+                params is needed. Defaults to lambda: None.
             sum_layer_cls (Type[Union[SumLayer, SumProductLayer]]): The layer class for sum \
                 layers, can be either just a class of SumLayer, or a class of SumProductLayer to \
-                indicate layer fusion..
+                indicate layer fusion.
             sum_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for sum \
                 layer class. Defaults to None.
-            sum_reparam (Reparameterization): The reparameterization for sum layer parameters.
+            sum_reparam (Callable[[], Reparameterization]): The factory to construct \
+                reparameterizations for sum layer parameters.
             prod_layer_cls (Type[Union[ProductLayer, SumProductLayer]]): The layer class for \
                 product layers, can be either just a class of ProductLayer, or a class of \
                 SumProductLayer to indicate layer fusion.
@@ -91,7 +101,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                         num_units=num_input_units,
                         layer_cls=input_layer_cls,
                         layer_kwargs=input_layer_kwargs,  # type: ignore[misc]
-                        reparam=input_reparam,
+                        reparam=input_reparam(),
                     )
                 ]
                 # This also works when the input is also output, in which case num_classes is used.
@@ -99,9 +109,9 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                     rg_node,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
-                    layer_cls=sum_layer_cls,
-                    layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
-                    reparam=sum_reparam,
+                    layer_cls=DenseLayer,  # TODO: can be other sum layer, but how to pass in???
+                    layer_kwargs={},  # type: ignore[misc]
+                    reparam=sum_reparam(),
                 )
             elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) == 1:  # Simple inner.
                 # layers_in keeps the same.
@@ -111,7 +121,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=sum_layer_cls,
                     layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
-                    reparam=sum_reparam,
+                    reparam=sum_reparam(),
                 )
             elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) > 1:  # Inner with mixture.
                 # MixingLayer cannot change number of units, so must project early.
@@ -122,7 +132,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                         num_units=num_sum_units if rg_node.outputs else num_classes,
                         layer_cls=sum_layer_cls,
                         layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
-                        reparam=sum_reparam,
+                        reparam=sum_reparam(),
                     )
                     for layer_in in layers_in
                 ]
@@ -132,7 +142,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=MixingLayer,
                     layer_kwargs={},  # type: ignore[misc]
-                    reparam=sum_reparam,  # TODO: use a constant reparam here?
+                    reparam=sum_reparam(),  # TODO: use a constant reparam here?
                 )
             elif isinstance(rg_node, PartitionNode):
                 # layers_in keeps the same.

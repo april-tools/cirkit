@@ -149,7 +149,8 @@ def PoonDomingos(
     queue: Deque[HyperCube] = deque()
     depth_dict: Dict[HyperCube, int] = {}  # Also serve as a "visited" set.
 
-    # A cast is required to get rid of Literal[0].  # TODO: type checking bug? annotation not work
+    # TODO: type checking bug? annotation not work
+    # Cast: A cast is required to get rid of Literal[0].
     cur_hypercube = cast(HyperCube, ((0,) * len(shape), tuple(shape)))
     graph.add_node(RegionNode(hypercube_to_scope[cur_hypercube]))
     queue.append(cur_hypercube)

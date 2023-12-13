@@ -1,18 +1,23 @@
 import functools
 from typing import Callable, Optional, Sequence, Tuple, Union, cast
-from typing_extensions import TypeVarTuple, Unpack  # TODO: in typing from 3.11
+from typing_extensions import TypeVarTuple, Unpack, final  # TODO: in typing from 3.11
 
 import torch
 from torch import Tensor
 
-from cirkit.new.utils.comp_space.comp_space import ComputationSapce
+from cirkit.new.utils.comp_space.comp_space import ComputationSapce, register_comp_space
 from cirkit.new.utils.flatten import flatten_dims, unflatten_dims
 
 Ts = TypeVarTuple("Ts")
 
 
+# TODO: ignore is bug?
+@register_comp_space
+@final  # type: ignore[misc]  # NOTE: Starting in 3.11, final sets __final__ for runtime check.
 class LogSpace(ComputationSapce):
     """The log space computation."""
+
+    name = "log"
 
     @classmethod
     def from_log(cls, x: Tensor) -> Tensor:
@@ -61,23 +66,23 @@ class LogSpace(ComputationSapce):
         """
         dims = tuple(dim) if isinstance(dim, Sequence) else (dim,)
 
-        # We use generators (... for) instead of list [... for] so that intermediate results will
-        # not be instantiated for all elements.
+        # TODO: can we use generators (... for) instead of list [... for] to avoid instantiation of
+        #       intermediate results. but generators can only be used once.
         # TODO: We have to cast from Ts to Tensor
-        x = (cast(Tensor, xi) for xi in xs)
+        x = [cast(Tensor, xi) for xi in xs]
         # We need flatten because max only works on one dim, and then match shape for exp_x.
-        max_x = (
+        max_x = [
             unflatten_dims(
                 torch.max(flatten_dims(xi, dims=dims), dim=dims[0], keepdim=True)[0],
                 dims=dims,
                 shape=(1,) * len(dims),  # The size for dims is 1 after max.
             )
             for xi in x
-        )
-        exp_x = (torch.exp(xi - xi_max) for xi, xi_max in zip(x, max_x))
+        ]
+        exp_x = [torch.exp(xi - xi_max) for xi, xi_max in zip(x, max_x)]
 
         # TODO: We have to cast from Tensor to Ts
-        #       NOTE: exp_x is not tuple, but it magically works with unpacking using *(...).
+        #       NOTE: exp_x is not tuple but list. But can be interchangably used here.
         func_exp_x = func(*cast(Tuple[Unpack[Ts]], exp_x))
 
         # TODO: verify the behavior of reduce under torch.compile
