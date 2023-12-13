@@ -77,8 +77,9 @@ class RegionGraph:
         # add_node will check for _is_frozen.
         self.add_node(tail)
         self.add_node(head)
-        tail.outputs.append(head)  # TODO: this insertion order may be different from add_node order
-        head.inputs.append(tail)
+        # TODO: this insertion order may be different from add_node order
+        assert tail.outputs.append(head), "The edges in RG should not be repeated."
+        head.inputs.append(tail)  # Only need to check duplicate in one direction.
 
     def add_partitioning(self, region: RegionNode, sub_regions: Iterable[RegionNode]) -> None:
         """Add a partitioning structure to the graph, with a PartitionNode constructed internally.
@@ -120,7 +121,8 @@ class RegionGraph:
             node.inputs.sort()
             node.outputs.sort()
 
-    def _validate(self) -> str:
+    # TODO: do we need these return? or just assert?
+    def _validate(self) -> str:  # pylint: disable=too-many-return-statements
         """Validate the RG structure to make sure it's a legal computational graph.
 
         Returns:
@@ -132,6 +134,9 @@ class RegionGraph:
         if next(self.output_nodes, None) is None:
             return "RG must have at least one output node"
 
+        # Also guarantees the input/output nodes are all regions.
+        if not all(partition.inputs for partition in self.partition_nodes):
+            return "PartitionNode must have at least one input"
         if any(len(partition.outputs) != 1 for partition in self.partition_nodes):
             return "PartitionNode can only have one output RegionNode"
 

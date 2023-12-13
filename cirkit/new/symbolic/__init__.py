@@ -1,4 +1,4 @@
-from .symbolic_circuit import SymbolicCircuit as SymbolicCircuit
+from .symbolic_circuit import SymbolicTensorizedCircuit as SymbolicTensorizedCircuit
 from .symbolic_layer import SymbolicInputLayer as SymbolicInputLayer
 from .symbolic_layer import SymbolicLayer as SymbolicLayer
 from .symbolic_layer import SymbolicProductLayer as SymbolicProductLayer

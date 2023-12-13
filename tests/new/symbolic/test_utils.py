@@ -4,7 +4,7 @@ from typing import Dict
 from cirkit.new.layers import CategoricalLayer, CPLayer
 from cirkit.new.region_graph import RegionGraph, RegionNode
 from cirkit.new.reparams import ExpReparam
-from cirkit.new.symbolic import SymbolicCircuit
+from cirkit.new.symbolic import SymbolicTensorizedCircuit
 
 
 def get_simple_rg() -> RegionGraph:
@@ -16,7 +16,7 @@ def get_simple_rg() -> RegionGraph:
     return rg.freeze()
 
 
-def get_symbolic_circuit_on_rg(rg: RegionGraph) -> SymbolicCircuit:
+def get_symbolic_circuit_on_rg(rg: RegionGraph) -> SymbolicTensorizedCircuit:
     num_units = 4
     input_cls = CategoricalLayer
     input_kwargs = {"num_categories": 256}
@@ -24,7 +24,7 @@ def get_symbolic_circuit_on_rg(rg: RegionGraph) -> SymbolicCircuit:
     inner_kwargs: Dict[str, None] = {}  # Avoid Any.
     reparam = ExpReparam()
 
-    return SymbolicCircuit(
+    return SymbolicTensorizedCircuit(
         rg,
         num_input_units=num_units,
         num_sum_units=num_units,
