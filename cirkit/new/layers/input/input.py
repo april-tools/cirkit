@@ -1,4 +1,5 @@
-from typing import Literal, Optional
+from abc import abstractmethod
+from typing import Any, Dict, Literal, Optional, Tuple, Type
 
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
@@ -40,3 +41,18 @@ class InputLayer(Layer):
             arity=arity,
             reparam=reparam,
         )
+
+    @classmethod
+    @abstractmethod
+    def get_integral(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+        cls, **kwargs: Any
+    ) -> Tuple[Type["InputLayer"], Dict[str, Any]]:
+        """Get the config to construct the integral of the input layer.
+
+        Args:
+            **kwargs (Any): The additional kwargs for this layer,
+
+        Returns:
+            Tuple[Type[InputLayer], Dict[str, Any]]: The class of the integral layer and its \
+                additional kwargs.
+        """

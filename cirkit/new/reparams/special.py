@@ -52,8 +52,12 @@ class EFNormalReparam(UnaryReparam):
         )  # shape (..., 2, :).
         return param / var.unsqueeze(dim=-2)  # shape (..., 2, :).
 
-    def materialize(self, shape: Sequence[int], /, **kwargs: Unpack[MaterializeKwargs]) -> None:
+    def materialize(self, shape: Sequence[int], /, **kwargs: Unpack[MaterializeKwargs]) -> bool:
         """Materialize the internal parameter tensors with given shape.
+
+        If it is already materialized, False will be returned to indicate no materialization. \
+        However, a second call to materialize must give the same config, so that the underlying \
+        params can indeed be reused.
 
         The initial value of the parameter after materialization is not guaranteed, and explicit \
         initialization is expected.
@@ -61,7 +65,10 @@ class EFNormalReparam(UnaryReparam):
         Args:
             shape (Sequence[int]): The shape of the output parameter.
             **kwargs (Unpack[MaterializeKwargs]): Passed to super().materialize().
+
+        Returns:
+            bool: Whether the materialization is done.
         """
         # TODO: do we use mask? or do we need mask at all?
         assert shape[-2] == 2, "The shape does not fit the requirement of EF-Normal."
-        super().materialize(shape, **kwargs)
+        return super().materialize(shape, **kwargs)

@@ -70,8 +70,12 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
         dim: Union[int, Sequence[int]],
         mask: Optional[Tensor] = None,
         log_mask: Optional[Tensor] = None,
-    ) -> None:
+    ) -> bool:
         """Materialize the internal parameter tensors with given shape.
+
+        If it is already materialized, False will be returned to indicate no materialization. \
+        However, a second call to materialize must give the same config, so that the underlying \
+        params can indeed be reused.
 
         The initial value of the parameter after materialization is not guaranteed, and explicit \
         initialization is expected.
@@ -89,8 +93,13 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
             log_mask (Optional[Tensor], optional): The -inf/0 mask for normalization positions. \
                 None for no masking. The shape must be broadcastable to shape if not None. \
                 Defaults to None.
+
+        Returns:
+            bool: Whether the materialization is done.
         """
-        super().materialize(shape, dim=dim, mask=mask, log_mask=log_mask)
+        if not super().materialize(shape, dim=dim, mask=mask, log_mask=log_mask):
+            return False
+
         for reparam in self.reparams:
             if not reparam.is_materialized:
                 # NOTE: Passing shape to all children reparams may not be always wanted. In that
@@ -99,6 +108,7 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
                 reparam.materialize(shape, dim=dim, mask=mask, log_mask=log_mask)
 
         assert self().shape == self.shape, "The actual shape does not match the given one."
+        return True
 
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
         """Initialize the internal parameter tensors with the given initializer.

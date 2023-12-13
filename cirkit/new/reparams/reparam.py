@@ -61,8 +61,12 @@ class Reparameterization(nn.Module, ABC):
         dim: Union[int, Sequence[int]],
         mask: Optional[Tensor] = None,
         log_mask: Optional[Tensor] = None,
-    ) -> None:
+    ) -> bool:
         """Materialize the internal parameter tensors with given shape.
+
+        If it is already materialized, False will be returned to indicate no materialization. \
+        However, a second call to materialize must give the same config, so that the underlying \
+        params can indeed be reused.
 
         The initial value of the parameter after materialization is not guaranteed, and explicit \
         initialization is expected.
@@ -81,20 +85,28 @@ class Reparameterization(nn.Module, ABC):
             log_mask (Optional[Tensor], optional): The -inf/0 mask for normalization positions. \
                 None for no masking. The shape must be broadcastable to shape if not None. \
                 Defaults to None.
+
+        Returns:
+            bool: Whether the materialization is done.
         """
-        # NOTE: Subclasses should never call into this materialize() when is_materialized.
-        assert not self.is_materialized, "This reparameterization is already materialized."
+        shape = tuple(shape)
 
-        self.shape = tuple(shape)
-
-        self.dims = (
+        dims = (
             tuple(sorted(d if d >= 0 else d + len(shape) for d in dim))
             if isinstance(dim, Sequence)
             else (dim if dim >= 0 else dim + len(shape),)
         )
-        assert all(
-            0 <= d < len(shape) for d in self.dims
-        ), f"dim={dim} out of range for {len(shape)}-d."
+        assert all(0 <= d < len(shape) for d in dims), f"dim={dim} out of range for {len(shape)}-d."
+
+        if self.is_materialized:
+            # TODO: check for mask?
+            assert (
+                self.shape == shape and self.dims == dims
+            ), "Reparameterization cannot be re-materialized into a different configuration."
+            return False
+
+        self.shape = shape
+        self.dims = dims
 
         assert mask is None or log_mask is None, "mask and log_mask may not be supplied together."
 
@@ -106,6 +118,8 @@ class Reparameterization(nn.Module, ABC):
             log_mask.broadcast_to(shape)
             self.log_mask = log_mask
         # else: both is None, self.log_mask = None, which is the default.
+
+        return True
 
     @abstractmethod
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:

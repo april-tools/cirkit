@@ -54,7 +54,7 @@ class ComputationSapce(ABC):
         """Raise an error when this class is instantiated.
 
         Raises:
-            TypeError: This is not the type to instantiate.
+            TypeError: When this classes is instantiated.
 
         Returns:
             Self: The method never returns.
@@ -66,7 +66,7 @@ class ComputationSapce(ABC):
     name: str
     """The name to be registered."""
 
-    # TODO: currently only from_log is used. if needed, we can also have to_log, to_lin, from_lin.
+    # TODO: if needed, we can also have to_log, to_lin.
     @classmethod
     @abstractmethod
     def from_log(cls, x: Tensor) -> Tensor:
@@ -74,6 +74,18 @@ class ComputationSapce(ABC):
 
         Args:
             x (Tensor): The value in log space.
+
+        Returns:
+            Tensor: The value in the current space.
+        """
+
+    @classmethod
+    @abstractmethod
+    def from_linear(cls, x: Tensor) -> Tensor:
+        """Convert a value from linear space to the current space.
+
+        Args:
+            x (Tensor): The value in linear space.
 
         Returns:
             Tensor: The value in the current space.

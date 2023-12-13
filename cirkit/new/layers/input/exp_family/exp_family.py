@@ -1,10 +1,11 @@
 import functools
 from abc import abstractmethod
-from typing import Literal, Tuple
+from typing import Any, Dict, Literal, Tuple, Type
 
 import torch
 from torch import Tensor, nn
 
+from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.reparams import Reparameterization
 
@@ -56,9 +57,8 @@ class ExpFamilyLayer(InputLayer):
         )
 
         self.params = reparam
-        self.params.materialize((arity, num_output_units, *self.suff_stats_shape), dim=-1)
-
-        self.reset_parameters()
+        if self.params.materialize((arity, num_output_units, *self.suff_stats_shape), dim=-1):
+            self.reset_parameters()  # Only reset if newly materialized.
 
     @torch.no_grad()
     def reset_parameters(self) -> None:
@@ -93,6 +93,23 @@ class ExpFamilyLayer(InputLayer):
             dim=-2,
         )  # shape (*B, H, K) -> (*B, K).
         return self.comp_space.from_log(log_p)
+
+    @classmethod
+    def get_integral(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+        cls, **kwargs: Any
+    ) -> Tuple[Type[InputLayer], Dict[str, float]]:
+        """Get the config to construct the integral of the input layer.
+
+        Args:
+            **kwargs (Any): The additional kwargs for this layer,
+
+        Returns:
+            Tuple[Type[InputLayer], Dict[str, float]]: The class of the integral layer and its \
+                additional kwargs.
+        """
+        # TODO: for unnormalized EF, should be ParameterizedConstantLayer
+        # We have already normalized with log_partition in forward().
+        return ConstantLayer, {"const_value": 1.0}
 
     @abstractmethod
     def sufficient_stats(self, x: Tensor) -> Tensor:
