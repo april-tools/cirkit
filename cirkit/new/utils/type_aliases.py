@@ -73,15 +73,17 @@ ReparamFactory = Callable[[], "Reparameterization"]
 OptReparamFactory = Callable[[], Optional["Reparameterization"]]
 
 
-LayerT = TypeVar("LayerT", bound="Layer")
+LayerT_co = TypeVar("LayerT_co", bound="Layer", covariant=True)
 
 
-class SymbLayerCfg(TypedDict, Generic[LayerT], total=False):
+# We need a covariant LayerT_co for subclass compatibility. Also, we don't expect this dict to
+# behave as mutable, so covariance can be safe to adopt.
+class SymbLayerCfg(TypedDict, Generic[LayerT_co], total=False):
     """The config of a layer in symbolic form, which is part of SymbolicLayer constructor.
 
     We make it generic so that it can be specific on a Layer subclass.
     """
 
-    layer_cls: Required[Type[LayerT]]
+    layer_cls: Required[Type[LayerT_co]]
     layer_kwargs: Dict[str, Any]
     reparam: Optional["Reparameterization"]

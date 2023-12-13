@@ -41,6 +41,7 @@ class InputLayer(Layer):
             reparam=reparam,
         )
 
+    # TODO: enable integ on part of H dim? if yes, also lift assert subset in functional
     @classmethod
     @abstractmethod
     def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
@@ -53,4 +54,24 @@ class InputLayer(Layer):
 
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
+        """
+
+    @classmethod
+    @abstractmethod
+    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
+    ) -> SymbLayerCfg["InputLayer"]:
+        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
+        of the given variable in the scope of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            order (int, optional): The order of differentiation. Defaults to 1.
+            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
+                layer's scope but not global variable id. Defaults to 0.
+            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
+                given channel of the given variable.
         """

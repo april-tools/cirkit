@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, cast
 from typing_extensions import Self  # TODO: in typing from 3.11
 
 import torch
@@ -60,11 +60,10 @@ class ConstantLayer(InputLayer):
             .expand(*x.shape[1:-1], self.num_output_units)
         )
 
-    # Disable/Ignore: It's define with this signature.  # TODO: consider TypedDict?
     @classmethod
     def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
         cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg["InputLayer"]:
+    ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the integral of this layer.
 
         Args:
@@ -88,6 +87,36 @@ class ConstantLayer(InputLayer):
             raise ValueError("The integral of ConstantLayer with const_value != 0 is infinity.")
 
         return {  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+            "layer_cls": ConstantLayer,
+            "layer_kwargs": {"const_value": 0.0},
+            "reparam": None,
+        }
+
+    @classmethod
+    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
+    ) -> SymbLayerCfg[InputLayer]:
+        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
+        of the given variable in the scope of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            order (int, optional): The order of differentiation. Defaults to 1.
+            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
+                layer's scope but not global variable id. Defaults to 0.
+            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
+                given channel of the given variable.
+        """
+        assert order >= 0, "The order of differential must be non-negative."
+        if not order:
+            # TODO: cast: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
+
+        # Ignore: SymbLayerCfg contains Any.
+        return {  # type: ignore[misc]
             "layer_cls": ConstantLayer,
             "layer_kwargs": {"const_value": 0.0},
             "reparam": None,
