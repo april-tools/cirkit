@@ -1,10 +1,12 @@
-from typing import Dict, Literal, Optional, Tuple, Type
+from typing import Literal, Optional
+from typing_extensions import Self  # TODO: in typing from 3.11
 
 import torch
 from torch import Tensor
 
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class ConstantLayer(InputLayer):
@@ -26,7 +28,7 @@ class ConstantLayer(InputLayer):
             num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
             arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
-            reparam (Optional[Reparameterization], optional):  Ignored. This layer has no params. \
+            reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
                 Defaults to None.
             const_value (float): The constant value, in linear space.
         """
@@ -34,13 +36,13 @@ class ConstantLayer(InputLayer):
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
-            reparam=reparam,
+            reparam=None,
         )
 
         self.const_value = const_value
 
     def reset_parameters(self) -> None:
-        """Do nothing as the product layers do not have parameters."""
+        """Do nothing, as constant layers do not have parameters."""
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -59,21 +61,33 @@ class ConstantLayer(InputLayer):
 
     # Disable/Ignore: It's define with this signature.  # TODO: consider TypedDict?
     @classmethod
-    def get_integral(  # type: ignore[override]  # pylint: disable=arguments-differ
-        cls, const_value: float
-    ) -> Tuple[Type[InputLayer], Dict[str, float]]:
-        """Get the config to construct the integral of the input layer.
+    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self]
+    ) -> SymbLayerCfg["InputLayer"]:
+        """Get the symbolic config to construct the integral of this layer.
 
         Args:
-            const_value (float): The const_value in __init__.
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
         Raises:
             ValueError: When const_value != 0, in which case the integral is infinity.
 
         Returns:
-            Tuple[Type[InputLayer], Dict[str, float]]: The class of the integral layer and its \
-                additional kwargs.
+            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
+        # Ignore: Each step contains Any due to kwargs.
+        assert isinstance(
+            const_value := symb_cfg.get("layer_kwargs", {}).get(  # type: ignore[misc]
+                "const_value", None
+            ),
+            (float, int),
+        ), "Mismatched kwargs for this layer."
+
         if const_value:
             raise ValueError("The integral of ConstantLayer with const_value != 0 is infinity.")
-        return ConstantLayer, {"const_value": 0.0}
+
+        return {  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+            "layer_cls": ConstantLayer,
+            "layer_kwargs": {"const_value": 0.0},
+            "reparam": None,
+        }

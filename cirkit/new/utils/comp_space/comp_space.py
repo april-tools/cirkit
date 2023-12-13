@@ -18,7 +18,7 @@ def register_comp_space(cls: CompSpaceT) -> CompSpaceT:
     Returns:
         CompSpaceT: The class passed in.
     """
-    # Cast: a cast is needed because __final__ may be undefined.
+    # Cast: A cast is needed because __final__ may be undefined.
     assert cast(
         bool, getattr(cls, "__final__", False)
     ), "Subclasses of ComputationSapce should be final."
@@ -30,7 +30,7 @@ def register_comp_space(cls: CompSpaceT) -> CompSpaceT:
 class ComputationSapce(ABC):
     """The abstract base class for compotational spaces.
 
-    Due to numerical precision, the actual units in computational graph may hold values in ,e.g., \
+    Due to numerical precision, the actual units in computational graph may hold values in, e.g., \
     log space, instead of linear space. And therefore, this provides a unified interface for the \
     computations so that computation can be done in a space suitable to the implementation \
     regardless of the global setting.
@@ -54,10 +54,10 @@ class ComputationSapce(ABC):
         """Raise an error when this class is instantiated.
 
         Raises:
-            TypeError: When this classes is instantiated.
+            TypeError: When this class is instantiated.
 
         Returns:
-            Self: The method never returns.
+            Self: This method never returns.
         """
         raise TypeError("This class cannot be instantiated.")
 

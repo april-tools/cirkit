@@ -1,6 +1,7 @@
 import functools
 from abc import abstractmethod
-from typing import Any, Dict, Literal, Tuple, Type
+from typing import Literal, Tuple
+from typing_extensions import Self  # TODO: in typing from 3.11
 
 import torch
 from torch import Tensor, nn
@@ -8,6 +9,7 @@ from torch import Tensor, nn
 from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class ExpFamilyLayer(InputLayer):
@@ -94,23 +96,6 @@ class ExpFamilyLayer(InputLayer):
         )  # shape (*B, H, K) -> (*B, K).
         return self.comp_space.from_log(log_p)
 
-    @classmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
-        cls, **kwargs: Any
-    ) -> Tuple[Type[InputLayer], Dict[str, float]]:
-        """Get the config to construct the integral of the input layer.
-
-        Args:
-            **kwargs (Any): The additional kwargs for this layer,
-
-        Returns:
-            Tuple[Type[InputLayer], Dict[str, float]]: The class of the integral layer and its \
-                additional kwargs.
-        """
-        # TODO: for unnormalized EF, should be ParameterizedConstantLayer
-        # We have already normalized with log_partition in forward().
-        return ConstantLayer, {"const_value": 1.0}
-
     @abstractmethod
     def sufficient_stats(self, x: Tensor) -> Tensor:
         """Calculate sufficient statistics T from input x.
@@ -143,3 +128,23 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             Tensor: The log partition function A, shape (H, K).
         """
+
+    @classmethod
+    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self]
+    ) -> SymbLayerCfg["InputLayer"]:
+        """Get the symbolic config to construct the integral of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
+        """
+        # TODO: for unnormalized EF, should be ParameterizedConstantLayer
+        # We have already normalized with log_partition in forward(), so integral is always 1.
+        return {  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+            "layer_cls": ConstantLayer,
+            "layer_kwargs": {"const_value": 1.0},
+            "reparam": None,
+        }

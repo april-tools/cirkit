@@ -1,6 +1,7 @@
 import functools
 from typing import Callable, Optional, Sequence, Union
-from typing_extensions import TypeVarTuple, Unpack, final  # TODO: in typing from 3.11
+from typing_extensions import final  # TODO: in typing from 3.11 for __final__
+from typing_extensions import TypeVarTuple, Unpack  # TODO: in typing from 3.11
 
 import torch
 from torch import Tensor

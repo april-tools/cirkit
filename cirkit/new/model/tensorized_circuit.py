@@ -47,7 +47,7 @@ class TensorizedCircuit(nn.Module):
         # Both containers with have a consistent layer order by this loop.
         for symb_layer in symb_circuit.layers:
             layer: Optional[Layer]
-            # Ignore: all SymbolicLayer contains Any.
+            # Ignore: All SymbolicLayer contains Any.
             # Ignore: Unavoidable for kwargs.
             if issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicProductLayer  # type: ignore[misc]

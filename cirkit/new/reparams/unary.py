@@ -119,7 +119,7 @@ class ClampReparam(UnaryReparam):
     Range: [min, max], as provided.
     """
 
-    # Disable: we must use min/max as names, so that it's in line with pytorch.
+    # Disable: We must use min/max as names, so that it's in line with pytorch.
     def __init__(
         self,
         reparam: Optional[Reparameterization] = None,

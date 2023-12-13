@@ -9,12 +9,12 @@ from cirkit.new.utils import Scope
 # TODO: now should work with H!=W but need tests
 
 
-def _merge_2_regions(graph: RegionGraph, region_nodes: List[RegionNode]) -> RegionNode:
+def _merge_2_regions(graph: RegionGraph, region_nodes: Tuple[RegionNode, RegionNode]) -> RegionNode:
     """Merge 2 regions to a larger region.
 
     Args:
         graph (RegionGraph): The region graph to hold the merging.
-        region_nodes (List[RegionNode]): The region nodes to merge.
+        region_nodes (Tuple[RegionNode, RegionNode]): The region nodes to merge.
 
     Returns:
         RegionNode: The merged region node.
@@ -27,7 +27,7 @@ def _merge_2_regions(graph: RegionGraph, region_nodes: List[RegionNode]) -> Regi
 
 
 def _merge_4_regions_struct_decomp(
-    graph: RegionGraph, region_nodes: List[RegionNode]
+    graph: RegionGraph, region_nodes: Tuple[RegionNode, RegionNode, RegionNode, RegionNode]
 ) -> RegionNode:
     """Merge 4 regions to a larger region, with structured-decomposablility.
 
@@ -35,7 +35,8 @@ def _merge_4_regions_struct_decomp(
 
     Args:
         graph (RegionGraph): The region graph to hold the merging.
-        region_nodes (List[RegionNode]): The region nodes to merge.
+        region_nodes (Tuple[RegionNode, RegionNode, RegionNode, RegionNode]): The region nodes to \
+            merge.
 
     Returns:
         RegionNode: The merged region node.
@@ -47,17 +48,20 @@ def _merge_4_regions_struct_decomp(
     region_bot = _merge_2_regions(graph, region_nodes[2:])
 
     # Merge vertically.
-    region_whole = _merge_2_regions(graph, [region_top, region_bot])
+    region_whole = _merge_2_regions(graph, (region_top, region_bot))
 
     return region_whole
 
 
-def _merge_4_regions_mixed(graph: RegionGraph, region_nodes: List[RegionNode]) -> RegionNode:
+def _merge_4_regions_mixed(
+    graph: RegionGraph, region_nodes: Tuple[RegionNode, RegionNode, RegionNode, RegionNode]
+) -> RegionNode:
     """Merge 4 regions to a larger region, with non-structured-decomposable mixutre.
 
     Args:
         graph (RegionGraph): The region graph to hold the merging.
-        region_nodes (List[RegionNode]): The region nodes to merge.
+        region_nodes (Tuple[RegionNode, RegionNode, RegionNode, RegionNode]): The region nodes to \
+            merge.
 
     Returns:
         RegionNode: The merged region node.
@@ -71,7 +75,7 @@ def _merge_4_regions_mixed(graph: RegionGraph, region_nodes: List[RegionNode]) -
     region_lft = _merge_2_regions(graph, region_nodes[0::2])
     region_rit = _merge_2_regions(graph, region_nodes[1::2])
     # Reuse the region_whole that is already constructed.
-    graph.add_partitioning(region_whole, [region_lft, region_rit])
+    graph.add_partitioning(region_whole, (region_lft, region_rit))
 
     return region_whole
 
@@ -122,7 +126,7 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
         layer = [[RegionNode(pad_scope)] * (width + 1) for _ in range(height + 1)]
 
         for i, j in itertools.product(range(height), range(width)):
-            regions = [  # Filter valid regions in the 4 possible sub-regions.
+            regions = tuple(  # Filter valid regions in the 4 possible sub-regions.
                 node
                 for node in (
                     prev_layer[i * 2][j * 2],
@@ -131,15 +135,22 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
                     prev_layer[i * 2 + 1][j * 2 + 1],
                 )
                 if node.scope != pad_scope
-            ]
+            )
             if len(regions) == 1:
                 node = regions[0]
             elif len(regions) == 2:
                 node = _merge_2_regions(graph, regions)
-            elif struct_decomp:  # len(regions) == 4
+            elif len(regions) == 4 and struct_decomp:
                 node = _merge_4_regions_struct_decomp(graph, regions)
-            else:  # not struct_decomp and len(regions) == 4
+            elif len(regions) == 4 and not struct_decomp:
                 node = _merge_4_regions_mixed(graph, regions)
+            else:
+                # NOTE: In the above if/elif, we made all conditions explicit to make it more
+                #       readable and also easier for static analysis inside the blocks. Yet the
+                #       completeness cannot be inferred and is only guaranteed by larger picture.
+                #       Also, should anything really go wrong, we will hit this guard statement
+                #       instead of going into a wrong branch.
+                assert False, "This should not happen."
             layer[i][j] = node
 
     return graph.freeze()

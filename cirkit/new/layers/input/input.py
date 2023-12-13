@@ -1,8 +1,10 @@
 from abc import abstractmethod
-from typing import Any, Dict, Literal, Optional, Tuple, Type
+from typing import Literal, Optional
+from typing_extensions import Self  # TODO: in typing from 3.11
 
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class InputLayer(Layer):
@@ -44,15 +46,14 @@ class InputLayer(Layer):
 
     @classmethod
     @abstractmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
-        cls, **kwargs: Any
-    ) -> Tuple[Type["InputLayer"], Dict[str, Any]]:
-        """Get the config to construct the integral of the input layer.
+    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self]
+    ) -> SymbLayerCfg["InputLayer"]:
+        """Get the symbolic config to construct the integral of this layer.
 
         Args:
-            **kwargs (Any): The additional kwargs for this layer,
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
         Returns:
-            Tuple[Type[InputLayer], Dict[str, Any]]: The class of the integral layer and its \
-                additional kwargs.
+            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """

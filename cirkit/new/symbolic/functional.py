@@ -44,6 +44,7 @@ def integrate(
     for self_layer in self._layers:
         integral_layer: SymbolicLayer
         # Ignore: SymbolicInputLayer contains Any.
+        # Ignore: SymbLayerCfg contains Any.
         # Ignore: Unavoidable for kwargs.
         if (
             isinstance(self_layer, SymbolicInputLayer)  # type: ignore[misc]
@@ -52,16 +53,20 @@ def integrate(
             assert (
                 self_layer.scope <= scope
             ), "The scope of an input layer must be either all marginalized or all not."
-            layer_cls, layer_kwargs = self_layer.layer_cls.get_integral(  # type: ignore[misc]
-                **self_layer.layer_kwargs  # type: ignore[misc]
+            integral_cfg = self_layer.layer_cls.get_integral(  # type: ignore[misc]
+                # TODO: maybe better to define self_layer.symb_layer_cfg? but then SymbolicLayer
+                #       must be Generic[LayerT]. seems still a good idea?
+                {  # type: ignore[misc]
+                    "layer_cls": self_layer.layer_cls,
+                    "layer_kwargs": self_layer.layer_kwargs,
+                    "reparam": self_layer.reparam,
+                }
             )
             integral_layer = SymbolicInputLayer(
                 self_layer.scope,
                 (),
                 num_units=self_layer.num_units,
-                layer_cls=layer_cls,
-                layer_kwargs=layer_kwargs,  # type: ignore[misc]
-                reparam=self_layer.reparam,  # Reuse the same reparam if the integral needs it.
+                **integral_cfg,  # type: ignore[misc]
             )
         else:
             integral_layer = self_layer.__class__(
