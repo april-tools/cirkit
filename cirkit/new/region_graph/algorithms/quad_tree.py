@@ -4,6 +4,7 @@ from typing import List, Tuple
 from cirkit.new.region_graph.algorithms.utils import HypercubeToScope
 from cirkit.new.region_graph.region_graph import RegionGraph
 from cirkit.new.region_graph.rg_node import RegionNode
+from cirkit.new.utils import Scope
 
 # TODO: now should work with H!=W but need tests
 
@@ -96,8 +97,12 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
     graph = RegionGraph()
     hypercube_to_scope = HypercubeToScope(shape)
 
-    # The regions of the current layer, in shape (H, W). scope={-1} is for padding.
-    layer: List[List[RegionNode]] = [[RegionNode({-1})] * (width + 1) for _ in range(height + 1)]
+    # Padding using Scope({num_var}) which is one larger than range(num_var).
+    pad_scope = Scope({height * width})
+    # The regions of the current layer, in shape (H, W).
+    layer: List[List[RegionNode]] = [
+        [RegionNode(pad_scope)] * (width + 1) for _ in range(height + 1)
+    ]
 
     # Add univariate input nodes.
     for i, j in itertools.product(range(height), range(width)):
@@ -114,7 +119,7 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
 
         height = (prev_height + 1) // 2
         width = (prev_width + 1) // 2
-        layer = [[RegionNode({-1})] * (width + 1) for _ in range(height + 1)]
+        layer = [[RegionNode(pad_scope)] * (width + 1) for _ in range(height + 1)]
 
         for i, j in itertools.product(range(height), range(width)):
             regions = [  # Filter valid regions in the 4 possible sub-regions.
@@ -125,7 +130,7 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
                     prev_layer[i * 2 + 1][j * 2],
                     prev_layer[i * 2 + 1][j * 2 + 1],
                 )
-                if node.scope != {-1}
+                if node.scope != pad_scope
             ]
             if len(regions) == 1:
                 node = regions[0]

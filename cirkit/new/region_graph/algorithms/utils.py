@@ -1,13 +1,15 @@
-from typing import Dict, FrozenSet, Sequence, Tuple
+from typing import Dict, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
+
+from cirkit.new.utils import Scope
 
 HyperCube = Tuple[Tuple[int, ...], Tuple[int, ...]]  # Just to shorten the annotation.
 """A hypercube represented by "top-left" and "bottom-right" coordinates (cut points)."""
 
 
-class HypercubeToScope(Dict[HyperCube, FrozenSet[int]]):
+class HypercubeToScope(Dict[HyperCube, Scope]):
     """Helper class to map sub-hypercubes to scopes with caching for variables arranged in a \
     hypercube.
 
@@ -29,7 +31,7 @@ class HypercubeToScope(Dict[HyperCube, FrozenSet[int]]):
         # We assume it's feasible to save the whole hypercube, since it should be the whole region.
         self.hypercube: NDArray[np.int64] = np.arange(np.prod(shape), dtype=np.int64).reshape(shape)
 
-    def __missing__(self, key: HyperCube) -> FrozenSet[int]:
+    def __missing__(self, key: HyperCube) -> Scope:
         """Construct the item when not exist in the dict.
 
         Args:
@@ -37,19 +39,19 @@ class HypercubeToScope(Dict[HyperCube, FrozenSet[int]]):
                 visited for the first time.
 
         Returns:
-            FrozenSet[int]: The value for the key, i.e., the corresponding scope.
+            Scope: The value for the key, i.e., the corresponding scope.
         """
         point1, point2 = key  # HyperCube is from point1 to point2.
 
         assert (
             len(point1) == len(point2) == self.ndims
-        ), "The shape of the HyperCube is not correct."
+        ), "The dimension of the HyperCube is not correct."
         assert all(
             0 <= x1 < x2 <= shape for x1, x2, shape in zip(point1, point2, self.shape)
         ), "The HyperCube is empty."
 
         # Ignore: Numpy has typing issues.
-        return frozenset(
+        return Scope(
             self.hypercube[
                 tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))  # type: ignore[misc]
             ]

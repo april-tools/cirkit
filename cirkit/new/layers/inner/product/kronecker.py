@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, cast
 
 from torch import Tensor
 
@@ -37,6 +37,20 @@ class KroneckerLayer(ProductLayer):
             arity=arity,
             reparam=None,
         )
+
+    @classmethod
+    def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> int:
+        """Infer the number of product units in the layer based on given information.
+
+        Args:
+            num_input_units (int): The number of input units.
+            arity (int, optional): The arity of the layer. Defaults to 2.
+
+        Returns:
+            int: The inferred number of product units.
+        """
+        # Cast: int**int is not guaranteed to be int.
+        return cast(int, num_input_units**arity)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

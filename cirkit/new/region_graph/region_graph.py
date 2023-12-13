@@ -1,32 +1,45 @@
 import itertools
 import json
-from typing import Dict, FrozenSet, Iterable, Iterator, Optional, Set, cast, final, overload
+from typing import Dict, Iterable, Iterator, Optional, Set, Tuple, cast, final, overload
 from typing_extensions import Self  # TODO: in typing from 3.11
 
 import numpy as np
 from numpy.typing import NDArray
 
 from cirkit.new.region_graph.rg_node import PartitionNode, RegionNode, RGNode
+from cirkit.new.utils import OrderedSet, Scope
 from cirkit.new.utils.type_aliases import RegionGraphJson
 
 
-# We mark RG as final to hint that RG algorithms should not be its subclasses but factories.
-# Disable: It's designed to have these many attributes.
+# We mark RG as final to hint that RG algorithms should not be its subclasses but factories, so that
+# constructed RGs and loaded RGs are all of type RegionGraph.
 @final
-class RegionGraph:  # pylint: disable=too-many-instance-attributes
+class RegionGraph:
     """The region graph that holds the high-level abstraction of circuit structure.
 
-    This class is initiated empty and nodes can be pushed into the graph with edges. It can also \
-    serve as a container of RGNode for use in the RG construction algorithms.
+    This class is initiated empty, and RG construction algorithms decides how to push nodes and \
+    edges into the graph.
+
+    After construction, the graph must be freezed before being used, so that some finalization \
+    work for construction can be done properly.
     """
 
     def __init__(self) -> None:
-        """Init class."""
-        super().__init__()
-        # The nodes container will not be visible to the user. Instead, node views are provided for
+        """Init class.
+
+        The graph is empty upon creation.
+        """
+        # This node container will not be visible to the user. Instead, node views are provided for
         # read-only access to an iterable of nodes.
-        self._nodes: Set[RGNode] = set()
-        self._frozen = False
+        self._nodes: OrderedSet[RGNode] = OrderedSet()
+
+        # It's on purpose that some attributes are defined outside __init__ but in freeze().
+
+    @property
+    def _is_frozen(self) -> bool:
+        """Whether freeze() has been called on this graph."""
+        # self.scope is not set in __init__ and will be set in freeze().
+        return hasattr(self, "scope")
 
     # TODO: __repr__?
 
@@ -41,8 +54,8 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
         Args:
             node (RGNode): The node to add.
         """
-        assert not self._frozen, "The RG should not be modified after calling freeze()."
-        self._nodes.add(node)
+        assert not self._is_frozen, "The RG should not be modified after calling freeze()."
+        self._nodes.append(node)
 
     @overload
     def add_edge(self, tail: RegionNode, head: PartitionNode) -> None:
@@ -55,16 +68,16 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
     def add_edge(self, tail: RGNode, head: RGNode) -> None:
         """Add a directed edge to the graph.
 
-        If the nodes are not present, they'll be automatically added.
+        If the nodes are not present yet, they'll be automatically added.
 
         Args:
             tail (RGNode): The tail of the edge (from).
             head (RGNode): The head of the edge (to).
         """
-        # add_node will check for _frozen.
+        # add_node will check for _is_frozen.
         self.add_node(tail)
         self.add_node(head)
-        tail.outputs.append(head)
+        tail.outputs.append(head)  # TODO: this insertion order may be different from add_node order
         head.inputs.append(tail)
 
     def add_partitioning(self, region: RegionNode, sub_regions: Iterable[RegionNode]) -> None:
@@ -72,41 +85,48 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
 
         Args:
             region (RegionNode): The region to be partitioned.
-            sub_regions (Iterable[RegionNode]): The partitioned regions.
+            sub_regions (Iterable[RegionNode]): The partitioned sub-regions.
         """
         partition = PartitionNode(region.scope)
         self.add_edge(partition, region)
         for sub_region in sub_regions:
             self.add_edge(sub_region, partition)
 
-    #######################################    Validation    #######################################
+    ########################################    Freezing    ########################################
     # After construction, the RG should be validated and its properties will be calculated. The RG
-    # should not be modified after being validated and frozen.
+    # should not be modified after being frozen.
 
     def freeze(self) -> Self:
-        """Freeze the RG to prevent further modifications.
+        """Freeze the RG to mark the end of construction and return self.
 
-        With a frozen RG, we also validate the RG structure and calculate its properties.
-
-        For convenience, self is returned after freezing.
+        The work here includes:
+        - Finalizing the maintenance on internal data structures;
+        - Validating the RG structure;
+        - Assigning public attributes/properties.
 
         Returns:
             Self: The self object.
         """
-        self._frozen = True
-        # TODO: print repr of self?
-        assert not (reason := self._validate()), f"The RG structure is not valid: {reason}."
-        self._calc_properties()
+        self._sort_nodes()
+        # TODO: include repr(self) in error msg?
+        assert not (reason := self._validate()), f"Illegal RG structure: {reason}."
+        self._set_properties()
         return self
 
-    # NOTE: The reason returned should not include a period.
+    def _sort_nodes(self) -> None:
+        """Sort the OrderedSet of RGNode for node list and edge tables."""
+        self._nodes.sort()
+        for node in self._nodes:
+            node.inputs.sort()
+            node.outputs.sort()
+
     def _validate(self) -> str:
         """Validate the RG structure to make sure it's a legal computational graph.
 
         Returns:
-            str: Empty if the RG is valid, otherwise the reason.
+            str: The reason for error (NOTE: without period), empty for nothing wrong.
         """
-        # These two if conditions are also quick checks for DAG.
+        # These two conditions are also quick checks for DAG.
         if next(self.input_nodes, None) is None:
             return "RG must have at least one input node"
         if next(self.output_nodes, None) is None:
@@ -115,24 +135,30 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
         if any(len(partition.outputs) != 1 for partition in self.partition_nodes):
             return "PartitionNode can only have one output RegionNode"
 
-        if not self._check_dag():
+        if any(
+            Scope.union(*(node_input.scope for node_input in node.inputs)) != node.scope
+            for node in self.inner_nodes
+        ):
+            return "The scope of an inner node should be the union of scopes of its inputs"
+
+        if not self._check_dag():  # It's a bit complex, so extracted as a standalone method.
             return "RG must be a DAG"
 
         # TODO: Anything else needed?
         return ""
 
-    # Checking DAG is a bit complex, so it's extracted as a standalone method.
     def _check_dag(self) -> bool:
-        """Check if the RG is a DAG.
+        """Check whether the graph is a DAG.
 
         Returns:
-            bool: Whether the RG is a DAG.
+            bool: Whether a DAG.
         """
         visited: Set[RGNode] = set()  # Visited nodes during all DFS runs.
         path: Set[RGNode] = set()  # Path stack for the current DFS run.
+        # Here we don't care about order and there's no duplicate, so set is used for fast in check.
 
         def _dfs(node: RGNode) -> bool:
-            """Try to traverse and check for cycle from node.
+            """Traverse and check for cycle from node.
 
             Args:
                 node (RGNode): The node to start with.
@@ -141,7 +167,7 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
                 bool: Whether it's OK (not cyclic).
             """
             visited.add(node)
-            path.add(node)
+            path.add(node)  # If OK, we need to pop node out, otherwise just propagate failure.
             for next_node in node.outputs:
                 if next_node in path:  # Loop to the current path, including next_node==node.
                     return False
@@ -154,39 +180,41 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
             return True  # Nothing wrong in the current DFS run.
 
         # If visited, shortcut to True, otherwise run DFS from node.
-        return all(node in visited or _dfs(node) for node in self._nodes)
+        return all(node in visited or _dfs(node) for node in self.nodes)
 
-    def _calc_properties(self) -> None:
-        """Calculate the properties of the RG and save them to self.
+    def _set_properties(self) -> None:
+        """Set the attributes for RG properties in self.
 
-        These properties are not valid before calling this method.
+        Names set here are not valid in self before calling this method.
         """
-        # It's intended to assign these attributes outside __init__: without calling into freeze(),
-        # these attrs, especially self.num_vars, will be undefined, and therefore blocks downstream
-        # usage. Thus freeze() will be enforced to run before using RG.
+        # It's intended to assign these attributes outside __init__. Without calling into freeze(),
+        # these attrs, especially self.scope and self.num_vars, will be undefined, and therefore
+        # blocks downstream usage. Thus freeze() will be enforced to run before using the RG.
 
-        self.scope = frozenset().union(*(node.scope for node in self.output_nodes))
+        # Guaranteed to be non-empty by _validate().
+        self.scope = Scope.union(*(node.scope for node in self.output_nodes))
         self.num_vars = len(self.scope)
 
         self.is_smooth = all(
-            all(partition.scope == region.scope for partition in region.inputs)
+            partition.scope == region.scope
             for region in self.inner_region_nodes
+            for partition in region.inputs
         )
 
-        self.is_decomposable = all(
-            not any(
-                region1.scope & region2.scope
-                for region1, region2 in itertools.combinations(partition.inputs, 2)
-            )
-            and set().union(*(region.scope for region in partition.inputs)) == partition.scope
+        # Union of input scopes is guaranteed to be the node scope by _validate().
+        self.is_decomposable = not any(
+            region1.scope & region2.scope
             for partition in self.partition_nodes
+            for region1, region2 in itertools.combinations(partition.inputs, 2)
         )
 
+        # TODO: is this correct for more-than-2 partition?
         # Structured-decomposablity first requires smoothness and decomposability.
         self.is_structured_decomposable = self.is_smooth and self.is_decomposable
-        decompositions: Dict[FrozenSet[int], Set[FrozenSet[int]]] = {}
+        decompositions: Dict[Scope, Tuple[Scope, ...]] = {}
         for partition in self.partition_nodes:
-            decomp = set(region.scope for region in partition.inputs)
+            # The scopes are sorted by _sort_nodes().
+            decomp = tuple(region.scope for region in partition.inputs)
             if partition.scope not in decompositions:
                 decompositions[partition.scope] = decomp
             self.is_structured_decomposable &= decomp == decompositions[partition.scope]
@@ -198,11 +226,11 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
 
     #######################################    Properties    #######################################
     # Here are the basic properties and some structural properties of the RG. Some of them are
-    # static and defined in the _calc_properties after the RG is freezed. Some requires further
-    # information and is define below to be calculated on the fly.
-    # We list everything here to add "docstrings" to them.
+    # static and defined in the _set_properties() when the RG is freezed. Some requires further
+    # information and is defined below to be calculated on the fly. We list everything here to add
+    # "docstrings" to them, but note that they're not valid before freeze().
 
-    scope: FrozenSet[int]
+    scope: Scope
     """The scope of the RG, i.e., the union of scopes of all output units."""
 
     num_vars: int
@@ -212,8 +240,7 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
     """Whether the RG is smooth, i.e., all inputs to a region have the same scope."""
 
     is_decomposable: bool
-    """Whether the RG is decomposable, i.e., inputs to a partition have disjoint scopes and their \
-    union is the scope of the partition."""
+    """Whether the RG is decomposable, i.e., inputs to a partition have disjoint scopes."""
 
     is_structured_decomposable: bool
     """Whether the RG is structured-decomposable, i.e., compatible to itself."""
@@ -221,24 +248,26 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
     is_omni_compatible: bool
     """Whether the RG is omni-compatible, i.e., compatible to all circuits of the same scope."""
 
-    def is_compatible(self, other: "RegionGraph", scope: Optional[Iterable[int]] = None) -> bool:
+    def is_compatible(self, other: "RegionGraph", *, scope: Optional[Iterable[int]] = None) -> bool:
         """Test compatibility with another region graph over the given scope.
 
         Args:
             other (RegionGraph): The other region graph to compare with.
             scope (Optional[Iterable[int]], optional): The scope over which to check. If None, \
-                will use the intersection of the scopes of two RG. Defaults to None.
+                will use the intersection of the scopes of the two RG. Defaults to None.
 
         Returns:
-            bool: Whether the RG is compatible to the other.
+            bool: Whether self is compatible to other.
         """
+        # _is_frozen is implicitly tested because is_smooth is set in freeze().
         if not (
             self.is_smooth and self.is_decomposable and other.is_smooth and other.is_decomposable
         ):  # Compatiblility first requires smoothness and decomposability.
             return False
 
-        scope = frozenset(scope) if scope is not None else self.scope & other.scope
+        scope = Scope(scope) if scope is not None else self.scope & other.scope
 
+        # TODO: is this correct for more-than-2 partition?
         for partition1, partition2 in itertools.product(
             self.partition_nodes, other.partition_nodes
         ):
@@ -249,7 +278,8 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
             for (i, region1), (j, region2) in itertools.product(
                 enumerate(partition1.inputs), enumerate(partition2.inputs)
             ):
-                adj_mat[i, j] = bool(region1.scope & region2.scope)  # I.e., scopes intersect.
+                # I.e., if scopes intersect over the scope to test.
+                adj_mat[i, j] = bool(region1.scope & region2.scope & scope)
             adj_mat = adj_mat @ adj_mat.T
             # Now we have adjencency from inputs1 (of self) to inputs1. An edge means the two
             # regions must be partitioned together.
@@ -267,11 +297,11 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
         return True
 
     #######################################    Node views    #######################################
-    # These are iterable views of the nodes in the RG, available even when the graph is only
-    # partially constructed. For efficiency, all these views are iterators (implemented as a
-    # container iter or a generator), so that they can be chained for iteration without
-    # instantiating intermediate containers.
-    # NOTE: There's no ordering graranteed for these views. However RGNode can be sorted if needed.
+    # These are iterable views of the nodes in the RG, and the topological order is guaranteed (by a
+    # stronger ordering). For efficiency, all these views are iterators (a container iter or a
+    # generator), so that they can be chained without instantiating intermediate containers.
+    # NOTE: The views are even available when the graph is only partially constructed, but without
+    #       freeze() there's no ordering graranteed for these views.
 
     @property
     def nodes(self) -> Iterator[RGNode]:
@@ -290,24 +320,29 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
 
     @property
     def input_nodes(self) -> Iterator[RegionNode]:
-        """Input nodes of the graph, which are guaranteed to be regions."""
+        """Input nodes of the graph, which are always regions."""
         return (node for node in self.region_nodes if not node.inputs)
 
     @property
     def output_nodes(self) -> Iterator[RegionNode]:
-        """Output nodes of the graph, which are guaranteed to be regions."""
+        """Output nodes of the graph, which are always regions."""
         return (node for node in self.region_nodes if not node.outputs)
 
     @property
+    def inner_nodes(self) -> Iterator[RGNode]:
+        """Inner (non-input) nodes in the graph."""
+        return (node for node in self.nodes if node.inputs)
+
+    @property
     def inner_region_nodes(self) -> Iterator[RegionNode]:
-        """Inner (non-input) region nodes in the graph."""
+        """Inner region nodes in the graph."""
         return (node for node in self.region_nodes if node.inputs)
 
     ####################################    (De)Serialization    ###################################
     # The RG can be dumped and loaded from json files, which can be useful when we want to save and
-    # share it. The load() is another way to construct a RG.
+    # share it. The load() is another way to construct a RG other than the RG algorithms.
 
-    # TODO: we can only deal with 2-partition here
+    # TODO: The RG json is only defined to 2-partition.
 
     def dump(self, filename: str) -> None:
         """Dump the region graph to the json file.
@@ -317,28 +352,26 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
         Args:
             filename (str): The file name for dumping.
         """
-        graph_json: RegionGraphJson = {"regions": {}, "graph": []}
+        rg_json: RegionGraphJson = {"regions": {}, "graph": []}
 
-        region_id = {node: idx for idx, node in enumerate(self.region_nodes)}
-        graph_json["regions"] = {str(idx): list(node.scope) for node, idx in region_id.items()}
+        region_idx = {node: idx for idx, node in enumerate(self.region_nodes)}
 
+        # "regions" keeps ordered by the index, corresponding to the self.region_nodes order.
+        rg_json["regions"] = {str(idx): list(node.scope) for node, idx in region_idx.items()}
+
+        # "graph" keeps ordered by the list, corresponding to the self.partition_nodes order.
         for partition in self.partition_nodes:
-            part_inputs = partition.inputs
-            assert len(part_inputs) == 2, "We can only dump RG with 2-partitions."
-            (part_output,) = partition.outputs
+            input_idxs = [region_idx[region_in] for region_in in partition.inputs]
+            assert len(input_idxs) == 2, "We can only dump RG with 2-partitions."  # TODO: 2-part
+
             # partition.outputs is guaranteed to have len==1 by _validate().
+            output_idx = region_idx[next(iter(partition.outputs))]
 
-            graph_json["graph"].append(
-                {
-                    "l": region_id[part_inputs[0]],
-                    "r": region_id[part_inputs[1]],
-                    "p": region_id[part_output],
-                }
-            )
+            rg_json["graph"].append({"l": input_idxs[0], "r": input_idxs[1], "p": output_idx})
 
-        # TODO: logging for graph_json?
+        # TODO: logging for dumping graph_json?
         with open(filename, "w", encoding="utf-8") as f:
-            json.dump(graph_json, f)
+            json.dump(rg_json, f)
 
     @staticmethod
     def load(filename: str) -> "RegionGraph":
@@ -353,26 +386,26 @@ class RegionGraph:  # pylint: disable=too-many-instance-attributes
             RegionGraph: The loaded region graph.
         """
         with open(filename, "r", encoding="utf-8") as f:
-            graph_json: RegionGraphJson = json.load(f)
+            rg_json: RegionGraphJson = json.load(f)
 
-        id_region = {int(idx): RegionNode(scope) for idx, scope in graph_json["regions"].items()}
+        # By json standard, this is not guaranteed to be sorted.
+        idx_region = {int(idx): RegionNode(scope) for idx, scope in rg_json["regions"].items()}
 
         graph = RegionGraph()
 
-        if not graph_json["graph"]:
-            # A corner case: no edge in RG, meaning ther's only one region node, and the following
-            # for-loop does not work, so we need to handle it here.
-            assert len(id_region) == 1
-            graph.add_node(id_region[0])
+        # Iterate regions by the order of index so that the order of graph.region_nodes is
+        # preserved.
+        # TODO: enumerate does not work on dict
+        for idx in range(len(idx_region)):  # pylint: disable=consider-using-enumerate
+            graph.add_node(idx_region[idx])
 
-        for partition in graph_json["graph"]:
-            part_inputs = id_region[partition["l"]], id_region[partition["r"]]
-            part_output = id_region[partition["p"]]
+        # Iterate partitions by the order of list so that the order of graph.partition_nodes is
+        # preserved.
+        for partition in rg_json["graph"]:
+            regions_in = [idx_region[idx_in] for idx_in in (partition["l"], partition["r"])]
+            region_out = idx_region[partition["p"]]
 
-            partition_node = PartitionNode(part_output.scope)
-
-            for part_input in part_inputs:
-                graph.add_edge(part_input, partition_node)
-            graph.add_edge(partition_node, part_output)
+            # TODO: is the order of edge table saved in nodes preserved?
+            graph.add_partitioning(region_out, regions_in)
 
         return graph.freeze()
