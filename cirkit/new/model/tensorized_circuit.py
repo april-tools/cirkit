@@ -22,20 +22,19 @@ class TensorizedCircuit(nn.Module):
     """
 
     # TODO: do we also move num_channels to SymbolicTensorizedCircuit?
-    def __init__(self, symb_circuit: SymbolicTensorizedCircuit, *, num_channels: int) -> None:
+    def __init__(self, symb_circuit: SymbolicTensorizedCircuit) -> None:
         """Init class.
 
         All the other config other than num_channels should be provided to the symbolic form.
 
         Args:
             symb_circuit (SymbolicTensorizedCircuit): The symbolic version of the circuit.
-            num_channels (int): The number of channels in the input.
         """
         super().__init__()
         self.symb_circuit = symb_circuit
         self.scope = symb_circuit.scope
         self.num_vars = symb_circuit.num_vars
-        self.num_channels = num_channels
+        self.num_channels = symb_circuit.num_channels
         self.num_classes = symb_circuit.num_classes
 
         # Automatic nn.Module registry, also in publicly available children names.
@@ -80,7 +79,7 @@ class TensorizedCircuit(nn.Module):
                 layer = symb_layer.layer_cls(
                     # TODO: is it good to use only [0]?
                     num_input_units=(  # num_channels for InputLayers or num_units of prev layer.
-                        symb_layer.inputs[0].num_units if symb_layer.inputs else num_channels
+                        symb_layer.inputs[0].num_units if symb_layer.inputs else self.num_channels
                     ),
                     num_output_units=symb_layer.num_units,
                     arity=(  # Reusing arity to contain num_vars for InputLayer.

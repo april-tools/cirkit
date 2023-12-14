@@ -32,6 +32,7 @@ def integrate(
     integral.is_decomposable = self.is_decomposable
     integral.is_structured_decomposable = self.is_structured_decomposable
     integral.is_omni_compatible = self.is_omni_compatible
+    integral.num_channels = self.num_channels
     integral.num_classes = self.num_classes
 
     # Disable: It's intended to use _layers from SymbolicTensorizedCircuit.

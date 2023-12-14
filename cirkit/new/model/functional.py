@@ -17,4 +17,4 @@ def integrate(
     Returns:
         TensorizedCircuit: The circuit giving the integral.
     """
-    return self.__class__(self.symb_circuit.integrate(scope=scope), num_channels=self.num_channels)
+    return self.__class__(self.symb_circuit.integrate(scope=scope))

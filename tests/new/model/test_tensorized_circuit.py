@@ -30,7 +30,7 @@ def _get_circuit_2x2() -> TensorizedCircuit:
         prod_layer_cls=CPLayer,
         prod_layer_kwargs={},  # type: ignore[misc]
     )
-    return TensorizedCircuit(symbc, num_channels=1)
+    return TensorizedCircuit(symbc)
 
 
 def _get_circuit_2x2_param_shapes() -> Dict[str, Tuple[int, ...]]:

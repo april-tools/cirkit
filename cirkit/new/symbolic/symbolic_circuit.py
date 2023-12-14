@@ -36,6 +36,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
         self,
         region_graph: RegionGraph,
         *,
+        num_channels: int = 1,
         num_input_units: int,
         num_sum_units: int,
         num_classes: int = 1,
@@ -52,9 +53,11 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
 
         Args:
             region_graph (RegionGraph): The region graph to convert.
+            num_channels (int, optional): The number of channels of the circuit input, i.e., the \
+                number of units for the variables. Defaults to 1.
             num_input_units (int): The number of units in the input layer.
-            num_sum_units (int): The number of units in the sum layer. Will also be used to infer \
-                the number of product units.
+            num_sum_units (int): The number of units in the sum layer. Also used to infer the \
+                number of product units.
             num_classes (int, optional): The number of classes of the circuit output, i.e., the \
                 number of units in the output layer. Defaults to 1.
             input_layer_cls (Type[InputLayer]): The layer class for input layers.
@@ -83,6 +86,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
         self.is_decomposable = region_graph.is_decomposable
         self.is_structured_decomposable = region_graph.is_structured_decomposable
         self.is_omni_compatible = region_graph.is_omni_compatible
+        self.num_channels = num_channels
         self.num_classes = num_classes
 
         self._layers: OrderedSet[SymbolicLayer] = OrderedSet()
