@@ -225,16 +225,23 @@ class RegionGraph:
         self.is_structured_decomposable = self.is_smooth and self.is_decomposable
         decompositions: Dict[Scope, Tuple[Scope, ...]] = {}
         for partition in self.partition_nodes:
-            # The scopes are sorted by _sort_nodes().
+            # The scopes are sorted by _sort_nodes(), so the tuple has a deterministic order.
             decomp = tuple(region.scope for region in partition.inputs)
             if partition.scope not in decompositions:
                 decompositions[partition.scope] = decomp
             self.is_structured_decomposable &= decomp == decompositions[partition.scope]
 
-        # Omni-compatiblility first requires smoothness and decomposability.
-        self.is_omni_compatible = self.is_smooth and self.is_decomposable
-        # TODO: currently we don't have a good way to represent omni-compatible circuits.
-        self.is_omni_compatible &= False
+        # Omni-compatiblility first requires smoothness and decomposability, and then it's a
+        # necessary and sufficient condition that all partitions decompose into univariate regions.
+        self.is_omni_compatible = (
+            self.is_smooth
+            and self.is_decomposable
+            and all(
+                len(region.scope) == 1
+                for partition in self.partition_nodes
+                for region in partition.inputs
+            )
+        )
 
     #######################################    Properties    #######################################
     # Here are the basic properties and some structural properties of the RG. Some of them are
