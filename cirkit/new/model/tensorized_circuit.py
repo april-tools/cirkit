@@ -151,6 +151,8 @@ class TensorizedCircuit(nn.Module):
             [layer_outputs[layer_out] for layer_out in self.symb_circuit.output_layers], dim=-2
         )  # shape num_out * (*B, K) -> (*B, num_out, num_cls=K).
 
+    #######################################    Functional    #######################################
+
     integrate = TCF.integrate
 
     # Use cached_property to lazily construct the circuit for partition function.

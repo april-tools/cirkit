@@ -29,7 +29,7 @@ def integrate(
             the whole scope of the circuit. Defaults to None.
 
     Returns:
-        SymbolicTensorizedCircuit: The circuit giving the integral.
+        SymbolicTensorizedCircuit: The circuit giving the definite integral.
     """
     assert (
         self.is_smooth and self.is_decomposable
@@ -103,7 +103,7 @@ class _ScopeVarAndSymbLayer(NamedTuple):
     """
 
     scope_var: int  # The id of a variable in the scope of THE SymbolicProductLayer.
-    symb_layer: SymbolicProductLayer  # the partial diff of THE SymbolicProductLayer w.r.t. the var.
+    symb_layer: SymbolicProductLayer  # The partial diff of THE SymbolicProductLayer w.r.t. the var.
 
 
 def differentiate(
@@ -155,7 +155,7 @@ def differentiate(
 
     for self_layer in self._layers:
         differential_layers: List[SymbolicLayer]
-        # Ignore: all SymbolicLayer contain Any.
+        # Ignore: All SymbolicLayer contain Any.
         # Ignore: SymbLayerCfg contains Any.
         # Ignore: Unavoidable for kwargs.
         if isinstance(self_layer, SymbolicInputLayer):  # type: ignore[misc]

@@ -203,7 +203,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     """Whether the SymbC is omni-compatible, i.e., compatible to all circuits of the same scope."""
 
     def is_compatible(
-        self, other: "SymbolicTensorizedCircuit", *, scope: Optional[Iterable[int]] = None
+        self, other: "SymbolicTensorizedCircuit", /, *, scope: Optional[Iterable[int]] = None
     ) -> bool:
         """Test compatibility with another symbolic circuit over the given scope.
 

@@ -51,7 +51,9 @@ def _cut_hypercube(
     node = _get_region_node_by_scope(graph, hypercube_to_scope[hypercube])
     point1, point2 = hypercube
 
-    assert all(point1[axis] < cut_point < point2[axis] for cut_point in cut_points)
+    assert all(
+        point1[axis] < cut_point < point2[axis] for cut_point in cut_points
+    ), "Cut point out of bounds."
 
     cut_points = [point1[axis]] + sorted(cut_points) + [point2[axis]]
 
@@ -82,7 +84,7 @@ def _parse_delta(
         List[List[List[int]]]: The cut points on each axis (without 0 and 1), in shape \
             (num_deltas, len_axes, num_cuts).
     """
-    # For type checking, float works, but for isinstance float does not cover int
+    # For type checking, float works, but for isinstance float does not cover int.
     if isinstance(delta, (float, int)):
         delta = [delta]  # Single delta to list of one delta.
     delta = [  # List of deltas to list of deltas for each axis.

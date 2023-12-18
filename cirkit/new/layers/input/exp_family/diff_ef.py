@@ -109,7 +109,7 @@ class DiffEFLayer(InputLayer):
             g_factor = g_1st(x) ** 2 + g_2nd(x)  # type: ignore[misc]
         else:
             # TODO: or no specific for EF, but generalize to all input layers using jac_functional?
-            raise NotImplementedError("order > 2 is not yet implemented for DiffEFLayer.")
+            raise NotImplementedError("order>2 is not yet implemented for DiffEFLayer.")
 
         return self.comp_space.mul(
             self.comp_space.from_log(log_p), self.comp_space.from_linear(g_factor)
@@ -173,7 +173,7 @@ class DiffEFLayer(InputLayer):
     def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
         cls, symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[InputLayer]:
-        """Get the symbolic config to construct the integral of this layer.
+        """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.

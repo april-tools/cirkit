@@ -64,7 +64,7 @@ class ConstantLayer(InputLayer):
     def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
         cls, symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[InputLayer]:
-        """Get the symbolic config to construct the integral of this layer.
+        """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
@@ -84,7 +84,9 @@ class ConstantLayer(InputLayer):
         ), "Mismatched kwargs for this layer."
 
         if const_value:
-            raise ValueError("The integral of ConstantLayer with const_value != 0 is infinity.")
+            raise ValueError(
+                "The definite integral of ConstantLayer with const_value!=0 is infinity."
+            )
 
         return {  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
             "layer_cls": ConstantLayer,

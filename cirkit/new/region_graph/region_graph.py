@@ -267,7 +267,9 @@ class RegionGraph:
     is_omni_compatible: bool
     """Whether the RG is omni-compatible, i.e., compatible to all circuits of the same scope."""
 
-    def is_compatible(self, other: "RegionGraph", *, scope: Optional[Iterable[int]] = None) -> bool:
+    def is_compatible(
+        self, other: "RegionGraph", /, *, scope: Optional[Iterable[int]] = None
+    ) -> bool:
         """Test compatibility with another region graph over the given scope.
 
         Args:
