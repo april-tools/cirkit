@@ -62,15 +62,7 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
         ), "The device of all composing reparams should be the same."
         return device
 
-    def materialize(
-        self,
-        shape: Sequence[int],
-        /,
-        *,
-        dim: Union[int, Sequence[int]],
-        mask: Optional[Tensor] = None,
-        log_mask: Optional[Tensor] = None,
-    ) -> bool:
+    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
         """Materialize the internal parameter tensors with given shape.
 
         If it is already materialized, False will be returned to indicate no materialization. \
@@ -80,24 +72,19 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
         The initial value of the parameter after materialization is not guaranteed, and explicit \
         initialization is expected.
 
-        The three kwargs, dim, mask/log_mask, are used to hint the normalization of sum weights. \
-        The dim kwarg must be supplied to hint the sum-to-1 dimension, but mask/log_mask can be \
-        optional and at most one can be provided.
+        The kwarg, dim, is used to hint the normalization of sum weights. It's not always used but \
+        must be supplied with the sum-to-1 dimension(s) so that it's guaranteed to be available \
+        when a normalized reparam is passed as self.
 
         Args:
             shape (Sequence[int]): The shape of the output parameter.
             dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
-                be applied.
-            mask (Optional[Tensor], optional): The 0/1 mask for normalization positions. None for \
-                no masking. The shape must be broadcastable to shape if not None. Defaults to None.
-            log_mask (Optional[Tensor], optional): The -inf/0 mask for normalization positions. \
-                None for no masking. The shape must be broadcastable to shape if not None. \
-                Defaults to None.
+                be applied. However a subclass impl may choose to ignore this.
 
         Returns:
             bool: Whether the materialization is done.
         """
-        if not super().materialize(shape, dim=dim, mask=mask, log_mask=log_mask):
+        if not super().materialize(shape, dim=dim):
             return False
 
         for reparam in self.reparams:
@@ -105,7 +92,7 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
                 # NOTE: Passing shape to all children reparams may not be always wanted. In that
                 #       case, children reparams should be materialized first, so that the following
                 #       is skipped by the above if.
-                reparam.materialize(shape, dim=dim, mask=mask, log_mask=log_mask)
+                reparam.materialize(shape, dim=dim)
 
         assert self().shape == self.shape, "The actual shape does not match the given one."
         return True

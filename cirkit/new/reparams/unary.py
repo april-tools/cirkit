@@ -2,7 +2,7 @@
 # Disable: For this file we disable the above because all classes trigger this but it's intended.
 
 import functools
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -39,6 +39,83 @@ class UnaryReparam(ComposedReparam[Tensor]):
 
 
 # TODO: how do we annotate the range? or use some way to calc and propagate it?
+
+
+class LogMaskReparam(UnaryReparam):
+    """Mask (in log-space) reparameterization.
+
+    Range: input unchanged, if not masked; -inf, at masked position.
+    """
+
+    log_mask: Optional[Tensor]
+    """The log of normalization mask, shape same as the parameter itself."""
+
+    def __init__(
+        self,
+        reparam: Optional[Reparameterization] = None,
+        /,
+        *,
+        mask: Optional[Tensor] = None,
+        log_mask: Optional[Tensor] = None,
+    ) -> None:
+        """Init class.
+
+        At most one of mask and log_mask may be provided. Masking will be skipped if neither is \
+        provided or the mask is full (nothing masked out).
+
+        Args:
+            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
+                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            mask (Optional[Tensor], optional): The 0/1 mask for valid positions. None for the \
+                other or no masking. If not None, the shape must be broadcastable to the shape \
+                used in materialization. Defaults to None.
+            log_mask (Optional[Tensor], optional): The -inf/0 mask for valid positions. None for \
+                the other or no masking. If not None, the shape must be broadcastable to the shape \
+                used in materialization. Defaults to None.
+        """
+        assert mask is None or log_mask is None, "mask and log_mask may not be supplied together."
+
+        # Broadcast is not checked now because we don't have self.shape.
+        if mask is not None:
+            log_mask = torch.log(mask)
+
+        # A non-0, i.e., -inf, element means that position is masked out, so mask is not full.
+        if log_mask is not None and log_mask.any():
+            # TODO: check if it's ok to pass through -inf in inv?
+            # We assume the inv is also masked.
+            super().__init__(reparam, func=lambda x: x + log_mask, inv_func=lambda x: x + log_mask)
+            self.register_buffer("log_mask", log_mask)  # register_* only work after __init__().
+        else:
+            super().__init__(reparam, func=lambda x: x)  # inv_func is identity by default.
+            self.register_buffer("log_mask", None)
+
+    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
+        """Materialize the internal parameter tensors with given shape.
+
+        If it is already materialized, False will be returned to indicate no materialization. \
+        However, a second call to materialize must give the same config, so that the underlying \
+        params can indeed be reused.
+
+        The initial value of the parameter after materialization is not guaranteed, and explicit \
+        initialization is expected.
+
+        The kwarg, dim, is used to hint the normalization of sum weights. It's not always used but \
+        must be supplied with the sum-to-1 dimension(s) so that it's guaranteed to be available \
+        when a normalized reparam is passed as self.
+
+        Args:
+            shape (Sequence[int]): The shape of the output parameter.
+            dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
+                be applied. However a subclass impl may choose to ignore this.
+
+        Returns:
+            bool: Whether the materialization is done.
+        """
+        if self.log_mask is not None:
+            # An easy way to check if broadcastable: broadcast_to raises RuntimeError when not.
+            self.log_mask.broadcast_to(shape)
+        # Here we only check shape broadcast. Delegate everything else to super().
+        return super().materialize(shape, dim=dim)
 
 
 class LinearReparam(UnaryReparam):

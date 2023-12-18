@@ -1,11 +1,9 @@
-from typing import Callable, Sequence, final
-from typing_extensions import Unpack  # TODO: in typing from 3.12 for Unpack[dict]
+from typing import Callable, Sequence, Union, final
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.new.reparams.reparam import Reparameterization
-from cirkit.new.utils.type_aliases import MaterializeKwargs
 
 
 # The LeafReparam only holds the tensor. Everything else should be a (unary) composed reparam.
@@ -29,7 +27,7 @@ class LeafReparam(Reparameterization):
         """The device of the output parameter."""
         return self.param.device
 
-    def materialize(self, shape: Sequence[int], /, **_kwargs: Unpack[MaterializeKwargs]) -> bool:
+    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
         """Materialize the internal parameter tensors with given shape.
 
         If it is already materialized, False will be returned to indicate no materialization. \
@@ -41,7 +39,7 @@ class LeafReparam(Reparameterization):
 
         Args:
             shape (Sequence[int]): The shape of the output parameter.
-            **_kwargs (Unpack[MaterializeKwargs]): Unused. See Reparameterization.materialize().
+            dim (Union[int, Sequence[int]]): Ignored. A leaf is always unnormalized.
 
         Returns:
             bool: Whether the materialization is done.

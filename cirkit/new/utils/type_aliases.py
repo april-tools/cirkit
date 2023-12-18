@@ -1,20 +1,6 @@
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    List,
-    Optional,
-    Sequence,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Callable, Dict, Generic, List, Optional, Type, TypeVar
 from typing_extensions import Required  # TODO: in typing from 3.11
 from typing_extensions import TypedDict  # TODO: in typing from 3.11 for generic TypedDict
-
-from torch import Tensor
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
     # NOTE: The following must be quoted in type annotations.
@@ -56,17 +42,6 @@ class RegionGraphJson(TypedDict):
 
     regions: Dict[str, List[int]]
     graph: List[PartitionDict]
-
-
-class MaterializeKwargs(TypedDict, total=False):
-    """Wrapper of the kwargs for Reparameterization.materialize().
-
-    See Reparameterization.materialize() for details, including Required or default value.
-    """
-
-    dim: Required[Union[int, Sequence[int]]]
-    mask: Optional[Tensor]
-    log_mask: Optional[Tensor]
 
 
 ReparamFactory = Callable[[], "Reparameterization"]
