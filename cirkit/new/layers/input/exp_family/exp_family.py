@@ -1,6 +1,7 @@
 import functools
 from abc import abstractmethod
-from typing import Any, Dict, Literal, Tuple, Type
+from typing import Tuple, cast
+from typing_extensions import Self  # TODO: in typing from 3.11
 
 import torch
 from torch import Tensor, nn
@@ -8,6 +9,7 @@ from torch import Tensor, nn
 from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class ExpFamilyLayer(InputLayer):
@@ -20,6 +22,10 @@ class ExpFamilyLayer(InputLayer):
     However here we directly parameterize eta instead of theta:
         f(x|eta) = exp(eta · T(x) - log_h(x) + A(eta)).
     Implemtations provide inverse mapping from eta to theta.
+
+    This implementation is fully factorized over the variables if used as multivariate, i.e., \
+    equivalent to num_vars (arity) univariate EF distributions followed by a Hadamard product of \
+    the same arity.
     """
 
     suff_stats_shape: Tuple[int, ...]
@@ -31,7 +37,7 @@ class ExpFamilyLayer(InputLayer):
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: Literal[1] = 1,
+        arity: int = 1,
         reparam: Reparameterization,
     ) -> None:
         """Init class.
@@ -39,7 +45,8 @@ class ExpFamilyLayer(InputLayer):
         Args:
             num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
-            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
+                Defaults to 1.
             reparam (Reparameterization): The reparameterization for layer parameters.
         """
         # NOTE: suff_stats_shape should not be part of the interface for users, but should be set by
@@ -76,6 +83,17 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
+        return self.comp_space.from_log(self.log_prob(x))
+
+    def log_prob(self, x: Tensor) -> Tensor:
+        """Calculate log-probability log(f(x)) from input x.
+
+        Args:
+            x (Tensor): The input x, shape (H, *B, K).
+
+        Returns:
+            Tensor: The log-prob log(f), shape (*B, K).
+        """
         # TODO: if we just propagate unnormalized values, we can remove log_part here and move it to
         #       integration -- by definition integration is partition.
         eta = self.params()  # shape (H, K, *S).
@@ -84,32 +102,12 @@ class ExpFamilyLayer(InputLayer):
         log_part = self.log_partition(eta)  # shape (H, K).
         # We need to flatten because we cannot have two ... in einsum for suff_stats as (*B, H, *S).
         eta = eta.flatten(start_dim=-len(self.suff_stats_shape))  # shape (H, K, S).
-        # TODO: when we extend to H>1:
-        #       this part still works as fully factorized input layer by summing dim=-2 (H dim).
-        log_p = torch.sum(
+        return torch.sum(
             torch.einsum("hks,...hs->...hk", eta, suff_stats)  # shape (*B, H, K).
             + log_h.unsqueeze(dim=-1)  # shape (*B, H, 1).
             - log_part,  # shape (*1, H, K), 1s automatically prepended.
             dim=-2,
         )  # shape (*B, H, K) -> (*B, K).
-        return self.comp_space.from_log(log_p)
-
-    @classmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
-        cls, **kwargs: Any
-    ) -> Tuple[Type[InputLayer], Dict[str, float]]:
-        """Get the config to construct the integral of the input layer.
-
-        Args:
-            **kwargs (Any): The additional kwargs for this layer,
-
-        Returns:
-            Tuple[Type[InputLayer], Dict[str, float]]: The class of the integral layer and its \
-                additional kwargs.
-        """
-        # TODO: for unnormalized EF, should be ParameterizedConstantLayer
-        # We have already normalized with log_partition in forward().
-        return ConstantLayer, {"const_value": 1.0}
 
     @abstractmethod
     def sufficient_stats(self, x: Tensor) -> Tensor:
@@ -143,3 +141,66 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             Tensor: The log partition function A, shape (H, K).
         """
+
+    @classmethod
+    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self]
+    ) -> SymbLayerCfg[InputLayer]:
+        """Get the symbolic config to construct the integral of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
+        """
+        # TODO: for unnormalized EF, should be ParameterizedConstantLayer
+        # We have already normalized with log_partition in forward(), so integral is always 1.
+        return {  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+            "layer_cls": ConstantLayer,
+            "layer_kwargs": {"const_value": 1.0},
+            "reparam": None,
+        }
+
+    # NOTE: Here we define the differential of all EF layers, but some subclasses, e.g. Categorical,
+    #       should not have differentials due to discrete variable. Those subclasses should override
+    #       this method and raise an error.
+    @classmethod
+    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
+    ) -> SymbLayerCfg[InputLayer]:
+        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
+        of the given variable in the scope of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            order (int, optional): The order of differentiation. Defaults to 1.
+            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
+                layer's scope but not global variable id. Defaults to 0.
+            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
+                given channel of the given variable.
+        """
+        assert order >= 0, "The order of differential must be non-negative."
+        if not order:
+            # TODO: cast: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
+
+        # Disable: Import here to avoid cyclic import, but still need to disable cyclic-import.
+        # pylint: disable-next=import-outside-toplevel,cyclic-import
+        from cirkit.new.layers.input.exp_family.diff_ef import DiffEFLayer
+
+        # Ignore: SymbLayerCfg contains Any.
+        return {  # type: ignore[misc]
+            "layer_cls": DiffEFLayer,
+            "layer_kwargs": {
+                "ef_cls": symb_cfg["layer_cls"],  # type: ignore[misc]
+                "ef_kwargs": symb_cfg["layer_kwargs"],  # type: ignore[misc]
+                "order": order,
+                "var_idx": var_idx,
+                "ch_idx": ch_idx,
+            },
+            "reparam": symb_cfg["reparam"],  # type: ignore[misc]
+        }

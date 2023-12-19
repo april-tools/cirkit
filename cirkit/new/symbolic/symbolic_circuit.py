@@ -1,5 +1,6 @@
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Type, Union, final
+from typing import Any, Dict, Iterable, Iterator, Optional, Type, Union, final
 
+import cirkit.new.symbolic.functional as STCF  # SymbolicTensorizedCircuit functional.
 from cirkit.new.layers import (
     DenseLayer,
     InputLayer,
@@ -9,8 +10,6 @@ from cirkit.new.layers import (
     SumProductLayer,
 )
 from cirkit.new.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
-from cirkit.new.reparams import Reparameterization
-from cirkit.new.symbolic.functional import integrate
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
@@ -18,11 +17,12 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicSumLayer,
 )
 from cirkit.new.utils import OrderedSet, Scope
+from cirkit.new.utils.type_aliases import OptReparamFactory, ReparamFactory
 
 # TODO: __repr__?
 
 
-# Mark this class final so that __class__ of s SymbC is always SymbolicTensorizedCircuit.
+# Mark this class final so that __class__ of a SymbC is always SymbolicTensorizedCircuit.
 # Disable: It's designed to have these many attributes.
 @final  # type: ignore[misc]  # Ignore: Caused by kwargs.
 class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
@@ -36,15 +36,16 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
         self,
         region_graph: RegionGraph,
         *,
+        num_channels: int = 1,
         num_input_units: int,
         num_sum_units: int,
         num_classes: int = 1,
         input_layer_cls: Type[InputLayer],
         input_layer_kwargs: Optional[Dict[str, Any]] = None,
-        input_reparam: Callable[[], Optional[Reparameterization]] = lambda: None,
+        input_reparam: OptReparamFactory = lambda: None,
         sum_layer_cls: Type[Union[SumLayer, SumProductLayer]],
         sum_layer_kwargs: Optional[Dict[str, Any]] = None,
-        sum_reparam: Callable[[], Reparameterization],
+        sum_reparam: ReparamFactory,
         prod_layer_cls: Type[Union[ProductLayer, SumProductLayer]],
         prod_layer_kwargs: Optional[Dict[str, Any]] = None,
     ):
@@ -52,24 +53,26 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
 
         Args:
             region_graph (RegionGraph): The region graph to convert.
+            num_channels (int, optional): The number of channels of the circuit input, i.e., the \
+                number of units for the variables. Defaults to 1.
             num_input_units (int): The number of units in the input layer.
-            num_sum_units (int): The number of units in the sum layer. Will also be used to infer \
-                the number of product units.
+            num_sum_units (int): The number of units in the sum layer. Also used to infer the \
+                number of product units.
             num_classes (int, optional): The number of classes of the circuit output, i.e., the \
                 number of units in the output layer. Defaults to 1.
             input_layer_cls (Type[InputLayer]): The layer class for input layers.
             input_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
                 input layer class. Defaults to None.
-            input_reparam (Callable[[], Optional[Reparameterization]], optional): The factory to \
-                construct reparameterizations for input layer parameters, can produce None if no \
-                params is needed. Defaults to lambda: None.
+            input_reparam (OptReparamFactory, optional): The factory to construct \
+                reparameterizations for input layer parameters, can produce None if no params \
+                needed. Defaults to lambda: None.
             sum_layer_cls (Type[Union[SumLayer, SumProductLayer]]): The layer class for sum \
                 layers, can be either just a class of SumLayer, or a class of SumProductLayer to \
                 indicate layer fusion.
             sum_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for sum \
                 layer class. Defaults to None.
-            sum_reparam (Callable[[], Reparameterization]): The factory to construct \
-                reparameterizations for sum layer parameters.
+            sum_reparam (ReparamFactory): The factory to construct reparameterizations for sum \
+                layer parameters.
             prod_layer_cls (Type[Union[ProductLayer, SumProductLayer]]): The layer class for \
                 product layers, can be either just a class of ProductLayer, or a class of \
                 SumProductLayer to indicate layer fusion.
@@ -83,12 +86,14 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
         self.is_decomposable = region_graph.is_decomposable
         self.is_structured_decomposable = region_graph.is_structured_decomposable
         self.is_omni_compatible = region_graph.is_omni_compatible
+        self.num_channels = num_channels
         self.num_classes = num_classes
 
         self._layers: OrderedSet[SymbolicLayer] = OrderedSet()
         # The RGNode and SymbolicLayer does not map 1-to-1 but 1-to-many. This still leads to a
-        # deterministic order: SymbolicLayer of the same RGNode are adjcent, and ordered based on
-        # the order of edges in the RG.
+        # deterministic order: SymbolicLayer of different RGNode will be naturally sorted by the
+        # RGNode order; SymbolicLayer of the same RGNode are adjcent, and ordered based on the order
+        # of edges in the RGNode.
 
         node_to_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.
 
@@ -100,7 +105,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
             if isinstance(rg_node, RegionNode) and not rg_node.inputs:  # Input region.
                 layers_in = [
                     SymbolicInputLayer(
-                        rg_node,
+                        rg_node.scope,
                         (),  # Old layers_in should be empty.
                         num_units=num_input_units,
                         layer_cls=input_layer_cls,
@@ -110,7 +115,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                 ]
                 # This also works when the input is also output, in which case num_classes is used.
                 layer_out = SymbolicSumLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=DenseLayer,  # TODO: can be other sum layer, but how to pass in???
@@ -120,7 +125,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
             elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) == 1:  # Simple inner.
                 # layers_in keeps the same.
                 layer_out = SymbolicSumLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=sum_layer_cls,
@@ -131,7 +136,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                 # MixingLayer cannot change number of units, so must project early.
                 layers_in = [
                     SymbolicSumLayer(
-                        rg_node,
+                        rg_node.scope,
                         (layer_in,),
                         num_units=num_sum_units if rg_node.outputs else num_classes,
                         layer_cls=sum_layer_cls,
@@ -141,7 +146,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
                     for layer_in in layers_in
                 ]
                 layer_out = SymbolicSumLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
                     layer_cls=MixingLayer,
@@ -151,7 +156,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
             elif isinstance(rg_node, PartitionNode):
                 # layers_in keeps the same.
                 layer_out = SymbolicProductLayer(
-                    rg_node,
+                    rg_node.scope,
                     layers_in,
                     num_units=prod_layer_cls._infer_num_prod_units(
                         num_sum_units, len(rg_node.inputs)
@@ -265,7 +270,8 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
 
     #######################################    Functional    #######################################
 
-    integrate = integrate
+    integrate = STCF.integrate
+    differentiate = STCF.differentiate
 
     ####################################    (De)Serialization    ###################################
     # TODO: impl? or just save RG and kwargs of SymbC?

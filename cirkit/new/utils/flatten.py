@@ -50,6 +50,7 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
     assert all(s == 1 for s in shape) or all(
         l < r for l, r in zip(dims[:-1], dims[1:])
     ), "dims must be sorted for unflatten_dims."
+    # TODO: the zip([:-1],[1:]) pattern can be itertools.pairwise() in 3.10
 
     if len(shape) == x.ndim - 1 + len(dims):  # The shape is for whole output.
         shape = [shape[d] for d in dims]

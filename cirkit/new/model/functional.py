@@ -17,4 +17,24 @@ def integrate(
     Returns:
         TensorizedCircuit: The circuit giving the integral.
     """
-    return self.__class__(self.symb_circuit.integrate(scope=scope), num_channels=self.num_channels)
+    return self.__class__(self.symb_circuit.integrate(scope=scope))
+
+
+def differentiate(self: "TensorizedCircuit", *, order: int = 1) -> "TensorizedCircuit":
+    """Differentiate the circuit w.r.t. each variable (i.e. total differentiate) to the given order.
+
+    NOTE: Each output layer will be expanded to (layer.num_vars * num_channels + 1) output layers \
+          consecutive in the layer container, with all-but-last layers reshapable to \
+          (layer.num_vars, num_channels) calculating the partial differential w.r.t. each variable \
+          in the layer's scope and each channel in the variables, and the last one calculating the \
+          original, which is copied (but not referenced) from the original circuit, i.e., the same \
+          SymbolicLayer object will not be reused in a different SymbolicTensorizedCircuit.
+
+    Args:
+        self (TensorizedCircuit): The circuit to differentiate.
+        order (int, optional): The order of differentiation. Defaults to 1.
+
+    Returns:
+        TensorizedCircuit: The circuit giving the (total) differential.
+    """
+    return self.__class__(self.symb_circuit.differentiate(order=order))

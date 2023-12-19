@@ -1,28 +1,27 @@
 from abc import abstractmethod
-from typing import Any, Dict, Literal, Optional, Tuple, Type
+from typing import Optional
+from typing_extensions import Self  # TODO: in typing from 3.11
 
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class InputLayer(Layer):
     """The abstract base class for input layers."""
 
     # NOTE: We use exactly the same interface (H, *B, K)->(*B, K) for __call__ of input layers:
-    #           1. Define arity(H)=1, which is simply an unsqueeze of input.
+    #           1. Define arity(H)=num_vars(D), reusing the H dimension.
     #           2. Define num_input_units(K)=num_channels(C), which reuses the K dimension.
     #       For dimension D (variables), we should parse the input in circuit according to the
     #       scope of the corresponding region node/symbolic input layer.
-    # TODO: currently we only support fully factorized input, so the input layer only works as
-    #       univariate functions. If we want to extend to more complicated cases, we can allow H>1,
-    #       and reuse the H dim as num_vars.
 
     def __init__(
         self,
         *,
         num_input_units: int,
         num_output_units: int,
-        arity: Literal[1] = 1,
+        arity: int = 1,
         reparam: Optional[Reparameterization] = None,
     ) -> None:
         """Init class.
@@ -30,11 +29,11 @@ class InputLayer(Layer):
         Args:
             num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
-            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
+            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
+                Defaults to 1.
             reparam (Optional[Reparameterization], optional): The reparameterization for layer \
                 parameters, can be None if the layer has no params. Defaults to None.
         """
-        assert arity == 1, "We define arity=1 for InputLayer."
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
@@ -42,17 +41,37 @@ class InputLayer(Layer):
             reparam=reparam,
         )
 
+    # TODO: enable integ on part of H dim? if yes, also lift assert subset in functional
     @classmethod
     @abstractmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
-        cls, **kwargs: Any
-    ) -> Tuple[Type["InputLayer"], Dict[str, Any]]:
-        """Get the config to construct the integral of the input layer.
+    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self]
+    ) -> SymbLayerCfg["InputLayer"]:
+        """Get the symbolic config to construct the integral of this layer.
 
         Args:
-            **kwargs (Any): The additional kwargs for this layer,
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
         Returns:
-            Tuple[Type[InputLayer], Dict[str, Any]]: The class of the integral layer and its \
-                additional kwargs.
+            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
+        """
+
+    @classmethod
+    @abstractmethod
+    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
+    ) -> SymbLayerCfg["InputLayer"]:
+        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
+        of the given variable in the scope of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            order (int, optional): The order of differentiation. Defaults to 1.
+            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
+                layer's scope but not global variable id. Defaults to 0.
+            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
+                given channel of the given variable.
         """

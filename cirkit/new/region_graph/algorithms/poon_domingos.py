@@ -36,7 +36,7 @@ def _cut_hypercube(
     Args:
         hypercube (HyperCube): The hypercube to cut.
         axis (int): The axis to cut along.
-        cut_points (Union[int,Sequence[int]]): The points to cut at, can be a single number for a \
+        cut_points (Union[int, Sequence[int]]): The points to cut at, can be a single number for a \
             single cut.
         hypercube_to_scope (HypercubeToScope): The mapping from hypercube to scope.
         graph (RegionGraph): The region graph to hold the cut.

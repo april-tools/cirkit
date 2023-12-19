@@ -9,6 +9,7 @@ from .inner import SumLayer as SumLayer
 from .inner import SumProductLayer as SumProductLayer
 from .inner import TuckerLayer as TuckerLayer
 from .input import CategoricalLayer as CategoricalLayer
+from .input import DiffEFLayer as DiffEFLayer
 from .input import ExpFamilyLayer as ExpFamilyLayer
 from .input import InputLayer as InputLayer
 from .input import NormalLayer as NormalLayer

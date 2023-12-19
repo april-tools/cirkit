@@ -1,11 +1,12 @@
+import functools
 from functools import cached_property
-from typing import Dict, Optional
+from typing import Dict, Optional, final
 
 import torch
 from torch import Tensor, nn
 
+import cirkit.new.model.functional as TCF  # TensorizedCircuit functional.
 from cirkit.new.layers import InputLayer, Layer, SumProductLayer
-from cirkit.new.model.functional import integrate
 from cirkit.new.symbolic import (
     SymbolicLayer,
     SymbolicProductLayer,
@@ -14,6 +15,9 @@ from cirkit.new.symbolic import (
 )
 
 
+# TODO: this final may not be wanted for user customization, but use of __class__ in TCF require it.
+# Mark this class final so that __class__ of a TensC is always TensorizedCircuit.
+@final
 class TensorizedCircuit(nn.Module):
     """The tensorized circuit with concrete computational graph in PyTorch.
     
@@ -22,31 +26,31 @@ class TensorizedCircuit(nn.Module):
     """
 
     # TODO: do we also move num_channels to SymbolicTensorizedCircuit?
-    def __init__(self, symb_circuit: SymbolicTensorizedCircuit, *, num_channels: int) -> None:
+    def __init__(self, symb_circuit: SymbolicTensorizedCircuit) -> None:
         """Init class.
 
         All the other config other than num_channels should be provided to the symbolic form.
 
         Args:
             symb_circuit (SymbolicTensorizedCircuit): The symbolic version of the circuit.
-            num_channels (int): The number of channels in the input.
         """
         super().__init__()
         self.symb_circuit = symb_circuit
         self.scope = symb_circuit.scope
         self.num_vars = symb_circuit.num_vars
-        self.num_channels = num_channels
+        self.num_channels = symb_circuit.num_channels
         self.num_classes = symb_circuit.num_classes
 
-        self.layers = nn.ModuleList()  # Automatic layer registry, also publically available.
+        # Automatic nn.Module registry, also in publicly available children names.
+        self.layers = nn.ModuleList()
 
-        # TODO: or do we store edges in Layer?
-        # The actual internal container for forward.
+        # The actual internal container for forward, preserves insertion order.
         self._symb_to_layers: Dict[SymbolicLayer, Optional[Layer]] = {}
 
+        # Both containers with have a consistent layer order by this loop.
         for symb_layer in symb_circuit.layers:
             layer: Optional[Layer]
-            # Ignore: all SymbolicLayer contains Any.
+            # Ignore: All SymbolicLayer contains Any.
             # Ignore: Unavoidable for kwargs.
             if issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicProductLayer  # type: ignore[misc]
@@ -68,9 +72,9 @@ class TensorizedCircuit(nn.Module):
             elif issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicSumLayer  # type: ignore[misc]
             ):  # Sum-product fusion at sum: just run checks and fill a placeholder.
-                prev_layer = symb_layer.inputs[0]  # There should be at exactly SymbProd input.
+                prev_layer = symb_layer.inputs[0]  # There should be exactly one SymbProd input.
                 assert (
-                    len(symb_layer.inputs) == 1  # I.e., symb_layer.arity == 1.
+                    symb_layer.arity == 1
                     and isinstance(prev_layer, SymbolicProductLayer)  # type: ignore[misc]
                     and prev_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
@@ -79,10 +83,12 @@ class TensorizedCircuit(nn.Module):
                 layer = symb_layer.layer_cls(
                     # TODO: is it good to use only [0]?
                     num_input_units=(  # num_channels for InputLayers or num_units of prev layer.
-                        symb_layer.inputs[0].num_units if symb_layer.inputs else num_channels
+                        symb_layer.inputs[0].num_units if symb_layer.inputs else self.num_channels
                     ),
                     num_output_units=symb_layer.num_units,
-                    arity=symb_layer.arity,
+                    arity=(  # Reusing arity to contain num_vars for InputLayer.
+                        symb_layer.arity if symb_layer.arity else len(symb_layer.scope)
+                    ),
                     reparam=symb_layer.reparam,
                     **symb_layer.layer_kwargs,  # type: ignore[misc]
                 )
@@ -124,7 +130,7 @@ class TensorizedCircuit(nn.Module):
         for symb_layer, layer in self._symb_to_layers.items():
             if layer is None:
                 assert (
-                    len(symb_layer.inputs) == 1
+                    symb_layer.arity == 1
                 ), "Only symbolic layers with arity=1 can be implemented by a place-holder."
                 layer_outputs[symb_layer] = layer_outputs[symb_layer.inputs[0]]
                 continue
@@ -145,7 +151,7 @@ class TensorizedCircuit(nn.Module):
             [layer_outputs[layer_out] for layer_out in self.symb_circuit.output_layers], dim=-2
         )  # shape num_out * (*B, K) -> (*B, num_out, num_cls=K).
 
-    integrate = integrate
+    integrate = TCF.integrate
 
     # Use cached_property to lazily construct the circuit for partition function.
     @cached_property
@@ -159,3 +165,9 @@ class TensorizedCircuit(nn.Module):
         # For partition_circuit, the input is irrelevant, so just use zeros.
         # shape (*B, D, C) -> (*B, num_out, num_cls) where *B = ().
         return self.partition_circuit(torch.zeros((self.num_vars, self.num_channels)))
+
+    differentiate = TCF.differentiate
+
+    # NOTE: partialmethod is not suitable here as it does not have __call__ but __get__.
+    grad_circuit = cached_property(functools.partial(differentiate, order=1))
+    """The circuit calculating the gradient."""

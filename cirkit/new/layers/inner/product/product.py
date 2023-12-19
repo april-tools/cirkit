@@ -34,4 +34,4 @@ class ProductLayer(InnerLayer):
         )
 
     def reset_parameters(self) -> None:
-        """Do nothing as the product layers do not have parameters."""
+        """Do nothing, as product layers do not have parameters."""
