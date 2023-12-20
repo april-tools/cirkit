@@ -1,6 +1,7 @@
-from typing import TYPE_CHECKING, Any, Callable, Dict, Generic, List, Optional, Type, TypeVar
-from typing_extensions import Required  # FUTURE: in typing from 3.11
+from typing import TYPE_CHECKING, Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union
+from typing_extensions import TypeAlias  # FUTURE: in typing from 3.10, deprecated in 3.12
 from typing_extensions import TypedDict  # FUTURE: in typing from 3.11 for generic TypedDict
+from typing_extensions import NotRequired, Required  # FUTURE: in typing from 3.11
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
     # NOTE: The following must be quoted in type annotations.
@@ -21,31 +22,37 @@ class ClampBounds(TypedDict, total=False):
     max: Optional[float]
 
 
+# The allowed value types are what can be saved in json.
+RGNodeMetadata: TypeAlias = Dict[str, Union[int, float, str, bool]]
+"""The type of RGNode.metadata."""
+
+
+class RegionDict(TypedDict):
+    """The structure of a region node in the json file."""
+
+    scope: List[int]  # The scope of this region node, specified by id of variable.
+    metadata: NotRequired[RGNodeMetadata]  # The metadata of this region node, if any.
+
+
 class PartitionDict(TypedDict):
-    """The struction of a partition in the json file."""
+    """The structure of a partition node in the json file."""
 
-    # TODO: more description?
-
-    p: int
-    l: int
-    r: int
-
-    # TODO: for more than 2 inputs
-    # i: List[int]
-    # o: int
+    inputs: List[int]  # The inputs of this partition node, specified by id of region node.
+    output: int  # The output of this partition node, specified by id of region node.
+    metadata: NotRequired[RGNodeMetadata]  # The metadata of this partition node, if any.
 
 
 class RegionGraphJson(TypedDict):
-    """The structure of region graph json file."""
+    """The structure of the region graph json file."""
 
-    # TODO: more description?
-
-    regions: Dict[str, List[int]]
+    # The regions of RG represented by a mapping from id in str to either a dict or only the scope.
+    regions: Dict[str, Union[RegionDict, List[int]]]
+    # The graph of RG represented by a list of partitions.
     graph: List[PartitionDict]
 
 
-ReparamFactory = Callable[[], "Reparameterization"]
-OptReparamFactory = Callable[[], Optional["Reparameterization"]]
+ReparamFactory: TypeAlias = Callable[[], "Reparameterization"]
+OptReparamFactory: TypeAlias = Callable[[], Optional["Reparameterization"]]
 
 
 LayerT_co = TypeVar("LayerT_co", bound="Layer", covariant=True)

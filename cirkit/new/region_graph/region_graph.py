@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 
 from cirkit.new.region_graph.rg_node import PartitionNode, RegionNode, RGNode
 from cirkit.new.utils import OrderedSet, Scope
-from cirkit.new.utils.type_aliases import RegionGraphJson
+from cirkit.new.utils.type_aliases import RegionGraphJson, RGNodeMetadata
 
 
 # We mark RG as final to hint that RG algorithms should not be its subclasses but factories, so that
@@ -47,15 +47,19 @@ class RegionGraph:
     ######################################    Construction    ######################################
     # The RG is initiated empty, and the following routines are used to populate the RG after that.
 
-    def add_node(self, node: RGNode) -> None:
+    def add_node(self, node: RGNode, *, metadata: Optional[RGNodeMetadata] = None) -> None:
         """Add a node to the graph.
 
         If the node is already present, this is no-op.
 
         Args:
             node (RGNode): The node to add.
+            metadata (Optional[RGNodeMetadata], optional): The metadata of the node, will be \
+                updated, not replaced, on to the node. Defaults to None.
         """
         assert not self._is_frozen, "The RG should not be modified after calling freeze()."
+        if metadata is not None:
+            node.metadata.update(metadata)
         self._nodes.append(node)
 
     @overload
@@ -69,7 +73,8 @@ class RegionGraph:
     def add_edge(self, tail: RGNode, head: RGNode) -> None:
         """Add a directed edge to the graph.
 
-        If the nodes are not present yet, they'll be automatically added.
+        If the nodes are not present yet, they'll be automatically added (with no metadata). If \
+        metadata needs to be specified, manually call add_node or directly assign instead.
 
         Args:
             tail (RGNode): The tail of the edge (from).
@@ -81,14 +86,24 @@ class RegionGraph:
         assert tail.outputs.append(head), "The edges in RG should not be repeated."
         head.inputs.append(tail)  # Only need to check duplicate in one direction.
 
-    def add_partitioning(self, region: RegionNode, sub_regions: Iterable[RegionNode]) -> None:
+    def add_partitioning(
+        self,
+        region: RegionNode,
+        sub_regions: Iterable[RegionNode],
+        *,
+        metadata: Optional[RGNodeMetadata] = None,
+    ) -> None:
         """Add a partitioning structure to the graph, with a PartitionNode constructed internally.
 
         Args:
             region (RegionNode): The region to be partitioned.
             sub_regions (Iterable[RegionNode]): The partitioned sub-regions.
+            metadata (Optional[RGNodeMetadata], optional): The metadata of the internally \
+                constructed PartitionNode. Defaults to None.
         """
         partition = PartitionNode(region.scope)
+        if metadata is not None:
+            partition.metadata.update(metadata)  # Use update() even when empty, to avoid cross-ref.
         self.add_edge(partition, region)
         for sub_region in sub_regions:
             self.add_edge(sub_region, partition)
@@ -120,8 +135,7 @@ class RegionGraph:
         self._nodes.sort()
         # Now the nodes are in an order determined solely by the construction algorithm.
         for i, node in enumerate(self._nodes):
-            # IGNORE: Unavoidable for Dict[str, Any].
-            node.metadata["sort_key"] = i  # type: ignore[misc]
+            node.metadata["sort_key"] = i
         # Now the nodes have total ordering based on the original order.
         for node in self._nodes:
             node.inputs.sort()
@@ -373,31 +387,45 @@ class RegionGraph:
 
     # TODO: The RG json is only defined to 2-partition.
 
-    def dump(self, filename: str) -> None:
+    def dump(self, filename: str, with_meta: bool = True) -> None:
         """Dump the region graph to the json file.
 
         The file will be opened with mode="w" and encoding="utf-8".
 
         Args:
             filename (str): The file name for dumping.
+            with_meta (bool, optional): Whether to include metadata of RGNode, set to False to \
+                save some space while risking loss of information. Defaults to True.
         """
+        # NOTE: Below we don't assume the existence of RGNode.metadata["sort_key"], and try to
+        #       preserve the ordering by file structure. However, the sort_key will be saved when
+        #       available and with_meta enabled.
+
         # ANNOTATE: Specify content for empty container.
         rg_json: RegionGraphJson = {"regions": {}, "graph": []}
 
         region_idx = {node: idx for idx, node in enumerate(self.region_nodes)}
 
         # "regions" keeps ordered by the index, corresponding to the self.region_nodes order.
-        rg_json["regions"] = {str(idx): list(node.scope) for node, idx in region_idx.items()}
+        rg_json["regions"] = (
+            {
+                str(idx): {"scope": list(node.scope), "metadata": node.metadata}
+                for node, idx in region_idx.items()
+            }
+            if with_meta
+            else {str(idx): list(node.scope) for node, idx in region_idx.items()}
+        )
 
         # "graph" keeps ordered by the list, corresponding to the self.partition_nodes order.
         for partition in self.partition_nodes:
             input_idxs = [region_idx[region_in] for region_in in partition.inputs]
-            assert len(input_idxs) == 2, "We can only dump RG with 2-partitions."  # TODO: 2-part
-
             # partition.outputs is guaranteed to have len==1 by _validate().
             output_idx = region_idx[next(iter(partition.outputs))]
+            rg_json["graph"].append({"inputs": input_idxs, "output": output_idx})
 
-            rg_json["graph"].append({"l": input_idxs[0], "r": input_idxs[1], "p": output_idx})
+        if with_meta:
+            for partition, part_dict in zip(self.partition_nodes, rg_json["graph"]):
+                part_dict["metadata"] = partition.metadata
 
         # TODO: logging for dumping graph_json?
         with open(filename, "w", encoding="utf-8") as f:
@@ -409,33 +437,43 @@ class RegionGraph:
 
         The file will be opened with mode="r" and encoding="utf-8".
 
+        Metadata is always loaded when available.
+
         Args:
             filename (str): The file name for loading.
 
         Returns:
             RegionGraph: The loaded region graph.
         """
+        # NOTE: Below we don't assume the existence of RGNode.metadata["sort_key"], and try to
+        #       recover the ordering from file structure. However, the sort_key will be used when
+        #       available.
+
         with open(filename, "r", encoding="utf-8") as f:
             # ANNOTATE: json.load gives Any.
             rg_json: RegionGraphJson = json.load(f)
 
-        # By json standard, this is not guaranteed to be sorted.
-        idx_region = {int(idx): RegionNode(scope) for idx, scope in rg_json["regions"].items()}
-
         graph = RegionGraph()
+        # ANNOTATE: Specify content for empty container.
+        idx_region: Dict[int, RegionNode] = {}
 
-        # Iterate regions by the order of index so that the order of graph.region_nodes is
-        # preserved.
-        # TODO: pylint should not warn? enumerate does not work on dict
-        for idx in range(len(idx_region)):  # pylint: disable=consider-using-enumerate
-            graph.add_node(idx_region[idx])
+        # Iterate regions by the order of idx so that the order of graph.region_nodes is recovered.
+        # NOTE: By json standard, rg_json["regions"] has no guaranteed order.
+        for idx in range(len(rg_json["regions"])):
+            dict_or_scope = rg_json["regions"][str(idx)]
+            if isinstance(dict_or_scope, dict):
+                region_node = RegionNode(dict_or_scope["scope"])
+                graph.add_node(region_node, metadata=dict_or_scope.get("metadata", {}))
+            else:
+                region_node = RegionNode(dict_or_scope)
+                graph.add_node(region_node)
+            idx_region[idx] = region_node
 
         # Iterate partitions by the order of list so that the order of graph.partition_nodes is
-        # preserved.
+        # recovered.
         for partition in rg_json["graph"]:
-            regions_in = [idx_region[idx_in] for idx_in in (partition["l"], partition["r"])]
-            region_out = idx_region[partition["p"]]
-
-            graph.add_partitioning(region_out, regions_in)
+            regions_in = [idx_region[idx_in] for idx_in in partition["inputs"]]
+            region_out = idx_region[partition["output"]]
+            graph.add_partitioning(region_out, regions_in, metadata=partition.get("metadata", {}))
 
         return graph.freeze()

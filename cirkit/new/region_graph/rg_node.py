@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, cast
+from typing import Iterable
 
 from cirkit.new.utils import OrderedSet, Scope
+from cirkit.new.utils.type_aliases import RGNodeMetadata
 
 
 class RGNode(ABC):
@@ -24,8 +25,8 @@ class RGNode(ABC):
         self.inputs: OrderedSet[RGNode] = OrderedSet()
         self.outputs: OrderedSet[RGNode] = OrderedSet()
 
-        # TODO: refine typing to what's actually used?
-        self.metadata: Dict[str, Any] = {}  # type: ignore[misc]
+        # NOTE: metadata is used for anything that is not part of the RG but is useful for node.
+        self.metadata: RGNodeMetadata = {}
 
     def __repr__(self) -> str:
         """Generate the repr string of the node.
@@ -46,7 +47,7 @@ class RGNode(ABC):
         - If they have different scopes, the one with a smaller scope is smaller;
         - With the same scope, PartitionNode is smaller than RegionNode;
         - For same type of node and same scope, an extra sort_key can be provided in \
-            self._metadata to define the order;
+            self.metadata to define the order;
         - If the above cannot compare, __lt__ is always False, indicating "equality for the \
             purpose of sorting".
 
@@ -65,16 +66,11 @@ class RGNode(ABC):
         """
         # A trick to compare classes: if the class name is equal, then the class is the same;
         # otherwise "P" < "R" and PartitionNode < RegionNode, so comparison of class names works.
-        # CAST: The values are typed as Any.
-        # IGNORE: Unavoidable for Dict[str, Any].
-        return (
-            self.scope,
-            self.__class__.__name__,
-            cast(int, self.metadata.get("sort_key", -1)),  # type: ignore[misc]
-        ) < (
+        # And amazingly, all possible types in metadata are comparable.
+        return (self.scope, self.__class__.__name__, self.metadata.get("sort_key", -1)) < (
             other.scope,
             other.__class__.__name__,
-            cast(int, other.metadata.get("sort_key", -1)),  # type: ignore[misc]
+            other.metadata.get("sort_key", -1),
         )
 
 
