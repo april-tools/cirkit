@@ -1,5 +1,5 @@
 # pylint: disable=too-few-public-methods
-# Disable: For this file we disable the above because all classes trigger this but it's intended.
+# DISABLE: For this file we disable the above because all classes trigger it and it's intended.
 
 from typing import Optional, Sequence, Union
 

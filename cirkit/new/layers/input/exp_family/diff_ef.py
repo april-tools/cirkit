@@ -1,5 +1,5 @@
 from typing import Any, Dict, Type, cast
-from typing_extensions import Self  # TODO: in typing from 3.11
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
@@ -22,8 +22,8 @@ class DiffEFLayer(InputLayer):
         f''(x) = f(x)(g'(x)^2 + g''(x)).
     """
 
-    # Disable: It's designed to have these arguments.
-    # Ignore: Unavoidable for kwargs.
+    # DISABLE: It's designed to have these arguments.
+    # IGNORE: Unavoidable for kwargs.
     def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
         self,
         *,
@@ -65,12 +65,13 @@ class DiffEFLayer(InputLayer):
             reparam=reparam,
         )
 
+        # IGNORE: Unavoidable for kwargs.
         self.ef = ef_cls(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
             reparam=reparam,
-            **ef_kwargs,  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+            **ef_kwargs,  # type: ignore[misc]
         )
         # ExpFamilyLayer already invoked reset_parameters().
 
@@ -113,8 +114,9 @@ class DiffEFLayer(InputLayer):
             self.comp_space.from_log(log_p), self.comp_space.from_linear(g_factor)
         )
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_integral(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
@@ -130,8 +132,9 @@ class DiffEFLayer(InputLayer):
         """
         raise NotImplementedError("The integral of DiffEFLayer is not yet defined.")
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_partial(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -154,7 +157,7 @@ class DiffEFLayer(InputLayer):
         # TODO: duplicate code?
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: cast: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            # TODO: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
             return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
 
         # TODO: for same var_idx and ch_idx, can reuse the same symb_cfg with only order increased.

@@ -1,5 +1,5 @@
 from typing import Callable, List, Tuple, Union, cast
-from typing_extensions import TypeVarTuple, Unpack  # TODO: in typing from 3.11
+from typing_extensions import TypeVarTuple, Unpack  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
@@ -10,8 +10,7 @@ Ts = TypeVarTuple("Ts")
 
 # TODO: better typing? Ts is not bound to Tensor. if needed, there's no harm to change from last one
 #       to the first one: Tuple[Tensor, Unpack[Ts]]
-# NOTE: We accept list as indices to mimic the subscript operator.
-#       ellipsis is a class that can be recognized by type checkers but not runtime.
+# NOTE: ellipsis is a class that can be recognized by type checkers but not runtime.
 def batch_diff_at(
     func: Callable[[Tensor], Tuple[Unpack[Ts]]], indices: List[Union[int, slice, "ellipsis"]], /
 ) -> Callable[[Tensor], Tuple[Unpack[Ts], Tensor]]:
@@ -40,6 +39,9 @@ def batch_diff_at(
         Callable[[Tensor], Tuple[Unpack[Ts], Tensor]]: The transformed func that gives the output \
             of func and the required differential.
     """
+    # We accept list as indices to mimic the subscript operator, but __getitem__ actually requires
+    # a tuple like idx_slicing.
+    idx_slicing = tuple(indices)
 
     def jvp_func(x: Tensor) -> Tuple[Unpack[Ts], Tensor]:
         """Wrap func to calculate the differential at given indices using Jac-vec prod.
@@ -55,10 +57,10 @@ def batch_diff_at(
         # in Jacobian. Thus, if indices correctly select only one element per-batch, jvp with this
         # tangents will leads to the correct differential at the given position.
         tangents = torch.zeros_like(x)
-        # Ignore: Tensor.__getitem__ typing issue.
-        tangents[tuple(indices)] = 1  # type: ignore[misc]
-        # Disable: jvp can return tuple of 2 or 3, but here it's guaranteed to be 2.
-        # Cast: Return of jvp is not typed.
+        tangents[idx_slicing] = 1
+        # TODO: better annotation for jvp?
+        # CAST: Return of jvp is not typed.
+        # DISABLE: jvp can return tuple of 2 or 3, but here it's guaranteed to be 2.
         orig, (*_, diff) = cast(  # pylint: disable=unbalanced-tuple-unpacking
             Tuple[Tuple[Unpack[Ts]], Tuple[Tensor, ...]], jvp(func, (x,), (tangents,))
         )
@@ -90,7 +92,7 @@ def batch_high_order_at(
     """
     assert order >= 0, "The order of differential must be non-negative."
 
-    # Cast: Otherwise pylance is not happy. TODO: but mypy is good?
+    # TODO: pylance issue. mypy is good with annotation
     diff_func = cast(Callable[[Tensor], Tuple[Tensor, ...]], lambda x: (func(x),))
     for _ in range(order):
         diff_func = batch_diff_at(diff_func, indices)

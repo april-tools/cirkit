@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, Callable, Dict, Generic, List, Optional, Type, TypeVar
-from typing_extensions import Required  # TODO: in typing from 3.11
-from typing_extensions import TypedDict  # TODO: in typing from 3.11 for generic TypedDict
+from typing_extensions import Required  # FUTURE: in typing from 3.11
+from typing_extensions import TypedDict  # FUTURE: in typing from 3.11 for generic TypedDict
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
     # NOTE: The following must be quoted in type annotations.
@@ -14,7 +14,7 @@ if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to 
 class ClampBounds(TypedDict, total=False):
     """Wrapper of the kwargs for torch.clamp().
 
-    Items can be either missing or None to disable clamping in corresponding direction.
+    Items can be either missing or None for no clamping in the corresponding direction.
     """
 
     min: Optional[float]

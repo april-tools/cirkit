@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Deque, Dict, List, Optional, Sequence, Union, cast
+from typing import Deque, Dict, List, Optional, Sequence, Union
 
 from cirkit.new.region_graph.algorithms.utils import HyperCube, HypercubeToScope
 from cirkit.new.region_graph.region_graph import RegionGraph
@@ -57,6 +57,7 @@ def _cut_hypercube(
 
     cut_points = [point1[axis]] + sorted(cut_points) + [point2[axis]]
 
+    # ANNOTATE: Specify content for empty container.
     hypercubes: List[HyperCube] = []
     region_nodes: List[RegionNode] = []
     for cut_l, cut_r in zip(cut_points[:-1], cut_points[1:]):
@@ -98,6 +99,7 @@ def _parse_delta(
         delta_i_ax >= 1 for delta_i in delta for delta_i_ax in delta_i
     ), "Each delta must be >=1."
 
+    # ANNOTATE: Specify content for empty container.
     cut_points: List[List[List[int]]] = []
     for delta_i in delta:
         cut_pts_i: List[List[int]] = []
@@ -109,9 +111,8 @@ def _parse_delta(
 
 
 # TODO: too-complex,too-many-locals. how to solve?
-# Disable: We use function name with upper case to mimic a class constructor.
-# pylint: disable-next=invalid-name,too-complex,too-many-locals
-def PoonDomingos(
+# DISABLE: We use function name with upper case to mimic a class constructor.
+def PoonDomingos(  # pylint: disable=invalid-name,too-complex,too-many-locals
     shape: Sequence[int],
     *,
     delta: Union[float, List[float], List[List[float]]],
@@ -148,17 +149,17 @@ def PoonDomingos(
 
     graph = RegionGraph()
     hypercube_to_scope = HypercubeToScope(shape)
+    # ANNOTATE: Specify content for empty container.
     queue: Deque[HyperCube] = deque()
     depth_dict: Dict[HyperCube, int] = {}  # Also serve as a "visited" set.
 
-    # TODO: type checking bug? annotation not work
-    # Cast: A cast is required to get rid of Literal[0].
-    cur_hypercube = cast(HyperCube, ((0,) * len(shape), tuple(shape)))
+    cur_hypercube = ((0,) * len(shape), tuple(shape))
     graph.add_node(RegionNode(hypercube_to_scope[cur_hypercube]))
     queue.append(cur_hypercube)
     depth_dict[cur_hypercube] = 0
 
-    while queue:  # pylint: disable=while-used  # Disable: It's intended to use while loop.
+    # DISABLE: It's intended to use while loop.
+    while queue:  # pylint: disable=while-used
         cur_hypercube = queue.popleft()
         if depth_dict[cur_hypercube] > max_depth:
             continue

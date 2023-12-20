@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, Optional, Sequence, Type, TypeVar, Union, cast
-from typing_extensions import Self, TypeVarTuple, Unpack  # TODO: in typing from 3.11
+from typing_extensions import Self, TypeVarTuple, Unpack  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
@@ -18,11 +18,11 @@ def register_comp_space(cls: CompSpaceT) -> CompSpaceT:
     Returns:
         CompSpaceT: The class passed in.
     """
-    # Cast: A cast is needed because __final__ may be undefined.
+    # CAST: __final__ is not part of standard data model.
     assert cast(
         bool, getattr(cls, "__final__", False)
     ), "Subclasses of ComputationSapce should be final."
-    # Disable: Access to _registry is by design.
+    # DISABLE: Access to _registry is by design.
     ComputationSapce._registry[cls.name] = cls  # pylint: disable=protected-access
     return cls
 

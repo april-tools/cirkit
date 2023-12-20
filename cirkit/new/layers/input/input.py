@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from typing import Optional
-from typing_extensions import Self  # TODO: in typing from 3.11
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
@@ -42,9 +42,10 @@ class InputLayer(Layer):
         )
 
     # TODO: enable integ on part of H dim? if yes, also lift assert subset in functional
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
     @abstractmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_integral(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg["InputLayer"]:
         """Get the symbolic config to construct the definite integral of this layer.
@@ -56,9 +57,10 @@ class InputLayer(Layer):
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
     @abstractmethod
-    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_partial(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg["InputLayer"]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \

@@ -1,7 +1,7 @@
 import functools
 from abc import abstractmethod
 from typing import Tuple, cast
-from typing_extensions import Self  # TODO: in typing from 3.11
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor, nn
@@ -28,6 +28,9 @@ class ExpFamilyLayer(InputLayer):
     the same arity.
     """
 
+    # NOTE: suff_stats_shape should not be part of the interface for users, but should be set by
+    #       subclasses based on the implementation. We assume it is already set before entering
+    #       ExpFamilyLayer.__init__.
     suff_stats_shape: Tuple[int, ...]
     """The shape for sufficient statistics, as dim S (or *S). The last dim is for normalization, \
     if relevant."""
@@ -49,9 +52,6 @@ class ExpFamilyLayer(InputLayer):
                 Defaults to 1.
             reparam (Reparameterization): The reparameterization for layer parameters.
         """
-        # NOTE: suff_stats_shape should not be part of the interface for users, but should be set by
-        #       subclasses based on the implementation. We assume it is already set before entering
-        #       ExpFamilyLayer.__init__.
         assert all(
             s for s in self.suff_stats_shape
         ), "The number of sufficient statistics must be positive."
@@ -142,8 +142,9 @@ class ExpFamilyLayer(InputLayer):
             Tensor: The log partition function A, shape (H, K).
         """
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_integral(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
@@ -156,7 +157,8 @@ class ExpFamilyLayer(InputLayer):
         """
         # TODO: for unnormalized EF, should be ParameterizedConstantLayer
         # We have already normalized with log_partition in forward(), so integral is always 1.
-        return {  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        # IGNORE: SymbLayerCfg contains Any.
+        return {  # type: ignore[misc]
             "layer_cls": ConstantLayer,
             "layer_kwargs": {"const_value": 1.0},
             "reparam": None,
@@ -165,8 +167,9 @@ class ExpFamilyLayer(InputLayer):
     # NOTE: Here we define the differential of all EF layers, but some subclasses, e.g. Categorical,
     #       should not have differentials due to discrete variable. Those subclasses should override
     #       this method and raise an error.
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_partial(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -185,14 +188,15 @@ class ExpFamilyLayer(InputLayer):
         """
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: cast: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            # TODO: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
             return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
 
-        # Disable: Import here to avoid cyclic import, but still need to disable cyclic-import.
+        # TODO: pylint bug? should not raise cyclic-import?
+        # DISABLE: We must import here to avoid cyclic import.
         # pylint: disable-next=import-outside-toplevel,cyclic-import
         from cirkit.new.layers.input.exp_family.diff_ef import DiffEFLayer
 
-        # Ignore: SymbLayerCfg contains Any.
+        # IGNORE: SymbLayerCfg contains Any.
         return {  # type: ignore[misc]
             "layer_cls": DiffEFLayer,
             "layer_kwargs": {

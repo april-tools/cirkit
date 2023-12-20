@@ -1,7 +1,5 @@
 from typing import FrozenSet, Iterable, Iterator, Union, final
-from typing_extensions import Self  # TODO: in typing from 3.11
-
-# TODO: convert to bitset
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 
 # We mark this final so that Scope==Self in typing. Also there's no need to inherit this.
@@ -15,6 +13,7 @@ class Scope(FrozenSet[int]):
 
     # NOTE: The following also serves as the API for Scope. Even the methods defined in the base
     #       class can be reused, they should be overriden below to explicitly define the methods.
+    # TODO: convert to bitset, and then all methods will be useful.
 
     # We should use __new__ instead of __init__ because it's immutable.
     def __new__(cls, scope: Union["Scope", Iterable[int]]) -> Self:
@@ -43,7 +42,7 @@ class Scope(FrozenSet[int]):
     ###########################
     # collections.abc.Container
     ###########################
-    # Ignore: We should only test int.
+    # IGNORE: We should only test int.
     def __contains__(self, var: int) -> bool:  # type: ignore[override]
         """Test whether a variable is in the scope, for `in` and `not in` operators.
 
@@ -59,7 +58,7 @@ class Scope(FrozenSet[int]):
     # collections.abc.Iterable
     ##########################
     def __iter__(self) -> Iterator[int]:
-        """Iterate over the scope variables in the order of id, for convertion to other containers.
+        """Iterate over the scope variables in the order of id, for conversion to other containers.
 
         Returns:
             Iterator[int]: The iterator over the scope (sorted).
@@ -69,7 +68,7 @@ class Scope(FrozenSet[int]):
     #######################
     # collections.abc.Sized
     #######################
-    # Disable: We require explicit definition.
+    # DISABLE: We require explicit definition.
     def __len__(self) -> int:  # pylint: disable=useless-parent-delegation
         """Get the length (number of variables) of the scope, for len() as well as bool().
 
@@ -99,7 +98,7 @@ class Scope(FrozenSet[int]):
     ################
     # Total Ordering
     ################
-    # Ignore: We should only compare scopes.
+    # IGNORE: We should only compare scopes.
     def __eq__(self, other: "Scope") -> bool:  # type: ignore[override]
         """Test equality between scopes, for == and != operators.
 
@@ -113,7 +112,7 @@ class Scope(FrozenSet[int]):
         """
         return super().__eq__(other)
 
-    # Ignore: We should only compare scopes.
+    # IGNORE: We should only compare scopes.
     def __lt__(self, other: "Scope") -> bool:  # type: ignore[override]
         """Compare scopes for ordering, for < operator.
 
@@ -133,7 +132,7 @@ class Scope(FrozenSet[int]):
         """
         return len(self) < len(other) or len(self) == len(other) and tuple(self) < tuple(other)
 
-    # Ignore: We should only compare scopes.
+    # IGNORE: We should only compare scopes.
     def __gt__(self, other: "Scope") -> bool:  # type: ignore[override]
         """Compare scopes for ordering, for > operator.
 
@@ -153,7 +152,7 @@ class Scope(FrozenSet[int]):
     # Subset Test
     #############
     # NOTE: Here we abuse the operators: < and > are for ordering, <= and >= are for subset test.
-    # Ignore: We should only compare scopes.
+    # IGNORE: We should only compare scopes.
     def __le__(self, other: "Scope") -> bool:  # type: ignore[override]
         """Test whether self is a subset (or equal) of other.
 
@@ -165,7 +164,7 @@ class Scope(FrozenSet[int]):
         """
         return super().__le__(other)
 
-    # Ignore: We should only compare scopes.
+    # IGNORE: We should only compare scopes.
     def __ge__(self, other: "Scope") -> bool:  # type: ignore[override]
         """Test whether self is a superset (or equal) of other.
 
@@ -180,7 +179,7 @@ class Scope(FrozenSet[int]):
     ########################
     # Union and Intersection
     ########################
-    # Ignore: We should only intersect scopes.
+    # IGNORE: We should only intersect scopes.
     def __and__(self, other: "Scope") -> "Scope":  # type: ignore[override]
         """Get the intersection of two scopes, for & operator.
 
@@ -192,7 +191,7 @@ class Scope(FrozenSet[int]):
         """
         return Scope(super().__and__(other))
 
-    # Ignore: We should only union scopes.
+    # IGNORE: We should only union scopes.
     def __or__(self, other: "Scope") -> "Scope":  # type: ignore[override]
         """Get the union of two scopes, for | operator.
 
@@ -204,9 +203,9 @@ class Scope(FrozenSet[int]):
         """
         return Scope(super().__or__(other))
 
-    # Ignore: We should only union scopes.
-    # Disable: This is a hack that self goes as the first of scopes, so that self.union(...) and
+    # DISABLE: This is a hack that self goes as the first of scopes, so that self.union(...) and
     #          Scope.union(...) both work, even when ... is empty.
+    # IGNORE: We should only union scopes.
     # pylint: disable-next=no-self-argument
     def union(*scopes: "Scope") -> "Scope":  # type: ignore[override]
         """Take the union over multiple scopes, for use as n-ary | operator.

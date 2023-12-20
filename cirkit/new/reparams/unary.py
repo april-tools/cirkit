@@ -1,5 +1,5 @@
 # pylint: disable=too-few-public-methods
-# Disable: For this file we disable the above because all classes trigger this but it's intended.
+# DISABLE: For this file we disable the above because all classes trigger it and it's intended.
 
 import functools
 from typing import Callable, Optional, Sequence, Tuple, Union
@@ -15,7 +15,7 @@ class UnaryReparam(ComposedReparam[Tensor]):
     """The unary composed reparameterization."""
 
     # TODO: pylint is wrong?
-    # Disable: This is not useless as the signature of __init__ has changed.
+    # DISABLE: This is not useless as the signature of __init__ has changed.
     def __init__(  # pylint: disable=useless-parent-delegation
         self,
         reparam: Optional[Reparameterization] = None,
@@ -136,11 +136,12 @@ class LinearReparam(UnaryReparam):
             b (float, optional): The intercept for the linear function. Defaults to 0.
         """
         # Faster code path for simpler cases, to save some computations.
+        # ANNOTATE: Specify signature for lambda.
         func: Callable[[Tensor], Tensor]
         inv_func: Callable[[Tensor], Tensor]
-        # Disable: It's intended to use lambda here -- too simple to use def.
+        # DISABLE: It's intended to use lambda here because it's too simple to use def.
         # pylint: disable=unnecessary-lambda-assignment
-        # Disable: It's intended to explicitly compare with 0, so that it's easier to understand.
+        # DISABLE: It's intended to explicitly compare with 0, so that it's easier to understand.
         # pylint: disable=use-implicit-booleaness-not-comparison-to-zero
         if a == 1 and b == 0:
             func = inv_func = lambda x: x
@@ -150,7 +151,7 @@ class LinearReparam(UnaryReparam):
         elif b == 0:  # and a != 1
             func = lambda x: a * x
             inv_func = lambda x: (1 / a) * x
-        else:
+        else:  # a != 1 and b != 0
             func = lambda x: a * x + b  # TODO: possible FMA?
             inv_func = lambda x: (1 / a) * (x - b)
         # pylint: enable=use-implicit-booleaness-not-comparison-to-zero
@@ -196,7 +197,7 @@ class ClampReparam(UnaryReparam):
     Range: [min, max], as provided.
     """
 
-    # Disable: We must use min/max as names, so that it's in line with pytorch.
+    # DISABLE: We must use min/max as names, because this is the API of pytorch.
     def __init__(
         self,
         reparam: Optional[Reparameterization] = None,
@@ -210,10 +211,10 @@ class ClampReparam(UnaryReparam):
         Args:
             reparam (Optional[Reparameterization], optional): The input reparameterization to be \
                 composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
-            min (Optional[float], optional): The lower-bound for clamping, None to disable this \
-                direction. Defaults to None.
-            max (Optional[float], optional): The upper-bound for clamping, None to disable this \
-                direction. Defaults to None.
+            min (Optional[float], optional): The lower-bound for clamping, None for no clamping in \
+                this direction. Defaults to None.
+            max (Optional[float], optional): The upper-bound for clamping, None for no clamping in \
+                this direction. Defaults to None.
         """
         # We assume the inv of clamp is identity.
         super().__init__(reparam, func=functools.partial(torch.clamp, min=min, max=max))

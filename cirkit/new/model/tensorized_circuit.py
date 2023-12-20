@@ -45,13 +45,15 @@ class TensorizedCircuit(nn.Module):
         self.layers = nn.ModuleList()
 
         # The actual internal container for forward, preserves insertion order.
+        # ANNOTATE: Specify content for empty container.
         self._symb_to_layers: Dict[SymbolicLayer, Optional[Layer]] = {}
 
         # Both containers with have a consistent layer order by this loop.
         for symb_layer in symb_circuit.layers:
+            # ANNOTATE: Different subclasses are assigned below.
             layer: Optional[Layer]
-            # Ignore: All SymbolicLayer contains Any.
-            # Ignore: Unavoidable for kwargs.
+            # IGNORE: All SymbolicLayer contain Any.
+            # IGNORE: Unavoidable for kwargs.
             if issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicProductLayer  # type: ignore[misc]
             ):  # Sum-product fusion at prod: build the actual layer with arity of prod.
@@ -112,7 +114,7 @@ class TensorizedCircuit(nn.Module):
         Returns:
             Tensor: The output of the circuit, shape (*B, num_out, num_cls).
         """  # TODO: single letter name?
-        # Ignore: Idiom for nn.Module.__call__.
+        # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     # TODO: do we accept each variable separately?
@@ -125,6 +127,7 @@ class TensorizedCircuit(nn.Module):
         Returns:
             Tensor: The output of the circuit, shape (*B, num_out, num_cls).
         """
+        # ANNOTATE: Specify content for empty container.
         layer_outputs: Dict[SymbolicLayer, Tensor] = {}  # shape (*B, K).
 
         for symb_layer, layer in self._symb_to_layers.items():
@@ -135,10 +138,9 @@ class TensorizedCircuit(nn.Module):
                 layer_outputs[symb_layer] = layer_outputs[symb_layer.inputs[0]]
                 continue
 
-            # Disable: Ternary will be too long for readability.
-            if isinstance(layer, InputLayer):  # pylint: disable=consider-ternary-expression
-                # TODO: mypy bug? tuple(symb_layer.scope) is inferred to Any
-                layer_input = x[..., tuple(symb_layer.scope), :].movedim(  # type: ignore[misc]
+            if isinstance(layer, InputLayer):
+                scope_idx = tuple(symb_layer.scope)  # Tensor slice does not accept iterable.
+                layer_input = x[..., scope_idx, :].movedim(
                     -2, 0
                 )  # shape (*B, D, C) -> (H=D, *B, K=C).
             else:

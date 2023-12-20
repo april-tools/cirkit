@@ -1,5 +1,5 @@
 import random
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -30,6 +30,7 @@ def _partition_node_randomly(
     scope_list = list(node.scope)
     random.shuffle(scope_list)
 
+    # ANNOTATE: Numpy has typing issues.
     split: NDArray[np.float64]  # Unnormalized split points including 0 and 1.
     if proportions is None:
         assert num_parts, "Must provide at least one of num_parts and proportions."
@@ -37,13 +38,17 @@ def _partition_node_randomly(
     else:
         split = np.array([0.0] + list(proportions), dtype=np.float64).cumsum()
 
-    # Ignore: Numpy has typing issues.
+    # ANNOTATE: ndarray.tolist gives Any.
+    # CAST: Numpy has typing issues.
+    # IGNORE: Numpy has typing issues.
     split_point: List[int] = (
-        np.around(split / split[-1] * len(scope_list))  # type: ignore[assignment,misc]
+        cast(NDArray[np.float64], split / split[-1] * len(scope_list))  # type: ignore[misc]
+        .round()
         .astype(np.int64)
         .tolist()
     )
 
+    # ANNOTATE: Specify content for empty container.
     region_nodes: List[RegionNode] = []
     for l, r in zip(split_point[:-1], split_point[1:]):
         if l < r:  # A region must have as least one var, otherwise we skip it.
@@ -59,12 +64,12 @@ def _partition_node_randomly(
     return region_nodes
 
 
-# Disable: We use function name with upper case to mimic a class constructor.
+# DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name
 def RandomBinaryTree(*, num_vars: int, depth: int, num_repetitions: int) -> RegionGraph:
     """Construct a RG with random binary trees.
 
-    See
+    See:
         Random sum-product networks: A simple but effective approach to probabilistic deep learning.
         Robert Peharz, Antonio Vergari, Karl Stelzner, Alejandro Molina, Xiaoting Shao,
         Martin Trapp, Kristian Kersting, Zoubin Ghahramani.

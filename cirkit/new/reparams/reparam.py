@@ -17,6 +17,7 @@ class Reparameterization(nn.Module, ABC):
         super().__init__()
         # All attributes available but empty before materialization.
         self.shape = ()
+        # ANNOTATE: Specify content for empty container.
         self.dims: Tuple[int, ...] = ()  # The sum weight normalization dims; see materialize(dim=).
 
     # TODO: should this be a property?
@@ -108,7 +109,7 @@ class Reparameterization(nn.Module, ABC):
         Returns:
             Tensor: The parameters after reparameterization.
         """
-        # Ignore: Idiom for nn.Module.__call__.
+        # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     @abstractmethod

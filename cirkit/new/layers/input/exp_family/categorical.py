@@ -1,5 +1,5 @@
 from typing import NoReturn
-from typing_extensions import Self  # TODO: in typing from 3.11
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
@@ -16,7 +16,7 @@ class CategoricalLayer(ExpFamilyLayer):
     This is fully factorized down to univariate Categorical distributions.
     """
 
-    # Disable: This __init__ is designed to have these arguments.
+    # DISABLE: It's designed to have these arguments.
     def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
@@ -61,7 +61,7 @@ class CategoricalLayer(ExpFamilyLayer):
         """
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete.
-        # TODO: pylint issue?
+        # TODO: pylint issue? one_hot is only in pyi
         suff_stats = F.one_hot(x, self.num_categories).to(  # pylint: disable=not-callable
             torch.get_default_dtype()
         )  # shape (H, *B, K, cat).
@@ -91,8 +91,9 @@ class CategoricalLayer(ExpFamilyLayer):
         """
         return torch.zeros(()).to(eta).expand(eta.shape[:2])
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_partial(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> NoReturn:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \

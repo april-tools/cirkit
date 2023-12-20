@@ -1,5 +1,5 @@
 # pylint: disable=too-few-public-methods
-# Disable: For this file we disable the above because all classes trigger this but it's intended.
+# DISABLE: For this file we disable the above because all classes trigger it and it's intended.
 
 from typing import Optional, Protocol, Tuple
 
@@ -21,12 +21,24 @@ class _TensorFuncWithDim(Protocol):
         ...
 
 
+class _HasDimsTuple(Protocol):
+    """The protocol providing self.dims.
+
+    See: https://mypy.readthedocs.io/en/stable/more_types.html?highlight=reveal_type#mixin-classes.
+    """
+
+    # DISABLE: It's intended to omit method docstring for this Protocol.
+    @property
+    def dims(self) -> Tuple[int, ...]:  # pylint: disable=missing-function-docstring
+        ...
+
+
 class _NormalizedReparamMixin:
     """A mixin for helpers useful for reparams with normalization on some dims."""
 
-    dims: Tuple[int, ...]
-
-    def _apply_normalizer(self, normalizer: _TensorFuncWithDim, x: Tensor, /) -> Tensor:
+    def _apply_normalizer(
+        self: _HasDimsTuple, normalizer: _TensorFuncWithDim, x: Tensor, /
+    ) -> Tensor:
         """Apply a normalizer function on a Tensor over self.dims.
 
         Args:

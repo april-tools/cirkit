@@ -2,7 +2,7 @@ from cirkit.new.region_graph.region_graph import RegionGraph
 from cirkit.new.region_graph.rg_node import RegionNode
 
 
-# Disable: We use function name with upper case to mimic a class constructor.
+# DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name
 def FullyFactorized(*, num_vars: int, num_repetitions: int = 1) -> RegionGraph:
     """Construct a RG with fully factorized partitions.

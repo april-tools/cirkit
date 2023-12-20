@@ -1,5 +1,5 @@
 from typing import Optional, cast
-from typing_extensions import Self  # TODO: in typing from 3.11
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
@@ -12,7 +12,8 @@ from cirkit.new.utils.type_aliases import SymbLayerCfg
 class ConstantLayer(InputLayer):
     """The constant input layer, with no parameters."""
 
-    # Disable: This __init__ is designed to have these arguments.
+    # We still accept any Reparameterization instance for reparam, but it will be ignored.
+    # DISABLE: It's designed to have these arguments.
     def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
@@ -60,8 +61,9 @@ class ConstantLayer(InputLayer):
             .expand(*x.shape[1:-1], self.num_output_units)
         )
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_integral(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
@@ -75,7 +77,7 @@ class ConstantLayer(InputLayer):
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
-        # Ignore: Each step contains Any due to kwargs.
+        # IGNORE: Unavoidable for kwargs.
         assert isinstance(
             const_value := symb_cfg.get("layer_kwargs", {}).get(  # type: ignore[misc]
                 "const_value", None
@@ -88,14 +90,16 @@ class ConstantLayer(InputLayer):
                 "The definite integral of ConstantLayer with const_value!=0 is infinity."
             )
 
-        return {  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+        # IGNORE: SymbLayerCfg contains Any.
+        return {  # type: ignore[misc]
             "layer_cls": ConstantLayer,
             "layer_kwargs": {"const_value": 0.0},
             "reparam": None,
         }
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_partial(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -114,10 +118,10 @@ class ConstantLayer(InputLayer):
         """
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: cast: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            # TODO: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
             return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
 
-        # Ignore: SymbLayerCfg contains Any.
+        # IGNORE: SymbLayerCfg contains Any.
         return {  # type: ignore[misc]
             "layer_cls": ConstantLayer,
             "layer_kwargs": {"const_value": 0.0},

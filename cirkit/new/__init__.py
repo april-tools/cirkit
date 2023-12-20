@@ -18,7 +18,7 @@ def set_layer_comp_space(comp_space: Union[Type[utils.ComputationSapce], str]) -
     if isinstance(comp_space, str):
         comp_space = utils.ComputationSapce.get_comp_space_by_name(comp_space)
 
-    # Cast: A cast is needed because __final__ may be undefined.
+    # CAST: __final__ is not part of standard data model.
     assert cast(
         bool, getattr(comp_space, "__final__", False)
     ), "A usable ComputationSapce must be final."
