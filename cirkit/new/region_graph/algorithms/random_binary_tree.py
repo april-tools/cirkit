@@ -51,6 +51,7 @@ def _partition_node_randomly(
     # ANNOTATE: Specify content for empty container.
     region_nodes: List[RegionNode] = []
     for l, r in zip(split_point[:-1], split_point[1:]):
+        # FUTURE: for l, r in itertools.pairwise(split_point) in 3.10
         if l < r:  # A region must have as least one var, otherwise we skip it.
             region_node = RegionNode(scope_list[l:r])
             region_nodes.append(region_node)

@@ -61,6 +61,7 @@ def _cut_hypercube(
     hypercubes: List[HyperCube] = []
     region_nodes: List[RegionNode] = []
     for cut_l, cut_r in zip(cut_points[:-1], cut_points[1:]):
+        # FUTURE: for cut_l, cut_r in itertools.pairwise(cut_points) in 3.10
         point_l, point_r = list(point1), list(point2)  # Must convert to list to modify.
         point_l[axis], point_r[axis] = cut_l, cut_r
         hypercube = tuple(point_l), tuple(point_r)

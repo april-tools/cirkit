@@ -89,7 +89,7 @@ class DiffEFLayer(InputLayer):
             x (Tensor): The input to this layer, shape (H, *B, K).
 
         Raises:
-            NotImplementedError: When "TODO not-yet-implemented feature" is invoked -- order > 2.
+            NotImplementedError: When "not-yet-implemented feature" is invoked -- order > 2.
 
         Returns:
             Tensor: The output of this layer, shape (*B, K).
@@ -125,7 +125,7 @@ class DiffEFLayer(InputLayer):
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
 
         Raises:
-            NotImplementedError: When "TODO not-yet-implemented feature" is invoked.
+            NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
@@ -148,7 +148,7 @@ class DiffEFLayer(InputLayer):
             ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
 
         Raises:
-            NotImplementedError: When "TODO not-yet-implemented feature" is invoked.
+            NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
@@ -157,7 +157,7 @@ class DiffEFLayer(InputLayer):
         # TODO: duplicate code?
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            # TODO: variance issue
             return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
 
         # TODO: for same var_idx and ch_idx, can reuse the same symb_cfg with only order increased.

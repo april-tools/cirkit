@@ -188,7 +188,7 @@ def differentiate(
             zip_layers_in: Iterable[Tuple[SymbolicLayer, ...]] = zip(
                 *(self_to_differential[self_layer_in][:-1] for self_layer_in in self_layer.inputs)
             )
-            differential_layers = [
+            differential_layers = [  # TODO: use a function to do this transform?
                 SymbolicSumLayer(
                     self_layer.scope,
                     layers_in,

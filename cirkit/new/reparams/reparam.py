@@ -20,7 +20,6 @@ class Reparameterization(nn.Module, ABC):
         # ANNOTATE: Specify content for empty container.
         self.dims: Tuple[int, ...] = ()  # The sum weight normalization dims; see materialize(dim=).
 
-    # TODO: should this be a property?
     shape: Tuple[int, ...]
     """The shape of the output parameter."""
 

@@ -118,7 +118,7 @@ class ConstantLayer(InputLayer):
         """
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            # TODO: variance issue
             return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
 
         # IGNORE: SymbLayerCfg contains Any.

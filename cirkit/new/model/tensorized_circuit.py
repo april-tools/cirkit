@@ -25,11 +25,8 @@ class TensorizedCircuit(nn.Module):
     properties. If those are really needed, use the properties of TensorizedCircuit.symb_circuit.
     """
 
-    # TODO: do we also move num_channels to SymbolicTensorizedCircuit?
     def __init__(self, symb_circuit: SymbolicTensorizedCircuit) -> None:
         """Init class.
-
-        All the other config other than num_channels should be provided to the symbolic form.
 
         Args:
             symb_circuit (SymbolicTensorizedCircuit): The symbolic version of the circuit.
@@ -63,7 +60,7 @@ class TensorizedCircuit(nn.Module):
                     isinstance(next_layer, SymbolicSumLayer)  # type: ignore[misc]
                     and next_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
-                layer = symb_layer.layer_cls(
+                layer = symb_layer.layer_cls(  # TODO: add a function for this cls construction?
                     # TODO: is it good to use only [0]?
                     num_input_units=symb_layer.inputs[0].num_units,
                     num_output_units=next_layer.num_units,
