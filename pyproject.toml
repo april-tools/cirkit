@@ -93,7 +93,6 @@ add_ignore = "D100,D104"
 
 # general linting
 [tool.pylint.main]
-jobs = 0
 py-version = "3.8"
 evaluation = """
   10 - 10 * min(
@@ -132,7 +131,7 @@ load-plugins = [  # as available in pylint/extensions
 enable= [
   "use-implicit-booleaness-not-comparison-to-string",
   "use-implicit-booleaness-not-comparison-to-zero",
-  # "consider-using-augmented-assign",  # always inconsistent on github workflow
+  # "consider-using-augmented-assign",  # inplace operators are not always applicable
   "prefer-typing-namedtuple",
   "bad-inline-option",
   "deprecated-pragma",
