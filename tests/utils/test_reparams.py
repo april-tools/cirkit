@@ -1,6 +1,3 @@
-# pylint: disable=missing-function-docstring
-# TODO: disable checking for docstrings for every test file in tests/
-
 from typing import Any, Type
 
 import torch

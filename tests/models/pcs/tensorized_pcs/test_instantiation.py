@@ -1,5 +1,3 @@
-# pylint: disable=missing-function-docstring
-# TODO: disable checking for docstrings for every test file in tests/
 import itertools
 import math
 from typing import Dict, Tuple

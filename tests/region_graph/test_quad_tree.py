@@ -1,4 +1,3 @@
-# pylint: disable=missing-function-docstring
 import itertools
 from typing import Tuple
 

@@ -1,6 +1,3 @@
-# pylint: disable=missing-function-docstring
-
-
 import torch
 
 from cirkit.new import set_layer_comp_space

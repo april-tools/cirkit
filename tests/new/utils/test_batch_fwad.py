@@ -1,5 +1,3 @@
-# pylint: disable=missing-function-docstring,missing-return-doc
-
 import itertools
 from typing import Callable
 
