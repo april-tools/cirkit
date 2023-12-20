@@ -1,5 +1,5 @@
 # pylint: disable=protected-access
-# Disable: For this file we disable the above because the functions defines will also be methods of
+# DISABLE: For this file we disable the above because the functions defined will also be methods of
 #          SymbolicTensorizedCircuit, so access to its protected members is expected.
 
 import heapq
@@ -29,7 +29,7 @@ def integrate(
             the whole scope of the circuit. Defaults to None.
 
     Returns:
-        SymbolicTensorizedCircuit: The circuit giving the integral.
+        SymbolicTensorizedCircuit: The circuit giving the definite integral.
     """
     assert (
         self.is_smooth and self.is_decomposable
@@ -52,13 +52,15 @@ def integrate(
 
     integral._layers = OrderedSet()
 
+    # ANNOTATE: Specify content for empty container.
     self_to_integral: Dict[SymbolicLayer, SymbolicLayer] = {}  # Map between two SymbC.
 
     for self_layer in self._layers:
+        # ANNOTATE: Different subclasses are assigned below.
         integral_layer: SymbolicLayer
-        # Ignore: SymbolicInputLayer contains Any.
-        # Ignore: SymbLayerCfg contains Any.
-        # Ignore: Unavoidable for kwargs.
+        # IGNORE: SymbolicInputLayer contains Any.
+        # IGNORE: SymbLayerCfg contains Any.
+        # IGNORE: Unavoidable for kwargs.
         if (
             isinstance(self_layer, SymbolicInputLayer)  # type: ignore[misc]
             and self_layer.scope & scope
@@ -67,8 +69,6 @@ def integrate(
                 self_layer.scope <= scope
             ), "The scope of an input layer must be either all marginalized or all not."
             integral_cfg = self_layer.layer_cls.get_integral(  # type: ignore[misc]
-                # TODO: maybe better to define self_layer.symb_layer_cfg? but then SymbolicLayer
-                #       must be Generic[LayerT]. seems still a good idea?
                 {  # type: ignore[misc]
                     "layer_cls": self_layer.layer_cls,
                     "layer_kwargs": self_layer.layer_kwargs,
@@ -103,7 +103,7 @@ class _ScopeVarAndSymbLayer(NamedTuple):
     """
 
     scope_var: int  # The id of a variable in the scope of THE SymbolicProductLayer.
-    symb_layer: SymbolicProductLayer  # the partial diff of THE SymbolicProductLayer w.r.t. the var.
+    symb_layer: SymbolicProductLayer  # The partial diff of THE SymbolicProductLayer w.r.t. the var.
 
 
 def differentiate(
@@ -151,13 +151,15 @@ def differentiate(
 
     differential._layers = OrderedSet()
 
+    # ANNOTATE: Specify content for empty container.
     self_to_differential: Dict[SymbolicLayer, List[SymbolicLayer]] = {}  # Map between two SymbC.
 
     for self_layer in self._layers:
+        # ANNOTATE: Different subclasses are assigned below.
         differential_layers: List[SymbolicLayer]
-        # Ignore: all SymbolicLayer contain Any.
-        # Ignore: SymbLayerCfg contains Any.
-        # Ignore: Unavoidable for kwargs.
+        # IGNORE: All SymbolicLayer contain Any.
+        # IGNORE: SymbLayerCfg contains Any.
+        # IGNORE: Unavoidable for kwargs.
         if isinstance(self_layer, SymbolicInputLayer):  # type: ignore[misc]
             differential_layers = [
                 SymbolicInputLayer(
@@ -182,11 +184,11 @@ def differentiate(
         elif isinstance(self_layer, SymbolicSumLayer):  # type: ignore[misc]
             # Zip to get the layers_in for each of (layer.num_vars * num_channels) partials, except
             # for the copy of self_layer_in at [-1] which will be appended later.
-            # NOTE: zip is Any when using *iterables, so we extract it from for and type explicitly.
+            # ANNOTATE: zip gives Any when using *iterables.
             zip_layers_in: Iterable[Tuple[SymbolicLayer, ...]] = zip(
                 *(self_to_differential[self_layer_in][:-1] for self_layer_in in self_layer.inputs)
             )
-            differential_layers = [
+            differential_layers = [  # TODO: use a function to do this transform?
                 SymbolicSumLayer(
                     self_layer.scope,
                     layers_in,
@@ -251,6 +253,7 @@ def differentiate(
             #       anything really go wrong, we will hit this guard statement instead of going into
             #       a wrong branch.
             assert False, "This should not happen."
+        # IGNORE: Unavoidable for kwargs.
         differential_layers.append(  # Append a copy of self_layer.
             self_layer.__class__(
                 self_layer.scope,

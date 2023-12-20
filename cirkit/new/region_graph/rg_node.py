@@ -20,11 +20,12 @@ class RGNode(ABC):
         assert self.scope, "The scope of a node in RG must not be empty."
 
         # The edge tables are initiated empty because a node may be contructed without the whole RG.
+        # ANNOTATE: Specify content for empty container.
         self.inputs: OrderedSet[RGNode] = OrderedSet()
         self.outputs: OrderedSet[RGNode] = OrderedSet()
 
         # TODO: refine typing to what's actually used?
-        self._metadata: Dict[str, Any] = {}  # type: ignore[misc]
+        self.metadata: Dict[str, Any] = {}  # type: ignore[misc]
 
     def __repr__(self) -> str:
         """Generate the repr string of the node.
@@ -64,23 +65,24 @@ class RGNode(ABC):
         """
         # A trick to compare classes: if the class name is equal, then the class is the same;
         # otherwise "P" < "R" and PartitionNode < RegionNode, so comparison of class names works.
-        # Ignore: Unavoidable for Dict[str, Any].
+        # CAST: The values are typed as Any.
+        # IGNORE: Unavoidable for Dict[str, Any].
         return (
             self.scope,
             self.__class__.__name__,
-            cast(int, self._metadata.get("sort_key", -1)),  # type: ignore[misc]
+            cast(int, self.metadata.get("sort_key", -1)),  # type: ignore[misc]
         ) < (
             other.scope,
             other.__class__.__name__,
-            cast(int, other._metadata.get("sort_key", -1)),  # type: ignore[misc]
+            cast(int, other.metadata.get("sort_key", -1)),  # type: ignore[misc]
         )
 
 
-# Disable: It's intended for RegionNode to only have few methods.
+# DISABLE: It's designed to have these methods.
 class RegionNode(RGNode):  # pylint: disable=too-few-public-methods
     """The region node in the region graph."""
 
-    # Ignore: Mutable containers are invariant, so there's no other choice.
+    # IGNORE: Mutable containers are invariant, so there's no other choice.
     inputs: OrderedSet["PartitionNode"]  # type: ignore[assignment]
     outputs: OrderedSet["PartitionNode"]  # type: ignore[assignment]
 
@@ -94,11 +96,11 @@ class RegionNode(RGNode):  # pylint: disable=too-few-public-methods
         super().__init__(scope)
 
 
-# Disable: It's intended for PartitionNode to only have few methods.
+# DISABLE: It's designed to have these methods.
 class PartitionNode(RGNode):  # pylint: disable=too-few-public-methods
     """The partition node in the region graph."""
 
-    # Ignore: Mutable containers are invariant, so there's no other choice.
+    # IGNORE: Mutable containers are invariant, so there's no other choice.
     inputs: OrderedSet["RegionNode"]  # type: ignore[assignment]
     outputs: OrderedSet["RegionNode"]  # type: ignore[assignment]
 

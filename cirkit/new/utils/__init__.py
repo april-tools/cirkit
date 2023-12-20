@@ -1,5 +1,7 @@
 # type_aliases is not imported on purpose. We explicitly import from type_aliases so we know those
 # names are just types.
+from .batch_fwad import batch_diff_at as batch_diff_at
+from .batch_fwad import batch_high_order_at as batch_high_order_at
 from .comp_space import ComputationSapce as ComputationSapce
 from .comp_space import LinearSpace as LinearSpace
 from .comp_space import LogSpace as LogSpace

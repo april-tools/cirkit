@@ -1,13 +1,12 @@
-from typing import Any, Callable, Dict, Type, cast
-from typing_extensions import Self  # TODO: in typing from 3.11
+from typing import Any, Dict, Type, cast
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
-import torch
 from torch import Tensor
-from torch.autograd.functional import jacobian
 
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils import batch_high_order_at
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -23,8 +22,8 @@ class DiffEFLayer(InputLayer):
         f''(x) = f(x)(g'(x)^2 + g''(x)).
     """
 
-    # Disable: It's designed to have these arguments.
-    # Ignore: Unavoidable for kwargs.
+    # DISABLE: It's designed to have these arguments.
+    # IGNORE: Unavoidable for kwargs.
     def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
         self,
         *,
@@ -53,7 +52,7 @@ class DiffEFLayer(InputLayer):
                 scope but not global variable id.
             ch_idx (int): The channel of variable to diffrentiate.
         """
-        assert (
+        assert (  # TODO: however order==0 actually also works here.
             order > 0
         ), "The order must be positive for DiffEFLayer (use ExpFamilyLayer for order=0)."
         assert (
@@ -66,12 +65,13 @@ class DiffEFLayer(InputLayer):
             reparam=reparam,
         )
 
+        # IGNORE: Unavoidable for kwargs.
         self.ef = ef_cls(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
             reparam=reparam,
-            **ef_kwargs,  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+            **ef_kwargs,  # type: ignore[misc]
         )
         # ExpFamilyLayer already invoked reset_parameters().
 
@@ -89,105 +89,52 @@ class DiffEFLayer(InputLayer):
             x (Tensor): The input to this layer, shape (H, *B, K).
 
         Raises:
-            NotImplementedError: When "TODO not-yet-implemented feature" is invoked -- order > 2.
+            NotImplementedError: When "not-yet-implemented feature" is invoked -- order > 2.
 
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
-        log_p = self.ef.log_prob(x)
+        g_diffs = batch_high_order_at(
+            self.ef.log_prob, x, [self.var_idx, ..., self.ch_idx], order=self.order
+        )
+        log_p = g_diffs[0]  # g(x) = log_p.
 
-        # order >= 1 is guaranteed for DiffEFLayer.
-        g_1st = self.jacobian_functional(self.ef.log_prob)
-
+        # order >= 1 is asserted in __init__.
         if self.order == 1:
             # g_factor: G(x) = f'(x)/f(x) = g'(x).
-            g_factor = g_1st(x)
+            g_factor = g_diffs[1]
         elif self.order == 2:
-            g_2nd = self.jacobian_functional(g_1st)
-            # TODO: tensor __pow__ issue
             # g_factor: G(x) = f''(x)/f(x) = g'(x)^2 + g''(x).
-            g_factor = g_1st(x) ** 2 + g_2nd(x)  # type: ignore[misc]
+            g_factor = g_diffs[1] ** 2 + g_diffs[2]  # type: ignore[misc]  # TODO: __pow__ issue
         else:
             # TODO: or no specific for EF, but generalize to all input layers using jac_functional?
-            raise NotImplementedError("order > 2 is not yet implemented for DiffEFLayer.")
+            raise NotImplementedError("order>2 is not yet implemented for DiffEFLayer.")
 
         return self.comp_space.mul(
             self.comp_space.from_log(log_p), self.comp_space.from_linear(g_factor)
         )
 
-    def jacobian_functional(self, func: Callable[[Tensor], Tensor]) -> Callable[[Tensor], Tensor]:
-        """Apply functional transform on the given func in the shape of forward() to calculate the \
-        partial differential (Jacobian) w.r.t. the specified element in input x.
-
-        Args:
-            func (Callable[[Tensor], Tensor]): A function that maps shape (H, *B, Ki=C) -> (*B, Ko).
-
-        Returns:
-            Callable[[Tensor], Tensor]: The funtion for batched Jacobian of func w.r.t. element \
-                (H: var_idx, C: ch_idx) in input x, mapping shape (H, *B, Ki=C) -> (*B, Ko).
-        """
-        # TODO: pydocstyle requires no blank line after docstring, but black needs one before def.
-
-        # We sum up all *B dims, so that each batch element receive ones as grad;
-        # we keep the Ko dim, so that the Jacobian includes it in shape.
-        def _summed_func(x: Tensor) -> Tensor:
-            """Sum the func output along all batch dimensions.
-
-            Args:
-                x (Tensor): The input x to the func, shape (H, *B, Ki=C).
-
-            Returns:
-                Tensor: The summed output, shape (Ko,).
-            """
-            func_x = func(x)
-            return func_x.sum(dim=tuple(range(func_x.ndim - 1)))
-
-        # TODO: enable_grad is untyped.
-        # Enable grad inside this function, even in no_grad env.
-        @torch.enable_grad()  # type: ignore[no-untyped-call]
-        def batch_jac_func(x: Tensor) -> Tensor:
-            """Calculate the batched Jacobian of the given func.
-
-            Args:
-                x (Tensor): The input x, shape (H, *B, Ki=C).
-
-            Returns:
-                Tensor: The Jacobian on element (H: var_idx, C: ch_idx) of x, shape (*B, Ko)
-            """
-            if not x.requires_grad:
-                x = x.clone().requires_grad_()  # Enforce grad enabled on x.
-            # TODO: is it possible to optimize the following? but for H=1,C=1 there's no difference.
-
-            # TODO: jacobian is untyped.
-            jac: Tensor = jacobian(  # type: ignore[no-untyped-call]
-                _summed_func, x, create_graph=True
-            )  # shape (Ko, H, *B, Ki=C).
-
-            return jac[:, self.var_idx, ..., self.ch_idx].movedim(
-                0, -1
-            )  # shape (Ko, H: var_idx, *B, Ki=C: ch_idx) -> (Ko, *B) -> (*B, Ko).
-
-        return batch_jac_func
-
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_integral(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[InputLayer]:
-        """Get the symbolic config to construct the integral of this layer.
+        """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
 
         Raises:
-            NotImplementedError: When "TODO not-yet-implemented feature" is invoked.
+            NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
         raise NotImplementedError("The integral of DiffEFLayer is not yet defined.")
 
+    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]  # Ignore: SymbLayerCfg contains Any.
+    def get_partial(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -201,7 +148,7 @@ class DiffEFLayer(InputLayer):
             ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
 
         Raises:
-            NotImplementedError: When "TODO not-yet-implemented feature" is invoked.
+            NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
@@ -210,7 +157,7 @@ class DiffEFLayer(InputLayer):
         # TODO: duplicate code?
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: cast: not sure why SymbLayerCfg[Self] is not SymbLayerCfg[InputLayer] in mypy
+            # TODO: variance issue
             return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
 
         # TODO: for same var_idx and ch_idx, can reuse the same symb_cfg with only order increased.

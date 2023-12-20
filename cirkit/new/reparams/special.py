@@ -1,18 +1,16 @@
 # pylint: disable=too-few-public-methods
-# Disable: For this file we disable the above because all classes trigger this but it's intended.
+# DISABLE: For this file we disable the above because all classes trigger it and it's intended.
 
-from typing import Optional, Sequence
-from typing_extensions import Unpack  # TODO: in typing from 3.12 for Unpack[dict]
+from typing import Optional, Sequence, Union
 
 import torch
 from torch import Tensor
 
 from cirkit.new.reparams.reparam import Reparameterization
 from cirkit.new.reparams.unary import UnaryReparam
-from cirkit.new.utils.type_aliases import MaterializeKwargs
 
-# This file is for some specialized reparams designed one purpose, e.g., specifically for one
-# InputLayer implementation. Simple reparams should still prefer to fit into unary.py/normalized.py.
+# This file is for specialized reparams designed for one single purpose, e.g., specifically for one
+# InputLayer implementation. unary.py/normalized.py shoud be preferred for general reparams.
 
 
 class EFNormalReparam(UnaryReparam):
@@ -52,7 +50,7 @@ class EFNormalReparam(UnaryReparam):
         )  # shape (..., 2, :).
         return param / var.unsqueeze(dim=-2)  # shape (..., 2, :).
 
-    def materialize(self, shape: Sequence[int], /, **kwargs: Unpack[MaterializeKwargs]) -> bool:
+    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
         """Materialize the internal parameter tensors with given shape.
 
         If it is already materialized, False will be returned to indicate no materialization. \
@@ -62,13 +60,18 @@ class EFNormalReparam(UnaryReparam):
         The initial value of the parameter after materialization is not guaranteed, and explicit \
         initialization is expected.
 
+        The kwarg, dim, is used to hint the normalization of sum weights. It's not always used but \
+        must be supplied with the sum-to-1 dimension(s) so that it's guaranteed to be available \
+        when a normalized reparam is passed as self.
+
         Args:
             shape (Sequence[int]): The shape of the output parameter.
-            **kwargs (Unpack[MaterializeKwargs]): Passed to super().materialize().
+            dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
+                be applied. However a subclass impl may choose to ignore this.
 
         Returns:
             bool: Whether the materialization is done.
         """
-        # TODO: do we use mask? or do we need mask at all?
+        # TODO: how should this chain with mask? need to doc the usage. or do we need mask at all?
         assert shape[-2] == 2, "The shape does not fit the requirement of EF-Normal."
-        return super().materialize(shape, **kwargs)
+        return super().materialize(shape, dim=dim)

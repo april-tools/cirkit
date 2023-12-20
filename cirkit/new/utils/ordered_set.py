@@ -1,11 +1,11 @@
-from typing import Any, Collection, Dict, Iterable, Iterator, Protocol, TypeVar, final
+from typing import Collection, Iterable, Iterator, Protocol, TypeVar, final
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 
+# We use this Protocol to construct a TypeVar for classes with __lt__. Ref: typeshed.
 # TODO: pylint issue? protocol are expected to have few public methods
 class _SupportsDunderLT(Protocol):  # pylint: disable=too-few-public-methods
-    # Disable: This is the only way to get a TypeVar for Protocol with __lt__. Another option, using
-    #          Protocol[T_contra], will introduce much more ignores.
-    def __lt__(self, other: Any, /) -> bool:  # type: ignore[misc]
+    def __lt__(self, other: Self, /) -> bool:  # At least support comparison with self type.
         ...
 
 
@@ -30,9 +30,6 @@ class OrderedSet(Collection[T]):
     The implementation relies on the order preservation of dict introduced in Python 3.7.
     """
 
-    # NOTE: We can also inherit Reversible[T] and implement __reversed__ based on reverse(dict), but
-    #       currently this feature is not needed.
-
     def __init__(self, *iterables: Iterable[T]) -> None:
         """Init class.
 
@@ -41,23 +38,27 @@ class OrderedSet(Collection[T]):
                 the order given.
         """
         super().__init__()
-        # The dict values are unused and always set to True.
-        self._container: Dict[T, T] = {
-            element: element for iterable in iterables for element in iterable
-        }
+        self._container = {element: element for iterable in iterables for element in iterable}
 
-    # Ignore: We should only test the element type.
-    def __contains__(self, element: T) -> bool:  # type: ignore[override]
+    ###########################
+    # collections.abc.Container
+    ###########################
+    # NOTE: As a general interface, any object can be tested with `in`, not just T. This enables
+    #       proper testing when a superclass of T is passed in and happens to be T.
+    def __contains__(self, element: object) -> bool:
         """Test whether an element is contained in the set.
 
         Args:
-            element (T): The element to test.
+            element (object): The element to test.
 
         Returns:
             bool: Whether the element exists.
         """
         return element in self._container
 
+    ##########################
+    # collections.abc.Iterable
+    ##########################
     def __iter__(self) -> Iterator[T]:
         """Iterate over the set in order.
 
@@ -66,6 +67,9 @@ class OrderedSet(Collection[T]):
         """
         return iter(self._container)
 
+    #######################
+    # collections.abc.Sized
+    #######################
     def __len__(self) -> int:
         """Get the length (number of elements) of the set.
 
@@ -74,6 +78,14 @@ class OrderedSet(Collection[T]):
         """
         return len(self._container)
 
+    ############################
+    # collections.abc.Collection
+    ############################
+    # Collection = Sized Iterable Container
+
+    ########################
+    # Part of list interface
+    ########################
     def append(self, element: T) -> bool:
         """Add an element to the end of the set, if it does not exist yet; otherwise no-op.
 

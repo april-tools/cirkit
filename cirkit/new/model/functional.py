@@ -15,7 +15,7 @@ def integrate(
             the whole scope of the circuit. Defaults to None.
 
     Returns:
-        TensorizedCircuit: The circuit giving the integral.
+        TensorizedCircuit: The circuit giving the definite integral.
     """
     return self.__class__(self.symb_circuit.integrate(scope=scope))
 

@@ -1,7 +1,7 @@
 import functools
 from typing import Callable, Optional, Sequence, Tuple, Union, cast
-from typing_extensions import final  # TODO: in typing from 3.11 for __final__
-from typing_extensions import TypeVarTuple, Unpack  # TODO: in typing from 3.11
+from typing_extensions import final  # FUTURE: in typing from 3.11 for __final__
+from typing_extensions import TypeVarTuple, Unpack  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
@@ -13,8 +13,9 @@ Ts = TypeVarTuple("Ts")
 
 
 # TODO: ignore is bug?
+# IGNORE: The annotation for final in typeshed/typing_extensions.pyi contains Any.
 @register_comp_space
-@final  # type: ignore[misc]  # NOTE: Starting in 3.11, final sets __final__ for runtime check.
+@final  # type: ignore[misc]
 class LogSpace(ComputationSapce):
     """The log space computation."""
 
@@ -81,7 +82,7 @@ class LogSpace(ComputationSapce):
 
         # TODO: can we use generators (... for) instead of list [... for] to avoid instantiation of
         #       intermediate results. but generators can only be used once.
-        # TODO: We have to cast from Ts to Tensor
+        # CAST: Expected tuple of Tensor but got Ts.
         x = [cast(Tensor, xi) for xi in xs]
         # We need flatten because max only works on one dim, and then match shape for exp_x.
         max_x = [
@@ -94,8 +95,8 @@ class LogSpace(ComputationSapce):
         ]
         exp_x = [torch.exp(xi - xi_max) for xi, xi_max in zip(x, max_x)]
 
-        # TODO: We have to cast from Tensor to Ts
-        #       NOTE: exp_x is not tuple but list. But can be interchangably used here.
+        # NOTE: exp_x is not tuple, but list still can be unpacked with *.
+        # CAST: Expected Ts but got tuple (actually list) of Tensor.
         func_exp_x = func(*cast(Tuple[Unpack[Ts]], exp_x))
 
         # TODO: verify the behavior of reduce under torch.compile

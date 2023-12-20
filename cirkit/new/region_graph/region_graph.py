@@ -1,7 +1,7 @@
 import itertools
 import json
 from typing import Dict, Iterable, Iterator, Optional, Set, Tuple, cast, final, overload
-from typing_extensions import Self  # TODO: in typing from 3.11
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,6 +31,7 @@ class RegionGraph:
         """
         # This node container will not be visible to the user. Instead, node views are provided for
         # read-only access to an iterable of nodes.
+        # ANNOTATE: Specify content for empty container.
         self._nodes: OrderedSet[RGNode] = OrderedSet()
 
         # It's on purpose that some attributes are defined outside __init__ but in freeze().
@@ -119,9 +120,8 @@ class RegionGraph:
         self._nodes.sort()
         # Now the nodes are in an order determined solely by the construction algorithm.
         for i, node in enumerate(self._nodes):
-            # Ignore: Unavoidable for Dict[str, Any].
-            # Disable: It is designed to be accessed.
-            node._metadata["sort_key"] = i  # type: ignore[misc]  # pylint: disable=protected-access
+            # IGNORE: Unavoidable for Dict[str, Any].
+            node.metadata["sort_key"] = i  # type: ignore[misc]
         # Now the nodes have total ordering based on the original order.
         for node in self._nodes:
             node.inputs.sort()
@@ -165,6 +165,7 @@ class RegionGraph:
         Returns:
             bool: Whether a DAG.
         """
+        # ANNOTATE: Specify content for empty container.
         visited: Set[RGNode] = set()  # Visited nodes during all DFS runs.
         path: Set[RGNode] = set()  # Path stack for the current DFS run.
         # Here we don't care about order and there's no duplicate, so set is used for fast in check.
@@ -223,18 +224,26 @@ class RegionGraph:
         # TODO: is this correct for more-than-2 partition?
         # Structured-decomposablity first requires smoothness and decomposability.
         self.is_structured_decomposable = self.is_smooth and self.is_decomposable
+        # ANNOTATE: Specify content for empty container.
         decompositions: Dict[Scope, Tuple[Scope, ...]] = {}
         for partition in self.partition_nodes:
-            # The scopes are sorted by _sort_nodes().
+            # The scopes are sorted by _sort_nodes(), so the tuple has a deterministic order.
             decomp = tuple(region.scope for region in partition.inputs)
             if partition.scope not in decompositions:
                 decompositions[partition.scope] = decomp
             self.is_structured_decomposable &= decomp == decompositions[partition.scope]
 
-        # Omni-compatiblility first requires smoothness and decomposability.
-        self.is_omni_compatible = self.is_smooth and self.is_decomposable
-        # TODO: currently we don't have a good way to represent omni-compatible circuits.
-        self.is_omni_compatible &= False
+        # Omni-compatiblility first requires smoothness and decomposability, and then it's a
+        # necessary and sufficient condition that all partitions decompose into univariate regions.
+        self.is_omni_compatible = (
+            self.is_smooth
+            and self.is_decomposable
+            and all(
+                len(region.scope) == 1
+                for partition in self.partition_nodes
+                for region in partition.inputs
+            )
+        )
 
     #######################################    Properties    #######################################
     # Here are the basic properties and some structural properties of the RG. Some of them are
@@ -260,7 +269,9 @@ class RegionGraph:
     is_omni_compatible: bool
     """Whether the RG is omni-compatible, i.e., compatible to all circuits of the same scope."""
 
-    def is_compatible(self, other: "RegionGraph", *, scope: Optional[Iterable[int]] = None) -> bool:
+    def is_compatible(
+        self, other: "RegionGraph", /, *, scope: Optional[Iterable[int]] = None
+    ) -> bool:
         """Test compatibility with another region graph over the given scope.
 
         Args:
@@ -298,7 +309,8 @@ class RegionGraph:
 
             # The number of zero eigen values for the laplacian matrix is the number of connected
             # components in a graph.
-            # Cast: Numpy has typing issues.
+            # ANNOTATE: Numpy has typing issues.
+            # CAST: Numpy has typing issues.
             deg_mat = np.diag(cast(NDArray[np.int64], adj_mat.sum(axis=1)))
             laplacian: NDArray[np.int64] = deg_mat - adj_mat
             eigen_values = np.linalg.eigvals(laplacian)
@@ -364,6 +376,7 @@ class RegionGraph:
         Args:
             filename (str): The file name for dumping.
         """
+        # ANNOTATE: Specify content for empty container.
         rg_json: RegionGraphJson = {"regions": {}, "graph": []}
 
         region_idx = {node: idx for idx, node in enumerate(self.region_nodes)}
@@ -398,6 +411,7 @@ class RegionGraph:
             RegionGraph: The loaded region graph.
         """
         with open(filename, "r", encoding="utf-8") as f:
+            # ANNOTATE: json.load gives Any.
             rg_json: RegionGraphJson = json.load(f)
 
         # By json standard, this is not guaranteed to be sorted.
@@ -407,7 +421,7 @@ class RegionGraph:
 
         # Iterate regions by the order of index so that the order of graph.region_nodes is
         # preserved.
-        # TODO: enumerate does not work on dict
+        # TODO: pylint should not warn? enumerate does not work on dict
         for idx in range(len(idx_region)):  # pylint: disable=consider-using-enumerate
             graph.add_node(idx_region[idx])
 

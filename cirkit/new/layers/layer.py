@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Optional, Type
+from typing import ClassVar, Optional, Type
 
 from torch import Tensor, nn
 
@@ -11,9 +11,11 @@ from cirkit.new.utils import ComputationSapce
 class Layer(nn.Module, ABC):
     """The abstract base class for all layers."""
 
-    comp_space: Type[ComputationSapce]
+    # NOTE: This is uninitialized for the class, but to be set later.
+    comp_space: ClassVar[Type[ComputationSapce]]
+    """The computational space for all Layers."""
 
-    # Disable: reparam is not used in the base class. It's only here for the interface.
+    # DISABLE: reparam is not used in the base class. It's only here for the interface.
     def __init__(
         self,
         *,
@@ -75,7 +77,7 @@ class Layer(nn.Module, ABC):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
-        # Ignore: Idiom for nn.Module.__call__.
+        # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     @abstractmethod

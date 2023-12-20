@@ -55,7 +55,7 @@ class TuckerLayer(SumProductLayer):
         Returns:
             int: The inferred number of product units.
         """
-        # Cast: int**int is not guaranteed to be int.
+        # CAST: int**int is not guaranteed to be int.
         return cast(int, num_input_units**arity)
 
     def _forward_linear(self, x0: Tensor, x1: Tensor) -> Tensor:

@@ -18,7 +18,8 @@ class BinaryReparam(ComposedReparam[Tensor, Tensor]):
         func: Callable[[Tensor, Tensor], Tensor],
         inv_func: Optional[Callable[[Tensor], Union[Tuple[Tensor, Tensor], Tensor]]] = None,
     ) -> None:
-        # pylint: disable=line-too-long  # Disable: This long line is unavoidable.
+        # DISABLE: This long line is unavoidable for Args doc.
+        # pylint: disable=line-too-long
         """Init class.
 
         Args:

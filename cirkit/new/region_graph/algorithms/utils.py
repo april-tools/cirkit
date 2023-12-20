@@ -29,6 +29,7 @@ class HypercubeToScope(Dict[HyperCube, Scope]):
         self.ndims = len(shape)
         self.shape = tuple(shape)
         # We assume it's feasible to save the whole hypercube, since it should be the whole region.
+        # ANNOTATE: Numpy has typing issues.
         self.hypercube: NDArray[np.int64] = np.arange(np.prod(shape), dtype=np.int64).reshape(shape)
 
     def __missing__(self, key: HyperCube) -> Scope:
@@ -50,10 +51,10 @@ class HypercubeToScope(Dict[HyperCube, Scope]):
             0 <= x1 < x2 <= shape for x1, x2, shape in zip(point1, point2, self.shape)
         ), "The HyperCube is empty."
 
-        # Ignore: Numpy has typing issues.
+        # IGNORE: Numpy has typing issues.
         return Scope(
-            self.hypercube[
-                tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))  # type: ignore[misc]
+            self.hypercube[  # type: ignore[misc]
+                tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))
             ]
             .reshape(-1)
             .tolist()

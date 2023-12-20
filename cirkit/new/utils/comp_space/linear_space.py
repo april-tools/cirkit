@@ -1,7 +1,7 @@
 import functools
 from typing import Callable, Optional, Sequence, Union
-from typing_extensions import final  # TODO: in typing from 3.11 for __final__
-from typing_extensions import TypeVarTuple, Unpack  # TODO: in typing from 3.11
+from typing_extensions import final  # FUTURE: in typing from 3.11 for __final__
+from typing_extensions import TypeVarTuple, Unpack  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
@@ -13,8 +13,9 @@ Ts = TypeVarTuple("Ts")
 
 
 # TODO: ignore is bug?
+# IGNORE: The annotation for final in typeshed/typing_extensions.pyi contains Any.
 @register_comp_space
-@final  # type: ignore[misc]  # NOTE: Starting in 3.11, final sets __final__ for runtime check.
+@final  # type: ignore[misc]
 class LinearSpace(ComputationSapce):
     """The linear space computation."""
 

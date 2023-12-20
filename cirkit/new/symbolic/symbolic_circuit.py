@@ -23,16 +23,17 @@ from cirkit.new.utils.type_aliases import OptReparamFactory, ReparamFactory
 
 
 # Mark this class final so that __class__ of a SymbC is always SymbolicTensorizedCircuit.
-# Disable: It's designed to have these many attributes.
-@final  # type: ignore[misc]  # Ignore: Caused by kwargs.
+# DISABLE: It's designed to have these attributes.
+# IGNORE: Unavoidable for kwargs.
+@final  # type: ignore[misc]
 class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     """The symbolic representation of a tensorized circuit."""
 
     # TODO: is this the best way to provide reparam? or give a layer-wise mapping?
     # TODO: how to design interface? require kwargs only?
     # TODO: how to deal with too-many?
-    # pylint: disable-next=too-many-arguments,too-many-locals
-    def __init__(  # type: ignore[misc]  # Ignore: Unavoidable for kwargs.
+    # IGNORE: Unavoidable for kwargs.
+    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments,too-many-locals
         self,
         region_graph: RegionGraph,
         *,
@@ -89,19 +90,22 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
         self.num_channels = num_channels
         self.num_classes = num_classes
 
+        # ANNOTATE: Specify content for empty container.
         self._layers: OrderedSet[SymbolicLayer] = OrderedSet()
         # The RGNode and SymbolicLayer does not map 1-to-1 but 1-to-many. This still leads to a
         # deterministic order: SymbolicLayer of different RGNode will be naturally sorted by the
         # RGNode order; SymbolicLayer of the same RGNode are adjcent, and ordered based on the order
         # of edges in the RGNode.
 
+        # ANNOTATE: Specify content for empty container.
         node_to_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.
 
         for rg_node in region_graph.nodes:
             # Cannot use a generator as layers_in, because it's used twice.
             layers_in = [node_to_layer[node_in] for node_in in rg_node.inputs]
+            # ANNOTATE: Different subclasses are assigned below.
             layer_out: SymbolicLayer
-            # Ignore: Unavoidable for kwargs.
+            # IGNORE: Unavoidable for kwargs.
             if isinstance(rg_node, RegionNode) and not rg_node.inputs:  # Input region.
                 layers_in = [
                     SymbolicInputLayer(
@@ -203,7 +207,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     """Whether the SymbC is omni-compatible, i.e., compatible to all circuits of the same scope."""
 
     def is_compatible(
-        self, other: "SymbolicTensorizedCircuit", *, scope: Optional[Iterable[int]] = None
+        self, other: "SymbolicTensorizedCircuit", /, *, scope: Optional[Iterable[int]] = None
     ) -> bool:
         """Test compatibility with another symbolic circuit over the given scope.
 
@@ -231,7 +235,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     @property
     def sum_layers(self) -> Iterator[SymbolicSumLayer]:
         """Sum layers in the circuit, which are always inner layers."""
-        # Ignore: SymbolicSumLayer contains Any.
+        # IGNORE: SymbolicSumLayer contains Any.
         return (
             layer
             for layer in self.layers
@@ -241,7 +245,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     @property
     def product_layers(self) -> Iterator[SymbolicProductLayer]:
         """Product layers in the circuit, which are always inner layers."""
-        # Ignore: SymbolicProductLayer contains Any.
+        # IGNORE: SymbolicProductLayer contains Any.
         return (
             layer
             for layer in self.layers
@@ -251,7 +255,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
     @property
     def input_layers(self) -> Iterator[SymbolicInputLayer]:
         """Input layers of the circuit."""
-        # Ignore: SymbolicInputLayer contains Any.
+        # IGNORE: SymbolicInputLayer contains Any.
         return (
             layer
             for layer in self.layers

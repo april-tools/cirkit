@@ -25,11 +25,8 @@ class TensorizedCircuit(nn.Module):
     properties. If those are really needed, use the properties of TensorizedCircuit.symb_circuit.
     """
 
-    # TODO: do we also move num_channels to SymbolicTensorizedCircuit?
     def __init__(self, symb_circuit: SymbolicTensorizedCircuit) -> None:
         """Init class.
-
-        All the other config other than num_channels should be provided to the symbolic form.
 
         Args:
             symb_circuit (SymbolicTensorizedCircuit): The symbolic version of the circuit.
@@ -45,13 +42,15 @@ class TensorizedCircuit(nn.Module):
         self.layers = nn.ModuleList()
 
         # The actual internal container for forward, preserves insertion order.
+        # ANNOTATE: Specify content for empty container.
         self._symb_to_layers: Dict[SymbolicLayer, Optional[Layer]] = {}
 
         # Both containers with have a consistent layer order by this loop.
         for symb_layer in symb_circuit.layers:
+            # ANNOTATE: Different subclasses are assigned below.
             layer: Optional[Layer]
-            # Ignore: All SymbolicLayer contains Any.
-            # Ignore: Unavoidable for kwargs.
+            # IGNORE: All SymbolicLayer contain Any.
+            # IGNORE: Unavoidable for kwargs.
             if issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicProductLayer  # type: ignore[misc]
             ):  # Sum-product fusion at prod: build the actual layer with arity of prod.
@@ -61,7 +60,7 @@ class TensorizedCircuit(nn.Module):
                     isinstance(next_layer, SymbolicSumLayer)  # type: ignore[misc]
                     and next_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
-                layer = symb_layer.layer_cls(
+                layer = symb_layer.layer_cls(  # TODO: add a function for this cls construction?
                     # TODO: is it good to use only [0]?
                     num_input_units=symb_layer.inputs[0].num_units,
                     num_output_units=next_layer.num_units,
@@ -112,7 +111,7 @@ class TensorizedCircuit(nn.Module):
         Returns:
             Tensor: The output of the circuit, shape (*B, num_out, num_cls).
         """  # TODO: single letter name?
-        # Ignore: Idiom for nn.Module.__call__.
+        # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     # TODO: do we accept each variable separately?
@@ -125,6 +124,7 @@ class TensorizedCircuit(nn.Module):
         Returns:
             Tensor: The output of the circuit, shape (*B, num_out, num_cls).
         """
+        # ANNOTATE: Specify content for empty container.
         layer_outputs: Dict[SymbolicLayer, Tensor] = {}  # shape (*B, K).
 
         for symb_layer, layer in self._symb_to_layers.items():
@@ -135,10 +135,9 @@ class TensorizedCircuit(nn.Module):
                 layer_outputs[symb_layer] = layer_outputs[symb_layer.inputs[0]]
                 continue
 
-            # Disable: Ternary will be too long for readability.
-            if isinstance(layer, InputLayer):  # pylint: disable=consider-ternary-expression
-                # TODO: mypy bug? tuple(symb_layer.scope) is inferred to Any
-                layer_input = x[..., tuple(symb_layer.scope), :].movedim(  # type: ignore[misc]
+            if isinstance(layer, InputLayer):
+                scope_idx = tuple(symb_layer.scope)  # Tensor slice does not accept iterable.
+                layer_input = x[..., scope_idx, :].movedim(
                     -2, 0
                 )  # shape (*B, D, C) -> (H=D, *B, K=C).
             else:
@@ -150,6 +149,8 @@ class TensorizedCircuit(nn.Module):
         return torch.stack(
             [layer_outputs[layer_out] for layer_out in self.symb_circuit.output_layers], dim=-2
         )  # shape num_out * (*B, K) -> (*B, num_out, num_cls=K).
+
+    #######################################    Functional    #######################################
 
     integrate = TCF.integrate
 

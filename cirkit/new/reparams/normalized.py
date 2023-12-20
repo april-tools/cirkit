@@ -1,5 +1,5 @@
 # pylint: disable=too-few-public-methods
-# Disable: For this file we disable the above because all classes trigger this but it's intended.
+# DISABLE: For this file we disable the above because all classes trigger it and it's intended.
 
 from typing import Optional, Protocol, Tuple
 
@@ -10,6 +10,9 @@ from cirkit.new.reparams.reparam import Reparameterization
 from cirkit.new.reparams.unary import UnaryReparam
 from cirkit.new.utils import flatten_dims, unflatten_dims
 
+# This file is for unary reparams that includes normalization. unary.py should be preferred for
+# simple reparams.
+
 
 class _TensorFuncWithDim(Protocol):
     """The protocol for `(Tensor, dim: int) -> Tensor`."""
@@ -18,12 +21,24 @@ class _TensorFuncWithDim(Protocol):
         ...
 
 
+class _HasDimsTuple(Protocol):
+    """The protocol providing self.dims.
+
+    See: https://mypy.readthedocs.io/en/stable/more_types.html?highlight=reveal_type#mixin-classes.
+    """
+
+    # DISABLE: It's intended to omit method docstring for this Protocol.
+    @property
+    def dims(self) -> Tuple[int, ...]:  # pylint: disable=missing-function-docstring
+        ...
+
+
 class _NormalizedReparamMixin:
     """A mixin for helpers useful for reparams with normalization on some dims."""
 
-    dims: Tuple[int, ...]
-
-    def _apply_normalizer(self, normalizer: _TensorFuncWithDim, x: Tensor, /) -> Tensor:
+    def _apply_normalizer(
+        self: _HasDimsTuple, normalizer: _TensorFuncWithDim, x: Tensor, /
+    ) -> Tensor:
         """Apply a normalizer function on a Tensor over self.dims.
 
         Args:
@@ -43,7 +58,7 @@ class _NormalizedReparamMixin:
 class SoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
     """Softmax reparameterization.
 
-    Range: (0, 1), 0 available through mask, 1 available when only one element valid.
+    Range: (0, 1), 0 available if input is masked, 1 available when only one element valid.
     Constraints: sum to 1.
     """
 
@@ -54,12 +69,10 @@ class SoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
             reparam (Optional[Reparameterization], optional): The input reparameterization to be \
                 composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
         """
-        # Softmax is just scaled exp, so we take log as inv. Mask is ignored for inv.
+        # Softmax is just scaled exp, so we take log as inv.
         super().__init__(reparam, func=self._func, inv_func=torch.log)
 
     def _func(self, x: Tensor) -> Tensor:
-        if self.log_mask is not None:
-            x = x + self.log_mask
         # torch.softmax can only accept one dim, so we need to rearrange dims.
         x = self._apply_normalizer(torch.softmax, x)
         # nan will appear when there's only 1 element and it's masked. In that case we projecte nan
@@ -70,7 +83,7 @@ class SoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
 class LogSoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
     """LogSoftmax reparameterization, which is more numarically-stable than log(softmax(...)).
 
-    Range: (-inf, 0), -inf available through mask, 0 available when only one element valid.
+    Range: (-inf, 0), -inf available if input is masked, 0 available when only one element valid.
     Constraints: logsumexp to 0.
     """
 
@@ -81,12 +94,10 @@ class LogSoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
             reparam (Optional[Reparameterization], optional): The input reparameterization to be \
                 composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
         """
-        # Log_softmax is just an offset, so we take identity as inv. Mask is ignored for inv.
+        # Log_softmax is just an offset, so we take identity as inv.
         super().__init__(reparam, func=self._func)
 
     def _func(self, x: Tensor) -> Tensor:
-        if self.log_mask is not None:
-            x = x + self.log_mask
         # torch.log_softmax can only accept one dim, so we need to rearrange dims.
         x = self._apply_normalizer(torch.log_softmax, x)
         # -inf still passes gradients, so we use a redundant projection to stop it. nan is the same

@@ -1,5 +1,5 @@
 import itertools
-from typing import List, Tuple
+from typing import Tuple
 
 from cirkit.new.region_graph.algorithms.utils import HypercubeToScope
 from cirkit.new.region_graph.region_graph import RegionGraph
@@ -80,7 +80,7 @@ def _merge_4_regions_mixed(
     return region_whole
 
 
-# Disable: We use function name with upper case to mimic a class constructor.
+# DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name
 def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGraph:
     """Construct a RG with a quad tree.
@@ -104,9 +104,7 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
     # Padding using Scope({num_var}) which is one larger than range(num_var).
     pad_scope = Scope({height * width})
     # The regions of the current layer, in shape (H, W).
-    layer: List[List[RegionNode]] = [
-        [RegionNode(pad_scope)] * (width + 1) for _ in range(height + 1)
-    ]
+    layer = [[RegionNode(pad_scope)] * (width + 1) for _ in range(height + 1)]
 
     # Add univariate input nodes.
     for i, j in itertools.product(range(height), range(width)):
@@ -115,7 +113,7 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
         graph.add_node(node)
 
     # Merge layer by layer.
-    # Disable: It's intended to use while loop.
+    # TODO: or not using while loop?
     while height > 1 or width > 1:  # pylint: disable=while-used
         prev_height = height
         prev_width = width
