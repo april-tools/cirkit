@@ -1,5 +1,3 @@
-# pylint: disable=missing-function-docstring
-# TODO: disable checking for docstrings for every test file in tests/
 import tempfile
 
 from cirkit.region_graph import PartitionNode, RegionGraph, RegionNode

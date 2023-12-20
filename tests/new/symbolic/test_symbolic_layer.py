@@ -1,5 +1,3 @@
-# pylint: disable=missing-function-docstring
-
 from typing import Dict
 
 from cirkit.new.layers import CategoricalLayer, DenseLayer, HadamardLayer, TuckerLayer

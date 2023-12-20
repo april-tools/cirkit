@@ -1,4 +1,3 @@
-# pylint: disable=missing-function-docstring,missing-return-doc
 from typing import Dict
 
 from cirkit.new.layers import CategoricalLayer, CPLayer

@@ -1,5 +1,3 @@
-# pylint: disable=missing-function-docstring
-
 from cirkit.new.region_graph import QuadTree
 from cirkit.new.symbolic import SymbolicInputLayer, SymbolicSumLayer
 from cirkit.new.utils import Scope

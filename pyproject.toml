@@ -38,6 +38,7 @@ lint = [
   "pylint~=3.0.0",
   "pydocstyle[toml]~=6.3.0",
   "pytest",  # this is required to lint the test files
+  "pylint-per-file-ignores",  # TODO: wait for native support in pylint
 ]
 test = [
   "pytest",
@@ -72,7 +73,7 @@ exclude_also = [  # regex for exclusion
 # code style
 [tool.black]
 line-length = 100
-target-version = ['py38']
+target-version = ["py38"]
 required-version = 23
 
 # import style
@@ -92,7 +93,6 @@ add_ignore = "D100,D104"
 
 # general linting
 [tool.pylint.main]
-jobs = 0
 py-version = "3.8"
 evaluation = """
   10 - 10 * min(
@@ -125,12 +125,13 @@ load-plugins = [  # as available in pylint/extensions
   "pylint.extensions.set_membership",
   "pylint.extensions.typing",
   "pylint.extensions.while_used",
+  "pylint_per_file_ignores",  # TODO: wait for native support in pylint
 ]
 [tool.pylint."messages control"]
 enable= [
   "use-implicit-booleaness-not-comparison-to-string",
   "use-implicit-booleaness-not-comparison-to-zero",
-  # "consider-using-augmented-assign",  # always inconsistent on github workflow
+  # "consider-using-augmented-assign",  # inplace operators are not always applicable
   "prefer-typing-namedtuple",
   "bad-inline-option",
   "deprecated-pragma",
@@ -142,6 +143,9 @@ disable = [
   "no-member",
   "fixme",
   "duplicate-code",
+]
+per-file-ignores = [  # TODO: wait for native support in pylint
+    "/tests/:missing-function-docstring,missing-return-doc",
 ]
 [tool.pylint.import]
 allow-reexport-from-package = true

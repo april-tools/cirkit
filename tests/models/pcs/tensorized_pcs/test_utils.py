@@ -1,5 +1,3 @@
-# pylint: disable=missing-function-docstring,missing-return-doc
-# TODO: disable checking for docstrings for every test file in tests/
 from typing import Type
 
 from cirkit.layers.input.exp_family import CategoricalLayer

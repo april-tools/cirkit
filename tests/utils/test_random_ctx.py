@@ -1,6 +1,3 @@
-# pylint: disable=missing-function-docstring,missing-return-doc
-# TODO: disable checking for docstrings for every test file in tests/
-
 import random
 from typing import Tuple
 
