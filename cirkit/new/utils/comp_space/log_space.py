@@ -6,7 +6,7 @@ from typing_extensions import TypeVarTuple, Unpack  # FUTURE: in typing from 3.1
 import torch
 from torch import Tensor
 
-from cirkit.new.utils.comp_space.comp_space import ComputationSapce, register_comp_space
+from cirkit.new.utils.comp_space.comp_space import ComputationSapce
 from cirkit.new.utils.flatten import flatten_dims, unflatten_dims
 
 Ts = TypeVarTuple("Ts")
@@ -14,12 +14,10 @@ Ts = TypeVarTuple("Ts")
 
 # TODO: ignore is bug?
 # IGNORE: The annotation for final in typeshed/typing_extensions.pyi contains Any.
-@register_comp_space
+@ComputationSapce.register("log")
 @final  # type: ignore[misc]
 class LogSpace(ComputationSapce):
     """The log space computation."""
-
-    name = "log"
 
     @classmethod
     def from_log(cls, x: Tensor) -> Tensor:
