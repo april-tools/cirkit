@@ -15,8 +15,8 @@ from cirkit.new.symbolic import (
 )
 
 
-# TODO: this final may not be wanted for user customization, but use of __class__ in TCF require it.
-# Mark this class final so that __class__ of a TensC is always TensorizedCircuit.
+# TODO: this final may not be wanted for user customization, but use of type() in TCF requires it.
+# Mark this class final so that type(TensC) is always TensorizedCircuit.
 @final
 class TensorizedCircuit(nn.Module):
     """The tensorized circuit with concrete computational graph in PyTorch.

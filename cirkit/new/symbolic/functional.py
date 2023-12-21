@@ -39,7 +39,7 @@ def integrate(
 
     scope = Scope(scope) if scope is not None else self.scope
 
-    integral = object.__new__(self.__class__)
+    integral = object.__new__(type(self))
     # Skip integral.__init__ and customize initialization as below.
 
     integral.region_graph = self.region_graph
@@ -84,7 +84,7 @@ def integrate(
                 **integral_cfg,  # type: ignore[misc]
             )
         else:
-            integral_layer = self_layer.__class__(
+            integral_layer = type(self_layer)(
                 self_layer.scope,
                 (self_to_integral[self_layer_in] for self_layer_in in self_layer.inputs),
                 num_units=self_layer.num_units,
@@ -138,7 +138,7 @@ def differentiate(
     assert order >= 0, "The order of differential must be non-negative."
     # TODO: does the following work when order=0? tests?
 
-    differential = object.__new__(self.__class__)
+    differential = object.__new__(type(self))
     # Skip differential.__init__ and customize initialization as below.
 
     differential.region_graph = self.region_graph
@@ -257,7 +257,7 @@ def differentiate(
             assert False, "This should not happen."
         # IGNORE: Unavoidable for kwargs.
         differential_layers.append(  # Append a copy of self_layer.
-            self_layer.__class__(
+            type(self_layer)(
                 self_layer.scope,
                 (self_to_differential[self_layer_in][-1] for self_layer_in in self_layer.inputs),
                 num_units=self_layer.num_units,
@@ -299,7 +299,7 @@ def product(
         other, scope=scope
     ), "Product could only perform on compatible circuits."
 
-    product_circuit = object.__new__(self.__class__)
+    product_circuit = object.__new__(type(self))
 
     product_circuit.region_graph = self.region_graph  # TODO: implement different-scope product
     # TODO: do we need region graph? region graph is not self!
@@ -329,7 +329,7 @@ def product(
         """Copy layers into the new circuit."""
         for layer in circuit._layers:
             if layer.scope <= scope:
-                new_layer = layer.__class__(
+                new_layer = type(layer)(
                     layer.scope,
                     (
                         self_to_product[layer_in] if circuit_is_self else other_to_product[layer_in]

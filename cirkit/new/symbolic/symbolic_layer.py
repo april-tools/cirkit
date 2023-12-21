@@ -62,7 +62,7 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes,too-fe
             str: The str representation of the layer.
         """
         repr_kv = ", ".join(f"{k}={v}" for k, v in self._repr_dict.items())
-        return f"{self.__class__.__name__}@0x{id(self):x}({repr_kv})"
+        return f"{type(self).__name__}@0x{id(self):x}({repr_kv})"
 
     # We use an abstract instead of direct attribute so that this class includes an abstract method.
     # NOTE: Use object to avoid Any. object is sufficient because we only need __repr__.

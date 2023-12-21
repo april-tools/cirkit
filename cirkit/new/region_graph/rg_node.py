@@ -45,7 +45,7 @@ class RGNode(ABC):
         Returns:
             str: The str representation of the node.
         """
-        return f"{self.__class__.__name__}@0x{id(self):x}({self.scope})"
+        return f"{type(self).__name__}@0x{id(self):x}({self.scope})"
 
     # __hash__ and __eq__ are defined by default to compare on object identity, i.e.,
     # (a is b) <=> (a == b) <=> (hash(a) == hash(b)).
@@ -78,9 +78,9 @@ class RGNode(ABC):
         # A trick to compare classes: if the class name is equal, then the class is the same;
         # otherwise "P" < "R" and PartitionNode < RegionNode, so comparison of class names works.
         # And amazingly, all possible types in metadata are comparable.
-        return (self.scope, self.__class__.__name__, self.metadata.get("sort_key", -1)) < (
+        return (self.scope, type(self).__name__, self.metadata.get("sort_key", -1)) < (
             other.scope,
-            other.__class__.__name__,
+            type(other).__name__,
             other.metadata.get("sort_key", -1),
         )
 

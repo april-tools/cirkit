@@ -22,7 +22,7 @@ from cirkit.new.utils.type_aliases import OptReparamFactory, ReparamFactory
 # TODO: __repr__?
 
 
-# Mark this class final so that __class__ of a SymbC is always SymbolicTensorizedCircuit.
+# Mark this class final so that type(SymbC) is always SymbolicTensorizedCircuit.
 # DISABLE: It's designed to have these attributes.
 # IGNORE: Unavoidable for kwargs.
 @final  # type: ignore[misc]
