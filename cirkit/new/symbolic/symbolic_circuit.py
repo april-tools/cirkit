@@ -1,14 +1,7 @@
-from typing import Any, Dict, Iterable, Iterator, Optional, Type, Union, final
+from typing import Any, Dict, Iterable, Iterator, Optional, Type, final
 
 import cirkit.new.symbolic.functional as STCF  # SymbolicTensorizedCircuit functional.
-from cirkit.new.layers import (
-    DenseLayer,
-    InputLayer,
-    MixingLayer,
-    ProductLayer,
-    SumLayer,
-    SumProductLayer,
-)
+from cirkit.new.layers import DenseLayer, InputLayer, MixingLayer, ProductLayer, SumLayer
 from cirkit.new.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
@@ -46,10 +39,10 @@ class SymbolicTensorizedCircuit:
         input_layer_cls: Type[InputLayer],
         input_layer_kwargs: Optional[Dict[str, Any]] = None,
         input_reparam: OptReparamFactory = lambda: None,
-        sum_layer_cls: Type[Union[SumLayer, SumProductLayer]],
+        sum_layer_cls: Type[SumLayer],
         sum_layer_kwargs: Optional[Dict[str, Any]] = None,
         sum_reparam: ReparamFactory,
-        prod_layer_cls: Type[Union[ProductLayer, SumProductLayer]],
+        prod_layer_cls: Type[ProductLayer],
         prod_layer_kwargs: Optional[Dict[str, Any]] = None,
     ):
         """Construct symbolic circuit from a region graph.
@@ -69,16 +62,15 @@ class SymbolicTensorizedCircuit:
             input_reparam (OptReparamFactory, optional): The factory to construct \
                 reparameterizations for input layer parameters, can produce None if no params \
                 needed. Defaults to lambda: None.
-            sum_layer_cls (Type[Union[SumLayer, SumProductLayer]]): The layer class for sum \
-                layers, can be either just a class of SumLayer, or a class of SumProductLayer to \
-                indicate layer fusion.
+            sum_layer_cls (Type[SumLayer]): The layer class for sum layers, can be either just a \
+                class of SumLayer, or a class of SumProductLayer to indicate layer fusion.
             sum_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for sum \
                 layer class. Defaults to None.
             sum_reparam (ReparamFactory): The factory to construct reparameterizations for sum \
                 layer parameters.
-            prod_layer_cls (Type[Union[ProductLayer, SumProductLayer]]): The layer class for \
-                product layers, can be either just a class of ProductLayer, or a class of \
-                SumProductLayer to indicate layer fusion.
+            prod_layer_cls (Type[ProductLayer]): The layer class for product layers, can be either \
+                just a class of ProductLayer, or a class of SumProductLayer to indicate layer \
+                fusion.
             prod_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
                 product layer class, will be ignored if SumProductLayer is used. Defaults to None.
         """

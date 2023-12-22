@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, List, Optional, Type, Union
+from typing import Any, Dict, Iterable, List, Optional, Type
 
-from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer, SumProductLayer
+from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils import Scope
 
@@ -83,8 +83,7 @@ class SymbolicSumLayer(SymbolicLayer):
     """The sum layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
-    layer_cls: Type[Union[SumLayer, SumProductLayer]]
-    reparam: Reparameterization  # Sum layer always have params.
+    layer_cls: Type[SumLayer]
 
     # Note that the typing for layers_in cannot be refined because all layers are mixed in one
     # container in SymbolicCircuit. Same the following two layers.
@@ -97,9 +96,9 @@ class SymbolicSumLayer(SymbolicLayer):
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cls: Type[Union[SumLayer, SumProductLayer]],
+        layer_cls: Type[SumLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: Reparameterization,
+        reparam: Optional[Reparameterization] = None,
     ) -> None:
         """Construct the SymbolicSumLayer.
 
@@ -107,12 +106,12 @@ class SymbolicSumLayer(SymbolicLayer):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[Union[SumLayer, SumProductLayer]]): The concrete layer class to \
-                become, can be either just a class of SumLayer, or a class of SumProductLayer to \
-                indicate layer fusion.
+            layer_cls (Type[SumLayer]): The concrete layer class to become, can be either just a \
+                class of SumLayer, or a class of SumProductLayer to indicate layer fusion.
             layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
                 layer_cls. Defaults to None.
-            reparam (Reparameterization): The reparameterization for layer parameters.
+            reparam (Optional[Reparameterization], optional): The reparameterization for layer \
+                parameters, can be None if layer_cls has no params. Defaults to None.
         """
         # IGNORE: Unavoidable for kwargs.
         super().__init__(
@@ -145,8 +144,7 @@ class SymbolicProductLayer(SymbolicLayer):
     """The product layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
-    layer_cls: Type[Union[ProductLayer, SumProductLayer]]
-    reparam: None  # Product layer has no params.
+    layer_cls: Type[ProductLayer]
 
     # DISABLE: It's designed to have these arguments.
     # IGNORE: Unavoidable for kwargs.
@@ -157,7 +155,7 @@ class SymbolicProductLayer(SymbolicLayer):
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cls: Type[Union[ProductLayer, SumProductLayer]],
+        layer_cls: Type[ProductLayer],
         layer_kwargs: Optional[Dict[str, Any]] = None,
         reparam: Optional[Reparameterization] = None,
     ) -> None:
@@ -167,9 +165,8 @@ class SymbolicProductLayer(SymbolicLayer):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[Union[ProductLayer, SumProductLayer]]): The concrete layer class to \
-                become, can be either just a class of ProductLayer, or a class of SumProductLayer \
-                to indicate layer fusion.
+            layer_cls (Type[ProductLayer]): The concrete layer class to become, can be either just \
+                a class of ProductLayer, or a class of SumProductLayer to indicate layer fusion.
             layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
                 layer_cls. Defaults to None.
             reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
@@ -205,7 +202,6 @@ class SymbolicInputLayer(SymbolicLayer):
 
     # The following attrs have more specific typing.
     layer_cls: Type[InputLayer]
-    reparam: Optional[Reparameterization]  # Input layer may or may not have params.
 
     # DISABLE: It's designed to have these arguments.
     # IGNORE: Unavoidable for kwargs.

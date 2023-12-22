@@ -1,4 +1,4 @@
-from typing import Any, Dict, Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, Literal, Optional, Tuple, Type
 
 import torch
 from torch import Tensor
@@ -10,7 +10,6 @@ from cirkit.new.layers import (
     NormalLayer,
     ProductLayer,
     SumLayer,
-    SumProductLayer,
 )
 from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import QuadTree
@@ -29,10 +28,10 @@ def get_circuit_2x2_fullcfg(  # type: ignore[misc]
     input_layer_cls: Type[InputLayer] = CategoricalLayer,
     input_layer_kwargs: Optional[Dict[str, Any]] = {"num_categories": 2},
     input_reparam: OptReparamFactory = LogSoftmaxReparam,
-    sum_layer_cls: Type[Union[SumLayer, SumProductLayer]] = CPLayer,
+    sum_layer_cls: Type[SumLayer] = CPLayer,
     sum_layer_kwargs: Optional[Dict[str, Any]] = {},
     sum_reparam: ReparamFactory = LeafReparam,
-    prod_layer_cls: Type[Union[ProductLayer, SumProductLayer]] = CPLayer,
+    prod_layer_cls: Type[ProductLayer] = CPLayer,
     prod_layer_kwargs: Optional[Dict[str, Any]] = {},
 ) -> TensorizedCircuit:
     rg = QuadTree((2, 2), struct_decomp=False)
