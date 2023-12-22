@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Iterable
+from functools import cached_property
+from typing import Iterable, cast
 
 from cirkit.new.utils import OrderedSet, Scope
 from cirkit.new.utils.type_aliases import RGNodeMetadata
@@ -8,8 +9,6 @@ from cirkit.new.utils.type_aliases import RGNodeMetadata
 class RGNode(ABC):
     """The abstract base class for nodes in region graphs."""
 
-    # We enforce __init__ to be abstract so that RGNode cannot be instantiated.
-    @abstractmethod
     def __init__(self, scope: Iterable[int]) -> None:
         """Init class.
 
@@ -20,13 +19,25 @@ class RGNode(ABC):
         self.scope = Scope(scope)
         assert self.scope, "The scope of a node in RG must not be empty."
 
-        # The edge tables are initiated empty because a node may be contructed without the whole RG.
-        # ANNOTATE: Specify content for empty container.
-        self.inputs: OrderedSet[RGNode] = OrderedSet()
-        self.outputs: OrderedSet[RGNode] = OrderedSet()
-
         # NOTE: metadata is used for anything that is not part of the RG but is useful for node.
         self.metadata: RGNodeMetadata = {}
+
+    # NOTE: These two edge tables are initiated empty because a node may be contructed without
+    #       knowing the whole RG structure.
+    #       We use cached_property and construct an empty container inside, to achieve:
+    #       - No _inputs/_outputs is explicitly needed;
+    #       - The same mutable object is returned every time the property is accessed.
+    @cached_property
+    @abstractmethod
+    def inputs(self) -> OrderedSet["RGNode"]:
+        """The input nodes of this node."""
+        return OrderedSet()
+
+    @cached_property
+    @abstractmethod
+    def outputs(self) -> OrderedSet["RGNode"]:
+        """The output nodes of this node."""
+        return OrderedSet()
 
     def __repr__(self) -> str:
         """Generate the repr string of the node.
@@ -74,37 +85,36 @@ class RGNode(ABC):
         )
 
 
-# DISABLE: It's designed to have these methods.
-class RegionNode(RGNode):  # pylint: disable=too-few-public-methods
+# In the following RGNode subclasses we simply force a narrowed type on inputs/outputs, while
+# concretizing the abstract methods. All the actual implementation is already in RGNode.
+# CAST: We know a narrower type so we enforce the narrowing.
+# IGNORE: Mutable container is invariant, and is typically incompatible with another, but we know
+#         it's correct here.
+
+
+class RegionNode(RGNode):
     """The region node in the region graph."""
 
-    # IGNORE: Mutable containers are invariant, so there's no other choice.
-    inputs: OrderedSet["PartitionNode"]  # type: ignore[assignment]
-    outputs: OrderedSet["PartitionNode"]  # type: ignore[assignment]
+    @cached_property
+    def inputs(self) -> OrderedSet["PartitionNode"]:  # type: ignore[override]
+        """The input nodes of this node."""
+        return cast(OrderedSet[PartitionNode], super().inputs)
 
-    # TODO: better way to impl this? we must have an abstract method in RGNode
-    def __init__(self, scope: Iterable[int]) -> None:  # pylint: disable=useless-parent-delegation
-        """Init class.
-
-        Args:
-            scope (Iterable[int]): The scope of this node.
-        """
-        super().__init__(scope)
+    @cached_property
+    def outputs(self) -> OrderedSet["PartitionNode"]:  # type: ignore[override]
+        """The output nodes of this node."""
+        return cast(OrderedSet[PartitionNode], super().outputs)
 
 
-# DISABLE: It's designed to have these methods.
-class PartitionNode(RGNode):  # pylint: disable=too-few-public-methods
+class PartitionNode(RGNode):
     """The partition node in the region graph."""
 
-    # IGNORE: Mutable containers are invariant, so there's no other choice.
-    inputs: OrderedSet["RegionNode"]  # type: ignore[assignment]
-    outputs: OrderedSet["RegionNode"]  # type: ignore[assignment]
+    @cached_property
+    def inputs(self) -> OrderedSet["RegionNode"]:  # type: ignore[override]
+        """The input nodes of this node."""
+        return cast(OrderedSet[RegionNode], super().inputs)
 
-    # TODO: better way to impl this? we must have an abstract method in RGNode
-    def __init__(self, scope: Iterable[int]) -> None:  # pylint: disable=useless-parent-delegation
-        """Init class.
-
-        Args:
-            scope (Iterable[int]): The scope of this node.
-        """
-        super().__init__(scope)
+    @cached_property
+    def outputs(self) -> OrderedSet["RegionNode"]:  # type: ignore[override]
+        """The output nodes of this node."""
+        return cast(OrderedSet[RegionNode], super().outputs)
