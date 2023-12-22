@@ -160,9 +160,21 @@ def PoonDomingos(
     queue.append(cur_hypercube)
     depth_dict[cur_hypercube] = 0
 
-    # DISABLE: It's intended to use while loop.
-    while queue:  # pylint: disable=while-used
-        cur_hypercube = queue.popleft()
+    # DISABLE: This is considered a constant.
+    SENTINEL = ((-1,) * len(shape), (-1,) * len(shape))  # pylint: disable=invalid-name
+
+    def queue_popleft() -> HyperCube:
+        """Wrap queue.popleft() with sentinel value.
+
+        Returns:
+            HyperCube: The result of queue.popleft(), or SENTINEL when queue is exhausted.
+        """
+        try:
+            return queue.popleft()
+        except IndexError:
+            return SENTINEL
+
+    for cur_hypercube in iter(queue_popleft, SENTINEL):
         if depth_dict[cur_hypercube] > max_depth:
             continue
 
