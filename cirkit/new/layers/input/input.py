@@ -42,12 +42,9 @@ class InputLayer(Layer):
         )
 
     # TODO: enable integ on part of H dim? if yes, also lift assert subset in functional
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
     @abstractmethod
-    def get_integral(  # type: ignore[misc]
-        cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg["InputLayer"]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg["InputLayer"]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -57,10 +54,9 @@ class InputLayer(Layer):
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
     @abstractmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg["InputLayer"]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \

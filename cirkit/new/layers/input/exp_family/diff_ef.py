@@ -1,4 +1,4 @@
-from typing import Any, Dict, Type, cast
+from typing import Any, Dict, Type
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
@@ -115,11 +115,8 @@ class DiffEFLayer(InputLayer):
             self.comp_space.from_log(log_p), self.comp_space.from_linear(g_factor)
         )
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]
-        cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -133,9 +130,8 @@ class DiffEFLayer(InputLayer):
         """
         raise NotImplementedError("The integral of DiffEFLayer is not yet defined.")
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -158,8 +154,7 @@ class DiffEFLayer(InputLayer):
         # TODO: duplicate code?
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: variance issue
-            return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
+            return symb_cfg
 
         # TODO: for same var_idx and ch_idx, can reuse the same symb_cfg with only order increased.
 

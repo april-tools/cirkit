@@ -1,6 +1,6 @@
 import functools
 from abc import abstractmethod
-from typing import Tuple, cast
+from typing import Tuple
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
@@ -142,11 +142,8 @@ class ExpFamilyLayer(InputLayer):
             Tensor: The log partition function A, shape (H, K).
         """
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]
-        cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -157,19 +154,16 @@ class ExpFamilyLayer(InputLayer):
         """
         # TODO: for unnormalized EF, should be ParameterizedConstantLayer
         # We have already normalized with log_partition in forward(), so integral is always 1.
-        # IGNORE: SymbLayerCfg contains Any.
-        return {  # type: ignore[misc]
-            "layer_cls": ConstantLayer,
-            "layer_kwargs": {"const_value": 1.0},
-            "reparam": None,
-        }
+        # IGNORE: Unavoidable for kwargs.
+        return SymbLayerCfg(
+            layer_cls=ConstantLayer, layer_kwargs={"const_value": 1.0}  # type: ignore[misc]
+        )
 
     # NOTE: Here we define the differential of all EF layers, but some subclasses, e.g. Categorical,
     #       should not have differentials due to discrete variable. Those subclasses should override
     #       this method and raise an error.
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -188,23 +182,23 @@ class ExpFamilyLayer(InputLayer):
         """
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: variance issue
-            return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
+            return symb_cfg
 
         # TODO: pylint bug? should not raise cyclic-import?
         # DISABLE: We must import here to avoid cyclic import.
         # pylint: disable-next=import-outside-toplevel,cyclic-import
         from cirkit.new.layers.input.exp_family.diff_ef import DiffEFLayer
 
-        # IGNORE: SymbLayerCfg contains Any.
-        return {  # type: ignore[misc]
-            "layer_cls": DiffEFLayer,
-            "layer_kwargs": {
-                "ef_cls": symb_cfg["layer_cls"],  # type: ignore[misc]
-                "ef_kwargs": symb_cfg["layer_kwargs"],  # type: ignore[misc]
+        # IGNORE: DiffEFLayer contains Any.
+        # IGNORE: Unavoidable for kwargs.
+        return SymbLayerCfg(
+            layer_cls=DiffEFLayer,  # type: ignore[misc]
+            layer_kwargs={
+                "ef_cls": symb_cfg.layer_cls,
+                "ef_kwargs": symb_cfg.layer_kwargs,  # type: ignore[misc]
                 "order": order,
                 "var_idx": var_idx,
                 "ch_idx": ch_idx,
             },
-            "reparam": symb_cfg["reparam"],  # type: ignore[misc]
-        }
+            reparam=symb_cfg.reparam,  # Reuse the same reparam to share params.
+        )

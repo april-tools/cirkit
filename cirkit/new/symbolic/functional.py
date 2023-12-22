@@ -4,6 +4,7 @@
 
 import heapq
 import itertools
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from cirkit.new.layers import KroneckerLayer, ProdEFLayer
@@ -15,6 +16,7 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicSumLayer,
 )
 from cirkit.new.utils import OrderedSet, Scope
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
     from cirkit.new.symbolic.symbolic_circuit import SymbolicTensorizedCircuit
@@ -61,7 +63,6 @@ def integrate(
         # ANNOTATE: Different subclasses are assigned below.
         integral_layer: SymbolicLayer
         # IGNORE: SymbolicInputLayer contains Any.
-        # IGNORE: SymbLayerCfg contains Any.
         # IGNORE: Unavoidable for kwargs.
         if (
             isinstance(self_layer, SymbolicInputLayer)  # type: ignore[misc]
@@ -70,18 +71,20 @@ def integrate(
             assert (
                 self_layer.scope <= scope
             ), "The scope of an input layer must be either all marginalized or all not."
-            integral_cfg = self_layer.layer_cls.get_integral(  # type: ignore[misc]
-                {  # type: ignore[misc]
-                    "layer_cls": self_layer.layer_cls,
-                    "layer_kwargs": self_layer.layer_kwargs,
-                    "reparam": self_layer.reparam,
-                }
+            integral_cfg = self_layer.layer_cls.get_integral(
+                SymbLayerCfg(
+                    layer_cls=self_layer.layer_cls,
+                    layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
+                    reparam=self_layer.reparam,
+                )
             )
             integral_layer = SymbolicInputLayer(
                 self_layer.scope,
                 (),
                 num_units=self_layer.num_units,
-                **integral_cfg,  # type: ignore[misc]
+                layer_cls=integral_cfg.layer_cls,
+                layer_kwargs=integral_cfg.layer_kwargs,  # type: ignore[misc]
+                reparam=integral_cfg.reparam,
             )
         else:
             integral_layer = type(self_layer)(
@@ -160,7 +163,6 @@ def differentiate(
         # ANNOTATE: Different subclasses are assigned below.
         differential_layers: List[SymbolicLayer]
         # IGNORE: All SymbolicLayer contain Any.
-        # IGNORE: SymbLayerCfg contains Any.
         # IGNORE: Unavoidable for kwargs.
         if isinstance(self_layer, SymbolicInputLayer):  # type: ignore[misc]
             differential_layers = [
@@ -168,15 +170,17 @@ def differentiate(
                     self_layer.scope,
                     (),
                     num_units=self_layer.num_units,
-                    **self_layer.layer_cls.get_partial(
-                        {  # type: ignore[misc]
-                            "layer_cls": self_layer.layer_cls,
-                            "layer_kwargs": self_layer.layer_kwargs,
-                            "reparam": self_layer.reparam,
-                        },
-                        order=order,
-                        var_idx=var_idx,
-                        ch_idx=ch_idx,
+                    **asdict(
+                        self_layer.layer_cls.get_partial(
+                            SymbLayerCfg(
+                                layer_cls=self_layer.layer_cls,
+                                layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
+                                reparam=self_layer.reparam,
+                            ),
+                            order=order,
+                            var_idx=var_idx,
+                            ch_idx=ch_idx,
+                        )
                     ),
                 )
                 for var_idx, ch_idx in itertools.product(
@@ -272,6 +276,7 @@ def differentiate(
     return differential
 
 
+# TODO: do we use SymbLayerCfg?
 # TODO: refactor: fixed too complex and too many statements
 # pylint: disable-next=too-complex,too-many-statements
 def product(

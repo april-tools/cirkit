@@ -127,11 +127,8 @@ class ProdEFLayer(ExpFamilyLayer):
 
         return self.ef1.log_partition(eta1) + self.ef2.log_partition(eta2)
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]
-        cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -147,9 +144,8 @@ class ProdEFLayer(ExpFamilyLayer):
             "The integral of ProdEFLayer other than categorical and normal is not yet defined."
         )
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -171,15 +167,11 @@ class ProdEFLayer(ExpFamilyLayer):
         """
         # TODO: support nested ProdEFLayer (3 or more products)
         # TODO: how to check continuous/discrete distribution
-        # IGNORE: SymbLayerCfg contains Any.
-        layer_kwargs = symb_cfg.get("layer_kwargs", {})  # type: ignore[misc]
+        # IGNORE: Unavoidable for kwargs.
         if CategoricalLayer in (
-            layer_kwargs.get("ef1_cls"),  # type: ignore[misc]
-            layer_kwargs.get("ef2_cls"),  # type: ignore[misc]
+            symb_cfg.layer_kwargs.get("ef1_cls"),  # type: ignore[misc]
+            symb_cfg.layer_kwargs.get("ef2_cls"),  # type: ignore[misc]
         ):
             raise TypeError("Cannot differentiate over discrete variables.")
 
-        # TODO: variance issue
-        return super().get_partial(
-            symb_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx  # type: ignore[misc]
-        )
+        return super().get_partial(symb_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx)

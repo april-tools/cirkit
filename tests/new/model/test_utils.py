@@ -15,7 +15,7 @@ from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import QuadTree
 from cirkit.new.reparams import EFNormalReparam, LeafReparam, LogSoftmaxReparam
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
-from cirkit.new.utils.type_aliases import OptReparamFactory, ReparamFactory
+from cirkit.new.utils.type_aliases import ReparamFactory
 
 
 # pylint: disable-next=too-many-arguments,dangerous-default-value
@@ -27,7 +27,7 @@ def get_circuit_2x2_fullcfg(  # type: ignore[misc]
     num_classes: int = 1,
     input_layer_cls: Type[InputLayer] = CategoricalLayer,
     input_layer_kwargs: Optional[Dict[str, Any]] = {"num_categories": 2},
-    input_reparam: OptReparamFactory = LogSoftmaxReparam,
+    input_reparam: ReparamFactory = LogSoftmaxReparam,
     sum_layer_cls: Type[SumLayer] = CPLayer,
     sum_layer_kwargs: Optional[Dict[str, Any]] = {},
     sum_reparam: ReparamFactory = LeafReparam,

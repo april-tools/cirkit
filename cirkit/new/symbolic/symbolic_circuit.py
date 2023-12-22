@@ -10,7 +10,7 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicSumLayer,
 )
 from cirkit.new.utils import OrderedSet, Scope
-from cirkit.new.utils.type_aliases import OptReparamFactory, ReparamFactory
+from cirkit.new.utils.type_aliases import ReparamFactory
 
 # TODO: __repr__?
 
@@ -38,7 +38,7 @@ class SymbolicTensorizedCircuit:
         num_classes: int = 1,
         input_layer_cls: Type[InputLayer],
         input_layer_kwargs: Optional[Dict[str, Any]] = None,
-        input_reparam: OptReparamFactory = lambda: None,
+        input_reparam: ReparamFactory = lambda: None,
         sum_layer_cls: Type[SumLayer],
         sum_layer_kwargs: Optional[Dict[str, Any]] = None,
         sum_reparam: ReparamFactory,
@@ -59,9 +59,9 @@ class SymbolicTensorizedCircuit:
             input_layer_cls (Type[InputLayer]): The layer class for input layers.
             input_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
                 input layer class. Defaults to None.
-            input_reparam (OptReparamFactory, optional): The factory to construct \
-                reparameterizations for input layer parameters, can produce None if no params \
-                needed. Defaults to lambda: None.
+            input_reparam (ReparamFactory, optional): The factory to construct reparameterizations \
+                for input layer parameters, can produce None if no params needed. \
+                Defaults to lambda: None.
             sum_layer_cls (Type[SumLayer]): The layer class for sum layers, can be either just a \
                 class of SumLayer, or a class of SumProductLayer to indicate layer fusion.
             sum_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for sum \

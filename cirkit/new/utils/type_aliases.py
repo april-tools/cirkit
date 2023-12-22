@@ -1,10 +1,22 @@
-from typing import TYPE_CHECKING, Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union
+from dataclasses import dataclass, field
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Type,
+    TypedDict,
+    TypeVar,
+    Union,
+)
+from typing_extensions import NotRequired  # FUTURE: in typing from 3.11
 from typing_extensions import TypeAlias  # FUTURE: in typing from 3.10, deprecated in 3.12
-from typing_extensions import TypedDict  # FUTURE: in typing from 3.11 for generic TypedDict
-from typing_extensions import NotRequired, Required  # FUTURE: in typing from 3.11
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
-    # NOTE: The following must be quoted in type annotations.
+    # NOTE: For safety, anything from cirkit should be imported here.
     from cirkit.new.layers import Layer
     from cirkit.new.reparams import Reparameterization
 
@@ -51,21 +63,32 @@ class RegionGraphJson(TypedDict):
     graph: List[PartitionDict]
 
 
-ReparamFactory: TypeAlias = Callable[[], "Reparameterization"]
-OptReparamFactory: TypeAlias = Callable[[], Optional["Reparameterization"]]
+# We allow None here because all abstract bases of Layer accepts it.
+ReparamFactory: TypeAlias = Callable[[], Optional["Reparameterization"]]
 
 
+# For subclass compatibility, covariance is needed.
 LayerT_co = TypeVar("LayerT_co", bound="Layer", covariant=True)
 
 
-# We need a covariant LayerT_co for subclass compatibility. Also, we don't expect this dict to
-# behave as mutable, so covariance can be safe to adopt.
-class SymbLayerCfg(TypedDict, Generic[LayerT_co], total=False):
-    """The config of a layer in symbolic form, which is part of SymbolicLayer constructor.
+# NOTE: We add frozen=True because this should be immutable. Also covariant TypeVar should only
+#       appear in immutable generic classes.
+# FUTURE: kw_only=True in 3.10
+# IGNORE: SymbLayerCfg contains Any (due to kwargs).
+@dataclass(frozen=True)  # type: ignore[misc]
+class SymbLayerCfg(Generic[LayerT_co]):  # type: ignore[misc]
+    """The config of a layer in symbolic form, which is part of SymbolicLayer constructor that \
+    saves the info of the corresponding Layer.
 
-    We make it generic so that it can be specific on a Layer subclass.
+    The reparam can be provided as a factory function, for use as a configuration on how to \
+    construct a reparam instance when we want a different instance each time. But in a SymbLayer, \
+    an instantiated reparam should be used, so that the same instance can be reused if needed.
+
+    We make this class generic so that it can be specific on a Layer subclass.
     """
 
-    layer_cls: Required[Type[LayerT_co]]
-    layer_kwargs: Dict[str, Any]
-    reparam: Optional["Reparameterization"]
+    layer_cls: Type[LayerT_co]
+    # IGNORE: Unavoidable for kwargs.
+    layer_kwargs: Dict[str, Any] = field(default_factory=dict)  # type: ignore[misc]
+    reparam: Optional["Reparameterization"] = None
+    # reparam_factory: Optional[ReparamFactory] = None  # TODO: to be enabled
