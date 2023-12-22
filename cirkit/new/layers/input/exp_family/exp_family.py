@@ -189,13 +189,11 @@ class ExpFamilyLayer(InputLayer):
         # pylint: disable-next=import-outside-toplevel,cyclic-import
         from cirkit.new.layers.input.exp_family.diff_ef import DiffEFLayer
 
-        # IGNORE: DiffEFLayer contains Any.
         # IGNORE: Unavoidable for kwargs.
         return SymbLayerCfg(
-            layer_cls=DiffEFLayer,  # type: ignore[misc]
-            layer_kwargs={
-                "ef_cls": symb_cfg.layer_cls,
-                "ef_kwargs": symb_cfg.layer_kwargs,  # type: ignore[misc]
+            layer_cls=DiffEFLayer,
+            layer_kwargs={  # type: ignore[misc]
+                "ef_cfg": symb_cfg,
                 "order": order,
                 "var_idx": var_idx,
                 "ch_idx": ch_idx,

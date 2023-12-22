@@ -1,29 +1,34 @@
+# pylint: disable=too-few-public-methods
+# DISABLE: For this file we disable the above because all classes except for the generic base
+#          trigger it and it's intended.
+
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, List, Optional, Type
+from typing import Dict, Generic, Iterable, List, TypeVar
 
 from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer
-from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils import Scope
+from cirkit.new.utils.type_aliases import SymbLayerCfg
+
+LayerT_co = TypeVar("LayerT_co", bound=Layer, covariant=True)
 
 
-# DISABLE: It's designed to have these attributes and methods.
-# pylint: disable-next=too-many-instance-attributes,too-few-public-methods
-class SymbolicLayer(ABC):
-    """The abstract base class for symbolic layers in symbolic circuits."""
+# NOTE: This is generic corresponding to SymbLayerCfg, so that subclasses can refine internal types.
+#       In most cases we use SymbolicLayer instead of GenericSymbolicLayer, so this class is not
+#       included in __init__.py. Yet we still name it as public in case it need to be used.
+class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
+    """The abstract base class for symbolic layers in symbolic circuits, with generics over the \
+    concrete Layer class."""
 
-    # We accept structure as positional args, and layer spec as kw-only.
-    # DISABLE: It's designed to have these arguments.
-    # IGNORE: Unavoidable for kwargs.
-    # pylint: disable-next=too-many-arguments
-    def __init__(  # type: ignore[misc]
+    # We accept structure as positional args, and layer config as kw-only.
+    # NOTE: The layers_in may contain any Layer, not just LayerT_co, because all layers can be used
+    #       mixed in SymbC.
+    def __init__(
         self,
         scope: Scope,
         layers_in: Iterable["SymbolicLayer"],
         *,
         num_units: int,
-        layer_cls: Type[Layer],
-        layer_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: Optional[Reparameterization] = None,
+        layer_cfg: SymbLayerCfg[LayerT_co],
     ) -> None:
         """Construct the SymbolicLayer.
 
@@ -31,11 +36,7 @@ class SymbolicLayer(ABC):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer, empty for input layers.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[Layer]): The concrete layer class to become.
-            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
-                layer_cls. Defaults to None.
-            reparam (Optional[Reparameterization], optional): The reparameterization for layer \
-                parameters, can be None if layer_cls has no params. Defaults to None.
+            layer_cfg (SymbLayerCfg[LayerT_co]): The config for the concrete layer in symbolic form.
         """
         super().__init__()
         self.scope = scope
@@ -44,18 +45,28 @@ class SymbolicLayer(ABC):
         # another layer's layers_in. No need to de-duplicate, so prefer list over OrderedSet. Both
         # lists automatically gain a consistent ordering with RGNode edge tables by design.
         # ANNOTATE: Specify content for empty container.
-        self.inputs: List[SymbolicLayer] = []
-        self.outputs: List[SymbolicLayer] = []
+        self.inputs: List["SymbolicLayer"] = []
+        self.outputs: List["SymbolicLayer"] = []
         for layer_in in layers_in:
             self.inputs.append(layer_in)
             layer_in.outputs.append(self)
 
         self.arity = len(self.inputs)
         self.num_units = num_units
-        self.layer_cls = layer_cls
+        # A SymbLayer instance should bind to a reparam instance but not just factory, to enable
+        # reusing the same reparam in transforms.
         # IGNORE: Unavoidable for kwargs.
-        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}  # type: ignore[misc]
-        self.reparam = reparam
+        self.layer_cfg = (
+            SymbLayerCfg(  # TODO: better way to construct SymbLayerCfg than untyped replace?
+                layer_cls=layer_cfg.layer_cls,
+                layer_kwargs=layer_cfg.layer_kwargs,  # type: ignore[misc]
+                reparam=layer_cfg.reparam_factory(),
+                reparam_factory=None,
+            )
+            if layer_cfg.reparam_factory is not None
+            else layer_cfg
+        )
+        self.layer_cls = layer_cfg.layer_cls  # Commonly used, so shorten reference.
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
@@ -63,6 +74,7 @@ class SymbolicLayer(ABC):
         Returns:
             str: The str representation of the layer.
         """
+        # TODO: line folding of the repr string?
         repr_kv = ", ".join(f"{k}={v}" for k, v in self._repr_dict.items())
         return f"{type(self).__name__}@0x{id(self):x}({repr_kv})"
 
@@ -77,28 +89,21 @@ class SymbolicLayer(ABC):
     # (a is b) <=> (a == b) <=> (hash(a) == hash(b)).
 
 
-# DISABLE: It's designed to have these methods.
-# pylint: disable-next=too-few-public-methods
-class SymbolicSumLayer(SymbolicLayer):
+# This is a specialized version of the generic one, serving as the base of all possible SymbL.
+SymbolicLayer = GenericSymbolicLayer[Layer]
+"""The abstract base class for symbolic layers in symbolic circuits."""
+
+
+class SymbolicSumLayer(GenericSymbolicLayer[SumLayer]):
     """The sum layer in symbolic circuits."""
 
-    # The following attrs have more specific typing.
-    layer_cls: Type[SumLayer]
-
-    # Note that the typing for layers_in cannot be refined because all layers are mixed in one
-    # container in SymbolicCircuit. Same the following two layers.
-    # DISABLE: It's designed to have these arguments.
-    # IGNORE: Unavoidable for kwargs.
-    # pylint: disable-next=too-many-arguments
-    def __init__(  # type: ignore[misc]
+    def __init__(
         self,
         scope: Scope,
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cls: Type[SumLayer],
-        layer_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: Optional[Reparameterization] = None,
+        layer_cfg: SymbLayerCfg[SumLayer],
     ) -> None:
         """Construct the SymbolicSumLayer.
 
@@ -106,58 +111,34 @@ class SymbolicSumLayer(SymbolicLayer):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[SumLayer]): The concrete layer class to become, can be either just a \
-                class of SumLayer, or a class of SumProductLayer to indicate layer fusion.
-            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
-                layer_cls. Defaults to None.
-            reparam (Optional[Reparameterization], optional): The reparameterization for layer \
-                parameters, can be None if layer_cls has no params. Defaults to None.
+            layer_cfg (SymbLayerCfg[SumLayer]): The config for the concrete layer in symbolic form.
         """
-        # IGNORE: Unavoidable for kwargs.
-        super().__init__(
-            scope,
-            layers_in,
-            num_units=num_units,
-            layer_cls=layer_cls,
-            layer_kwargs=layer_kwargs,  # type: ignore[misc]
-            reparam=reparam,
-        )
+        super().__init__(scope, layers_in, num_units=num_units, layer_cfg=layer_cfg)
+        # NOTE: layers_in may not support len(), so must check after __init__. Same for the
+        #       following two classes.
         assert self.inputs, "SymbolicSumLayer must be an inner layer of the SymbC."
 
     @property
     def _repr_dict(self) -> Dict[str, object]:
         """The dict of key-value pairs used in __repr__."""
-        # IGNORE: Unavoidable for kwargs.
         return {
             "scope": self.scope,
             "arity": self.arity,
             "num_units": self.num_units,
-            "layer_cls": self.layer_cls,
-            "layer_kwargs": self.layer_kwargs,  # type: ignore[misc]
-            "reparam": self.reparam,  # TODO: repr of reparam
+            "layer_cfg": self.layer_cfg,
         }
 
 
-# DISABLE: It's designed to have these methods.
-# pylint: disable-next=too-few-public-methods
-class SymbolicProductLayer(SymbolicLayer):
+class SymbolicProductLayer(GenericSymbolicLayer[ProductLayer]):
     """The product layer in symbolic circuits."""
 
-    # The following attrs have more specific typing.
-    layer_cls: Type[ProductLayer]
-
-    # DISABLE: It's designed to have these arguments.
-    # IGNORE: Unavoidable for kwargs.
-    # pylint: disable-next=too-many-arguments
-    def __init__(  # type: ignore[misc]
+    def __init__(
         self,
         scope: Scope,
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cls: Type[ProductLayer],
-        layer_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: Optional[Reparameterization] = None,
+        layer_cfg: SymbLayerCfg[ProductLayer],
     ) -> None:
         """Construct the SymbolicProductLayer.
 
@@ -165,88 +146,51 @@ class SymbolicProductLayer(SymbolicLayer):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[ProductLayer]): The concrete layer class to become, can be either just \
-                a class of ProductLayer, or a class of SumProductLayer to indicate layer fusion.
-            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
-                layer_cls. Defaults to None.
-            reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
-                Defaults to None.
+            layer_cfg (SymbLayerCfg[ProductLayer]): The config for the concrete layer in symbolic \
+                form.
         """
-        # IGNORE: Unavoidable for kwargs.
-        super().__init__(
-            scope,
-            layers_in,
-            num_units=num_units,
-            layer_cls=layer_cls,
-            layer_kwargs=layer_kwargs,  # type: ignore[misc]
-            reparam=None,
-        )
+        super().__init__(scope, layers_in, num_units=num_units, layer_cfg=layer_cfg)
+        assert self.inputs, "SymbolicProductLayer must be an inner layer of the SymbC."
 
     @property
     def _repr_dict(self) -> Dict[str, object]:
         """The dict of key-value pairs used in __repr__."""
-        # IGNORE: Unavoidable for kwargs.
         return {
             "scope": self.scope,
             "arity": self.arity,
             "num_units": self.num_units,
-            "layer_cls": self.layer_cls,
-            "layer_kwargs": self.layer_kwargs,  # type: ignore[misc]
+            "layer_cfg": self.layer_cfg,
         }
 
 
-# DISABLE: It's designed to have these methods.
-# pylint: disable-next=too-few-public-methods
-class SymbolicInputLayer(SymbolicLayer):
+class SymbolicInputLayer(GenericSymbolicLayer[InputLayer]):
     """The input layer in symbolic circuits."""
 
-    # The following attrs have more specific typing.
-    layer_cls: Type[InputLayer]
-
-    # DISABLE: It's designed to have these arguments.
-    # IGNORE: Unavoidable for kwargs.
-    # pylint: disable-next=too-many-arguments
-    def __init__(  # type: ignore[misc]
+    def __init__(
         self,
         scope: Scope,
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cls: Type[InputLayer],
-        layer_kwargs: Optional[Dict[str, Any]] = None,
-        reparam: Optional[Reparameterization] = None,
+        layer_cfg: SymbLayerCfg[InputLayer],
     ) -> None:
         """Construct the SymbolicInputLayer.
 
         Args:
             scope (Scope): The scope of this layer.
-            layers_in (Iterable[SymbolicLayer]): Empty iterable.
+            layers_in (Iterable[SymbolicLayer]): The input to this layer, empty.
             num_units (int): The number of units in this layer.
-            layer_cls (Type[InputLayer]): The concrete layer class to become.
-            layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs to initialize \
-                layer_cls. Defaults to None.
-            reparam (Optional[Reparameterization], optional): The reparameterization for layer \
-                parameters, can be None if layer_cls has no params. Defaults to None.
+            layer_cfg (SymbLayerCfg[InputLayer]): The config for the concrete layer in symbolic \
+                form.
         """
-        # IGNORE: Unavoidable for kwargs.
-        super().__init__(
-            scope,
-            layers_in,  # Should be empty, will be tested in super().__init__ by its length.
-            num_units=num_units,
-            layer_cls=layer_cls,
-            layer_kwargs=layer_kwargs,  # type: ignore[misc]
-            reparam=reparam,
-        )
+        super().__init__(scope, layers_in, num_units=num_units, layer_cfg=layer_cfg)
         assert not self.inputs, "SymbolicInputLayer must be an input layer of the SymbC."
 
     @property
     def _repr_dict(self) -> Dict[str, object]:
         """The dict of key-value pairs used in __repr__."""
-        # IGNORE: Unavoidable for kwargs.
         return {
             "scope": self.scope,
             "num_units": self.num_units,
-            "layer_cls": self.layer_cls,
-            "layer_kwargs": self.layer_kwargs,  # type: ignore[misc]
-            "reparam": self.reparam,  # TODO: repr of reparam
+            "layer_cfg": self.layer_cfg,
         }

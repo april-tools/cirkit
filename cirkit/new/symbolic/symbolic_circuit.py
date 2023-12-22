@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, Iterator, Optional, Type, final
+from typing import Dict, Iterable, Iterator, Optional, final
 
 import cirkit.new.symbolic.functional as STCF  # SymbolicTensorizedCircuit functional.
 from cirkit.new.layers import DenseLayer, InputLayer, MixingLayer, ProductLayer, SumLayer
@@ -10,42 +10,38 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicSumLayer,
 )
 from cirkit.new.utils import OrderedSet, Scope
-from cirkit.new.utils.type_aliases import ReparamFactory
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 # TODO: __repr__?
 
 
 # Mark this class final so that type(SymbC) is always SymbolicTensorizedCircuit.
 # DISABLE: It's designed to have these attributes.
-# IGNORE: Unavoidable for kwargs.
-@final  # type: ignore[misc]
+@final
 # pylint: disable-next=too-many-instance-attributes
 class SymbolicTensorizedCircuit:
     """The symbolic representation of a tensorized circuit."""
 
-    # TODO: is this the best way to provide reparam? or give a layer-wise mapping?
-    # TODO: how to design interface? require kwargs only?
-    # TODO: how to deal with too-many?
-    # IGNORE: Unavoidable for kwargs.
-    # pylint: disable-next=too-many-arguments,too-many-locals
-    def __init__(  # type: ignore[misc]
+    # TODO: Use a whole SymbC_Cfg?
+    # DISABLE: It's designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
+    def __init__(
         self,
         region_graph: RegionGraph,
+        /,
         *,
         num_channels: int = 1,
         num_input_units: int,
         num_sum_units: int,
         num_classes: int = 1,
-        input_layer_cls: Type[InputLayer],
-        input_layer_kwargs: Optional[Dict[str, Any]] = None,
-        input_reparam: ReparamFactory = lambda: None,
-        sum_layer_cls: Type[SumLayer],
-        sum_layer_kwargs: Optional[Dict[str, Any]] = None,
-        sum_reparam: ReparamFactory,
-        prod_layer_cls: Type[ProductLayer],
-        prod_layer_kwargs: Optional[Dict[str, Any]] = None,
+        input_cfg: SymbLayerCfg[InputLayer],
+        sum_cfg: SymbLayerCfg[SumLayer],
+        prod_cfg: SymbLayerCfg[ProductLayer],
     ):
         """Construct symbolic circuit from a region graph.
+
+        If both configs for sum and product specify SumProductLayer as the layer class, they must \
+        be the same, which will be used for layer fusion. Otherwise, both should be SumProductLayer.
 
         Args:
             region_graph (RegionGraph): The region graph to convert.
@@ -56,23 +52,11 @@ class SymbolicTensorizedCircuit:
                 number of product units.
             num_classes (int, optional): The number of classes of the circuit output, i.e., the \
                 number of units in the output layer. Defaults to 1.
-            input_layer_cls (Type[InputLayer]): The layer class for input layers.
-            input_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
-                input layer class. Defaults to None.
-            input_reparam (ReparamFactory, optional): The factory to construct reparameterizations \
-                for input layer parameters, can produce None if no params needed. \
-                Defaults to lambda: None.
-            sum_layer_cls (Type[SumLayer]): The layer class for sum layers, can be either just a \
-                class of SumLayer, or a class of SumProductLayer to indicate layer fusion.
-            sum_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for sum \
-                layer class. Defaults to None.
-            sum_reparam (ReparamFactory): The factory to construct reparameterizations for sum \
-                layer parameters.
-            prod_layer_cls (Type[ProductLayer]): The layer class for product layers, can be either \
-                just a class of ProductLayer, or a class of SumProductLayer to indicate layer \
-                fusion.
-            prod_layer_kwargs (Optional[Dict[str, Any]], optional): The additional kwargs for \
-                product layer class, will be ignored if SumProductLayer is used. Defaults to None.
+            input_cfg (SymbLayerCfg[InputLayer]): The config for input layers.
+            sum_cfg (SymbLayerCfg[SumLayer]): The config for sum layers. Use SumProductLayer for \
+                layer fusion.
+            prod_cfg (SymbLayerCfg[ProductLayer]): The config for sum layers. Use SumProductLayer \
+                for layer fusion.
         """
         self.region_graph = region_graph
         self.scope = region_graph.scope
@@ -95,6 +79,20 @@ class SymbolicTensorizedCircuit:
         node_to_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.
 
         for rg_node in region_graph.nodes:
+            if isinstance(rg_node, RegionNode):
+                num_units = num_sum_units if rg_node.outputs else num_classes
+            elif isinstance(rg_node, PartitionNode):
+                num_units = prod_cfg.layer_cls._infer_num_prod_units(
+                    num_sum_units, len(rg_node.inputs)
+                )
+            else:
+                # NOTE: In the above if/elif, we made all conditions explicit to make it more
+                #       readable and also easier for static analysis inside the blocks. Yet the
+                #       completeness cannot be inferred and is only guaranteed by larger picture.
+                #       Also, should anything really go wrong, we will hit this guard statement
+                #       instead of going into a wrong branch.
+                assert False, "This should not happen."
+
             # Cannot use a generator as layers_in, because it's used twice.
             layers_in = [node_to_layer[node_in] for node_in in rg_node.inputs]
             # ANNOTATE: Different subclasses are assigned below.
@@ -103,43 +101,30 @@ class SymbolicTensorizedCircuit:
             if isinstance(rg_node, RegionNode) and not rg_node.inputs:  # Input region.
                 layers_in = [
                     SymbolicInputLayer(
-                        rg_node.scope,
-                        (),  # Old layers_in should be empty.
-                        num_units=num_input_units,
-                        layer_cls=input_layer_cls,
-                        layer_kwargs=input_layer_kwargs,  # type: ignore[misc]
-                        reparam=input_reparam(),
+                        rg_node.scope, (), num_units=num_input_units, layer_cfg=input_cfg
                     )
                 ]
                 # This also works when the input is also output, in which case num_classes is used.
                 layer_out = SymbolicSumLayer(
                     rg_node.scope,
                     layers_in,
-                    num_units=num_sum_units if rg_node.outputs else num_classes,
-                    layer_cls=DenseLayer,  # TODO: can be other sum layer, but how to pass in???
-                    layer_kwargs={},  # type: ignore[misc]
-                    reparam=sum_reparam(),
+                    num_units=num_units,
+                    layer_cfg=SymbLayerCfg(
+                        layer_cls=DenseLayer,
+                        layer_kwargs={},  # type: ignore[misc]
+                        reparam_factory=sum_cfg.reparam_factory,  # TODO: should not reuse?
+                    ),
                 )
             elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) == 1:  # Simple inner.
                 # layers_in keeps the same.
                 layer_out = SymbolicSumLayer(
-                    rg_node.scope,
-                    layers_in,
-                    num_units=num_sum_units if rg_node.outputs else num_classes,
-                    layer_cls=sum_layer_cls,
-                    layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
-                    reparam=sum_reparam(),
+                    rg_node.scope, layers_in, num_units=num_units, layer_cfg=sum_cfg
                 )
             elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) > 1:  # Inner with mixture.
                 # MixingLayer cannot change number of units, so must project early.
                 layers_in = [
                     SymbolicSumLayer(
-                        rg_node.scope,
-                        (layer_in,),
-                        num_units=num_sum_units if rg_node.outputs else num_classes,
-                        layer_cls=sum_layer_cls,
-                        layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
-                        reparam=sum_reparam(),
+                        rg_node.scope, (layer_in,), num_units=num_units, layer_cfg=sum_cfg
                     )
                     for layer_in in layers_in
                 ]
@@ -147,21 +132,16 @@ class SymbolicTensorizedCircuit:
                     rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
-                    layer_cls=MixingLayer,
-                    layer_kwargs={},  # type: ignore[misc]
-                    reparam=sum_reparam(),  # TODO: use a constant reparam here?
+                    layer_cfg=SymbLayerCfg(
+                        layer_cls=MixingLayer,
+                        layer_kwargs={},  # type: ignore[misc]
+                        reparam_factory=sum_cfg.reparam_factory,  # TODO: should not reuse?
+                    ),
                 )
             elif isinstance(rg_node, PartitionNode):
                 # layers_in keeps the same.
                 layer_out = SymbolicProductLayer(
-                    rg_node.scope,
-                    layers_in,
-                    num_units=prod_layer_cls._infer_num_prod_units(
-                        num_sum_units, len(rg_node.inputs)
-                    ),
-                    layer_cls=prod_layer_cls,
-                    layer_kwargs=prod_layer_kwargs,  # type: ignore[misc]
-                    reparam=None,
+                    rg_node.scope, layers_in, num_units=num_units, layer_cfg=prod_cfg
                 )
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
@@ -229,32 +209,17 @@ class SymbolicTensorizedCircuit:
     @property
     def sum_layers(self) -> Iterator[SymbolicSumLayer]:
         """Sum layers in the circuit, which are always inner layers."""
-        # IGNORE: SymbolicSumLayer contains Any.
-        return (
-            layer
-            for layer in self.layers
-            if isinstance(layer, SymbolicSumLayer)  # type: ignore[misc]
-        )
+        return (layer for layer in self.layers if isinstance(layer, SymbolicSumLayer))
 
     @property
     def product_layers(self) -> Iterator[SymbolicProductLayer]:
         """Product layers in the circuit, which are always inner layers."""
-        # IGNORE: SymbolicProductLayer contains Any.
-        return (
-            layer
-            for layer in self.layers
-            if isinstance(layer, SymbolicProductLayer)  # type: ignore[misc]
-        )
+        return (layer for layer in self.layers if isinstance(layer, SymbolicProductLayer))
 
     @property
     def input_layers(self) -> Iterator[SymbolicInputLayer]:
         """Input layers of the circuit."""
-        # IGNORE: SymbolicInputLayer contains Any.
-        return (
-            layer
-            for layer in self.layers
-            if isinstance(layer, SymbolicInputLayer)  # type: ignore[misc]
-        )
+        return (layer for layer in self.layers if isinstance(layer, SymbolicInputLayer))
 
     @property
     def output_layers(self) -> Iterator[SymbolicSumLayer]:

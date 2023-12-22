@@ -91,4 +91,4 @@ class SymbLayerCfg(Generic[LayerT_co]):  # type: ignore[misc]
     # IGNORE: Unavoidable for kwargs.
     layer_kwargs: Dict[str, Any] = field(default_factory=dict)  # type: ignore[misc]
     reparam: Optional["Reparameterization"] = None
-    # reparam_factory: Optional[ReparamFactory] = None  # TODO: to be enabled
+    reparam_factory: Optional[ReparamFactory] = None

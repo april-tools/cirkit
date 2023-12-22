@@ -4,7 +4,6 @@
 
 import heapq
 import itertools
-from dataclasses import asdict
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from cirkit.new.layers import KroneckerLayer, ProdEFLayer
@@ -62,38 +61,22 @@ def integrate(
     for self_layer in self._layers:
         # ANNOTATE: Different subclasses are assigned below.
         integral_layer: SymbolicLayer
-        # IGNORE: SymbolicInputLayer contains Any.
-        # IGNORE: Unavoidable for kwargs.
-        if (
-            isinstance(self_layer, SymbolicInputLayer)  # type: ignore[misc]
-            and self_layer.scope & scope
-        ):
+        if isinstance(self_layer, SymbolicInputLayer) and self_layer.scope & scope:
             assert (
                 self_layer.scope <= scope
             ), "The scope of an input layer must be either all marginalized or all not."
-            integral_cfg = self_layer.layer_cls.get_integral(
-                SymbLayerCfg(
-                    layer_cls=self_layer.layer_cls,
-                    layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                    reparam=self_layer.reparam,
-                )
-            )
             integral_layer = SymbolicInputLayer(
                 self_layer.scope,
                 (),
                 num_units=self_layer.num_units,
-                layer_cls=integral_cfg.layer_cls,
-                layer_kwargs=integral_cfg.layer_kwargs,  # type: ignore[misc]
-                reparam=integral_cfg.reparam,
+                layer_cfg=self_layer.layer_cls.get_integral(self_layer.layer_cfg),
             )
         else:
             integral_layer = type(self_layer)(
                 self_layer.scope,
                 (self_to_integral[self_layer_in] for self_layer_in in self_layer.inputs),
                 num_units=self_layer.num_units,
-                layer_cls=self_layer.layer_cls,
-                layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                reparam=self_layer.reparam,  # Reuse the same reparam to share params.
+                layer_cfg=self_layer.layer_cfg,  # Reuse the same reparam to share params.
             )
         integral._layers.append(integral_layer)
         self_to_integral[self_layer] = integral_layer
@@ -162,34 +145,24 @@ def differentiate(
     for self_layer in self._layers:
         # ANNOTATE: Different subclasses are assigned below.
         differential_layers: List[SymbolicLayer]
-        # IGNORE: All SymbolicLayer contain Any.
-        # IGNORE: Unavoidable for kwargs.
-        if isinstance(self_layer, SymbolicInputLayer):  # type: ignore[misc]
+        if isinstance(self_layer, SymbolicInputLayer):
             differential_layers = [
                 SymbolicInputLayer(
                     self_layer.scope,
                     (),
                     num_units=self_layer.num_units,
-                    **asdict(
-                        self_layer.layer_cls.get_partial(
-                            SymbLayerCfg(
-                                layer_cls=self_layer.layer_cls,
-                                layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                                reparam=self_layer.reparam,
-                            ),
-                            order=order,
-                            var_idx=var_idx,
-                            ch_idx=ch_idx,
-                        )
+                    layer_cfg=self_layer.layer_cls.get_partial(
+                        self_layer.layer_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx
                     ),
                 )
                 for var_idx, ch_idx in itertools.product(
                     range(len(self_layer.scope)), range(self.num_channels)
                 )
             ]
-        elif isinstance(self_layer, SymbolicSumLayer):  # type: ignore[misc]
+        elif isinstance(self_layer, SymbolicSumLayer):
             # Zip to get the layers_in for each of (layer.num_vars * num_channels) partials, except
             # for the copy of self_layer_in at [-1] which will be appended later.
+            # TODO: typeshed issue?
             # ANNOTATE: zip gives Any when using *iterables.
             zip_layers_in: Iterable[Tuple[SymbolicLayer, ...]] = zip(
                 *(self_to_differential[self_layer_in][:-1] for self_layer_in in self_layer.inputs)
@@ -199,13 +172,11 @@ def differentiate(
                     self_layer.scope,
                     layers_in,
                     num_units=self_layer.num_units,
-                    layer_cls=self_layer.layer_cls,
-                    layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                    reparam=self_layer.reparam,  # Shared for all partial diffs.
+                    layer_cfg=self_layer.layer_cfg,  # Share params in all partial diffs.
                 )
                 for layers_in in zip_layers_in
             ]
-        elif isinstance(self_layer, SymbolicProductLayer):  # type: ignore[misc]
+        elif isinstance(self_layer, SymbolicProductLayer):
             # A generator that produces all the partial diffs of self_layer w.r.t. each cur_layer in
             # the input layers of self_layer.
             all_scope_var_symb_layer = (
@@ -229,9 +200,7 @@ def differentiate(
                                 for self_layer_in in self_layer.inputs
                             ),
                             num_units=self_layer.num_units,
-                            layer_cls=self_layer.layer_cls,
-                            layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                            reparam=None,
+                            layer_cfg=self_layer.layer_cfg,
                         ),
                     )
                     for var_idx, scope_var in enumerate(cur_layer.scope)
@@ -259,15 +228,12 @@ def differentiate(
             #       anything really go wrong, we will hit this guard statement instead of going into
             #       a wrong branch.
             assert False, "This should not happen."
-        # IGNORE: Unavoidable for kwargs.
         differential_layers.append(  # Append a copy of self_layer.
             type(self_layer)(
                 self_layer.scope,
                 (self_to_differential[self_layer_in][-1] for self_layer_in in self_layer.inputs),
                 num_units=self_layer.num_units,
-                layer_cls=self_layer.layer_cls,
-                layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                reparam=self_layer.reparam,
+                layer_cfg=self_layer.layer_cfg,  # Reuse the same reparam to share params.
             )
         )
         differential._layers.extend(differential_layers)
@@ -277,6 +243,7 @@ def differentiate(
 
 
 # TODO: do we use SymbLayerCfg?
+# TODO: assert message? also other styling
 # TODO: refactor: fixed too complex and too many statements
 # pylint: disable-next=too-complex,too-many-statements
 def product(
@@ -341,9 +308,7 @@ def product(
                         for layer_in in layer.inputs
                     ),
                     num_units=layer.num_units,
-                    layer_cls=layer.layer_cls,
-                    layer_kwargs=layer.layer_kwargs,  # type: ignore[misc]
-                    reparam=layer.reparam,  # Reuse the same reparam to share params.
+                    layer_cfg=layer.layer_cfg,  # Reuse the same reparam to share params.
                 )
                 product_circuit._layers.append(new_layer)
                 if circuit_is_self:
@@ -359,7 +324,10 @@ def product(
         assert (
             self_layer.layer_cls == other_layer.layer_cls
         )  # TODO: implement product between cp and tucker
-        assert self_layer.layer_kwargs == other_layer.layer_kwargs  # type: ignore[misc]
+        assert (
+            self_layer.layer_cfg.layer_kwargs  # type: ignore[misc]
+            == other_layer.layer_cfg.layer_kwargs  # type: ignore[misc]
+        )
 
         new_layer: SymbolicLayer
 
@@ -379,39 +347,42 @@ def product(
                 (self_to_product[self_layer], other_to_product[other_layer]),
                 num_units=self_layer.num_units,
                 # TODO: implement product between circuits with different units
-                layer_cls=KroneckerLayer,
-                layer_kwargs=None,
-                reparam=None,
+                layer_cfg=SymbLayerCfg(layer_cls=KroneckerLayer),
             )
 
-        elif isinstance(self_layer, SymbolicInputLayer) and isinstance(  # type: ignore[misc]
-            other_layer, SymbolicInputLayer  # type: ignore[misc]
+        elif isinstance(self_layer, SymbolicInputLayer) and isinstance(
+            other_layer, SymbolicInputLayer
         ):
             assert self_layer.scope == other_layer.scope, "input layers have different scope"
 
-            if self_layer.reparam is None or other_layer.reparam is None:
+            if self_layer.layer_cfg.reparam is None or other_layer.layer_cfg.reparam is None:
                 raise ValueError("Both layers must have a reparameterization")
 
-            # IGNORE: ProdEFLayer contains Any.
             # IGNORE: Unavoidable for kwargs.
             new_layer = SymbolicInputLayer(
                 self_layer.scope,
                 (),
                 num_units=self_layer.num_units * other_layer.num_units,
                 # TODO: implement product between circuits with different units
-                layer_cls=ProdEFLayer,  # type: ignore[misc]
-                layer_kwargs={  # type: ignore[misc]
-                    "ef1_cls": self_layer.layer_cls,
-                    "ef1_kwargs": self_layer.layer_kwargs,  # type: ignore[misc]
-                    "ef2_cls": other_layer.layer_cls,
-                    "ef2_kwargs": other_layer.layer_kwargs,  # type: ignore[misc]
-                },
-                reparam=EFProductReparam(self_layer.reparam, other_layer.reparam),
+                layer_cfg=SymbLayerCfg(
+                    layer_cls=ProdEFLayer,
+                    layer_kwargs={  # type: ignore[misc]
+                        "ef1_cfg": SymbLayerCfg(
+                            layer_cls=self_layer.layer_cls,
+                            layer_kwargs=self_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
+                        ),
+                        "ef2_cfg": SymbLayerCfg(
+                            layer_cls=other_layer.layer_cls,
+                            layer_kwargs=other_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
+                        ),
+                    },
+                    reparam=EFProductReparam(
+                        self_layer.layer_cfg.reparam, other_layer.layer_cfg.reparam
+                    ),
+                ),
             )
-        # IGNORE: SymbolicSumLayer contains Any.
-        elif isinstance(self_layer, SymbolicSumLayer) and isinstance(  # type: ignore[misc]
-            other_layer, SymbolicSumLayer  # type: ignore[misc]
-        ):
+
+        elif isinstance(self_layer, SymbolicSumLayer) and isinstance(other_layer, SymbolicSumLayer):
             self_layer_input = self_layer.inputs
             other_layer_input = other_layer.inputs
 
@@ -424,14 +395,17 @@ def product(
                 (_product(self_layer_input[0], other_layer_input[0]),),
                 num_units=self_layer.num_units * other_layer.num_units,
                 # TODO: implement product between circuits with different units
-                layer_cls=self_layer.layer_cls,
-                layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                reparam=KroneckerReparam(self_layer.reparam, other_layer.reparam),
+                layer_cfg=SymbLayerCfg(
+                    layer_cls=self_layer.layer_cls,
+                    layer_kwargs=self_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
+                    reparam=KroneckerReparam(
+                        self_layer.layer_cfg.reparam, other_layer.layer_cfg.reparam
+                    ),
+                ),
             )
 
-        # IGNORE: SymbolicProductLayer contains Any.
-        elif isinstance(self_layer, SymbolicProductLayer) and isinstance(  # type: ignore[misc]
-            other_layer, SymbolicProductLayer  # type: ignore[misc]
+        elif isinstance(self_layer, SymbolicProductLayer) and isinstance(
+            other_layer, SymbolicProductLayer
         ):
             self_layer_inputs = self_layer.inputs
             other_layer_inputs = other_layer.inputs
@@ -465,9 +439,11 @@ def product(
                 ([_product(pair[0], pair[1]) for pair in aligned_inputs]),
                 num_units=self_layer.num_units * other_layer.num_units,
                 # TODO: implement product between circuits with different units
-                layer_cls=self_layer.layer_cls,
-                layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
-                reparam=None,
+                layer_cfg=SymbLayerCfg(
+                    layer_cls=self_layer.layer_cls,
+                    layer_kwargs=self_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
+                    reparam=None,
+                ),
             )
 
         else:

@@ -49,15 +49,14 @@ class TensorizedCircuit(nn.Module):
         for symb_layer in symb_circuit.layers:
             # ANNOTATE: Different subclasses are assigned below.
             layer: Optional[Layer]
-            # IGNORE: All SymbolicLayer contain Any.
             # IGNORE: Unavoidable for kwargs.
             if issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
-                symb_layer, SymbolicProductLayer  # type: ignore[misc]
+                symb_layer, SymbolicProductLayer
             ):  # Sum-product fusion at prod: build the actual layer with arity of prod.
                 # len(symb_layer.outputs) == 1 should be guaranteed by PartitionNode.
                 next_layer = symb_layer.outputs[0]  # There should be exactly one SymbSum output.
                 assert (
-                    isinstance(next_layer, SymbolicSumLayer)  # type: ignore[misc]
+                    isinstance(next_layer, SymbolicSumLayer)
                     and next_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
                 layer = symb_layer.layer_cls(  # TODO: add a function for this cls construction?
@@ -65,16 +64,16 @@ class TensorizedCircuit(nn.Module):
                     num_input_units=symb_layer.inputs[0].num_units,
                     num_output_units=next_layer.num_units,
                     arity=symb_layer.arity,
-                    reparam=next_layer.reparam,
-                    **next_layer.layer_kwargs,  # type: ignore[misc]
+                    reparam=next_layer.layer_cfg.reparam,
+                    **next_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
                 )
             elif issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
-                symb_layer, SymbolicSumLayer  # type: ignore[misc]
+                symb_layer, SymbolicSumLayer
             ):  # Sum-product fusion at sum: just run checks and fill a placeholder.
                 prev_layer = symb_layer.inputs[0]  # There should be exactly one SymbProd input.
                 assert (
                     symb_layer.arity == 1
-                    and isinstance(prev_layer, SymbolicProductLayer)  # type: ignore[misc]
+                    and isinstance(prev_layer, SymbolicProductLayer)
                     and prev_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
                 layer = None
@@ -88,8 +87,8 @@ class TensorizedCircuit(nn.Module):
                     arity=(  # Reusing arity to contain num_vars for InputLayer.
                         symb_layer.arity if symb_layer.arity else len(symb_layer.scope)
                     ),
-                    reparam=symb_layer.reparam,
-                    **symb_layer.layer_kwargs,  # type: ignore[misc]
+                    reparam=symb_layer.layer_cfg.reparam,
+                    **symb_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
                 )
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
