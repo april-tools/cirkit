@@ -86,7 +86,7 @@ class ComputationSapce(ABC):
         return ComputationSapce._registry[name]
 
     @final
-    def __new__(cls) -> Self:  # TODO: NoReturn should be used, but mypy is not happy.
+    def __new__(cls) -> Self:  # TODO: Never should be used, but mypy is not happy.
         """Raise an error when this class is instantiated.
 
         Raises:
@@ -97,7 +97,8 @@ class ComputationSapce(ABC):
         """
         raise TypeError("This class cannot be instantiated.")
 
-    # NOTE: Subclasses should implement all the following and should be @final.
+    # NOTE: Subclasses should not touch any of the above final static methods but should implement
+    #       all of the following abstract class methods, and subclasses should be @final.
 
     # TODO: if needed, we can also have to_log, to_lin.
     @classmethod
