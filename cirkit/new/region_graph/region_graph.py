@@ -143,7 +143,8 @@ class RegionGraph:
         # Now all containers are consistently sorted by the order decided by sort_key.
 
     # TODO: do we need these return? or just assert?
-    def _validate(self) -> str:  # pylint: disable=too-many-return-statements
+    # pylint: disable-next=too-many-return-statements
+    def _validate(self) -> str:
         """Validate the RG structure to make sure it's a legal computational graph.
 
         Returns:

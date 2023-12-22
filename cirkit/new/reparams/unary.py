@@ -16,7 +16,8 @@ class UnaryReparam(ComposedReparam[Tensor]):
 
     # TODO: pylint is wrong?
     # DISABLE: This is not useless as the signature of __init__ has changed.
-    def __init__(  # pylint: disable=useless-parent-delegation
+    # pylint: disable-next=useless-parent-delegation
+    def __init__(
         self,
         reparam: Optional[Reparameterization] = None,
         /,

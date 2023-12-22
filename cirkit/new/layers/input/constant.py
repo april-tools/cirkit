@@ -14,7 +14,8 @@ class ConstantLayer(InputLayer):
 
     # We still accept any Reparameterization instance for reparam, but it will be ignored.
     # DISABLE: It's designed to have these arguments.
-    def __init__(  # pylint: disable=too-many-arguments
+    # pylint: disable-next=too-many-arguments
+    def __init__(
         self,
         *,
         num_input_units: int,

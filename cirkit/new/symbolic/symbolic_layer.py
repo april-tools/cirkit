@@ -7,13 +7,15 @@ from cirkit.new.utils import Scope
 
 
 # DISABLE: It's designed to have these attributes and methods.
-class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes,too-few-public-methods
+# pylint: disable-next=too-many-instance-attributes,too-few-public-methods
+class SymbolicLayer(ABC):
     """The abstract base class for symbolic layers in symbolic circuits."""
 
     # We accept structure as positional args, and layer spec as kw-only.
     # DISABLE: It's designed to have these arguments.
     # IGNORE: Unavoidable for kwargs.
-    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
+    # pylint: disable-next=too-many-arguments
+    def __init__(  # type: ignore[misc]
         self,
         scope: Scope,
         layers_in: Iterable["SymbolicLayer"],
@@ -76,7 +78,8 @@ class SymbolicLayer(ABC):  # pylint: disable=too-many-instance-attributes,too-fe
 
 
 # DISABLE: It's designed to have these methods.
-class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
+# pylint: disable-next=too-few-public-methods
+class SymbolicSumLayer(SymbolicLayer):
     """The sum layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
@@ -87,7 +90,8 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
     # container in SymbolicCircuit. Same the following two layers.
     # DISABLE: It's designed to have these arguments.
     # IGNORE: Unavoidable for kwargs.
-    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
+    # pylint: disable-next=too-many-arguments
+    def __init__(  # type: ignore[misc]
         self,
         scope: Scope,
         layers_in: Iterable[SymbolicLayer],
@@ -136,7 +140,8 @@ class SymbolicSumLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
 
 
 # DISABLE: It's designed to have these methods.
-class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
+# pylint: disable-next=too-few-public-methods
+class SymbolicProductLayer(SymbolicLayer):
     """The product layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
@@ -145,7 +150,8 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
 
     # DISABLE: It's designed to have these arguments.
     # IGNORE: Unavoidable for kwargs.
-    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
+    # pylint: disable-next=too-many-arguments
+    def __init__(  # type: ignore[misc]
         self,
         scope: Scope,
         layers_in: Iterable[SymbolicLayer],
@@ -193,7 +199,8 @@ class SymbolicProductLayer(SymbolicLayer):  # pylint: disable=too-few-public-met
 
 
 # DISABLE: It's designed to have these methods.
-class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-methods
+# pylint: disable-next=too-few-public-methods
+class SymbolicInputLayer(SymbolicLayer):
     """The input layer in symbolic circuits."""
 
     # The following attrs have more specific typing.
@@ -202,7 +209,8 @@ class SymbolicInputLayer(SymbolicLayer):  # pylint: disable=too-few-public-metho
 
     # DISABLE: It's designed to have these arguments.
     # IGNORE: Unavoidable for kwargs.
-    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
+    # pylint: disable-next=too-many-arguments
+    def __init__(  # type: ignore[misc]
         self,
         scope: Scope,
         layers_in: Iterable[SymbolicLayer],

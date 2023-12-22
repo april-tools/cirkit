@@ -113,7 +113,8 @@ def _parse_delta(
 
 # TODO: too-complex,too-many-locals. how to solve?
 # DISABLE: We use function name with upper case to mimic a class constructor.
-def PoonDomingos(  # pylint: disable=invalid-name,too-complex,too-many-locals
+# pylint: disable-next=invalid-name,too-complex,too-many-locals
+def PoonDomingos(
     shape: Sequence[int],
     *,
     delta: Union[float, List[float], List[List[float]]],

@@ -69,7 +69,8 @@ class Scope(FrozenSet[int]):
     # collections.abc.Sized
     #######################
     # DISABLE: We require explicit definition.
-    def __len__(self) -> int:  # pylint: disable=useless-parent-delegation
+    # pylint: disable-next=useless-parent-delegation
+    def __len__(self) -> int:
         """Get the length (number of variables) of the scope, for len() as well as bool().
 
         Returns:

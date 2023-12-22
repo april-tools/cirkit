@@ -4,7 +4,8 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 # We use this Protocol to construct a TypeVar for classes with __lt__. Ref: typeshed.
 # TODO: pylint issue? protocol are expected to have few public methods
-class _SupportsDunderLT(Protocol):  # pylint: disable=too-few-public-methods
+# pylint: disable-next=too-few-public-methods
+class _SupportsDunderLT(Protocol):
     def __lt__(self, other: Self, /) -> bool:  # At least support comparison with self type.
         ...
 

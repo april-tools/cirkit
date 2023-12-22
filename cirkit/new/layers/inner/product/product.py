@@ -9,7 +9,8 @@ class ProductLayer(InnerLayer):
 
     # We still accept any Reparameterization instance for reparam, but it will be ignored.
     # TODO: this disable should be a pylint bug, because reparam is fixed to None
-    def __init__(  # pylint: disable=useless-parent-delegation
+    # pylint: disable-next=useless-parent-delegation
+    def __init__(
         self,
         *,
         num_input_units: int,
