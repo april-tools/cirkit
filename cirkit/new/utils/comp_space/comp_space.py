@@ -85,8 +85,9 @@ class ComputationSapce(ABC):
         """
         return ComputationSapce._registry[name]
 
+    # TODO: Never should be used. This is known issue: https://github.com/python/mypy/issues/14044
     @final
-    def __new__(cls) -> Self:  # TODO: Never should be used, but mypy is not happy.
+    def __new__(cls) -> Self:
         """Raise an error when this class is instantiated.
 
         Raises:

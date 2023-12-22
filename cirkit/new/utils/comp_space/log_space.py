@@ -78,8 +78,8 @@ class LogSpace(ComputationSapce):
         """
         dims = tuple(dim) if isinstance(dim, Sequence) else (dim,)
 
-        # TODO: can we use generators (... for) instead of list [... for] to avoid instantiation of
-        #       intermediate results. but generators can only be used once.
+        # NOTE: Due to usage of intermediate results, they need to be instantiated in lists but not
+        #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
         x = [cast(Tensor, xi) for xi in xs]
         # We need flatten because max only works on one dim, and then match shape for exp_x.
