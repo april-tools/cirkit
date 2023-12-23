@@ -72,12 +72,9 @@ def integrate(
                 layer_cfg=self_layer.layer_cls.get_integral(self_layer.layer_cfg),
             )
         else:
-            integral_layer = type(self_layer)(
-                self_layer.scope,
-                (self_to_integral[self_layer_in] for self_layer_in in self_layer.inputs),
-                num_units=self_layer.num_units,
-                layer_cfg=self_layer.layer_cfg,  # Reuse the same reparam to share params.
-            )
+            integral_layer = self_layer.transform(
+                self_to_integral[self_layer_in] for self_layer_in in self_layer.inputs
+            )  # The same reparam shared to integral_layer.
         integral._layers.append(integral_layer)
         self_to_integral[self_layer] = integral_layer
 
@@ -167,15 +164,8 @@ def differentiate(
             zip_layers_in: Iterable[Tuple[SymbolicLayer, ...]] = zip(
                 *(self_to_differential[self_layer_in][:-1] for self_layer_in in self_layer.inputs)
             )
-            differential_layers = [  # TODO: use a function to do this transform?
-                SymbolicSumLayer(
-                    self_layer.scope,
-                    layers_in,
-                    num_units=self_layer.num_units,
-                    layer_cfg=self_layer.layer_cfg,  # Share params in all partial diffs.
-                )
-                for layers_in in zip_layers_in
-            ]
+            # The same reparam shared to all partial diffs.
+            differential_layers = [self_layer.transform(layers_in) for layers_in in zip_layers_in]
         elif isinstance(self_layer, SymbolicProductLayer):
             # A generator that produces all the partial diffs of self_layer w.r.t. each cur_layer in
             # the input layers of self_layer.
@@ -189,18 +179,13 @@ def differentiate(
                     # scope_var.
                     _ScopeVarAndSymbLayer(
                         scope_var,
-                        SymbolicProductLayer(
-                            self_layer.scope,
-                            # The inputs to a partial diff is the copy of original input, except for
-                            # cur_layer which is replaced by its diff.
-                            (
-                                diff_cur_layer
-                                if self_layer_in == cur_layer
-                                else self_to_differential[self_layer_in][-1]
-                                for self_layer_in in self_layer.inputs
-                            ),
-                            num_units=self_layer.num_units,
-                            layer_cfg=self_layer.layer_cfg,
+                        # The inputs to a partial diff is the copy of original input, except for
+                        # cur_layer which is replaced by its diff.
+                        self_layer.transform(
+                            diff_cur_layer
+                            if self_layer_in == cur_layer
+                            else self_to_differential[self_layer_in][-1]
+                            for self_layer_in in self_layer.inputs
                         ),
                     )
                     for var_idx, scope_var in enumerate(cur_layer.scope)
@@ -229,11 +214,8 @@ def differentiate(
             #       a wrong branch.
             assert False, "This should not happen."
         differential_layers.append(  # Append a copy of self_layer.
-            type(self_layer)(
-                self_layer.scope,
-                (self_to_differential[self_layer_in][-1] for self_layer_in in self_layer.inputs),
-                num_units=self_layer.num_units,
-                layer_cfg=self_layer.layer_cfg,  # Reuse the same reparam to share params.
+            self_layer.transform(
+                self_to_differential[self_layer_in][-1] for self_layer_in in self_layer.inputs
             )
         )
         differential._layers.extend(differential_layers)
@@ -244,6 +226,7 @@ def differentiate(
 
 # TODO: do we use SymbLayerCfg?
 # TODO: assert message? also other styling
+# TODO: SymbL.transform?
 # TODO: refactor: fixed too complex and too many statements
 # pylint: disable-next=too-complex,too-many-statements
 def product(
