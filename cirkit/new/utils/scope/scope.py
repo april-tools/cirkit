@@ -216,7 +216,8 @@ class Scope(Collection[int], Hashable):
         Returns:
             bool: Whether the variable is in this scope.
         """
-        raise NotImplementedError("This should not be called on the Scope base class.")
+        # With checks in register(), this raise should not be hit. Same for the following two.
+        raise NotImplementedError("This should not be reached.")
 
     ##########################
     # collections.abc.Iterable
@@ -227,7 +228,7 @@ class Scope(Collection[int], Hashable):
         Returns:
             Iterator[int]: The iterator over the scope (sorted).
         """
-        raise NotImplementedError("This should not be called on the Scope base class.")
+        raise NotImplementedError("This should not be reached.")
 
     #######################
     # collections.abc.Sized
@@ -238,7 +239,7 @@ class Scope(Collection[int], Hashable):
         Returns:
             int: The number of variables in the scope.
         """
-        raise NotImplementedError("This should not be called on the Scope base class.")
+        raise NotImplementedError("This should not be reached.")
 
     ############################
     # collections.abc.Collection
