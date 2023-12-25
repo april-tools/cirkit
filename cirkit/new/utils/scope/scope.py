@@ -1,21 +1,34 @@
-from abc import abstractmethod
 from typing import (
     Callable,
     ClassVar,
     Collection,
     Dict,
-    FrozenSet,
     Hashable,
     Iterable,
     Iterator,
     Type,
     TypeVar,
-    Union,
     cast,
     final,
-    overload,
 )
-from typing_extensions import Never, Self  # FUTURE: in typing from 3.11
+from typing_extensions import Never  # FUTURE: in typing from 3.11
+
+# NOTE: Explaination on the magic in class customization for Scope.
+#       - It's an abstract class, because it does not include a complete implementation and is not
+#           meant to be instantiated.
+#       - It's not an abstract class, because instantiation is not prohibited, both in runtime and
+#           in static checking.
+#       - NotImplementedError is raised in "abstract" methods, so that this class works as an \
+#           interface but is instantiable:
+#           - All the methods are concrete and does not block instantiation;
+#           - All the methods run into error when called so must be implemented by subclasses;
+#       - The instantiation of the class is intercepted in __new__, so that:
+#           - It behaves as if this class itself is instantiated;
+#           - Different subclass implementations can be selected for the actual object so that those
+#               not-implemented interface methods are never actually called.
+
+
+ScopeClsT = TypeVar("ScopeClsT", bound=Type["Scope"])
 
 
 class Scope(Collection[int], Hashable):
@@ -25,29 +38,117 @@ class Scope(Collection[int], Hashable):
     A scope should always be a subset of range(num_vars), but for efficiency this is not checked.
     """
 
-    # TODO: ???
-    # NOTE: The following also serves as the API for Scope. Even the methods defined in the base
-    #       class can be reused, they should be overriden below to explicitly define the methods.
-    # TODO: convert to bitset, and then all methods will be useful.
+    # NOTE: This is not set here by default, and a default value should be provided later.
+    impl: ClassVar[Type["Scope"]]
+    """The currently selected implementation."""
+
+    _registry: ClassVar[Dict[str, Type["Scope"]]] = {}
+
+    @final
+    @staticmethod
+    def register(name: str) -> Callable[[ScopeClsT], ScopeClsT]:
+        """Register a concrete Scope implementation by its name.
+
+        Args:
+            name (str): The name to register.
+
+        Returns:
+            Callable[[ScopeClsT], ScopeClsT]: The class decorator to register a subclass.
+        """
+
+        def _decorator(cls: ScopeClsT) -> ScopeClsT:
+            """Register a concrete Scope implementation by its name.
+
+            Args:
+                cls (ScopeClsT): The Scope subclass to register.
+
+            Returns:
+                ScopeClsT: The class passed in.
+            """
+            # CAST: getattr gives Any.
+            assert cast(
+                bool, getattr(cls, "__final__", False)
+            ), "Subclasses of Scope should be final."
+
+            methods_to_implement = ("__new__", "__contains__", "__iter__", "__len__")
+            for method in methods_to_implement:
+                # DISABLE: We are comparing callable objects.
+                # IGNORE: getattr gives Any.
+                # pylint: disable-next=comparison-with-callable
+                assert getattr(cls, method) != getattr(  # type: ignore[misc]
+                    Scope, method
+                ), f"{cls} should implement {method}()."
+
+            # Check final during runtime in case of multi-inheritance, which static checking cannot
+            # capture and warn.
+            methods_to_preserve = ("__init__", "__setattr__", "__delattr__", "__repr__")
+            for method in methods_to_preserve:
+                # IGNORE: getattr gives Any.
+                assert getattr(cls, method) == getattr(  # type: ignore[misc]
+                    Scope, method
+                ), f"{cls} should not redefine final method {method}()."
+
+            # __eq__ and __hash__ are not checked because they just follow the standard protocol.
+            methods_to_override = (
+                "__lt__",
+                "__gt__",
+                "__le__",
+                "__ge__",
+                "__and__",
+                "__or__",
+                "union",
+            )
+            for method in methods_to_override:
+                # IGNORE: vars and getattr give Any.
+                assert method in vars(cls) or getattr(cls, method) == getattr(  # type: ignore[misc]
+                    Scope, method
+                ), f"{cls} should either explicitly override {method}() or inherit from Scope."
+
+            Scope._registry[name] = cls
+            return cls
+
+        return _decorator
+
+    @final
+    @staticmethod
+    def list_all_scope_impl() -> Iterable[str]:
+        """List all names of Scope implementations registered.
+
+        Returns:
+            Iterable[str]: An iterable over all names available.
+        """
+        return iter(Scope._registry)
+
+    @final
+    @staticmethod
+    def set_scope_impl_by_name(name: str) -> None:
+        """Set the active implementation to a Scope subclass specified by its registered name.
+
+        Args:
+            name (str): The name of implementation.
+        """
+        Scope.impl = Scope._registry[name]
+
+    ################################################################################################
+    # The following are about immutability, including constriction, disabling modification, etc.
 
     # We should use __new__ instead of __init__ because it's immutable.
-    # NOTE: Subclasses should implement:
-    #       - Reusing the scope passed in if it's of the self class.
-    #       - Making use of scope to initialize the internal container.
-    @abstractmethod
-    def __new__(cls, scope: Iterable[int]) -> Self:
-        """Construct the scope object.
+    # NOTE: Subclasses only need to handle the initialization of internal data structure in __new__.
+    def __new__(cls, scope: Iterable[int]) -> "Scope":
+        """Construct a scope object.
 
         Args:
             scope (Iterable[int]): The scope as an iterable of variable ids. If already an object \
                 of the same class, the object will be directly returned.
 
         Returns:
-            Self: The Scope object.
+            Scope: A Scope object.
         """
-        # Here we need this super() call to correctly chain the super() from subclasses. If a
-        # subclass has another base class, this __new__ may also be skipped in favor of the other.
-        return super().__new__(cls)
+        if isinstance(scope, Scope.impl):  # Reuse the same object when possible.
+            return scope
+        if cls == Scope.impl:  # If called from Scope.impl.__new__(), break infinite recursion.
+            return super().__new__(cls)
+        return Scope.impl.__new__(Scope.impl, scope)  # Enforce instantiation of the selected impl.
 
     # Mark __init__ as final so that subclasses cannot use it.
     # NOTE: This is just a no-op. The docstirng is only for intellisense.
@@ -94,17 +195,17 @@ class Scope(Collection[int], Hashable):
 
     ################################################################################################
     # The following are user-faced interface. The three abstract method of Collection's interface
-    # must be implemented, while the rest have default implementations depending on them. The
-    # non-abstract methods may be override if a subclass implementation has a better algorithm, but
-    # they must be explicitly overriden instead of provided by another base class.
-    # TODO: runtime check? static check?
+    # are marked as non-abstract to allow instantiation in static checking, but still must be
+    # implemented by a subclass. The rest of the interface have default implementations depending on
+    # the three, but may also be override if a subclass implementation has a better algorithm, in
+    # which case they must be explicitly overriden instead of provided by another base class, so
+    # that we never accidentally override them to some wrong behaviour (only checked in runtime).
 
     ###########################
     # collections.abc.Container
     ###########################
     # NOTE: As a general interface, any object can be tested with `in`, not just int. This enables
     #       proper testing when a superclass of int is passed in and happens to be int.
-    @abstractmethod
     def __contains__(self, item: object) -> bool:
         """Test whether a variable is in the scope, for `in` and `not in` operators.
 
@@ -115,28 +216,29 @@ class Scope(Collection[int], Hashable):
         Returns:
             bool: Whether the variable is in this scope.
         """
+        raise NotImplementedError("This should not be called on the Scope base class.")
 
     ##########################
     # collections.abc.Iterable
     ##########################
-    @abstractmethod
     def __iter__(self) -> Iterator[int]:
         """Iterate over the scope variables in the order of id, for conversion to other containers.
 
         Returns:
             Iterator[int]: The iterator over the scope (sorted).
         """
+        raise NotImplementedError("This should not be called on the Scope base class.")
 
     #######################
     # collections.abc.Sized
     #######################
-    @abstractmethod
     def __len__(self) -> int:
         """Get the length (number of variables) of the scope, for len() as well as bool().
 
         Returns:
             int: The number of variables in the scope.
         """
+        raise NotImplementedError("This should not be called on the Scope base class.")
 
     ############################
     # collections.abc.Collection
@@ -172,9 +274,7 @@ class Scope(Collection[int], Hashable):
         Returns:
             bool: Whether self == other.
         """
-        if not isinstance(other, Scope):
-            return False
-        return tuple(self) == tuple(other)
+        return tuple(self) == tuple(other) if isinstance(other, Scope) else False
 
     # __ne__ automatically delegates to __eq__.
 
@@ -198,8 +298,6 @@ class Scope(Collection[int], Hashable):
         """
         return len(self) < len(other) or len(self) == len(other) and tuple(self) < tuple(other)
 
-    # Always delegate to __lt__, no need to override.
-    @final
     def __gt__(self, other: "Scope") -> bool:
         """Compare scopes for ordering, for > operator.
 
@@ -213,7 +311,7 @@ class Scope(Collection[int], Hashable):
         Returns:
             bool: Whether self > other.
         """
-        return NotImplemented
+        return NotImplemented  # Delegate to __lt__ by default.
 
     ################
     # Subset Testing
@@ -232,8 +330,6 @@ class Scope(Collection[int], Hashable):
         """
         return frozenset(self) <= frozenset(other)
 
-    # Always delegate to __le__, no need to override.
-    @final
     def __ge__(self, other: "Scope") -> bool:
         """Test whether self is a superset (or equal) of other.
 
@@ -247,11 +343,12 @@ class Scope(Collection[int], Hashable):
         Returns:
             bool: Whether self ⊇ other.
         """
-        return NotImplemented
+        return NotImplemented  # Delegate to __lt__ by default.
 
     ########################
     # Union and Intersection
     ########################
+    # NOTE: It's possible to accept any Iterable[int] as other, but we enforce Scope here.
     def __and__(self, other: "Scope") -> "Scope":
         """Get the intersection of two scopes, for & operator.
 

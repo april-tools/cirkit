@@ -53,7 +53,7 @@ class ComputationSapce(ABC):
             Returns:
                 CompSpaceClsT: The class passed in.
             """
-            # CAST: __final__ is not part of standard data model.
+            # CAST: getattr gives Any.
             assert cast(
                 bool, getattr(cls, "__final__", False)
             ), "Subclasses of ComputationSapce should be final."
