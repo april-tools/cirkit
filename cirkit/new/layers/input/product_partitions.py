@@ -1,16 +1,20 @@
-from typing import NoReturn, Optional, cast
+# mypy: disable-error-code="misc"
+from typing import NoReturn
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
 
 from cirkit.new.layers.input.input import InputLayer
-from cirkit.new.reparams import BinaryReparam, Reparameterization
+from cirkit.new.reparams import BinaryReparam
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class CategoricalProductPartitionLayer(InputLayer):
-    """Layer calculates the partition function for product input layer of categorical distribution."""
+    """Layer calculates the partition function for.
+
+    product input layer of categorical distribution.
+    """
 
     # DISABLE: It's designed to have these arguments.
     def __init__(  # pylint: disable=too-many-arguments
@@ -29,8 +33,8 @@ class CategoricalProductPartitionLayer(InputLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Optional[Reparameterization], optional): The reparameterization for this layer parameters. \
-                Guaranteed to be BinaryReparam, for product layer.
+            reparam (Optional[Reparameterization], optional): The reparameterization for the. \
+             layer parameters. Guaranteed to be BinaryReparam, for product layer.
             num_categories (int): The number of categories for Categorical distribution.
         """
         super().__init__(
@@ -70,7 +74,7 @@ class CategoricalProductPartitionLayer(InputLayer):
             and param.shape[2] == self.num_input_units
             and param.shape[3] == self.num_categories
             for param in self.params()
-        ), "All categorical parameters must have shape (arity, num_units, num_input_units, categories)"
+        ), "All parameters must have shape (arity, num_units, num_input_units, categories)"
 
         # shape (H, K_out_n, K_in, cat) -> (H, K_out_n, *S=(K_in, cat))
         flatten_params = [
@@ -95,13 +99,20 @@ class CategoricalProductPartitionLayer(InputLayer):
 
     # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> NoReturn:  # type: ignore[misc]
-        """Do nothing, as constant layers do not have parameters."""
-        raise TypeError("Cannot differentiate over discrete variables.")
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> NoReturn:
+        """Get the symbolic config to construct the definite integral of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
+
+        Raises:
+            TypeError: When this method is called on this layer.
+        """
+        raise TypeError("This is the integral layer, no additional configs required.")
 
     # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> NoReturn:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -114,9 +125,8 @@ class CategoricalProductPartitionLayer(InputLayer):
                 layer's scope but not global variable id. Defaults to 0.
             ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
 
-        Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
-                given channel of the given variable.
+        Raises:
+            TypeError: When this method is called on this layer.
         """
         raise TypeError("Cannot differentiate over discrete variables.")
 
@@ -125,7 +135,7 @@ class NormalProductPartitionLayer(InputLayer):
     """Layer calculates the partition function for product input layer of normal distribution."""
 
     # DISABLE: It's designed to have these arguments.
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(
         self,
         *,
         num_input_units: int,
@@ -140,8 +150,8 @@ class NormalProductPartitionLayer(InputLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Optional[Reparameterization], optional): The reparameterization for this layer parameters. \
-                Guaranteed to be BinaryReparam, for product layer.
+            reparam (Optional[Reparameterization], optional): The reparameterization for this. \
+            layer parameters. Guaranteed to be BinaryReparam, for product layer.
         """
         super().__init__(
             num_input_units=num_input_units,
@@ -159,6 +169,7 @@ class NormalProductPartitionLayer(InputLayer):
         """Do nothing, as constant layers do not have parameters."""
 
     def forward(self, x: Tensor) -> Tensor:
+        # pylint: disable=too-many-locals
         """Run forward pass.
 
         Args:
@@ -218,13 +229,20 @@ class NormalProductPartitionLayer(InputLayer):
 
     # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> NoReturn:  # type: ignore[misc]
-        """Do nothing, as constant layers do not have parameters."""
-        raise TypeError("Cannot differentiate over discrete variables.")
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> NoReturn:
+        """Get the symbolic config to construct the definite integral of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
+
+        Raises:
+            TypeError: When this method is called on this layer.
+        """
+        raise TypeError("This is the integral layer, no additional configs required.")
 
     # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> NoReturn:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -236,9 +254,8 @@ class NormalProductPartitionLayer(InputLayer):
             var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
                 layer's scope but not global variable id. Defaults to 0.
             ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
-
-        Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
-                given channel of the given variable.
+        
+        Raises:
+            TypeError: When this method is called on this layer.
         """
-        raise TypeError("Cannot differentiate over discrete variables.")
+        raise TypeError("No differential on partition function.")
