@@ -1,4 +1,5 @@
 from .binary import BinaryReparam as BinaryReparam
+from .binary import ProductReparam as ProductReparam
 from .composed import ComposedReparam as ComposedReparam
 from .leaf import LeafReparam as LeafReparam
 from .normalized import LogSoftmaxReparam as LogSoftmaxReparam

@@ -92,9 +92,10 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
                 # NOTE: Passing shape to all children reparams may not be always wanted. In that
                 #       case, children reparams should be materialized first, so that the following
                 #       is skipped by the above if.
+                # TODO: self.reparams: List[Reparameterization] with different shapes
                 reparam.materialize(shape, dim=dim)
+            assert reparam.shape == self.shape, "The actual shape does not match the given one."
 
-        assert self().shape == self.shape, "The actual shape does not match the given one."
         return True
 
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:

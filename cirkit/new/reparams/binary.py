@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 from torch import Tensor
 
@@ -37,4 +37,41 @@ class BinaryReparam(ComposedReparam[Tensor, Tensor]):
         super().__init__(reparam1, reparam2, func=func, inv_func=inv_func)
 
 
-# TODO: circuit product
+class ProductReparam(BinaryReparam):
+    """reparameterization for the product of circuits."""
+
+    def __init__(
+        self,
+        reparam1: Reparameterization,
+        reparam2: Reparameterization,
+        /,
+    ) -> None:
+        # DISABLE: This long line is unavoidable for Args doc.
+        """Init class.
+
+        Args:
+            reparam1 (Optional[Reparameterization], optional): The input reparameterization to be \
+                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam2 (Optional[Reparameterization], optional): The input reparameterization to be \
+                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+        """
+        super().__init__(reparam1, reparam2, func=None, inv_func=None)  # type: ignore[arg-type]
+
+        if reparam1.is_materialized and reparam2.is_materialized:
+            self.shape = reparam1.shape
+            self.dims = reparam1.dims  # TODO: product with different param shape
+
+    def forward(self) -> List[Tensor]:  # type: ignore[override]
+        """Get the reparameterized parameters.
+
+        Returns:
+            List[Tensor]: The list of parameters in the circuit product.
+        """
+        # pylint: disable=line-too-long
+        # flatten nested lists into a single list
+        params = [  # type: ignore[misc]
+            rep  # type: ignore[misc]
+            for reparam in self.reparams
+            for rep in (reparam() if isinstance(reparam(), list) else [reparam()])  # type: ignore[attr-defined]
+        ]
+        return params  # type: ignore[misc]

@@ -94,8 +94,12 @@ class DiffEFLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
+        eta_value = self.ef.params()
         g_diffs = batch_high_order_at(
-            self.ef.log_prob, x, [self.var_idx, ..., self.ch_idx], order=self.order
+            lambda x: self.ef.log_prob(eta_value, x),
+            x,
+            [self.var_idx, ..., self.ch_idx],
+            order=self.order,
         )
         log_p = g_diffs[0]  # g(x) = log_p.
 

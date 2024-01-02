@@ -83,12 +83,41 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
-        return self.comp_space.from_log(self.log_prob(x))
+        # if the parameter is that of the product of two circuits
+        if isinstance(self.params(), list):
+            num_params = len(self.params())
+            assert num_params >= 2, "Circuit product should have more than one parameters"
+            layer_outputs = []
 
-    def log_prob(self, x: Tensor) -> Tensor:
+            for i in range(num_params):
+                # shape (H, K_i, 2, K_in) in normal distribution
+                # or shape (H, K_i, K_in, C) in categorical distribution
+                eta_i = self.params()[i]
+                # (B, K_i)
+                layer_output = self.comp_space.from_log(self.log_prob(eta_i, x))
+
+                # reshape layer output for multiplication:
+                # e.g. when num_params=3, reshape each of the three outputs into
+                # (B, K_1, 1, 1), (B, 1, K_2, 1), (B, 1, 1, K_2)
+                layer_shape = list(layer_output.shape[:-1]) + [1] * (num_params - 1)
+                layer_shape.insert(i + 1, layer_output.shape[-1])
+
+                layer_output_reshaped = layer_output.reshape(layer_shape)
+                layer_outputs.append(layer_output_reshaped)
+            # (B, K_1, K_2, ...)
+            return self.comp_space.mul(*layer_outputs)
+
+        # when the parameter is unary
+        assert isinstance(self.params(), Tensor), "The parameter is not unary"  # type: ignore[misc]
+        eta = self.params()
+        return self.comp_space.from_log(self.log_prob(eta, x))
+
+    def log_prob(self, eta: Tensor, x: Tensor) -> Tensor:
         """Calculate log-probability log(f(x)) from input x.
 
         Args:
+            eta (Tensor): the parameters, shape (H, K_out, 2, K_in) in normal distribution \
+            or shape (H, K_out, K_in, C) in categorical distribution.
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
@@ -96,7 +125,6 @@ class ExpFamilyLayer(InputLayer):
         """
         # TODO: if we just propagate unnormalized values, we can remove log_part here and move it to
         #       integration -- by definition integration is partition.
-        eta = self.params()  # shape (H, K, *S).
         suff_stats = self.sufficient_stats(x)  # shape (*B, H, S).
         log_h = self.log_base_measure(x)  # shape (*B, H).
         log_part = self.log_partition(eta)  # shape (H, K).
