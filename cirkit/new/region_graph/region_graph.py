@@ -434,3 +434,4 @@ class RegionGraph:
             graph.add_partitioning(region_out, regions_in)
 
         return graph.freeze()
+

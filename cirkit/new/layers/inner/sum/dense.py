@@ -35,7 +35,7 @@ class DenseLayer(SumLayer):
         )
 
         self.params = reparam
-        if self.params.materialize((num_output_units, num_input_units), dim=1):
+        if self.params.materialize((num_output_units, num_input_units), dim= 1):
             self.reset_parameters()  # Only reset if newly materialized.
 
     def _forward_linear(self, x: Tensor) -> Tensor:
