@@ -26,8 +26,6 @@ def test_cp_layer(
     reparam: ReparamFactory
     if reparam_name == "unary":
         reparam = UnaryReparam(func=torch.tanh)
-    else:
-        assert False
 
     layer = CPLayer(
         num_input_units=num_input_units,
