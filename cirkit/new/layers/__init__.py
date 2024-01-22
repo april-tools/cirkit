@@ -13,4 +13,5 @@ from .input import DiffEFLayer as DiffEFLayer
 from .input import ExpFamilyLayer as ExpFamilyLayer
 from .input import InputLayer as InputLayer
 from .input import NormalLayer as NormalLayer
+from .input import ProdEFLayer as ProdEFLayer
 from .layer import Layer as Layer

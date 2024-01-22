@@ -87,11 +87,14 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
         if not super().materialize(shape, dim=dim):
             return False
 
-        for reparam in self.reparams:
+        if len(self.reparams) > 1:
+            assert all(reparam.is_materialized for reparam in self.reparams), (
+                "A Reparameterization with more than one children must not be materialized before "
+                "all its children are materialized."
+            )
+        else:
+            reparam = self.reparams[0]
             if not reparam.is_materialized:
-                # NOTE: Passing shape to all children reparams may not be always wanted. In that
-                #       case, children reparams should be materialized first, so that the following
-                #       is skipped by the above if.
                 reparam.materialize(shape, dim=dim)
 
         assert self().shape == self.shape, "The actual shape does not match the given one."
