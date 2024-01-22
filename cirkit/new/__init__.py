@@ -26,4 +26,23 @@ def set_layer_comp_space(comp_space: Union[Type[utils.ComputationSapce], str]) -
     layers.Layer.comp_space = comp_space
 
 
+def set_reparam_comp_space(comp_space: Union[Type[utils.ComputationSapce], str]) -> None:
+    """Set the global computational space for reparams.
+
+    Args:
+        comp_space (Union[Type[utils.ComputationSapce], str]): The computational space to use, can \
+            be speficied by either the class or the name.
+    """
+    if isinstance(comp_space, str):
+        comp_space = utils.ComputationSapce.get_comp_space_by_name(comp_space)
+
+    # CAST: __final__ is not part of standard data model.
+    assert cast(
+        bool, getattr(comp_space, "__final__", False)
+    ), "A usable ComputationSapce must be final."
+
+    reparams.Reparameterization.comp_space = comp_space
+
+
 set_layer_comp_space(utils.LogSpace)
+set_reparam_comp_space(utils.LogSpace)

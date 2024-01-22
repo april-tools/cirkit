@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Sequence, Tuple, Union
+from typing import Callable, ClassVar, Sequence, Tuple, Type, Union
 
 import torch
 from torch import Tensor, nn
+
+from cirkit.new.utils import ComputationSapce
 
 
 class Reparameterization(nn.Module, ABC):
@@ -22,6 +24,9 @@ class Reparameterization(nn.Module, ABC):
 
     shape: Tuple[int, ...]
     """The shape of the output parameter."""
+
+    comp_space: ClassVar[Type[ComputationSapce]]
+    """The computational space for reparameterization"""
 
     @property
     @abstractmethod

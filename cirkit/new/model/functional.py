@@ -38,3 +38,20 @@ def differentiate(self: "TensorizedCircuit", *, order: int = 1) -> "TensorizedCi
         TensorizedCircuit: The circuit giving the (total) differential.
     """
     return self.__class__(self.symb_circuit.differentiate(order=order))
+
+
+def product(
+    self: "TensorizedCircuit", other: "TensorizedCircuit", *, scope: Optional[Iterable[int]] = None
+) -> "TensorizedCircuit":
+    """Perform product between two circuits over the given scope.
+
+    Args:
+        self (TensorizedCircuit): The first circuit to perform product.
+        other (TensorizedCircuit): The second circuit to perrform product.
+        scope (Optional[Iterable[int]], optional): The scope to perform product with, or None for \
+            the union of scope of the two circuits. Defaults to None.
+
+    Returns:
+        SymbolicTensorizedCircuit: The circuit product.
+    """
+    return self.__class__(self.symb_circuit.product(other.symb_circuit, scope=scope))

@@ -276,6 +276,7 @@ class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
 
     integrate = STCF.integrate
     differentiate = STCF.differentiate
+    product = STCF.product
 
     ####################################    (De)Serialization    ###################################
     # TODO: impl? or just save RG and kwargs of SymbC?

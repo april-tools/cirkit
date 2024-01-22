@@ -86,7 +86,7 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
         """
         if not super().materialize(shape, dim=dim):
             return False
-
+        # TODO: modify reparam.shape?
         for reparam in self.reparams:
             if not reparam.is_materialized:
                 # NOTE: Passing shape to all children reparams may not be always wanted. In that
@@ -94,7 +94,8 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
                 #       is skipped by the above if.
                 reparam.materialize(shape, dim=dim)
 
-        assert self().shape == self.shape, "The actual shape does not match the given one."
+            assert reparam.shape == self.shape, "The actual shape does not match the given one."
+
         return True
 
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:

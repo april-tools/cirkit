@@ -1,4 +1,7 @@
 from .binary import BinaryReparam as BinaryReparam
+from .binary import CategoricalProductReparam as CategoricalProductReparam
+from .binary import EFNormalProductReparam as EFNormalProductReparam
+from .binary import InnerLayerProductReparam as InnerLayerProductReparam
 from .composed import ComposedReparam as ComposedReparam
 from .leaf import LeafReparam as LeafReparam
 from .normalized import LogSoftmaxReparam as LogSoftmaxReparam

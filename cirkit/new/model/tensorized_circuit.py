@@ -172,3 +172,5 @@ class TensorizedCircuit(nn.Module):
     # NOTE: partialmethod is not suitable here as it does not have __call__ but __get__.
     grad_circuit = cached_property(functools.partial(differentiate, order=1))
     """The circuit calculating the gradient."""
+
+    product = TCF.product
