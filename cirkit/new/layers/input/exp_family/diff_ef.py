@@ -14,7 +14,7 @@ class DiffEFLayer(InputLayer):
     """The partial differential for Exponential Family distribution layers.
 
     Exponential Family dist:
-        f(x) = exp(eta · T(x) - log_h(x) + A(eta)) = exp(g(x)),
+        f(x) = exp(η · T(x) + log_h(x) - A(η)) = exp(g(x)),
     where g(x) is log-prob.
 
     Differentials:
