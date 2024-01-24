@@ -395,7 +395,12 @@ def product(
                 num_units=self_layer.num_units * other_layer.num_units,
                 # TODO: implement product between circuits with different units
                 layer_cls=ProdEFLayer,  # type: ignore[misc]
-                layer_kwargs=self_layer.layer_kwargs,  # type: ignore[misc]
+                layer_kwargs={  # type: ignore[misc]
+                    "ef1_cls": self_layer.layer_cls,
+                    "ef1_kwargs": self_layer.layer_kwargs,  # type: ignore[misc]
+                    "ef2_cls": other_layer.layer_cls,
+                    "ef2_kwargs": other_layer.layer_kwargs,  # type: ignore[misc]
+                },
                 reparam=EFProductReparam(self_layer.reparam, other_layer.reparam),
             )
         # IGNORE: SymbolicSumLayer contains Any.

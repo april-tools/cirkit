@@ -84,12 +84,15 @@ class EFProductReparam(BinaryReparam):
 
     @staticmethod
     def _func(param1: Tensor, param2: Tensor) -> Tensor:
-        param1 = param1.flatten(start_dim=2).unsqueeze(
-            dim=2
-        )  # shape (H, K, *S) -> (H, K, S) -> (H, K, 1, S).
-        param2 = param2.flatten(start_dim=2).unsqueeze(
-            dim=1
-        )  # shape (H, K, *S) -> (H, K, S) -> (H, 1, K, S).
-        return torch.cat((param1, param2), dim=-1).flatten(
-            start_dim=1, end_dim=2
-        )  # shape (H, K, K, S+S) -> (H, K*K, S+S).
+        # shape (H, K, *S) -> (H, K, S)
+        param1 = param1.flatten(start_dim=2)
+        param2 = param2.flatten(start_dim=2)
+        param1_shape = param1.shape
+        param2_shape = param2.shape
+
+        # shape (H, K, S) -> (H, K*K, S)
+        param1 = param1.repeat(1, 1, param2_shape[1]).reshape(param1_shape[0], -1, param1_shape[-1])
+        param2 = param2.repeat(1, param1_shape[1], 1).reshape(param2_shape[0], -1, param2_shape[-1])
+
+        # shape (H, K*K, S) -> (H, K*K, S+S)
+        return torch.cat((param1, param2), dim=-1)
