@@ -1,7 +1,7 @@
+import math
 from typing import Any, Dict, Type
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
-import numpy as np
 import torch
 from torch import Tensor
 
@@ -26,7 +26,7 @@ class ProdEFLayer(ExpFamilyLayer):
         - log_h(x) = log_h_1(x) + log_h_2(x),
         - A(η) = A_1(η_1) + A_2(η_2).
 
-    However the A here is not the log partition anymore, so get_intergral should not be 1s.
+    However the A here is not the log partition anymore, so get_integral should not be 1s.
     """
 
     # DISABLE: It's designed to have these arguments.
@@ -50,7 +50,7 @@ class ProdEFLayer(ExpFamilyLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Reparameterization): The reparameterization for layer parameters.
+            reparam (BinaryReparam): The reparameterization for layer parameters.
             ef1_cls (Type[ExpFamilyLayer]): The class of the first ExpFamilyLayer for product.
             ef1_kwargs (Dict[str,Any]): The kwargs of the first ExpFamilyLayer for product.
             ef2_cls (Type[ExpFamilyLayer]): The class of the second ExpFamilyLayer for product.
@@ -71,8 +71,8 @@ class ProdEFLayer(ExpFamilyLayer):
             reparam=reparam.reparams[1],
             **ef2_kwargs,  # type: ignore[misc]
         )
-        self.suff_split_point = int(np.prod(ef1.suff_stats_shape))
-        self.suff_stats_shape = (self.suff_split_point + int(np.prod(ef2.suff_stats_shape)),)
+        self.suff_split_point = math.prod(ef1.suff_stats_shape)
+        self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)
 
         super().__init__(
             num_input_units=num_input_units,
@@ -134,7 +134,7 @@ class ProdEFLayer(ExpFamilyLayer):
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
         Raises:
             NotImplementedError: When "not-yet-implemented feature" is invoked.
@@ -142,7 +142,9 @@ class ProdEFLayer(ExpFamilyLayer):
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
-        raise NotImplementedError("The integral of ProdEFLayer is not yet defined.")
+        raise NotImplementedError(
+            "The integral of ProdEFLayer other than categorical and normal is not yet defined."
+        )
 
     # IGNORE: SymbLayerCfg contains Any.
     @classmethod
@@ -166,6 +168,7 @@ class ProdEFLayer(ExpFamilyLayer):
             SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
                 given channel of the given variable.
         """
+        # TODO: support nested ProdEFLayer (3 or more products)
         # TODO: how to check continuous/discrete distribution
         # IGNORE: SymbLayerCfg contains Any.
         layer_kwargs = symb_cfg.get("layer_kwargs", {})  # type: ignore[misc]

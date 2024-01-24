@@ -272,8 +272,8 @@ def differentiate(
     return differential
 
 
-# pylint: disable=too-complex
-# pylint: disable=too-many-statements
+# TODO: refactor: fixed too complex and too many statements
+# pylint: disable-next=too-complex,too-many-statements
 def product(
     self: "SymbolicTensorizedCircuit", other: "SymbolicTensorizedCircuit"
 ) -> "SymbolicTensorizedCircuit":
@@ -364,8 +364,8 @@ def product(
                 self_to_product[self_layer] is other_to_product[other_layer]
             )  # TODO: different-scope product
             return self_to_product[self_layer]
-        # pylint: disable=use-implicit-booleaness-not-len
-        if not len(self_layer.scope & other_layer.scope):
+
+        if not self_layer.scope & other_layer.scope:
             _copy_layer(self, scope=self_layer.scope, circuit_is_self=True)
             _copy_layer(other, scope=other_layer.scope, circuit_is_self=False)
 

@@ -1,4 +1,5 @@
 # pylint: disable=too-many-locals
+# TODO: add to pyproject.toml
 from typing import Dict, Literal, Tuple, Type
 
 from cirkit.new.layers import CategoricalLayer, CPLayer, InputLayer, NormalLayer
