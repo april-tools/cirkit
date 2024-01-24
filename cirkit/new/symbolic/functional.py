@@ -331,7 +331,10 @@ def product(
             if layer.scope <= scope:
                 new_layer = layer.__class__(
                     layer.scope,
-                    (layer.inputs),
+                    (
+                        self_to_product[layer_in] if circuit_is_self else other_to_product[layer_in]
+                        for layer_in in layer.inputs
+                    ),
                     num_units=layer.num_units,
                     layer_cls=layer.layer_cls,
                     layer_kwargs=layer.layer_kwargs,  # type: ignore[misc]
@@ -352,9 +355,6 @@ def product(
             self_layer.layer_cls == other_layer.layer_cls
         )  # TODO: implement product between cp and tucker
         assert self_layer.layer_kwargs == other_layer.layer_kwargs  # type: ignore[misc]
-        assert (
-            self_layer.num_units == other_layer.num_units
-        )  # TODO: implement product between circuits with different units
 
         new_layer: SymbolicLayer
 

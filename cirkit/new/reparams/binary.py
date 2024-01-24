@@ -1,3 +1,5 @@
+from functools import reduce
+from operator import mul
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -57,6 +59,11 @@ class KroneckerReparam(BinaryReparam):
         """
         super().__init__(reparam1, reparam2, func=torch.kron, inv_func=None)
 
+        self.shape = tuple(
+            p1_shape * p2_shape for p1_shape, p2_shape in zip(reparam1.shape, reparam2.shape)
+        )
+        self.dims = reparam1.dims
+
 
 class EFProductReparam(BinaryReparam):
     """Reparameterization for product of Exponential Family.
@@ -81,6 +88,12 @@ class EFProductReparam(BinaryReparam):
                 composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
         """
         super().__init__(reparam1, reparam2, func=self._func, inv_func=None)
+
+        shape_s = reduce(mul, list(reparam1.shape[2:])) + reduce(  # type: ignore[misc]
+            mul, list(reparam2.shape[2:])
+        )  # type: ignore[misc]
+        self.shape = tuple([reparam1.shape[0], reparam1.shape[1] * reparam2.shape[1], shape_s])
+        self.dims = (len(self.shape) - 1,)
 
     @staticmethod
     def _func(param1: Tensor, param2: Tensor) -> Tensor:
