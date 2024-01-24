@@ -12,7 +12,7 @@ from cirkit.new.reparams.reparam import Reparameterization
 
 
 class UnaryReparam(ComposedReparam[Tensor]):
-    """The unary composed reparameterization."""
+    """The base class for unary composed reparameterization."""
 
     # TODO: pylint is wrong?
     # DISABLE: This is not useless as the signature of __init__ has changed.

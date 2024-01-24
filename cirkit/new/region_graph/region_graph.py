@@ -297,6 +297,11 @@ class RegionGraph:
             if partition1.scope & scope != partition2.scope & scope:
                 continue  # Only check partitions with the same scope.
 
+            if any(partition1.scope <= input.scope for input in partition2.inputs) or any(
+                partition2.scope <= input.scope for input in partition1.inputs
+            ):
+                continue  # Only check partitions not within another partition.
+
             adj_mat = np.zeros((len(partition1.inputs), len(partition2.inputs)), dtype=np.bool_)
             for (i, region1), (j, region2) in itertools.product(
                 enumerate(partition1.inputs), enumerate(partition2.inputs)

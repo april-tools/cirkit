@@ -16,12 +16,12 @@ class ExpFamilyLayer(InputLayer):
     """The abstract base class for Exponential Family distribution layers.
 
     Exponential Family dist:
-        f(x|theta) = exp(eta(theta) · T(x) - log_h(x) + A(eta)).
+        f(x|theta) = exp(η(theta) · T(x) + log_h(x) - A(η)).
     Ref: https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions.
 
-    However here we directly parameterize eta instead of theta:
-        f(x|eta) = exp(eta · T(x) - log_h(x) + A(eta)).
-    Implemtations provide inverse mapping from eta to theta.
+    However here we directly parameterize η instead of theta:
+        f(x|η) = exp(η · T(x) + log_h(x) - A(η)).
+    Implemtations provide inverse mapping from η to theta.
 
     This implementation is fully factorized over the variables if used as multivariate, i.e., \
     equivalent to num_vars (arity) univariate EF distributions followed by a Hadamard product of \

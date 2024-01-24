@@ -1,4 +1,6 @@
 from .binary import BinaryReparam as BinaryReparam
+from .binary import EFProductReparam as EFProductReparam
+from .binary import KroneckerReparam as KroneckerReparam
 from .composed import ComposedReparam as ComposedReparam
 from .leaf import LeafReparam as LeafReparam
 from .normalized import LogSoftmaxReparam as LogSoftmaxReparam
