@@ -1,3 +1,4 @@
+# pylint: disable=too-many-locals
 import torch
 
 from cirkit.new import set_layer_comp_space

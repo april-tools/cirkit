@@ -1,10 +1,10 @@
-# pylint: disable-next=too-many-arguments,dangerous-default-value
-from typing import Dict, Literal, Tuple
+# pylint: disable=too-many-locals
+from typing import Dict, Literal, Tuple, Type
 
-from cirkit.new.layers import CategoricalLayer, CPLayer, NormalLayer
+from cirkit.new.layers import CategoricalLayer, CPLayer, InputLayer, NormalLayer
 from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import RegionGraph, RegionNode
-from cirkit.new.reparams import EFNormalReparam, ExpReparam, SoftmaxReparam
+from cirkit.new.reparams import EFNormalReparam, ExpReparam, Reparameterization, SoftmaxReparam
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
 
 
@@ -50,6 +50,9 @@ def get_two_circuits(
 
     num_units_1 = 4
     num_units_2 = 5
+
+    input_cls: Type[InputLayer]
+    input_reparam: Type[Reparameterization]
 
     if setting == "cat":
         input_cls = CategoricalLayer

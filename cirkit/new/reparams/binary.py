@@ -90,8 +90,8 @@ class EFProductReparam(BinaryReparam):
         super().__init__(reparam1, reparam2, func=self._func, inv_func=None)
 
         shape_s = reduce(mul, list(reparam1.shape[2:])) + reduce(  # type: ignore[misc]
-            mul, list(reparam2.shape[2:])
-        )  # type: ignore[misc]
+            mul, list(reparam2.shape[2:])  # type: ignore[misc]
+        )
         self.shape = tuple([reparam1.shape[0], reparam1.shape[1] * reparam2.shape[1], shape_s])
         self.dims = (len(self.shape) - 1,)
 
