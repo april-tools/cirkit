@@ -297,8 +297,8 @@ class RegionGraph:
             if partition1.scope & scope != partition2.scope & scope:
                 continue  # Only check partitions with the same scope.
 
-            if (any(partition1.scope <= input.scope for input in partition2.inputs)) or (
-                any(partition2.scope <= input.scope for input in partition1.inputs)
+            if any(partition1.scope <= input.scope for input in partition2.inputs) or any(
+                partition2.scope <= input.scope for input in partition1.inputs
             ):
                 continue  # Only check partitions not within another partition.
 

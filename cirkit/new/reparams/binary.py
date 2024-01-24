@@ -84,15 +84,15 @@ class EFProductReparam(BinaryReparam):
 
     @staticmethod
     def _func(param1: Tensor, param2: Tensor) -> Tensor:
-        # shape (H, K, *S) -> (H, K, S)
-        param1 = param1.flatten(start_dim=2)
-        param2 = param2.flatten(start_dim=2)
-        # shape (H, K, S) -> (H, K, K, S+S)
-        concat_param = torch.cat(
-            torch.broadcast_tensors(  # type: ignore[no-untyped-call]
-                param1.unsqueeze(dim=2), param2.unsqueeze(dim=1)  # type: ignore[misc]
-            ),
-            dim=-1,
-        )
-        # shape (H, K, K, S+S) -> (H, K*K, S+S)
-        return concat_param.reshape(concat_param.shape[0], -1, concat_param.shape[-1])
+        param1 = param1.flatten(start_dim=2).unsqueeze(
+            dim=2
+        )  # shape (H, K, *S) -> (H, K, S) -> (H, K, 1, S).
+        param2 = param2.flatten(start_dim=2).unsqueeze(
+            dim=1
+        )  # shape (H, K, *S) -> (H, K, S) -> (H, 1, K, S).
+        # IGNORE: broadcast_tensors is not typed.
+        return torch.cat(
+            torch.broadcast_tensors(param1, param2), dim=-1  # type: ignore[no-untyped-call,misc]
+        ).flatten(
+            start_dim=1, end_dim=2
+        )  # shape (H, K, K, S+S) -> (H, K*K, S+S).
