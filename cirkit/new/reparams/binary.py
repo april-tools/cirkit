@@ -43,11 +43,13 @@ class KroneckerReparam(BinaryReparam):
 
     def __init__(
         self,
-        reparam1: Reparameterization,
-        reparam2: Reparameterization,
+        reparam1: Optional[Reparameterization] = None,
+        reparam2: Optional[Reparameterization] = None,
         /,
     ) -> None:
         """Init class.
+
+        NOTE: Be careful about passing None for this reparam. It might be unexpected.
 
         Args:
             reparam1 (Optional[Reparameterization], optional): The input reparameterization to be \
@@ -68,11 +70,13 @@ class EFProductReparam(BinaryReparam):
 
     def __init__(
         self,
-        reparam1: Reparameterization,
-        reparam2: Reparameterization,
+        reparam1: Optional[Reparameterization] = None,
+        reparam2: Optional[Reparameterization] = None,
         /,
     ) -> None:
         """Init class.
+
+        NOTE: Be careful about passing None for this reparam. It might be unexpected.
 
         Args:
             reparam1 (Optional[Reparameterization], optional): The input reparameterization to be \
