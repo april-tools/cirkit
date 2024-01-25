@@ -7,7 +7,6 @@ from typing_extensions import final  # FUTURE: in typing from 3.11 for __final__
 from cirkit.new.utils.scope.scope import Scope
 
 
-# IGNORE: Incompatible multi-inheritance is expected.
 # IGNORE: The annotation for final in typeshed/typing_extensions.pyi contains Any.
 # IGNORE: Incompatible multi-inheritance is expected.
 @Scope.register("frozenset")  # type: ignore[misc]

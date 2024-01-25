@@ -4,6 +4,7 @@ from cirkit.new.layers import CategoricalLayer, CPLayer
 from cirkit.new.region_graph import RegionGraph, RegionNode
 from cirkit.new.reparams import ExpReparam
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 def get_simple_rg() -> RegionGraph:
@@ -27,12 +28,11 @@ def get_symbolic_circuit_on_rg(rg: RegionGraph) -> SymbolicTensorizedCircuit:
         rg,
         num_input_units=num_units,
         num_sum_units=num_units,
-        input_layer_cls=input_cls,
-        input_layer_kwargs=input_kwargs,
-        input_reparam=reparam,
-        sum_layer_cls=inner_cls,
-        sum_layer_kwargs=inner_kwargs,
-        sum_reparam=reparam,
-        prod_layer_cls=inner_cls,
-        prod_layer_kwargs=None,
+        input_cfg=SymbLayerCfg(
+            layer_cls=input_cls, layer_kwargs=input_kwargs, reparam_factory=reparam
+        ),
+        sum_cfg=SymbLayerCfg(
+            layer_cls=inner_cls, layer_kwargs=inner_kwargs, reparam_factory=reparam
+        ),
+        prod_cfg=SymbLayerCfg(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
     )

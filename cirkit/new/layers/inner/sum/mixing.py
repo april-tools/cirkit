@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 from torch import Tensor
 
@@ -42,6 +44,21 @@ class MixingLayer(SumLayer):
         self.params = reparam
         if self.params.materialize((num_output_units, arity), dim=1):
             self.reset_parameters()  # Only reset if newly materialized.
+
+    @classmethod
+    def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> Literal[0]:
+        """Infer the number of product units in the layer based on given information.
+
+        This layer has no product units. This method is only for interface compatibility.
+
+        Args:
+            num_input_units (int): The number of input units.
+            arity (int, optional): The arity of the layer. Defaults to 2.
+
+        Returns:
+            Literal[0]: Sum layers have 0 product units.
+        """
+        return 0
 
     def _forward_linear(self, x: Tensor) -> Tensor:
         return torch.einsum("kh,h...k->...k", self.params(), x)  # shape (H, *B, K) -> (*B, K).

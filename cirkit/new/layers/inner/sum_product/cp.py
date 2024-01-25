@@ -49,7 +49,7 @@ class CPLayer(SumProductLayer):
             arity=1,
             reparam=reparam,
         )
-        # DenseLayer already invoked reset_parameters().
+        # The params belong to DenseLayer so we don't handle it here.
 
     @classmethod
     def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> int:

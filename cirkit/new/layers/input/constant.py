@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import Optional
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
@@ -62,11 +62,8 @@ class ConstantLayer(InputLayer):
             .expand(*x.shape[1:-1], self.num_output_units)
         )
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]
-        cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -80,9 +77,7 @@ class ConstantLayer(InputLayer):
         """
         # IGNORE: Unavoidable for kwargs.
         assert isinstance(
-            const_value := symb_cfg.get("layer_kwargs", {}).get(  # type: ignore[misc]
-                "const_value", None
-            ),
+            const_value := symb_cfg.layer_kwargs.get("const_value", None),  # type: ignore[misc]
             (float, int),
         ), "Mismatched kwargs for this layer."
 
@@ -91,16 +86,13 @@ class ConstantLayer(InputLayer):
                 "The definite integral of ConstantLayer with const_value!=0 is infinity."
             )
 
-        # IGNORE: SymbLayerCfg contains Any.
-        return {  # type: ignore[misc]
-            "layer_cls": ConstantLayer,
-            "layer_kwargs": {"const_value": 0.0},
-            "reparam": None,
-        }
+        # IGNORE: Unavoidable for kwargs.
+        return SymbLayerCfg(
+            layer_cls=ConstantLayer, layer_kwargs={"const_value": 0.0}  # type: ignore[misc]
+        )
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -119,12 +111,9 @@ class ConstantLayer(InputLayer):
         """
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: variance issue
-            return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
+            return symb_cfg
 
-        # IGNORE: SymbLayerCfg contains Any.
-        return {  # type: ignore[misc]
-            "layer_cls": ConstantLayer,
-            "layer_kwargs": {"const_value": 0.0},
-            "reparam": None,
-        }
+        # IGNORE: Unavoidable for kwargs.
+        return SymbLayerCfg(
+            layer_cls=ConstantLayer, layer_kwargs={"const_value": 0.0}  # type: ignore[misc]
+        )

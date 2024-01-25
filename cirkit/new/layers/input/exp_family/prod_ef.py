@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, Type
+from typing import cast
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
@@ -30,19 +30,16 @@ class ProdEFLayer(ExpFamilyLayer):
     """
 
     # DISABLE: It's designed to have these arguments.
-    # IGNORE: Unavoidable for kwargs.
     # pylint: disable-next=too-many-arguments
-    def __init__(  # type: ignore[misc]
+    def __init__(
         self,
         *,
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
         reparam: BinaryReparam,
-        ef1_cls: Type[ExpFamilyLayer],
-        ef1_kwargs: Dict[str, Any],
-        ef2_cls: Type[ExpFamilyLayer],
-        ef2_kwargs: Dict[str, Any],
+        ef1_cfg: SymbLayerCfg[ExpFamilyLayer],
+        ef2_cfg: SymbLayerCfg[ExpFamilyLayer],
     ) -> None:
         """Init class.
 
@@ -52,25 +49,28 @@ class ProdEFLayer(ExpFamilyLayer):
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
             reparam (BinaryReparam): The reparameterization for layer parameters.
-            ef1_cls (Type[ExpFamilyLayer]): The class of the first ExpFamilyLayer for product.
-            ef1_kwargs (Dict[str,Any]): The kwargs of the first ExpFamilyLayer for product.
-            ef2_cls (Type[ExpFamilyLayer]): The class of the second ExpFamilyLayer for product.
-            ef2_kwargs (Dict[str,Any]): The kwargs of the second ExpFamilyLayer for product.
+            ef1_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the first ExpFamilyLayer for \
+                product, layer_cls and layer_kwargs will be used and reparam and reparam_factory \
+                will be ignored in favour of the reparam passed in above.
+            ef2_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the second ExpFamilyLayer for \
+                product, layer_cls and layer_kwargs will be used and reparam and reparam_factory \
+                will be ignored in favour of the reparam passed in above.
         """
+        # TODO: better way to handle the shapes?
         # IGNORE: Unavoidable for kwargs.
-        ef1 = ef1_cls(
+        ef1 = ef1_cfg.layer_cls(
             num_input_units=num_input_units,
             num_output_units=reparam.reparams[0].shape[1],
             arity=arity,
             reparam=reparam.reparams[0],
-            **ef1_kwargs,  # type: ignore[misc]
+            **ef1_cfg.layer_kwargs,  # type: ignore[misc]
         )
-        ef2 = ef2_cls(
+        ef2 = ef2_cfg.layer_cls(
             num_input_units=num_input_units,
-            num_output_units=reparam.reparams[1].shape[1],
+            num_output_units=reparam.reparams[0].shape[1],
             arity=arity,
-            reparam=reparam.reparams[1],
-            **ef2_kwargs,  # type: ignore[misc]
+            reparam=reparam.reparams[0],
+            **ef2_cfg.layer_kwargs,  # type: ignore[misc]
         )
         self.suff_split_point = math.prod(ef1.suff_stats_shape)
         self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)
@@ -127,11 +127,8 @@ class ProdEFLayer(ExpFamilyLayer):
 
         return self.ef1.log_partition(eta1) + self.ef2.log_partition(eta2)
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]
-        cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -147,9 +144,8 @@ class ProdEFLayer(ExpFamilyLayer):
             "The integral of ProdEFLayer other than categorical and normal is not yet defined."
         )
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -171,15 +167,18 @@ class ProdEFLayer(ExpFamilyLayer):
         """
         # TODO: support nested ProdEFLayer (3 or more products)
         # TODO: how to check continuous/discrete distribution
-        # IGNORE: SymbLayerCfg contains Any.
-        layer_kwargs = symb_cfg.get("layer_kwargs", {})  # type: ignore[misc]
+        # CAST: kwargs.get gives Any.
+        # IGNORE: Unavoidable for kwargs.
         if CategoricalLayer in (
-            layer_kwargs.get("ef1_cls"),  # type: ignore[misc]
-            layer_kwargs.get("ef2_cls"),  # type: ignore[misc]
+            cast(
+                SymbLayerCfg[ExpFamilyLayer],
+                symb_cfg.layer_kwargs.get("ef1_cfg"),  # type: ignore[misc]
+            ).layer_cls,
+            cast(
+                SymbLayerCfg[ExpFamilyLayer],
+                symb_cfg.layer_kwargs.get("ef2_cfg"),  # type: ignore[misc]
+            ).layer_cls,
         ):
             raise TypeError("Cannot differentiate over discrete variables.")
 
-        # TODO: variance issue
-        return super().get_partial(
-            symb_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx  # type: ignore[misc]
-        )
+        return super().get_partial(symb_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx)

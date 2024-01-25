@@ -1,4 +1,3 @@
-from typing import Any, Dict, Type, cast
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
@@ -23,17 +22,15 @@ class DiffEFLayer(InputLayer):
     """
 
     # DISABLE: It's designed to have these arguments.
-    # IGNORE: Unavoidable for kwargs.
     # pylint: disable-next=too-many-arguments
-    def __init__(  # type: ignore[misc]
+    def __init__(
         self,
         *,
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
         reparam: Reparameterization,
-        ef_cls: Type[ExpFamilyLayer],
-        ef_kwargs: Dict[str, Any],
+        ef_cfg: SymbLayerCfg[ExpFamilyLayer],
         order: int,
         var_idx: int,
         ch_idx: int,
@@ -46,8 +43,9 @@ class DiffEFLayer(InputLayer):
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
             reparam (Reparameterization): The reparameterization for layer parameters.
-            ef_cls (Type[ExpFamilyLayer]): The class of ExpFamilyLayer to differentiate.
-            ef_kwargs (Dict[str,Any]): The kwargs of ExpFamilyLayer to differentiate.
+            ef_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of ExpFamilyLayer to differentiate, \
+                layer_cls and layer_kwargs will be used and reparam and reparam_factory will be \
+                ignored in favour of the reparam passed in above.
             order (int): The order of differentiation.
             var_idx (int): The variable to diffrentiate. The idx is counted within this layer's \
                 scope but not global variable id.
@@ -67,12 +65,12 @@ class DiffEFLayer(InputLayer):
         )
 
         # IGNORE: Unavoidable for kwargs.
-        self.ef = ef_cls(
+        self.ef = ef_cfg.layer_cls(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
             reparam=reparam,
-            **ef_kwargs,  # type: ignore[misc]
+            **ef_cfg.layer_kwargs,  # type: ignore[misc]
         )
         # ExpFamilyLayer already invoked reset_parameters().
 
@@ -115,11 +113,8 @@ class DiffEFLayer(InputLayer):
             self.comp_space.from_log(log_p), self.comp_space.from_linear(g_factor)
         )
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_integral(  # type: ignore[misc]
-        cls, symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -133,9 +128,8 @@ class DiffEFLayer(InputLayer):
         """
         raise NotImplementedError("The integral of DiffEFLayer is not yet defined.")
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
@@ -158,8 +152,7 @@ class DiffEFLayer(InputLayer):
         # TODO: duplicate code?
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
-            # TODO: variance issue
-            return cast(SymbLayerCfg[InputLayer], symb_cfg)  # type: ignore[misc]
+            return symb_cfg
 
         # TODO: for same var_idx and ch_idx, can reuse the same symb_cfg with only order increased.
 

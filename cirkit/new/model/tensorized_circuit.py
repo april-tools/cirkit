@@ -20,12 +20,12 @@ from cirkit.new.symbolic import (
 @final
 class TensorizedCircuit(nn.Module):
     """The tensorized circuit with concrete computational graph in PyTorch.
-    
+
     This class is aimed for computation, and therefore does not include excessive strutural \
     properties. If those are really needed, use the properties of TensorizedCircuit.symb_circuit.
     """
 
-    def __init__(self, symb_circuit: SymbolicTensorizedCircuit) -> None:
+    def __init__(self, symb_circuit: SymbolicTensorizedCircuit, /) -> None:
         """Init class.
 
         Args:
@@ -49,48 +49,36 @@ class TensorizedCircuit(nn.Module):
         for symb_layer in symb_circuit.layers:
             # ANNOTATE: Different subclasses are assigned below.
             layer: Optional[Layer]
-            # IGNORE: All SymbolicLayer contain Any.
-            # IGNORE: Unavoidable for kwargs.
             if issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
-                symb_layer, SymbolicProductLayer  # type: ignore[misc]
+                symb_layer, SymbolicProductLayer
             ):  # Sum-product fusion at prod: build the actual layer with arity of prod.
                 # len(symb_layer.outputs) == 1 should be guaranteed by PartitionNode.
                 next_layer = symb_layer.outputs[0]  # There should be exactly one SymbSum output.
                 assert (
-                    isinstance(next_layer, SymbolicSumLayer)  # type: ignore[misc]
+                    isinstance(next_layer, SymbolicSumLayer)
                     and next_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
-                layer = symb_layer.layer_cls(  # TODO: add a function for this cls construction?
-                    # TODO: is it good to use only [0]?
-                    num_input_units=symb_layer.inputs[0].num_units,
-                    num_output_units=next_layer.num_units,
-                    arity=symb_layer.arity,
-                    reparam=next_layer.reparam,
-                    **next_layer.layer_kwargs,  # type: ignore[misc]
+                # Concretize based on the cfg of SymbolicSumLayer, and the input num_units and arity
+                # of SymbolicProductLayer
+                layer = next_layer.concretize(
+                    num_input_units=symb_layer.inputs[0].num_units, arity=symb_layer.arity
                 )
             elif issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
-                symb_layer, SymbolicSumLayer  # type: ignore[misc]
+                symb_layer, SymbolicSumLayer
             ):  # Sum-product fusion at sum: just run checks and fill a placeholder.
                 prev_layer = symb_layer.inputs[0]  # There should be exactly one SymbProd input.
                 assert (
                     symb_layer.arity == 1
-                    and isinstance(prev_layer, SymbolicProductLayer)  # type: ignore[misc]
+                    and isinstance(prev_layer, SymbolicProductLayer)
                     and prev_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
                 layer = None
-            elif not issubclass(symb_layer.layer_cls, SumProductLayer):  # Normal layers.
-                layer = symb_layer.layer_cls(
-                    # TODO: is it good to use only [0]?
-                    num_input_units=(  # num_channels for InputLayers or num_units of prev layer.
-                        symb_layer.inputs[0].num_units if symb_layer.inputs else self.num_channels
-                    ),
-                    num_output_units=symb_layer.num_units,
-                    arity=(  # Reusing arity to contain num_vars for InputLayer.
-                        symb_layer.arity if symb_layer.arity else len(symb_layer.scope)
-                    ),
-                    reparam=symb_layer.reparam,
-                    **symb_layer.layer_kwargs,  # type: ignore[misc]
+            elif issubclass(symb_layer.layer_cls, InputLayer):  # Input layers.
+                layer = symb_layer.concretize(
+                    num_input_units=self.num_channels, arity=len(symb_layer.scope)
                 )
+            elif not issubclass(symb_layer.layer_cls, SumProductLayer):  # No-fuse inner layers.
+                layer = symb_layer.concretize()
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
                 #       readable and also easier for static analysis inside the blocks. Yet the

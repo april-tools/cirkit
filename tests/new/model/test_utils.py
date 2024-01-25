@@ -1,4 +1,4 @@
-from typing import Any, Dict, Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, Literal, Tuple, Type
 
 import torch
 from torch import Tensor
@@ -10,13 +10,12 @@ from cirkit.new.layers import (
     NormalLayer,
     ProductLayer,
     SumLayer,
-    SumProductLayer,
 )
 from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import QuadTree
 from cirkit.new.reparams import EFNormalReparam, LeafReparam, LogSoftmaxReparam
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
-from cirkit.new.utils.type_aliases import OptReparamFactory, ReparamFactory
+from cirkit.new.utils.type_aliases import ReparamFactory, SymbLayerCfg
 
 
 # pylint: disable-next=too-many-arguments,dangerous-default-value
@@ -27,13 +26,13 @@ def get_circuit_2x2_fullcfg(  # type: ignore[misc]
     num_sum_units: int = 1,
     num_classes: int = 1,
     input_layer_cls: Type[InputLayer] = CategoricalLayer,
-    input_layer_kwargs: Optional[Dict[str, Any]] = {"num_categories": 2},
-    input_reparam: OptReparamFactory = LogSoftmaxReparam,
-    sum_layer_cls: Type[Union[SumLayer, SumProductLayer]] = CPLayer,
-    sum_layer_kwargs: Optional[Dict[str, Any]] = {},
+    input_layer_kwargs: Dict[str, Any] = {"num_categories": 2},
+    input_reparam: ReparamFactory = LogSoftmaxReparam,
+    sum_layer_cls: Type[SumLayer] = CPLayer,
+    sum_layer_kwargs: Dict[str, Any] = {},
     sum_reparam: ReparamFactory = LeafReparam,
-    prod_layer_cls: Type[Union[ProductLayer, SumProductLayer]] = CPLayer,
-    prod_layer_kwargs: Optional[Dict[str, Any]] = {},
+    prod_layer_cls: Type[ProductLayer] = CPLayer,
+    prod_layer_kwargs: Dict[str, Any] = {},
 ) -> TensorizedCircuit:
     rg = QuadTree((2, 2), struct_decomp=False)
     symbc = SymbolicTensorizedCircuit(
@@ -42,14 +41,19 @@ def get_circuit_2x2_fullcfg(  # type: ignore[misc]
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
         num_classes=num_classes,
-        input_layer_cls=input_layer_cls,
-        input_layer_kwargs=input_layer_kwargs,  # type: ignore[misc]
-        input_reparam=input_reparam,
-        sum_layer_cls=sum_layer_cls,
-        sum_layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
-        sum_reparam=sum_reparam,
-        prod_layer_cls=prod_layer_cls,
-        prod_layer_kwargs=prod_layer_kwargs,  # type: ignore[misc]
+        input_cfg=SymbLayerCfg(
+            layer_cls=input_layer_cls,
+            layer_kwargs=input_layer_kwargs,  # type: ignore[misc]
+            reparam_factory=input_reparam,
+        ),
+        sum_cfg=SymbLayerCfg(
+            layer_cls=sum_layer_cls,
+            layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
+            reparam_factory=sum_reparam,
+        ),
+        prod_cfg=SymbLayerCfg(
+            layer_cls=prod_layer_cls, layer_kwargs=prod_layer_kwargs  # type: ignore[misc]
+        ),
     )
     return TensorizedCircuit(symbc)
 

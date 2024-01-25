@@ -7,6 +7,7 @@ from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import RegionGraph, RegionNode
 from cirkit.new.reparams import EFNormalReparam, ExpReparam, Reparameterization, SoftmaxReparam
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 def get_two_circuits(
@@ -72,14 +73,17 @@ def get_two_circuits(
         num_sum_units=num_units_1,
         num_channels=num_channels,
         num_classes=num_classes,
-        input_layer_cls=input_cls,
-        input_layer_kwargs=input_kwargs,
-        input_reparam=input_reparam,
-        sum_layer_cls=inner_cls,
-        sum_layer_kwargs=inner_kwargs,
-        sum_reparam=inner_reparam,
-        prod_layer_cls=inner_cls,
-        prod_layer_kwargs=None,
+        input_cfg=SymbLayerCfg(
+            layer_cls=input_cls,
+            layer_kwargs=input_kwargs,
+            reparam_factory=input_reparam,
+        ),
+        sum_cfg=SymbLayerCfg(
+            layer_cls=inner_cls,
+            layer_kwargs=inner_kwargs,
+            reparam_factory=inner_reparam,
+        ),
+        prod_cfg=SymbLayerCfg(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
     )
 
     symbolic_circuit_2 = SymbolicTensorizedCircuit(
@@ -88,14 +92,17 @@ def get_two_circuits(
         num_sum_units=num_units_2,
         num_channels=num_channels,
         num_classes=num_classes,
-        input_layer_cls=input_cls,
-        input_layer_kwargs=input_kwargs,
-        input_reparam=input_reparam,
-        sum_layer_cls=inner_cls,
-        sum_layer_kwargs=inner_kwargs,
-        sum_reparam=inner_reparam,
-        prod_layer_cls=inner_cls,
-        prod_layer_kwargs=None,
+        input_cfg=SymbLayerCfg(
+            layer_cls=input_cls,
+            layer_kwargs=input_kwargs,
+            reparam_factory=input_reparam,
+        ),
+        sum_cfg=SymbLayerCfg(
+            layer_cls=inner_cls,
+            layer_kwargs=inner_kwargs,
+            reparam_factory=inner_reparam,
+        ),
+        prod_cfg=SymbLayerCfg(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
     )
 
     return (TensorizedCircuit(symbolic_circuit_1), TensorizedCircuit(symbolic_circuit_2))

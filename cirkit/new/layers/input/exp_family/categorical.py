@@ -91,9 +91,8 @@ class CategoricalLayer(ExpFamilyLayer):
         """
         return torch.zeros(()).to(eta).expand(eta.shape[:2])
 
-    # IGNORE: SymbLayerCfg contains Any.
     @classmethod
-    def get_partial(  # type: ignore[misc]
+    def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> Never:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \

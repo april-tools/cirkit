@@ -10,13 +10,8 @@ def test_symbolic_circuit_simple() -> None:
     circuit = get_symbolic_circuit_on_rg(rg)
 
     assert len(list(circuit.layers)) == 6
-    assert all(
-        isinstance(layer, SymbolicInputLayer)  # type: ignore[misc]
-        for layer in circuit.input_layers
-    )
-    assert all(
-        isinstance(layer, SymbolicSumLayer) for layer in circuit.output_layers  # type: ignore[misc]
-    )
+    assert all(isinstance(layer, SymbolicInputLayer) for layer in circuit.input_layers)
+    assert all(isinstance(layer, SymbolicSumLayer) for layer in circuit.output_layers)
 
 
 def test_symbolic_circuit_qt() -> None:
