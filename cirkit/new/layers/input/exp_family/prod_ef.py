@@ -126,6 +126,26 @@ class ProdEFLayer(ExpFamilyLayer):
     def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
+        Generally, we cannot calculate the integral in closed form, but in some special cases we \
+        can, as shown below (LogIntegExp is integration w.r.t. x).
+
+        Assume:
+            1. T_2(x) = T_1(x) (so η_1, η_2 are of the same shape);
+            2. log_h_2(x) = log_h_2 (constant).
+        By definition:
+            LogIntegExp(η_1 · T_1(x) + log_h_1(x)) = A_1(η_1).
+        That is:
+            LogIntegExp((η_1 + η_2) · T_1(x) + log_h_1(x)) = A_1(η_1 + η_2).
+        Therefore:
+            LogIntegExp(η · T(x) + log_h(x) - A(η)) \
+            = LogIntegExp((η_1 + η_2) · T_1(x) + (log_h_1(x) + log_h_2) - A(η)) \
+            = A_1(η_1 + η_2) + log_h_2 - A(η).
+
+        The subscripts can be swapped for constant log_h_1, but note that the circuit product is \
+        NOT commutative. For simplicity we further require in practice that f_1 and f_2 are of the \
+        same class (and therefore log_h_* are both constant), and this can be easily extended to \
+        more-than-two product.
+
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
