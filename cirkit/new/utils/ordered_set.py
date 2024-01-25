@@ -6,7 +6,7 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 # TODO: pylint issue? protocol are expected to have few public methods
 # pylint: disable-next=too-few-public-methods
 class _SupportsDunderLT(Protocol):
-    def __lt__(self, other: Self, /) -> bool:  # At least support comparison with self type.
+    def __lt__(self, other: Self) -> bool:  # At least support comparison with self type.
         ...
 
 
@@ -46,16 +46,17 @@ class OrderedSet(Collection[T]):
     ###########################
     # NOTE: As a general interface, any object can be tested with `in`, not just T. This enables
     #       proper testing when a superclass of T is passed in and happens to be T.
-    def __contains__(self, element: object) -> bool:
-        """Test whether an element is contained in the set.
+    def __contains__(self, item: object) -> bool:
+        """Test whether an item (any object) is contained in the set.
 
         Args:
-            element (object): The element to test.
+            item (object): The item to test. Any object can be tests, but only those of type T \
+                make sense.
 
         Returns:
-            bool: Whether the element exists.
+            bool: Whether the item exists.
         """
-        return element in self._container
+        return item in self._container
 
     ##########################
     # collections.abc.Iterable
