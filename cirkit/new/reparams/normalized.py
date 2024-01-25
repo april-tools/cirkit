@@ -29,7 +29,8 @@ class _HasDimsTuple(Protocol):
 
     # DISABLE: It's intended to omit method docstring for this Protocol.
     @property
-    def dims(self) -> Tuple[int, ...]:  # pylint: disable=missing-function-docstring
+    # pylint: disable-next=missing-function-docstring
+    def dims(self) -> Tuple[int, ...]:
         ...
 
 

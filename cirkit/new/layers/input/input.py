@@ -10,7 +10,7 @@ from cirkit.new.utils.type_aliases import SymbLayerCfg
 class InputLayer(Layer):
     """The abstract base class for input layers."""
 
-    # NOTE: We use exactly the same interface (H, *B, K)->(*B, K) for __call__ of input layers:
+    # NOTE: We use exactly the same interface (H, *B, K) -> (*B, K) for __call__ of input layers:
     #           1. Define arity(H)=num_vars(D), reusing the H dimension.
     #           2. Define num_input_units(K)=num_channels(C), which reuses the K dimension.
     #       For dimension D (variables), we should parse the input in circuit according to the

@@ -92,8 +92,8 @@ def batch_high_order_at(
     """
     assert order >= 0, "The order of differential must be non-negative."
 
-    # TODO: pylance issue. mypy is good with annotation
-    diff_func = cast(Callable[[Tensor], Tuple[Tensor, ...]], lambda x: (func(x),))
+    # ANNOTATE: The return value is allowed to be tuple of any length.
+    diff_func: Callable[[Tensor], Tuple[Tensor, ...]] = lambda x: (func(x),)
     for _ in range(order):
         diff_func = batch_diff_at(diff_func, indices)
 

@@ -22,18 +22,20 @@ from cirkit.new.utils.type_aliases import OptReparamFactory, ReparamFactory
 # TODO: __repr__?
 
 
-# Mark this class final so that __class__ of a SymbC is always SymbolicTensorizedCircuit.
+# Mark this class final so that type(SymbC) is always SymbolicTensorizedCircuit.
 # DISABLE: It's designed to have these attributes.
 # IGNORE: Unavoidable for kwargs.
 @final  # type: ignore[misc]
-class SymbolicTensorizedCircuit:  # pylint: disable=too-many-instance-attributes
+# pylint: disable-next=too-many-instance-attributes
+class SymbolicTensorizedCircuit:
     """The symbolic representation of a tensorized circuit."""
 
     # TODO: is this the best way to provide reparam? or give a layer-wise mapping?
     # TODO: how to design interface? require kwargs only?
     # TODO: how to deal with too-many?
     # IGNORE: Unavoidable for kwargs.
-    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments,too-many-locals
+    # pylint: disable-next=too-many-arguments,too-many-locals
+    def __init__(  # type: ignore[misc]
         self,
         region_graph: RegionGraph,
         *,

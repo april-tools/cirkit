@@ -4,7 +4,6 @@ from typing import Tuple
 from cirkit.new.region_graph.algorithms.utils import HypercubeToScope
 from cirkit.new.region_graph.region_graph import RegionGraph
 from cirkit.new.region_graph.rg_node import RegionNode
-from cirkit.new.utils import Scope
 
 # TODO: now should work with H!=W but need tests
 
@@ -102,9 +101,10 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
     hypercube_to_scope = HypercubeToScope(shape)
 
     # Padding using Scope({num_var}) which is one larger than range(num_var).
-    pad_scope = Scope({height * width})
-    # The regions of the current layer, in shape (H, W).
-    layer = [[RegionNode(pad_scope)] * (width + 1) for _ in range(height + 1)]
+    # DISABLE: This is considered a constant here, although RegionNode is mutable.
+    PADDING = RegionNode({height * width})  # pylint: disable=invalid-name
+    # The regions of the current layer, in shape (H, W). The same PADDING object is reused.
+    layer = [[PADDING] * (width + 1) for _ in range(height + 1)]
 
     # Add univariate input nodes.
     for i, j in itertools.product(range(height), range(width)):
@@ -112,16 +112,11 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
         layer[i][j] = node
         graph.add_node(node)
 
-    # Merge layer by layer.
-    # TODO: or not using while loop?
-    while height > 1 or width > 1:  # pylint: disable=while-used
-        prev_height = height
-        prev_width = width
-        prev_layer = layer
-
-        height = (prev_height + 1) // 2
-        width = (prev_width + 1) // 2
-        layer = [[RegionNode(pad_scope)] * (width + 1) for _ in range(height + 1)]
+    # Merge layer by layer, loop until (H, W)==(1, 1).
+    for _ in range((max(height, width) - 1).bit_length()):
+        height = (height + 1) // 2
+        width = (width + 1) // 2
+        prev_layer, layer = layer, [[PADDING] * (width + 1) for _ in range(height + 1)]
 
         for i, j in itertools.product(range(height), range(width)):
             regions = tuple(  # Filter valid regions in the 4 possible sub-regions.
@@ -132,7 +127,7 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
                     prev_layer[i * 2 + 1][j * 2],
                     prev_layer[i * 2 + 1][j * 2 + 1],
                 )
-                if node.scope != pad_scope
+                if node.scope != PADDING
             )
             if len(regions) == 1:
                 node = regions[0]

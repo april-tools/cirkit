@@ -113,7 +113,8 @@ def _parse_delta(
 
 # TODO: too-complex,too-many-locals. how to solve?
 # DISABLE: We use function name with upper case to mimic a class constructor.
-def PoonDomingos(  # pylint: disable=invalid-name,too-complex,too-many-locals
+# pylint: disable-next=invalid-name,too-complex,too-many-locals
+def PoonDomingos(
     shape: Sequence[int],
     *,
     delta: Union[float, List[float], List[List[float]]],
@@ -159,9 +160,21 @@ def PoonDomingos(  # pylint: disable=invalid-name,too-complex,too-many-locals
     queue.append(cur_hypercube)
     depth_dict[cur_hypercube] = 0
 
-    # DISABLE: It's intended to use while loop.
-    while queue:  # pylint: disable=while-used
-        cur_hypercube = queue.popleft()
+    # DISABLE: This is considered a constant.
+    SENTINEL = ((-1,) * len(shape), (-1,) * len(shape))  # pylint: disable=invalid-name
+
+    def queue_popleft() -> HyperCube:
+        """Wrap queue.popleft() with sentinel value.
+
+        Returns:
+            HyperCube: The result of queue.popleft(), or SENTINEL when queue is exhausted.
+        """
+        try:
+            return queue.popleft()
+        except IndexError:
+            return SENTINEL
+
+    for cur_hypercube in iter(queue_popleft, SENTINEL):
         if depth_dict[cur_hypercube] > max_depth:
             continue
 

@@ -1,3 +1,4 @@
+import math
 from typing import Dict, Sequence, Tuple
 
 import numpy as np
@@ -30,7 +31,9 @@ class HypercubeToScope(Dict[HyperCube, Scope]):
         self.shape = tuple(shape)
         # We assume it's feasible to save the whole hypercube, since it should be the whole region.
         # ANNOTATE: Numpy has typing issues.
-        self.hypercube: NDArray[np.int64] = np.arange(np.prod(shape), dtype=np.int64).reshape(shape)
+        self.hypercube: NDArray[np.int64] = np.arange(math.prod(shape), dtype=np.int64).reshape(
+            shape
+        )
 
     def __missing__(self, key: HyperCube) -> Scope:
         """Construct the item when not exist in the dict.

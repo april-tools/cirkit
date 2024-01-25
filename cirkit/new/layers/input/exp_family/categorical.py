@@ -1,5 +1,4 @@
-from typing import NoReturn
-from typing_extensions import Self  # FUTURE: in typing from 3.11
+from typing_extensions import Never, Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
@@ -17,7 +16,8 @@ class CategoricalLayer(ExpFamilyLayer):
     """
 
     # DISABLE: It's designed to have these arguments.
-    def __init__(  # pylint: disable=too-many-arguments
+    # pylint: disable-next=too-many-arguments
+    def __init__(
         self,
         *,
         num_input_units: int,
@@ -95,7 +95,7 @@ class CategoricalLayer(ExpFamilyLayer):
     @classmethod
     def get_partial(  # type: ignore[misc]
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> NoReturn:
+    ) -> Never:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
         of the given variable in the scope of this layer.
 

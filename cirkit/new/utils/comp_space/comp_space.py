@@ -1,30 +1,24 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Optional, Sequence, Type, TypeVar, Union, cast
+from typing import (
+    Callable,
+    ClassVar,
+    Dict,
+    Iterable,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    final,
+)
 from typing_extensions import Self, TypeVarTuple, Unpack  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
 Ts = TypeVarTuple("Ts")
 
-CompSpaceT = TypeVar("CompSpaceT", bound=Type["ComputationSapce"])
-
-
-def register_comp_space(cls: CompSpaceT) -> CompSpaceT:
-    """Register a concrete ComputationSapce by its name.
-
-    Args:
-        cls (CompSpaceT): The ComputationSapce subclass to register.
-
-    Returns:
-        CompSpaceT: The class passed in.
-    """
-    # CAST: __final__ is not part of standard data model.
-    assert cast(
-        bool, getattr(cls, "__final__", False)
-    ), "Subclasses of ComputationSapce should be final."
-    # DISABLE: Access to _registry is by design.
-    ComputationSapce._registry[cls.name] = cls  # pylint: disable=protected-access
-    return cls
+CompSpaceClsT = TypeVar("CompSpaceClsT", bound=Type["ComputationSapce"])
 
 
 class ComputationSapce(ABC):
@@ -36,8 +30,49 @@ class ComputationSapce(ABC):
     regardless of the global setting.
     """
 
-    _registry: Dict[str, Type["ComputationSapce"]] = {}
+    _registry: ClassVar[Dict[str, Type["ComputationSapce"]]] = {}
 
+    @final
+    @staticmethod
+    def register(name: str) -> Callable[[CompSpaceClsT], CompSpaceClsT]:
+        """Register a concrete ComputationSapce implementation by its name.
+
+        Args:
+            name (str): The name to register.
+
+        Returns:
+            Callable[[CompSpaceClsT], CompSpaceClsT]: The class decorator to register a subclass.
+        """
+
+        def _decorator(cls: CompSpaceClsT) -> CompSpaceClsT:
+            """Register a concrete ComputationSapce implementation by its name.
+
+            Args:
+                cls (CompSpaceClsT): The ComputationSapce subclass to register.
+
+            Returns:
+                CompSpaceClsT: The class passed in.
+            """
+            # CAST: __final__ is not part of standard data model.
+            assert cast(
+                bool, getattr(cls, "__final__", False)
+            ), "Subclasses of ComputationSapce should be final."
+            ComputationSapce._registry[name] = cls
+            return cls
+
+        return _decorator
+
+    @final
+    @staticmethod
+    def list_all_comp_space() -> Iterable[str]:
+        """List all ComputationSapce names registered.
+
+        Returns:
+            Iterable[str]: An iterable over all names available.
+        """
+        return iter(ComputationSapce._registry)
+
+    @final
     @staticmethod
     def get_comp_space_by_name(name: str) -> Type["ComputationSapce"]:
         """Get a ComputationSapce by its registered name.
@@ -50,7 +85,9 @@ class ComputationSapce(ABC):
         """
         return ComputationSapce._registry[name]
 
-    def __new__(cls) -> Self:  # TODO: NoReturn should be used, but mypy is not happy.
+    # TODO: Never should be used. This is known issue: https://github.com/python/mypy/issues/14044
+    @final
+    def __new__(cls) -> Self:
         """Raise an error when this class is instantiated.
 
         Raises:
@@ -61,10 +98,8 @@ class ComputationSapce(ABC):
         """
         raise TypeError("This class cannot be instantiated.")
 
-    # NOTE: Subclasses should implement all the following and should be @final.
-
-    name: str
-    """The name to be registered."""
+    # NOTE: Subclasses should not touch any of the above final static methods but should implement
+    #       all of the following abstract class methods, and subclasses should be @final.
 
     # TODO: if needed, we can also have to_log, to_lin.
     @classmethod

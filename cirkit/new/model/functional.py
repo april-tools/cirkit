@@ -17,7 +17,7 @@ def integrate(
     Returns:
         TensorizedCircuit: The circuit giving the definite integral.
     """
-    return self.__class__(self.symb_circuit.integrate(scope=scope))
+    return type(self)(self.symb_circuit.integrate(scope=scope))
 
 
 def differentiate(self: "TensorizedCircuit", *, order: int = 1) -> "TensorizedCircuit":
@@ -37,7 +37,7 @@ def differentiate(self: "TensorizedCircuit", *, order: int = 1) -> "TensorizedCi
     Returns:
         TensorizedCircuit: The circuit giving the (total) differential.
     """
-    return self.__class__(self.symb_circuit.differentiate(order=order))
+    return type(self)(self.symb_circuit.differentiate(order=order))
 
 
 def product(self: "TensorizedCircuit", other: "TensorizedCircuit") -> "TensorizedCircuit":
@@ -50,4 +50,4 @@ def product(self: "TensorizedCircuit", other: "TensorizedCircuit") -> "Tensorize
     Returns:
         SymbolicTensorizedCircuit: The circuit product.
     """
-    return self.__class__(self.symb_circuit.product(other.symb_circuit))
+    return type(self)(self.symb_circuit.product(other.symb_circuit))

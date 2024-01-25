@@ -24,7 +24,8 @@ class DiffEFLayer(InputLayer):
 
     # DISABLE: It's designed to have these arguments.
     # IGNORE: Unavoidable for kwargs.
-    def __init__(  # type: ignore[misc]  # pylint: disable=too-many-arguments
+    # pylint: disable-next=too-many-arguments
+    def __init__(  # type: ignore[misc]
         self,
         *,
         num_input_units: int,
