@@ -54,7 +54,9 @@ def test_symbolic_layers_sum_and_prod() -> None:
         repr(prod_layer).splitlines()[0] == f"SymbolicProductLayer@0x{id(prod_layer):x}("
         "scope=Scope({0, 1}), arity=2, num_units=3, layer_cfg=SymbLayerCfg(layer_cls=<class 'cirkit"
         ".new.layers.inner.product.hadamard.HadamardLayer'>, layer_kwargs={}, reparam=None, "
-        "reparam_factory=None))"
+        "reparam_factory=None, symb_layer=SymbolicProductLayer@0x"
+        f"{id(prod_layer.layer_cfg.symb_layer):x}(scope=Scope({{0, 1}}), arity=2, num_units=3, "
+        "layer_cfg=...)))"
     )
 
     sum_layer = SymbolicSumLayer(
@@ -114,7 +116,9 @@ def test_symbolic_layers_sum_prod() -> None:
         repr(prod_layer).splitlines()[0] == f"SymbolicProductLayer@0x{id(prod_layer):x}("
         "scope=Scope({0, 1}), arity=2, num_units=9, layer_cfg=SymbLayerCfg(layer_cls=<class 'cirkit"
         ".new.layers.inner.sum_product.tucker.TuckerLayer'>, layer_kwargs={}, reparam=None, "
-        "reparam_factory=None))"
+        "reparam_factory=None, symb_layer=SymbolicProductLayer@0x"
+        f"{id(prod_layer.layer_cfg.symb_layer):x}(scope=Scope({{0, 1}}), arity=2, num_units=9, "
+        "layer_cfg=...)))"
     )
 
     sum_layer = SymbolicSumLayer(
