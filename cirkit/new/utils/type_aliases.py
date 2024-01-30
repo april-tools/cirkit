@@ -6,6 +6,7 @@ from typing import (
     Dict,
     Generic,
     List,
+    Mapping,
     Optional,
     Type,
     TypedDict,
@@ -19,6 +20,7 @@ if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to 
     # NOTE: For safety, anything from cirkit should be imported here.
     from cirkit.new.layers import Layer
     from cirkit.new.reparams import Reparameterization
+    from cirkit.new.symbolic import GenericSymbolicLayer
 
 # Here're all the type defs and aliases shared across the library.
 # If a type is private and only used in one file, it can also be defined there.
@@ -84,11 +86,16 @@ class SymbLayerCfg(Generic[LayerT_co]):  # type: ignore[misc]
     construct a reparam instance when we want a different instance each time. But in a SymbLayer, \
     an instantiated reparam should be used, so that the same instance can be reused if needed.
 
+    When a SymbolicLayer is constructed based on a cfg, it saves a **copy** of the cfg, and saves \
+    a reference to self (the SymbL). This cfg should be held by only this one SymbL so that we can \
+    find the layer corresponding to the cfg.
+
     We make this class generic so that it can be specific on a Layer subclass.
     """
 
     layer_cls: Type[LayerT_co]
     # IGNORE: Unavoidable for kwargs.
-    layer_kwargs: Dict[str, Any] = field(default_factory=dict)  # type: ignore[misc]
+    layer_kwargs: Mapping[str, Any] = field(default_factory=dict)  # type: ignore[misc]
     reparam: Optional["Reparameterization"] = None
     reparam_factory: Optional[ReparamFactory] = None
+    symb_layer: Optional["GenericSymbolicLayer[LayerT_co]"] = None
