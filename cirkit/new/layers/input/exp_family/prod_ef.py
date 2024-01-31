@@ -5,7 +5,6 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 import torch
 from torch import Tensor
 
-from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.reparams import EFProductReparam, Reparameterization
@@ -165,6 +164,10 @@ class ProdEFLayer(ExpFamilyLayer):
         # TODO: how to check continuous/discrete distribution
         # CAST: kwargs.get gives Any.
         # IGNORE: Unavoidable for kwargs.
+        # DISABLE: We must import here to avoid cyclic import.
+        # pylint: disable-next=import-outside-toplevel,cyclic-import
+        from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
+
         if CategoricalLayer in (
             cast(
                 SymbLayerCfg[ExpFamilyLayer],

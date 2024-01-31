@@ -199,3 +199,46 @@ class ExpFamilyLayer(InputLayer):
                 "ch_idx": ch_idx,
             },
         )
+
+    @classmethod
+    def get_product(
+        cls,
+        self_symb_cfg: SymbLayerCfg[Self],
+        other_symb_cfg: SymbLayerCfg[InputLayer],
+    ) -> SymbLayerCfg[InputLayer]:
+        """Get the symbolic config to construct the product of this input layer \
+            with the other input layer.
+        
+        Cases:
+            - Product with class in ExpFamilyLayer: f_1*f_2(x) according to the \
+                construction in ProdEFLayer class.
+            - Product with ConstantLayer: f(x)*c.
+            - Product with DiffEFLayer: f_1(x)*f_2'(x). 
+        
+        Args:
+            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer \
+                must be of InputLayer.
+
+        Raises:
+            NotImplementedError: When "not-yet-implemented feature" is invoked.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the product of two input layers.
+        """
+        # DISABLE: We must import here to avoid cyclic import.
+        # pylint: disable-next=import-outside-toplevel,cyclic-import
+        from cirkit.new.layers.input.exp_family.prod_ef import ProdEFLayer
+
+        if issubclass(other_symb_cfg.layer_cls, ExpFamilyLayer):
+            # IGNORE: Unavoidable for kwargs.
+            return SymbLayerCfg(
+                layer_cls=ProdEFLayer,
+                layer_kwargs={  # type: ignore[misc]
+                    "ef1_cfg": self_symb_cfg,
+                    "ef2_cfg": other_symb_cfg,
+                },
+            )
+        raise NotImplementedError(
+            "Product for EF input layer and other input layers not implemented."
+        )

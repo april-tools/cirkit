@@ -1,9 +1,11 @@
 from typing import Literal, Optional, cast
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
 from cirkit.new.layers.inner.product.product import ProductLayer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class KroneckerLayer(ProductLayer):
@@ -64,3 +66,28 @@ class KroneckerLayer(ProductLayer):
         x0 = x[0].unsqueeze(dim=-1)  # shape (*B, K, 1).
         x1 = x[1].unsqueeze(dim=-2)  # shape (*B, 1, K).
         return self.comp_space.mul(x0, x1).flatten(start_dim=-2)  # shape (*B, K, K) -> (*B, K**2).
+
+    @classmethod
+    def get_product(
+        cls,
+        self_symb_cfg: SymbLayerCfg[Self],
+        other_symb_cfg: SymbLayerCfg[Self],
+    ) -> SymbLayerCfg[Self]:
+        """Get the symbolic config to construct the product of this Kronecker layer \
+            with the other Kronecker layer.
+            
+        The new layer config of this Kronecker layer is unchanged, as \
+            (a_1 ⊗ a_2) ⊗ (b_1 ⊗ b_2) = PermuteMatrix((a_1 ⊗ b_1) ⊗ (a_2 ⊗ b_2)). \
+            Where the PermuteMatrix is treated as a parent sum layer.
+        
+        Pre-requisite:
+            - The arity of both layers must be 2.
+            - The two layers for product must be of the same layer class (KroneckerLayer). \
+                This means that the product must be performed between two \
+                circuits with the same region graph.
+
+        Args:
+            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+        """
+        raise NotImplementedError("Product between two kroneker layers is not implemented yet.")
