@@ -27,7 +27,7 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "torch~=2.1.0",
+  "torch~=2.2.0",
   "numpy>=1.24.0",
 ]
 
@@ -45,11 +45,18 @@ test = [
   "pytest-cov",
 ]
 notebooks = [
-  "torchvision"
+  "notebook",
+  "torchvision",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/april-tools/cirkit"
+
+################################################################################
+# Anything below this line does count to the "hash of pyproject" in workflows,
+# as they are for development tools but not project release.
+
+# Configs for testing. Rules for coverage may be changed to reflect unreachable-by-design.
 
 # unit test
 [tool.pytest.ini_options]
@@ -60,21 +67,19 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["cirkit"]
-
 [tool.coverage.report]
 show_missing = true
 exclude_also = [  # regex for exclusion
   '@overload',
 ]
 
-# Following are configs for code quality checks. Any change should be put into
-# a separate PR and merge with care. Rules can only be modified after discussion.
+# Configs for linting. Rules may be changed/lifted with a good reason.
 
 # code style
 [tool.black]
 line-length = 100
 target-version = ["py38"]
-required-version = 23
+required-version = "23"
 
 # import style
 [tool.isort]
@@ -158,8 +163,8 @@ default-docstring-type = "google"
 
 # type checking
 [tool.mypy]
-python_version = 3.8
-mypy_path = "3rd-party-stubs"
+python_version = "3.8"
+mypy_path = "3rd-party-stubs"  # TODO: for old version, check deprecation for cirkit.new
 follow_imports = "silent"
 follow_imports_for_stubs = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous
