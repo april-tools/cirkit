@@ -14,20 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out with submodules
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Truncate pyproject for hashing
+        run: |
+          sed -n '1,/#\{80\}/p' pyproject.toml > pyproject-hash.toml
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.8'
           cache: 'pip'
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: pyproject-hash.toml
       - name: Cache mypy_cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .mypy_cache
-          key: mypy_cache-${{ hashFiles('pyproject.toml') }}
+          key: mypy_cache-${{ hashFiles('pyproject-hash.toml') }}
           restore-keys: mypy_cache-
       - name: Install dependencies
         run: |
