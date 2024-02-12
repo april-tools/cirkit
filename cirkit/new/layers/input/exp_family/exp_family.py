@@ -198,5 +198,4 @@ class ExpFamilyLayer(InputLayer):
                 "var_idx": var_idx,
                 "ch_idx": ch_idx,
             },
-            reparam=symb_cfg.reparam,  # Reuse the same reparam to share params.
         )

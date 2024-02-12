@@ -1,3 +1,4 @@
+from typing import Optional
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
@@ -29,7 +30,7 @@ class DiffEFLayer(InputLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: Reparameterization,
+        reparam: Optional[Reparameterization] = None,
         ef_cfg: SymbLayerCfg[ExpFamilyLayer],
         order: int,
         var_idx: int,
@@ -42,10 +43,10 @@ class DiffEFLayer(InputLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Reparameterization): The reparameterization for layer parameters.
+            reparam (Optional[Reparameterization], optional): Ignored. This layer has no params \
+                itself but only holds the params through the ef_cfg passed in. Defaults to None.
             ef_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of ExpFamilyLayer to differentiate, \
-                layer_cls and layer_kwargs will be used and reparam and reparam_factory will be \
-                ignored in favour of the reparam passed in above.
+                should include a reference to a concretized SymbL for EF.
             order (int): The order of differentiation.
             var_idx (int): The variable to diffrentiate. The idx is counted within this layer's \
                 scope but not global variable id.
@@ -61,18 +62,15 @@ class DiffEFLayer(InputLayer):
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
-            reparam=reparam,
+            reparam=None,
         )
 
-        # IGNORE: Unavoidable for kwargs.
-        self.ef = ef_cfg.layer_cls(
-            num_input_units=num_input_units,
-            num_output_units=num_output_units,
-            arity=arity,
-            reparam=reparam,
-            **ef_cfg.layer_kwargs,  # type: ignore[misc]
+        assert (symbl := ef_cfg.symb_layer) is not None and (
+            ef := symbl.concrete_layer
+        ) is not None, (
+            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
         )
-        # ExpFamilyLayer already invoked reset_parameters().
+        self.ef = ef
 
         self.order = order
         self.var_idx = var_idx

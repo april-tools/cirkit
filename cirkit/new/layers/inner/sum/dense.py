@@ -22,7 +22,7 @@ class DenseLayer(SumLayer):
 
         Args:
             num_input_units (int): The number of input units.
-            num_output_units (int): The number of output units, must be input**arity.
+            num_output_units (int): The number of output units.
             arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
             reparam (Reparameterization): The reparameterization for layer parameters.
         """

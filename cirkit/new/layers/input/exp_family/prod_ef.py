@@ -1,5 +1,5 @@
 import math
-from typing import cast
+from typing import Optional, cast
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
@@ -8,7 +8,7 @@ from torch import Tensor
 from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.input import InputLayer
-from cirkit.new.reparams import BinaryReparam
+from cirkit.new.reparams import EFProductReparam, Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -37,7 +37,7 @@ class ProdEFLayer(ExpFamilyLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: BinaryReparam,
+        reparam: Optional[Reparameterization] = None,
         ef1_cfg: SymbLayerCfg[ExpFamilyLayer],
         ef2_cfg: SymbLayerCfg[ExpFamilyLayer],
     ) -> None:
@@ -48,30 +48,25 @@ class ProdEFLayer(ExpFamilyLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (BinaryReparam): The reparameterization for layer parameters.
+            reparam (Optional[Reparameterization], optional): Ignored. This layer constructs a \
+                EFProductReparam internally based on ef1_cfg and ef2_cfg passed in. \
+                Defaults to None.
             ef1_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the first ExpFamilyLayer for \
-                product, layer_cls and layer_kwargs will be used and reparam and reparam_factory \
-                will be ignored in favour of the reparam passed in above.
+                product, should include a reference to a concretized SymbL for EF.
             ef2_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the second ExpFamilyLayer for \
-                product, layer_cls and layer_kwargs will be used and reparam and reparam_factory \
-                will be ignored in favour of the reparam passed in above.
+                product, should include a reference to a concretized SymbL for EF.
         """
-        # TODO: better way to handle the shapes?
-        # IGNORE: Unavoidable for kwargs.
-        ef1 = ef1_cfg.layer_cls(
-            num_input_units=num_input_units,
-            num_output_units=reparam.reparams[0].shape[1],
-            arity=arity,
-            reparam=reparam.reparams[0],
-            **ef1_cfg.layer_kwargs,  # type: ignore[misc]
+        assert (symbl1 := ef1_cfg.symb_layer) is not None and (
+            ef1 := symbl1.concrete_layer
+        ) is not None, (
+            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
         )
-        ef2 = ef2_cfg.layer_cls(
-            num_input_units=num_input_units,
-            num_output_units=reparam.reparams[0].shape[1],
-            arity=arity,
-            reparam=reparam.reparams[0],
-            **ef2_cfg.layer_kwargs,  # type: ignore[misc]
+        assert (symbl2 := ef2_cfg.symb_layer) is not None and (
+            ef2 := symbl2.concrete_layer
+        ) is not None, (
+            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
         )
+
         self.suff_split_point = math.prod(ef1.suff_stats_shape)
         self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)
 
@@ -79,8 +74,9 @@ class ProdEFLayer(ExpFamilyLayer):
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
-            reparam=reparam,
+            reparam=EFProductReparam(ef1_cfg.reparam, ef2_cfg.reparam),
         )
+        # TODO: is it possible to remove the EFProductReparam at all? but EF needs a reparam.
 
         # We need suff_stats_shape before __init__, but submodule can only be registered after.
         self.ef1 = ef1

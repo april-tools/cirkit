@@ -374,7 +374,8 @@ class Scope(Collection[int], Hashable):
 
     # DISABLE: This is a hack that self goes as the first of scopes, so that self.union(...) and
     #          Scope.union(...) both work, even when ... is empty.
-    def union(*scopes: "Scope") -> "Scope":  # pylint: disable=no-self-argument
+    # pylint: disable-next=no-self-argument
+    def union(*scopes: "Scope") -> "Scope":
         """Take the union over multiple scopes, for use as reduction with n-ary | operator.
 
         Can be used as either self.union(...) or Scope.union(...).

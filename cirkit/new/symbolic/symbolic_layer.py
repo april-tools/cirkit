@@ -12,6 +12,8 @@ LayerT_co = TypeVar("LayerT_co", bound=Layer, covariant=True)
 # NOTE: This is generic corresponding to SymbLayerCfg, so that subclasses can refine internal types.
 #       In most cases we use SymbolicLayer instead of GenericSymbolicLayer, so this class is not
 #       included in __init__.py. Yet we still name it as public in case it need to be used.
+# DISABLE: It's designed to have these attributes.
+# pylint: disable-next=too-many-instance-attributes
 class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
     """The abstract base class for symbolic layers in symbolic circuits, with generics over the \
     concrete Layer class."""
@@ -50,20 +52,22 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
 
         self.arity = len(self.inputs)
         self.num_units = num_units
-        # A SymbLayer instance should bind to a reparam instance but not just factory, to enable
-        # reusing the same reparam in transforms.
+        # A SymbLayer should hold its own instance of SymbLayerCfg, so the cfg passed in is always
+        # copied; it should bind to a reparam instance but not just factory, to enable reusing the
+        # same reparam in transforms.
         # IGNORE: Unavoidable for kwargs.
-        self.layer_cfg = (
-            SymbLayerCfg(  # TODO: better way to construct SymbLayerCfg than untyped replace?
-                layer_cls=layer_cfg.layer_cls,
-                layer_kwargs=layer_cfg.layer_kwargs,  # type: ignore[misc]
-                reparam=layer_cfg.reparam_factory(),
-                reparam_factory=None,
-            )
+        # TODO: better way to construct SymbLayerCfg than untyped replace?
+        #       reparam_factory only called here
+        self.layer_cfg = SymbLayerCfg(
+            layer_cls=layer_cfg.layer_cls,
+            layer_kwargs=layer_cfg.layer_kwargs,  # type: ignore[misc]
+            reparam=layer_cfg.reparam_factory()
             if layer_cfg.reparam_factory is not None
-            else layer_cfg
+            else layer_cfg.reparam,
+            symb_layer=self,
         )
         self.layer_cls = layer_cfg.layer_cls  # Commonly used, so shorten reference.
+        self.concrete_layer: Optional[LayerT_co] = None  # Set in concretize().
 
     def __repr__(self) -> str:
         """Generate the repr string of the layer.
@@ -109,21 +113,12 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
         Returns:
             Self: A new SymbolicLayer of the same type as self.
         """
-        num_units = self.num_units if num_units is None else num_units
-        # IGNORE: Unavoidable for kwargs.
-        layer_cfg = (
-            self.layer_cfg
-            if layer_cfg is None
-            else layer_cfg
-            if layer_cfg.reparam_factory is None
-            else SymbLayerCfg(  # TODO: better way to construct SymbLayerCfg than untyped replace?
-                layer_cls=layer_cfg.layer_cls,
-                layer_kwargs=layer_cfg.layer_kwargs,  # type: ignore[misc]
-                reparam=layer_cfg.reparam_factory(),
-                reparam_factory=None,
-            )
+        return type(self)(
+            self.scope,
+            layers_in,
+            num_units=num_units if num_units is not None else self.num_units,
+            layer_cfg=layer_cfg if layer_cfg is not None else self.layer_cfg,
         )
-        return type(self)(self.scope, layers_in, num_units=num_units, layer_cfg=layer_cfg)
 
     def concretize(
         self,
@@ -151,15 +146,16 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
         Returns:
             LayerT_co: The concrete Layer.
         """
-        assert (
+        assert (  # TODO: do we need this?
             self.layer_cfg.reparam_factory is None
         ), "A SymbL must hold an instance of reparam instead of a factory."
+        assert self.concrete_layer is None, "A SymbL can be concretized only once."
         num_input_units = self.inputs[0].num_units if num_input_units is None else num_input_units
         num_output_units = self.num_units if num_output_units is None else num_output_units
         arity = self.arity if arity is None else arity
         # CAST: We use a pair of redundant casts to enable intellisense pointing to Layer.__init__.
         # IGNORE: Unavoidable for kwargs.
-        return cast(
+        self.concrete_layer = cast(
             LayerT_co,
             cast(Type[Layer], self.layer_cls)(
                 num_input_units=num_input_units,
@@ -169,6 +165,7 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
                 **self.layer_cfg.layer_kwargs,  # type: ignore[misc]
             ),
         )
+        return self.concrete_layer
 
 
 # This is a specialized version of the generic one, serving as the base of all possible SymbL.
