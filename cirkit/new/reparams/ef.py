@@ -6,11 +6,11 @@ from typing import Optional, Sequence, Union
 import torch
 from torch import Tensor
 
+from cirkit.new.reparams.binary import BinaryReparam
 from cirkit.new.reparams.reparam import Reparameterization
 from cirkit.new.reparams.unary import UnaryReparam
 
-# This file is for specialized reparams designed for one single purpose, e.g., specifically for one
-# InputLayer implementation. unary.py/normalized.py shoud be preferred for general reparams.
+# This file is for specialized reparams designed specifically for ExpFamilyLayer.
 
 
 class EFNormalReparam(UnaryReparam):
@@ -75,3 +75,45 @@ class EFNormalReparam(UnaryReparam):
         # TODO: how should this chain with mask? need to doc the usage. or do we need mask at all?
         assert shape[-2] == 2, "The shape does not fit the requirement of EF-Normal."
         return super().materialize(shape, dim=dim)
+
+
+class EFProductReparam(BinaryReparam):
+    """Reparameterization for product of Exponential Family.
+
+    This is designed to do the "kronecker concat" with flattened suff stats:
+        - Expected input: (H, K_1, *S_1), (H, K_2, *S_2);
+        - Will output: (H, K_1*K_2, flatten(S_1)+flatten(S_2)).
+    """
+
+    def __init__(
+        self,
+        reparam1: Optional[Reparameterization] = None,
+        reparam2: Optional[Reparameterization] = None,
+        /,
+    ) -> None:
+        """Init class.
+
+        NOTE: Be careful about passing None for this reparam. It might be unexpected.
+
+        Args:
+            reparam1 (Optional[Reparameterization], optional): The input reparameterization to be \
+                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam2 (Optional[Reparameterization], optional): The input reparameterization to be \
+                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+        """
+        super().__init__(reparam1, reparam2, func=self._func, inv_func=None)
+
+    @staticmethod
+    def _func(param1: Tensor, param2: Tensor) -> Tensor:
+        param1 = param1.flatten(start_dim=2).unsqueeze(
+            dim=2
+        )  # shape (H, K, *S) -> (H, K, S) -> (H, K, 1, S).
+        param2 = param2.flatten(start_dim=2).unsqueeze(
+            dim=1
+        )  # shape (H, K, *S) -> (H, K, S) -> (H, 1, K, S).
+        # IGNORE: broadcast_tensors is not typed.
+        return torch.cat(
+            torch.broadcast_tensors(param1, param2), dim=-1  # type: ignore[no-untyped-call,misc]
+        ).flatten(
+            start_dim=1, end_dim=2
+        )  # shape (H, K, K, S+S) -> (H, K*K, S+S).

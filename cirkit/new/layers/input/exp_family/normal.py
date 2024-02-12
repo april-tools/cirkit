@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
-from cirkit.new.reparams import Reparameterization
+from cirkit.new.reparams import EFNormalReparam
 
 
 class NormalLayer(ExpFamilyLayer):
@@ -20,7 +20,7 @@ class NormalLayer(ExpFamilyLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: Reparameterization,
+        reparam: EFNormalReparam,
     ) -> None:
         """Init class.
 
@@ -29,10 +29,10 @@ class NormalLayer(ExpFamilyLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Reparameterization): The reparameterization for layer parameters. Expected to \
-                be EFNormalReparam.
-            num_categories (int): The number of categories for Categorical distribution.
+            reparam (EFNormalReparam): The reparameterization for layer parameters. Must be \
+                EFNormalReparam.
         """
+        assert isinstance(reparam, EFNormalReparam), "Must use a EFNormalReparam for NormalLayer."
         self.suff_stats_shape = (2, num_input_units)  # 2 for mean and var.
         # Set self.suff_stats_shape before ExpFamilyLayer.__init__. Although dim=-1 is marked to
         # normalize there, the reparam is expected to be EFNormalReparam which ignores the dim.
