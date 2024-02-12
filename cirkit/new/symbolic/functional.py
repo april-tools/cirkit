@@ -7,7 +7,7 @@ import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from cirkit.new.layers import KroneckerLayer, ProdEFLayer
-from cirkit.new.reparams import EFProductReparam, KroneckerReparam
+from cirkit.new.reparams import KroneckerReparam
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
@@ -350,18 +350,9 @@ def product(
                 layer_cfg=SymbLayerCfg(
                     layer_cls=ProdEFLayer,
                     layer_kwargs={  # type: ignore[misc]
-                        "ef1_cfg": SymbLayerCfg(
-                            layer_cls=self_layer.layer_cls,
-                            layer_kwargs=self_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
-                        ),
-                        "ef2_cfg": SymbLayerCfg(
-                            layer_cls=other_layer.layer_cls,
-                            layer_kwargs=other_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
-                        ),
+                        "ef1_cfg": self_layer.layer_cfg,
+                        "ef2_cfg": other_layer.layer_cfg,
                     },
-                    reparam=EFProductReparam(
-                        self_layer.layer_cfg.reparam, other_layer.layer_cfg.reparam
-                    ),
                 ),
             )
 
