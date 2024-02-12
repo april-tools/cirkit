@@ -41,38 +41,34 @@ class TensorizedCircuit(nn.Module):
         # Automatic nn.Module registry, also in publicly available children names.
         self.layers = nn.ModuleList()
 
-        # The actual internal container for forward, preserves insertion order.
-        # ANNOTATE: Specify content for empty container.
-        self._symb_to_layers: Dict[SymbolicLayer, Optional[Layer]] = {}
-
         # Both containers with have a consistent layer order by this loop.
         for symb_layer in symb_circuit.layers:
             # ANNOTATE: Different subclasses are assigned below.
             layer: Optional[Layer]
             if issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicProductLayer
-            ):  # Sum-product fusion at prod: build the actual layer with arity of prod.
+            ):  # Sum-product fusion at prod: just run checks and and give a placeholder.
                 # len(symb_layer.outputs) == 1 should be guaranteed by PartitionNode.
                 next_layer = symb_layer.outputs[0]  # There should be exactly one SymbSum output.
                 assert (
                     isinstance(next_layer, SymbolicSumLayer)
                     and next_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
-                # Concretize based on the cfg of SymbolicSumLayer, and the input num_units and arity
-                # of SymbolicProductLayer
-                layer = next_layer.concretize(
-                    num_input_units=symb_layer.inputs[0].num_units, arity=symb_layer.arity
-                )
+                layer = None
             elif issubclass(symb_layer.layer_cls, SumProductLayer) and isinstance(
                 symb_layer, SymbolicSumLayer
-            ):  # Sum-product fusion at sum: just run checks and fill a placeholder.
+            ):  # Sum-product fusion at sum: build the actual layer with fused kwargs.
                 prev_layer = symb_layer.inputs[0]  # There should be exactly one SymbProd input.
                 assert (
                     symb_layer.arity == 1
                     and isinstance(prev_layer, SymbolicProductLayer)
                     and prev_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
-                layer = None
+                # Concretize based on the cfg and the output num_units of the SymbolicSumLayer, but
+                # the input num_units and the arity of the SymbolicProductLayer.
+                layer = symb_layer.concretize(
+                    num_input_units=prev_layer.inputs[0].num_units, arity=prev_layer.arity
+                )
             elif issubclass(symb_layer.layer_cls, InputLayer):  # Input layers.
                 layer = symb_layer.concretize(
                     num_input_units=self.num_channels, arity=len(symb_layer.scope)
@@ -88,7 +84,6 @@ class TensorizedCircuit(nn.Module):
                 assert False, "This should not happen."
             if layer is not None:  # Only register actual layers.
                 self.layers.append(layer)
-            self._symb_to_layers[symb_layer] = layer  # But keep a complete mapping.
 
     def __call__(self, x: Tensor) -> Tensor:
         """Invoke the forward function.
@@ -115,22 +110,31 @@ class TensorizedCircuit(nn.Module):
         # ANNOTATE: Specify content for empty container.
         layer_outputs: Dict[SymbolicLayer, Tensor] = {}  # shape (*B, K).
 
-        for symb_layer, layer in self._symb_to_layers.items():
-            if layer is None:
-                assert (
-                    symb_layer.arity == 1
-                ), "Only symbolic layers with arity=1 can be implemented by a place-holder."
-                layer_outputs[symb_layer] = layer_outputs[symb_layer.inputs[0]]
+        # The graph is only saved in SymbC, so we must loop over SymbLs.
+        for symb_layer in self.symb_circuit.layers:
+            layer = symb_layer.concrete_layer
+
+            # DISABLE: Extract the assignment for better readability above.
+            if layer is None:  # pylint: disable=consider-using-assignment-expr
+                # A placeholder, used for SymbolicProductLayer in case of fusion. It's ignored here.
                 continue
 
             if isinstance(layer, InputLayer):
-                scope_idx = tuple(symb_layer.scope)  # Tensor slice does not accept iterable.
-                layer_input = x[..., scope_idx, :].movedim(
+                # Tensor slice does not accept iterable but only sequence.
+                layer_input = x[..., tuple(symb_layer.scope), :].movedim(
                     -2, 0
                 )  # shape (*B, D, C) -> (H=D, *B, K=C).
             else:
+                # The placeholder cases are actually handled here. Only arity=1 layers can have
+                # a placeholder input.
+                layers_in = (
+                    symb_layer.inputs
+                    if symb_layer.arity > 1 or symb_layer.inputs[0].concrete_layer is not None
+                    else symb_layer.inputs[0].inputs
+                )
+                # TODO: save a copy when arity==1
                 layer_input = torch.stack(
-                    [layer_outputs[layer_in] for layer_in in symb_layer.inputs], dim=0
+                    [layer_outputs[layer_in] for layer_in in layers_in], dim=0
                 )  # shape H * (*B, K) -> (H, *B, K).
             layer_outputs[symb_layer] = layer(layer_input)
 
