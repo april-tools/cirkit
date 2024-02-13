@@ -75,3 +75,7 @@ class MixingLayer(SumLayer):
         return self.comp_space.sum(
             self._forward_linear, x, dim=0, keepdim=False
         )  # shape (H, *B, K) -> (*B, K).
+
+
+# NOTE: DenseLayer class have get_product() function, it directly use the get_product() function
+#       in base class SumLayer in sum.py.

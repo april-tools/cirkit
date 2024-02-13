@@ -72,3 +72,7 @@ class TuckerLayer(SumProductLayer):
             Tensor: The output of this layer, shape (*B, K).
         """
         return self.comp_space.sum(self._forward_linear, x[0], x[1], dim=-1, keepdim=True)
+
+
+# NOTE: CPLayer class have get_product() function, it directly use the get_product() function
+#       in base class SumLayer in sum.py.

@@ -67,3 +67,7 @@ class DenseLayer(SumLayer):
         """
         x = x.squeeze(dim=0)  # shape (H=1, *B, K) -> (*B, K).
         return self.comp_space.sum(self._forward_linear, x, dim=-1, keepdim=True)  # shape (*B, K).
+
+
+# NOTE: DenseLayer class have get_product() function, it directly use the get_product() function
+#       in base class SumLayer in sum.py.

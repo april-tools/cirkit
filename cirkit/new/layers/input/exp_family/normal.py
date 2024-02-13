@@ -6,9 +6,6 @@ from torch import Tensor
 
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.reparams import EFNormalReparam
-from cirkit.new.layers.input.exp_family.prod_ef import ProdEFLayer
-from cirkit.new.layers.input.input import InputLayer
-from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class NormalLayer(ExpFamilyLayer):

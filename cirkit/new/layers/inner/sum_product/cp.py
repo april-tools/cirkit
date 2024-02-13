@@ -77,4 +77,7 @@ class CPLayer(SumProductLayer):
         return self.sum(self.prod(x).unsqueeze(dim=0))
 
 
+# NOTE: CPLayer class have get_product() function, it directly use the get_product() function
+#       in base class SumLayer in sum.py.
+
 # TODO: Uncollapsed?

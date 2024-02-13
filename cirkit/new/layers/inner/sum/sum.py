@@ -31,9 +31,6 @@ class SumLayer(InnerLayer):
     ) -> SymbLayerCfg[Self]:
         """Get the symbolic config to construct the product of this layer with the other layer, \
             construct a new layer config with parameter (param_self ⊗ param_other).
-            
-        NOTE: This function is used directly by sub-classes of SumLayer that follows the above \
-            construction: DenseLayer, CPLayer, and TuckerLayer.
         
         Pre-requisite:
             - This function is ONLY USED for certain sub-classes of SumLayer: DenseLayer, CPLayer, \

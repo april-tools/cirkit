@@ -6,8 +6,7 @@ import heapq
 import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-from cirkit.new.layers import KroneckerLayer, ProdEFLayer
-from cirkit.new.reparams import KroneckerReparam
+from cirkit.new.layers.inner.product.kronecker import KroneckerLayer
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
