@@ -1,9 +1,11 @@
 from typing import Optional
+from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
 from cirkit.new.layers.inner.product.product import ProductLayer
 from cirkit.new.reparams import Reparameterization
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class HadamardLayer(ProductLayer):
@@ -59,3 +61,28 @@ class HadamardLayer(ProductLayer):
             Tensor: The output of this layer, shape (*B, K).
         """
         return self.comp_space.prod(x, dim=0, keepdim=False)  # shape (H, *B, K) -> (*B, K).
+
+    @classmethod
+    def get_product(
+        cls,
+        self_symb_cfg: SymbLayerCfg[Self],
+        other_symb_cfg: SymbLayerCfg[Self],
+    ) -> SymbLayerCfg[Self]:
+        """Get the symbolic config to construct the product of this Hadamard layer with the other \
+        Hadamard layer.
+
+        The two inner layers for product must be of the same layer class. This means that the \
+        product must be performed between two circuits with the same region graph.
+
+        The layer config is unchanged, because:
+            (a_1 ⊙ a_2 ⊙ ... ⊙ a_n) ⊗ (b_1 ⊙ b_2 ⊙ ... ⊙ b_n)
+            = (a_1 ⊗ b_1) ⊙ (a_2 ⊗ b_2) ⊙ ... ⊙ (a_n ⊗ b_n).
+
+        Args:
+            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+
+        Returns:
+            SymbLayerCfg[Self]: The symbolic config for the product of the two Hadamard layers.
+        """
+        return self_symb_cfg

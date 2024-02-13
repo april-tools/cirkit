@@ -6,8 +6,7 @@ import heapq
 import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-from cirkit.new.layers import KroneckerLayer, ProdEFLayer
-from cirkit.new.reparams import KroneckerReparam
+from cirkit.new.layers import KroneckerLayer
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
@@ -224,9 +223,7 @@ def differentiate(
     return differential
 
 
-# TODO: do we use SymbLayerCfg?
 # TODO: assert message? also other styling
-# TODO: SymbL.transform?
 # TODO: refactor: fixed too complex and too many statements
 # pylint: disable-next=too-complex,too-many-statements
 def product(
@@ -272,7 +269,7 @@ def product(
 
     # ANNOTATE: Specify content for empty container.
     # Map between self circuit to product circuit, other circuit to product circuit.
-    self_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}
+    self_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}  # TODO: leftover of different scope
     other_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}
 
     def _copy_layer(
@@ -284,14 +281,9 @@ def product(
         """Copy layers into the new circuit."""
         for layer in circuit._layers:
             if layer.scope <= scope:
-                new_layer = type(layer)(
-                    layer.scope,
-                    (
-                        self_to_product[layer_in] if circuit_is_self else other_to_product[layer_in]
-                        for layer_in in layer.inputs
-                    ),
-                    num_units=layer.num_units,
-                    layer_cfg=layer.layer_cfg,  # Reuse the same reparam to share params.
+                new_layer = layer.transform(
+                    self_to_product[layer_in] if circuit_is_self else other_to_product[layer_in]
+                    for layer_in in layer.inputs
                 )
                 product_circuit._layers.append(new_layer)
                 if circuit_is_self:
@@ -304,16 +296,9 @@ def product(
         other_layer: SymbolicLayer,
     ) -> SymbolicLayer:
         """Perform product between two layers."""
-        assert (
-            self_layer.layer_cls == other_layer.layer_cls
-        )  # TODO: implement product between cp and tucker
-        assert (
-            self_layer.layer_cfg.layer_kwargs  # type: ignore[misc]
-            == other_layer.layer_cfg.layer_kwargs  # type: ignore[misc]
-        )
-
         new_layer: SymbolicLayer
 
+        # TODO: leftover of different scope prod
         # product layer is already generated
         if self_layer in self_to_product and other_layer in other_to_product:
             assert (
@@ -329,10 +314,12 @@ def product(
                 Scope(self_layer.scope | other_layer.scope),
                 (self_to_product[self_layer], other_to_product[other_layer]),
                 num_units=self_layer.num_units,
-                # TODO: implement product between circuits with different units
+                # Kroneker product configuration to connect two sub-circuits with distinct scope.
                 layer_cfg=SymbLayerCfg(layer_cls=KroneckerLayer),
             )
+        # TODO: leftover of different scope prod
 
+        # TODO: fuse the following cases for get_product?
         elif isinstance(self_layer, SymbolicInputLayer) and isinstance(
             other_layer, SymbolicInputLayer
         ):
@@ -342,17 +329,13 @@ def product(
                 raise ValueError("Both layers must have a reparameterization")
 
             # IGNORE: Unavoidable for kwargs.
-            new_layer = SymbolicInputLayer(
+            new_layer = type(self_layer)(
                 self_layer.scope,
                 (),
                 num_units=self_layer.num_units * other_layer.num_units,
                 # TODO: implement product between circuits with different units
-                layer_cfg=SymbLayerCfg(
-                    layer_cls=ProdEFLayer,
-                    layer_kwargs={  # type: ignore[misc]
-                        "ef1_cfg": self_layer.layer_cfg,
-                        "ef2_cfg": other_layer.layer_cfg,
-                    },
+                layer_cfg=self_layer.layer_cls.get_product(
+                    self_layer.layer_cfg, other_layer.layer_cfg
                 ),
             )
 
@@ -369,12 +352,8 @@ def product(
                 (_product(self_layer_input[0], other_layer_input[0]),),
                 num_units=self_layer.num_units * other_layer.num_units,
                 # TODO: implement product between circuits with different units
-                layer_cfg=SymbLayerCfg(
-                    layer_cls=self_layer.layer_cls,
-                    layer_kwargs=self_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
-                    reparam=KroneckerReparam(
-                        self_layer.layer_cfg.reparam, other_layer.layer_cfg.reparam
-                    ),
+                layer_cfg=self_layer.layer_cls.get_product(
+                    self_layer.layer_cfg, other_layer.layer_cfg
                 ),
             )
 
@@ -388,6 +367,7 @@ def product(
                 len(self_layer_inputs) == 2 and len(other_layer_inputs) == 2
             ), "product layers only allow for 2 inputs"
 
+            # TODO: automatically aligned due to scope sorting?
             # align the inputs to have the same or similar scope
             aligned_inputs = [
                 (self_input, other_input)
@@ -413,10 +393,8 @@ def product(
                 ([_product(pair[0], pair[1]) for pair in aligned_inputs]),
                 num_units=self_layer.num_units * other_layer.num_units,
                 # TODO: implement product between circuits with different units
-                layer_cfg=SymbLayerCfg(
-                    layer_cls=self_layer.layer_cls,
-                    layer_kwargs=self_layer.layer_cfg.layer_kwargs,  # type: ignore[misc]
-                    reparam=None,
+                layer_cfg=self_layer.layer_cls.get_product(
+                    self_layer.layer_cfg, other_layer.layer_cfg
                 ),
             )
 

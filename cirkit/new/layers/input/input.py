@@ -73,3 +73,22 @@ class InputLayer(Layer):
             SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
                 given channel of the given variable.
         """
+
+    @classmethod
+    @abstractmethod
+    def get_product(
+        cls,
+        self_symb_cfg: SymbLayerCfg[Self],
+        other_symb_cfg: SymbLayerCfg["InputLayer"],
+    ) -> SymbLayerCfg["InputLayer"]:
+        """Get the symbolic config to construct the product of this input layer with the other \
+        input layer.
+
+        Args:
+            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer, \
+                must be of InputLayer.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the product of the two input layers.
+        """

@@ -67,3 +67,6 @@ class DenseLayer(SumLayer):
         """
         x = x.squeeze(dim=0)  # shape (H=1, *B, K) -> (*B, K).
         return self.comp_space.sum(self._forward_linear, x, dim=-1, keepdim=True)  # shape (*B, K).
+
+    # NOTE: get_product is inherited from SumLayer. The product between DesnLayer leads to the
+    #       Kronecker of the param.
