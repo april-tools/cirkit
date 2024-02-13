@@ -17,6 +17,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Merge main into PR branch
+        run: |
+          git merge main
       - name: Truncate pyproject for hashing
         run: |
           sed -n '1,/#\{80\}/p' pyproject.toml > pyproject-hash.toml
