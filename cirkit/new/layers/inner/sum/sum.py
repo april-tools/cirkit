@@ -5,8 +5,7 @@ import torch
 from torch import nn
 
 from cirkit.new.layers.inner.inner import InnerLayer
-from cirkit.new.reparams import Reparameterization
-from cirkit.new.reparams.binary import KroneckerReparam
+from cirkit.new.reparams import KroneckerReparam, Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -29,23 +28,21 @@ class SumLayer(InnerLayer):
         self_symb_cfg: SymbLayerCfg[Self],
         other_symb_cfg: SymbLayerCfg[Self],
     ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this layer with the other layer, \
-            construct a new layer config with parameter (param_self ⊗ param_other).
-        
-        Pre-requisite:
-            - This function is ONLY USED for certain sub-classes of SumLayer: DenseLayer, CPLayer, \
-                and TuckerLayer. Sub-classes that does not follow this construction \
-                (e.g. MixingLayer) would need to override this function.
-            - The two layers for product must both be the same layer class.
-                This means that the product must be performed between two \
-                circuits with the same region graph.
+        """Get the symbolic config to construct the product of this sum layer with the other sum \
+        layer.
+
+        The two inner layers for product must be of the same layer class. This means that the \
+        product must be performed between two circuits with the same region graph.
+
+        This will construct a new layer config with param = param_self ⊗ param_other. This \
+        applies to all sum layers and sum-product layers. See each layer for details.
 
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
             other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
 
         Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of two sum-product layers.
+            SymbLayerCfg[Self]: The symbolic config for the product of the two sum layers.
         """
         assert (
             self_symb_cfg.layer_cls == other_symb_cfg.layer_cls

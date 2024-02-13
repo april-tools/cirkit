@@ -162,23 +162,23 @@ class DiffEFLayer(InputLayer):
         self_symb_cfg: SymbLayerCfg[Self],
         other_symb_cfg: SymbLayerCfg[InputLayer],
     ) -> SymbLayerCfg[InputLayer]:
-        """Get the symbolic config to construct the product of this input layer \
-            with the other input layer.
-        
-        Cases:
-            - Product with DiffEFLayer: f_1'(x)*f_2'(x). 
+        """Get the symbolic config to construct the product of this input layer with the other \
+        input layer.
+
+        TODO: Cases:
+            - Product with DiffEFLayer: f_1'(x)*f_2'(x).
             - Product with class in ExpFamilyLayer: f_1'(x)*f_2(x).
             - Product with ConstantLayer: f'(x)*c.
-        
+
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer \
+            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer, \
                 must be of InputLayer.
 
         Raises:
             NotImplementedError: When "not-yet-implemented feature" is invoked.
-            
+
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the product of two input layers.
+            SymbLayerCfg[InputLayer]: The symbolic config for the product of the two input layers.
         """
         raise NotImplementedError("The product of DiffEFLayer is not yet implemented.")

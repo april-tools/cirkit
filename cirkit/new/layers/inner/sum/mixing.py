@@ -76,6 +76,5 @@ class MixingLayer(SumLayer):
             self._forward_linear, x, dim=0, keepdim=False
         )  # shape (H, *B, K) -> (*B, K).
 
-
-# NOTE: DenseLayer class have get_product() function, it directly use the get_product() function
-#       in base class SumLayer in sum.py.
+    # NOTE: get_product is inherited from SumLayer. The product between MixingLayer leads to the
+    #       Kronecker of the param, with the arity expanded to the product of arities.

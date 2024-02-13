@@ -6,7 +6,7 @@ import heapq
 import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-from cirkit.new.layers.inner.product.kronecker import KroneckerLayer
+from cirkit.new.layers import KroneckerLayer
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
@@ -269,7 +269,7 @@ def product(
 
     # ANNOTATE: Specify content for empty container.
     # Map between self circuit to product circuit, other circuit to product circuit.
-    self_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}
+    self_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}  # TODO: leftover of different scope
     other_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}
 
     def _copy_layer(
@@ -298,6 +298,7 @@ def product(
         """Perform product between two layers."""
         new_layer: SymbolicLayer
 
+        # TODO: leftover of different scope prod
         # product layer is already generated
         if self_layer in self_to_product and other_layer in other_to_product:
             assert (
@@ -316,7 +317,9 @@ def product(
                 # Kroneker product configuration to connect two sub-circuits with distinct scope.
                 layer_cfg=SymbLayerCfg(layer_cls=KroneckerLayer),
             )
+        # TODO: leftover of different scope prod
 
+        # TODO: fuse the following cases for get_product?
         elif isinstance(self_layer, SymbolicInputLayer) and isinstance(
             other_layer, SymbolicInputLayer
         ):
@@ -326,7 +329,7 @@ def product(
                 raise ValueError("Both layers must have a reparameterization")
 
             # IGNORE: Unavoidable for kwargs.
-            new_layer = SymbolicInputLayer(
+            new_layer = type(self_layer)(
                 self_layer.scope,
                 (),
                 num_units=self_layer.num_units * other_layer.num_units,
@@ -364,6 +367,7 @@ def product(
                 len(self_layer_inputs) == 2 and len(other_layer_inputs) == 2
             ), "product layers only allow for 2 inputs"
 
+            # TODO: automatically aligned due to scope sorting?
             # align the inputs to have the same or similar scope
             aligned_inputs = [
                 (self_input, other_input)

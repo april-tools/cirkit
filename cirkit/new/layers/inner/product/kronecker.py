@@ -73,21 +73,23 @@ class KroneckerLayer(ProductLayer):
         self_symb_cfg: SymbLayerCfg[Self],
         other_symb_cfg: SymbLayerCfg[Self],
     ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this Kronecker layer \
-            with the other Kronecker layer.
-            
-        The new layer config of this Kronecker layer is unchanged, as \
-            (a_1 ⊗ a_2) ⊗ (b_1 ⊗ b_2) = PermuteMatrix((a_1 ⊗ b_1) ⊗ (a_2 ⊗ b_2)). \
-            Where the PermuteMatrix is treated as a parent sum layer.
-        
-        Pre-requisite:
-            - The arity of both layers must be 2.
-            - The two layers for product must be of the same layer class (KroneckerLayer). \
-                This means that the product must be performed between two \
-                circuits with the same region graph.
+        """Get the symbolic config to construct the product of this Kronecker layer with the other \
+        Kronecker layer.
+
+        The two inner layers for product must be of the same layer class. This means that the \
+        product must be performed between two circuits with the same region graph.
+
+        TODO: we need permutation: \
+            (a_1 ⊗ a_2) ⊗ (b_1 ⊗ b_2) = PermuteMatrix((a_1 ⊗ b_1) ⊗ (a_2 ⊗ b_2)).
 
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
             other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+
+        Raises:
+            NotImplementedError: When "not-yet-implemented feature" is invoked.
+
+        Returns:
+            SymbLayerCfg[Self]: The symbolic config for the product of the two Kronecker layers.
         """
         raise NotImplementedError("Product between two kroneker layers is not implemented yet.")

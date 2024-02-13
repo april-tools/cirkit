@@ -56,18 +56,16 @@ class InnerLayer(Layer):
         self_symb_cfg: SymbLayerCfg[Self],
         other_symb_cfg: SymbLayerCfg[Self],
     ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this inner layer \
-            with the other inner layer.
-        
-        Pre-requisite:
-            The two inner layers for product must be of the same layer class. \
-                This means that the product must be performed between two \
-                circuits with the same region graph.
+        """Get the symbolic config to construct the product of this inner layer with the other \
+        inner layer.
+
+        The two inner layers for product must be of the same layer class. This means that the \
+        product must be performed between two circuits with the same region graph.
 
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
             other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
 
         Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of two inner layers.
+            SymbLayerCfg[Self]: The symbolic config for the product of the two inner layers.
         """

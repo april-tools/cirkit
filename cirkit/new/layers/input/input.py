@@ -81,8 +81,8 @@ class InputLayer(Layer):
         self_symb_cfg: SymbLayerCfg[Self],
         other_symb_cfg: SymbLayerCfg["InputLayer"],
     ) -> SymbLayerCfg["InputLayer"]:
-        """Get the symbolic config to construct the product of this input layer \
-            with the other input layer.
+        """Get the symbolic config to construct the product of this input layer with the other \
+        input layer.
 
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
@@ -90,5 +90,5 @@ class InputLayer(Layer):
                 must be of InputLayer.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the product of two input layers.
+            SymbLayerCfg[InputLayer]: The symbolic config for the product of the two input layers.
         """

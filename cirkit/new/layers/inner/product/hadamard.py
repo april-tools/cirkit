@@ -68,22 +68,21 @@ class HadamardLayer(ProductLayer):
         self_symb_cfg: SymbLayerCfg[Self],
         other_symb_cfg: SymbLayerCfg[Self],
     ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this Hadamard layer \
-            with the other Hadamard layer.
+        """Get the symbolic config to construct the product of this Hadamard layer with the other \
+        Hadamard layer.
 
-        The layer config is unchanged, as (a_1 ⊙ a_2 ⊙ ... ⊙ a_n) ⊗ (b_1 ⊙ b_2 ⊙ ... ⊙ b_n) = \
-            (a_1 ⊗ b_1) ⊙ (a_2 ⊗ b_2) ⊙ ... ⊙ (a_n ⊗ b_n).
+        The two inner layers for product must be of the same layer class. This means that the \
+        product must be performed between two circuits with the same region graph.
 
-        Pre-requisite:
-            The two layers for product must be of the same layer class (HadamardLayer). \
-                This means that the product must be performed between two \
-                circuits with the same region graph.
+        The layer config is unchanged, because:
+            (a_1 ⊙ a_2 ⊙ ... ⊙ a_n) ⊗ (b_1 ⊙ b_2 ⊙ ... ⊙ b_n)
+            = (a_1 ⊗ b_1) ⊙ (a_2 ⊗ b_2) ⊙ ... ⊙ (a_n ⊗ b_n).
 
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
             other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
 
         Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of two Hadamard layers.
+            SymbLayerCfg[Self]: The symbolic config for the product of the two Hadamard layers.
         """
         return self_symb_cfg

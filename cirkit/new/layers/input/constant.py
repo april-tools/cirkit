@@ -124,24 +124,21 @@ class ConstantLayer(InputLayer):
         self_symb_cfg: SymbLayerCfg[Self],
         other_symb_cfg: SymbLayerCfg[InputLayer],
     ) -> SymbLayerCfg[InputLayer]:
-        """Get the symbolic config to construct the product of this input layer \
-            with the other input layer.
-        
-        Cases:
-            - Product with ConstantLayer: c*c.
-            - Product with class in ExpFamilyLayer: c*f(x).
-            - Product with and DiffEFLayer: c*f'(x). 
-        
+        """Get the symbolic config to construct the product of this input layer with the other \
+        input layer.
+
+        TODO: scaling of other layers.
+
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer \
+            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer, \
                 must be of InputLayer.
 
         Raises:
             NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the product of two input layers.
+            SymbLayerCfg[InputLayer]: The symbolic config for the product of the two input layers.
         """
         if issubclass(other_symb_cfg.layer_cls, ConstantLayer):
             # IGNORE: Unavoidable for kwargs.
@@ -152,6 +149,7 @@ class ConstantLayer(InputLayer):
                     * other_symb_cfg.layer_kwargs["const_value"]  # type: ignore[misc]
                 },
             )
+
         raise NotImplementedError(
             "Product for constant input layer and other input layers not implemented."
         )
