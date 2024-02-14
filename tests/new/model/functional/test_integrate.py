@@ -1,8 +1,10 @@
 import itertools
+from typing import cast
 
 import torch
 
-from cirkit.new.layers import InputLayer
+from cirkit.new.layers import InputLayer, ParameterizedConstantLayer
+from cirkit.new.reparams.unary import UnaryReparam
 from tests import floats
 from tests.new.model.test_prod_utils import get_two_circuits, pf_of_product_of_normal
 from tests.new.model.test_utils import get_circuit_2x2, set_circuit_2x2_params
@@ -31,6 +33,9 @@ def test_circuit_product_part_func() -> None:
 
     for layer in product_part_circuit.layers:  # type: ignore[misc]
         if isinstance(layer, InputLayer):  # type: ignore[misc]
-            pf_output_by_expression = pf_of_product_of_normal(layer.params())  # type: ignore[misc]
+            assert isinstance(layer, ParameterizedConstantLayer)
+            pf_output_by_expression = pf_of_product_of_normal(
+                cast(UnaryReparam, layer.params).reparams[0]()
+            )
             pf_output_by_layer = layer.forward(layer_input)
             assert torch.allclose(pf_output_by_expression, pf_output_by_layer)

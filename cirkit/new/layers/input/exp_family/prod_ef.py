@@ -9,6 +9,7 @@ from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.input.param_constant import ParameterizedConstantLayer
 from cirkit.new.reparams import EFProductReparam
+from cirkit.new.reparams.unary import UnaryReparam
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -208,8 +209,7 @@ class ProdEFLayer(ExpFamilyLayer):
         # IGNORE: Unavoidable for kwargs.
         return SymbLayerCfg(
             layer_cls=ParameterizedConstantLayer,
-            layer_kwargs={"func": _func},  # type: ignore[misc]
-            reparam=symb_cfg.reparam,
+            reparam=UnaryReparam(symb_cfg.reparam, func=_func),
         )
 
     @classmethod
