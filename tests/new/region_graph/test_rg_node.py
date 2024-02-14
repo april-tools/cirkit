@@ -1,4 +1,4 @@
-import pytest
+
 from cirkit.new.region_graph import PartitionNode, RegionNode
 
 

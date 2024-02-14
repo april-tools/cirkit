@@ -1,6 +1,7 @@
+import torch
+
 from cirkit.new.layers.inner.sum.mixing import MixingLayer
 from cirkit.new.reparams.unary import UnaryReparam
-import torch
 
 
 def test_mixing_layer() -> None:

@@ -1,7 +1,7 @@
+import torch
+
 from cirkit.new.layers.inner.sum.dense import DenseLayer
 from cirkit.new.reparams.unary import UnaryReparam
-from cirkit.new.reparams.binary import BinaryReparam
-import torch
 
 
 def test_dense_layer() -> None:
