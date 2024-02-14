@@ -8,7 +8,7 @@ from torch import Tensor, nn
 
 from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
-from cirkit.new.reparams import Reparameterization
+from cirkit.new.reparams import EFProductReparam, Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -238,6 +238,7 @@ class ExpFamilyLayer(InputLayer):
                     "ef1_cfg": self_symb_cfg,
                     "ef2_cfg": other_symb_cfg,
                 },
+                reparam=EFProductReparam(self_symb_cfg.reparam, other_symb_cfg.reparam),
             )
 
         raise NotImplementedError(
