@@ -5,7 +5,6 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 import torch
 from torch import Tensor
 
-from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.reparams import EFProductReparam, Reparameterization
@@ -161,6 +160,10 @@ class ProdEFLayer(ExpFamilyLayer):
             SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
                 given channel of the given variable.
         """
+        # DISABLE: We must import here to avoid cyclic import.
+        # pylint: disable-next=import-outside-toplevel,cyclic-import
+        from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
+
         # TODO: support nested ProdEFLayer (3 or more products)
         # TODO: how to check continuous/discrete distribution
         # CAST: kwargs.get gives Any.
@@ -178,3 +181,6 @@ class ProdEFLayer(ExpFamilyLayer):
             raise TypeError("Cannot differentiate over discrete variables.")
 
         return super().get_partial(symb_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx)
+
+    # NOTE: get_product is inherited from ExpFamilyLayer. For cascaded product this will lead to a
+    #       binary tree of ProdEFLayer.

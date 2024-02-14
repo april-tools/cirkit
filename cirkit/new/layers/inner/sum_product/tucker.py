@@ -72,3 +72,7 @@ class TuckerLayer(SumProductLayer):
             Tensor: The output of this layer, shape (*B, K).
         """
         return self.comp_space.sum(self._forward_linear, x[0], x[1], dim=-1, keepdim=True)
+
+    # NOTE: get_product is inherited from SumLayer. The product between TuckerLayer leads to the
+    #       Kronecker of the param. For the internal Kronecker, the arity is still 2, with each \
+    #       input mapped to the corresponding Kronecker'ed param axis.

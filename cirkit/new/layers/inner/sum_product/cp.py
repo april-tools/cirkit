@@ -76,5 +76,8 @@ class CPLayer(SumProductLayer):
         # shape (H, *B, K) -> (*B, K) -> (H, *B, K) -> (*B, K).
         return self.sum(self.prod(x).unsqueeze(dim=0))
 
+    # NOTE: get_product is inherited from SumLayer. The product between CPLayer leads to the
+    #       Kronecker of the param, just like DenseLayer.
+
 
 # TODO: Uncollapsed?
