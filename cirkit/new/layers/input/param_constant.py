@@ -114,3 +114,27 @@ class ParameterizedConstantLayer(InputLayer):
         return SymbLayerCfg(
             layer_cls=ConstantLayer, layer_kwargs={"const_value": 0.0}  # type: ignore[misc]
         )
+
+    @classmethod
+    def get_product(
+        cls,
+        self_symb_cfg: SymbLayerCfg[Self],
+        other_symb_cfg: SymbLayerCfg[InputLayer],
+    ) -> SymbLayerCfg[InputLayer]:
+        """Get the symbolic config to construct the product of this input layer with the other \
+        input layer.
+
+        Args:
+            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer, \
+                must be of InputLayer.
+
+        Raises:
+            NotImplementedError: When "not-yet-implemented feature" is invoked.
+
+        Returns:
+            SymbLayerCfg[InputLayer]: The symbolic config for the product of the two input layers.
+        """
+        raise NotImplementedError(
+            "Product for constant input layer and other input layers not implemented."
+        )

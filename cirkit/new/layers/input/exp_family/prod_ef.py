@@ -1,5 +1,5 @@
 import math
-from typing import Optional, cast
+from typing import List, Optional, cast
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
@@ -7,6 +7,7 @@ from torch import Tensor
 
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.input import InputLayer
+from cirkit.new.layers.input.param_constant import ParameterizedConstantLayer
 from cirkit.new.reparams import EFProductReparam, Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
@@ -139,7 +140,7 @@ class ProdEFLayer(ExpFamilyLayer):
         Therefore:
             LogIntegExp(η · T(x) + log_h(x) - A(η)) \
             = LogIntegExp((η_1 + η_2) · T_1(x) + (log_h_1(x) + log_h_2) - A(η)) \
-            = A_1(η_1 + η_2) + log_h_2 - A(η).
+            = A_1(η_1 + η_2) + log_h_2 - A(η) \
 
         The subscripts can be swapped for constant log_h_1, but note that the circuit product is \
         NOT commutative. For simplicity we further require in practice that f_1 and f_2 are of the \
@@ -155,8 +156,65 @@ class ProdEFLayer(ExpFamilyLayer):
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
-        raise NotImplementedError(
-            "The integral of ProdEFLayer other than categorical and normal is not yet defined."
+        # IGNORE: Unavoidable for kwargs.
+
+        def _get_leaf_layers_cfg(
+            config: SymbLayerCfg[ExpFamilyLayer],
+        ) -> List[SymbLayerCfg[ExpFamilyLayer]]:
+            """Fetch all actual input layers configs in the product."""
+            if config.layer_cls != ProdEFLayer:
+                return [config]
+            return _get_leaf_layers_cfg(
+                config.layer_kwargs["ef1_cfg"]  # type: ignore[misc]
+            ) + _get_leaf_layers_cfg(
+                config.layer_kwargs["ef2_cfg"]  # type: ignore[misc]
+            )
+
+        layers_cfgs = _get_leaf_layers_cfg(symb_cfg)
+        assert all(
+            (layer_cfg.layer_cls == layers_cfgs[0].layer_cls) for layer_cfg in layers_cfgs[1:]
+        ), "Input layers for the product must be the same class."
+
+        # TODO: this is not symbolic, but reqiured for layer_all.params.
+        # Add back symb_cfg.reparam in get_product() in exp_family.py to fix this?
+        # So layer_all could be defined inside _func()
+        assert (symbl_all := symb_cfg.symb_layer) is not None and (
+            layer_all := symbl_all.concrete_layer
+        ) is not None, (
+            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+        )
+
+        def _func(eta: Tensor) -> Tensor:
+            """Calculate the partition function of the product."""
+            assert (symbl_1 := layers_cfgs[0].symb_layer) is not None and (
+                layer_1 := symbl_1.concrete_layer
+            ) is not None, (
+                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            )
+            pseudo_inputs = torch.zeros(layer_1.arity, layer_1.num_input_units)
+
+            eta_summed = torch.unflatten(
+                torch.unflatten(
+                    eta, dim=-1, sizes=(len(layers_cfgs), eta.shape[-1] // len(layers_cfgs))
+                ).sum(dim=-2),
+                dim=-1,
+                sizes=layer_1.suff_stats_shape,
+            )
+            # shape (H, K, S) -> (H, K, N_In, S) -> (H, K, *S).
+
+            log_part_1 = layer_1.log_partition(eta_summed)
+
+            log_h_2 = layer_all.log_base_measure(pseudo_inputs) - layer_1.log_base_measure(
+                pseudo_inputs
+            )
+
+            return torch.sum(log_part_1 + log_h_2 - layer_all.log_partition(eta), dim=0)
+
+        # IGNORE: Unavoidable for kwargs.
+        return SymbLayerCfg(
+            layer_cls=ParameterizedConstantLayer,
+            layer_kwargs={"func": _func},  # type: ignore[misc]
+            reparam=layer_all.params,
         )
 
     @classmethod

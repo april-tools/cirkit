@@ -1,6 +1,10 @@
 # pylint: disable=too-many-locals
 # TODO: add to pyproject.toml
+import math
 from typing import Dict, Literal, Tuple, Type
+
+import torch
+from torch import Tensor
 
 from cirkit.new.layers import CategoricalLayer, CPLayer, InputLayer, NormalLayer
 from cirkit.new.model import TensorizedCircuit
@@ -106,3 +110,28 @@ def get_two_circuits(
     )
 
     return (TensorizedCircuit(symbolic_circuit_1), TensorizedCircuit(symbolic_circuit_2))
+
+
+def pf_of_product_of_normal(eta: Tensor) -> Tensor:
+    """This function calculates the partition function of the product of two normal distributions, \
+    to verify if the implementation in cirkit is correct.
+
+    By definition:
+        LogInt N(x; η0,η1)*N(x; η2,η3) dx \
+        = ((η0*η3-η1*η2)^2 / 4*η1*η3*(η1+η3)) - 0.5*log(pi) - 0.5*log((-η1-η3)/(η1*η3)).
+        
+    Args:
+        eta (Tensor): The parameters of two Gaussians, shape (H, K*K, 4).
+
+    Returns:
+        Tensor: The partition functions, shape (K*K).
+    """
+    log_sq_pi = 0.5 * math.log(math.pi)
+    square_term = (
+        eta[:, :, 0] * eta[:, :, 3] - eta[:, :, 1] * eta[:, :, 2]  # type: ignore[misc]
+    ) ** 2
+    exponent = square_term / (  # type: ignore[misc]
+        4 * eta[:, :, 1] * eta[:, :, 3] * (eta[:, :, 1] + eta[:, :, 3])
+    )
+    normalizer = 0.5 * torch.log((-eta[:, :, 1] - eta[:, :, 3]) / (eta[:, :, 1] * eta[:, :, 3]))
+    return torch.sum((exponent - log_sq_pi - normalizer), dim=0)  # type: ignore[misc]
