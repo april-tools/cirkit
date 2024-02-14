@@ -11,6 +11,6 @@ def test_symbolic_product_qt() -> None:
 
     pf_of_prod = prod_circuit.integrate()
 
-    assert len(list(pf_of_prod.layers)) == 62  # TODO: confirm this number
+    assert len(list(pf_of_prod.layers)) == 62
     assert len(list(pf_of_prod.input_layers)) == 16
     assert len(list(pf_of_prod.output_layers)) == 1

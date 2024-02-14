@@ -1,5 +1,5 @@
 import math
-from typing import List, Optional, cast
+from typing import List, cast
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
@@ -8,7 +8,7 @@ from torch import Tensor
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.input.param_constant import ParameterizedConstantLayer
-from cirkit.new.reparams import EFProductReparam, Reparameterization
+from cirkit.new.reparams import EFProductReparam
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -37,7 +37,7 @@ class ProdEFLayer(ExpFamilyLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: Optional[Reparameterization] = None,
+        reparam: EFProductReparam,
         ef1_cfg: SymbLayerCfg[ExpFamilyLayer],
         ef2_cfg: SymbLayerCfg[ExpFamilyLayer],
     ) -> None:
@@ -48,14 +48,13 @@ class ProdEFLayer(ExpFamilyLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Optional[Reparameterization], optional): Ignored. This layer constructs a \
-                EFProductReparam internally based on ef1_cfg and ef2_cfg passed in. \
-                Defaults to None.
+            reparam (EFProductReparam): The reparameterization for layer parameters.
             ef1_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the first ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
             ef2_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the second ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
         """
+        assert isinstance(reparam, EFProductReparam), "Must use a EFProductReparam for ProdEFLayer."
         assert (symbl1 := ef1_cfg.symb_layer) is not None and (
             ef1 := symbl1.concrete_layer
         ) is not None, (
@@ -70,13 +69,13 @@ class ProdEFLayer(ExpFamilyLayer):
         self.suff_split_point = math.prod(ef1.suff_stats_shape)
         self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)
 
+        # NOTE: We need a reparam to be provided in SymbCfg and registered for EFLayer.
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
-            reparam=EFProductReparam(ef1_cfg.reparam, ef2_cfg.reparam),
+            reparam=reparam,
         )
-        # TODO: is it possible to remove the EFProductReparam at all? but EF needs a reparam.
 
         # We need suff_stats_shape before __init__, but submodule can only be registered after.
         self.ef1 = ef1
@@ -175,17 +174,13 @@ class ProdEFLayer(ExpFamilyLayer):
             (layer_cfg.layer_cls == layers_cfgs[0].layer_cls) for layer_cfg in layers_cfgs[1:]
         ), "Input layers for the product must be the same class."
 
-        # TODO: this is not symbolic, but reqiured for layer_all.params.
-        # Add back symb_cfg.reparam in get_product() in exp_family.py to fix this?
-        # So layer_all could be defined inside _func()
-        assert (symbl_all := symb_cfg.symb_layer) is not None and (
-            layer_all := symbl_all.concrete_layer
-        ) is not None, (
-            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
-        )
-
         def _func(eta: Tensor) -> Tensor:
             """Calculate the partition function of the product."""
+            assert (symbl_all := symb_cfg.symb_layer) is not None and (
+                layer_all := symbl_all.concrete_layer
+            ) is not None, (
+                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            )
             assert (symbl_1 := layers_cfgs[0].symb_layer) is not None and (
                 layer_1 := symbl_1.concrete_layer
             ) is not None, (
@@ -214,7 +209,7 @@ class ProdEFLayer(ExpFamilyLayer):
         return SymbLayerCfg(
             layer_cls=ParameterizedConstantLayer,
             layer_kwargs={"func": _func},  # type: ignore[misc]
-            reparam=layer_all.params,
+            reparam=symb_cfg.reparam,
         )
 
     @classmethod
