@@ -6,6 +6,7 @@ import torch
 from torch import Tensor
 
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
+from cirkit.new.layers.input.exp_family.normal import NormalLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.input.param_constant import ParameterizedConstantLayer
 from cirkit.new.reparams import EFProductReparam
@@ -140,7 +141,7 @@ class ProdEFLayer(ExpFamilyLayer):
         Therefore:
             LogIntegExp(η · T(x) + log_h(x) - A(η)) \
             = LogIntegExp((η_1 + η_2) · T_1(x) + (log_h_1(x) + log_h_2) - A(η)) \
-            = A_1(η_1 + η_2) + log_h_2 - A(η) \
+            = A_1(η_1 + η_2) + log_h_2 - A(η).
 
         The subscripts can be swapped for constant log_h_1, but note that the circuit product is \
         NOT commutative. For simplicity we further require in practice that f_1 and f_2 are of the \
@@ -172,8 +173,13 @@ class ProdEFLayer(ExpFamilyLayer):
 
         layers_cfgs = _get_leaf_layers_cfg(symb_cfg)
         assert all(
-            (layer_cfg.layer_cls == layers_cfgs[0].layer_cls) for layer_cfg in layers_cfgs[1:]
+            (layer_cfg.layer_cls == layers_cfgs[0].layer_cls) for layer_cfg in layers_cfgs
         ), "Input layers for the product must be the same class."
+
+        # TODO: Support product partition for categorial input layers.
+        assert all(
+            (layer_cfg.layer_cls == NormalLayer) for layer_cfg in layers_cfgs
+        ), "Currently only support product partition for normal input layers."
 
         def _func(eta: Tensor) -> Tensor:
             """Calculate the partition function of the product."""
@@ -187,16 +193,12 @@ class ProdEFLayer(ExpFamilyLayer):
             ) is not None, (
                 "There should be a concrete Layer corresponding to the SymbCfg at this stage."
             )
-            pseudo_inputs = torch.zeros(layer_1.arity, layer_1.num_input_units)
+            pseudo_inputs = torch.zeros(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
 
             eta_summed = torch.unflatten(
-                torch.unflatten(
-                    eta, dim=-1, sizes=(len(layers_cfgs), eta.shape[-1] // len(layers_cfgs))
-                ).sum(dim=-2),
-                dim=-1,
-                sizes=layer_1.suff_stats_shape,
-            )
-            # shape (H, K, S) -> (H, K, N_In, S) -> (H, K, *S).
+                eta, dim=-1, sizes=(len(layers_cfgs),) + layer_1.suff_stats_shape
+            ).sum(dim=2)
+            # shape (H, K, S) -> (H, K, N, *S) -> (H, K, *S).
 
             log_part_1 = layer_1.log_partition(eta_summed)
 
