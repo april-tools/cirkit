@@ -9,8 +9,7 @@ from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.exp_family.normal import NormalLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.input.param_constant import ParameterizedConstantLayer
-from cirkit.new.reparams import EFProductReparam
-from cirkit.new.reparams.unary import UnaryReparam
+from cirkit.new.reparams import EFProductReparam, UnaryReparam
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -157,7 +156,6 @@ class ProdEFLayer(ExpFamilyLayer):
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
-        # IGNORE: Unavoidable for kwargs.
 
         def _get_leaf_layers_cfg(
             config: SymbLayerCfg[ExpFamilyLayer],
@@ -165,6 +163,7 @@ class ProdEFLayer(ExpFamilyLayer):
             """Fetch all actual input layers configs in the product."""
             if config.layer_cls != ProdEFLayer:
                 return [config]
+            # IGNORE: Unavoidable for kwargs.
             return _get_leaf_layers_cfg(
                 config.layer_kwargs["ef1_cfg"]  # type: ignore[misc]
             ) + _get_leaf_layers_cfg(
@@ -197,8 +196,9 @@ class ProdEFLayer(ExpFamilyLayer):
 
             eta_summed = torch.unflatten(
                 eta, dim=-1, sizes=(len(layers_cfgs),) + layer_1.suff_stats_shape
-            ).sum(dim=2)
-            # shape (H, K, S) -> (H, K, N, *S) -> (H, K, *S).
+            ).sum(
+                dim=2
+            )  # shape (H, K, S) -> (H, K, N, *S) -> (H, K, *S).
 
             log_part_1 = layer_1.log_partition(eta_summed)
 
@@ -208,7 +208,6 @@ class ProdEFLayer(ExpFamilyLayer):
 
             return torch.sum(log_part_1 + log_h_2 - layer_all.log_partition(eta), dim=0)
 
-        # IGNORE: Unavoidable for kwargs.
         return SymbLayerCfg(
             layer_cls=ParameterizedConstantLayer,
             reparam=UnaryReparam(symb_cfg.reparam, func=_func),

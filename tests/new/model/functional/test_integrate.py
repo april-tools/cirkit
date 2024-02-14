@@ -4,7 +4,7 @@ from typing import cast
 import torch
 
 from cirkit.new.layers import InputLayer, ParameterizedConstantLayer
-from cirkit.new.reparams.unary import UnaryReparam
+from cirkit.new.reparams import UnaryReparam
 from tests import floats
 from tests.new.model.test_prod_utils import get_two_circuits, pf_of_product_of_normal
 from tests.new.model.test_utils import get_circuit_2x2, set_circuit_2x2_params
