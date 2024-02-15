@@ -1,13 +1,15 @@
 import math
-from typing import Optional, cast
+from typing import List, cast
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
 
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
+from cirkit.new.layers.input.exp_family.normal import NormalLayer
 from cirkit.new.layers.input.input import InputLayer
-from cirkit.new.reparams import EFProductReparam, Reparameterization
+from cirkit.new.layers.input.param_constant import ParameterizedConstantLayer
+from cirkit.new.reparams import EFProductReparam, UnaryReparam
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -36,7 +38,7 @@ class ProdEFLayer(ExpFamilyLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: Optional[Reparameterization] = None,
+        reparam: EFProductReparam,
         ef1_cfg: SymbLayerCfg[ExpFamilyLayer],
         ef2_cfg: SymbLayerCfg[ExpFamilyLayer],
     ) -> None:
@@ -47,14 +49,13 @@ class ProdEFLayer(ExpFamilyLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Optional[Reparameterization], optional): Ignored. This layer constructs a \
-                EFProductReparam internally based on ef1_cfg and ef2_cfg passed in. \
-                Defaults to None.
+            reparam (EFProductReparam): The reparameterization for layer parameters.
             ef1_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the first ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
             ef2_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the second ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
         """
+        assert isinstance(reparam, EFProductReparam), "Must use a EFProductReparam for ProdEFLayer."
         assert (symbl1 := ef1_cfg.symb_layer) is not None and (
             ef1 := symbl1.concrete_layer
         ) is not None, (
@@ -69,13 +70,13 @@ class ProdEFLayer(ExpFamilyLayer):
         self.suff_split_point = math.prod(ef1.suff_stats_shape)
         self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)
 
+        # NOTE: We need a reparam to be provided in SymbCfg and registered for EFLayer.
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
-            reparam=EFProductReparam(ef1_cfg.reparam, ef2_cfg.reparam),
+            reparam=reparam,
         )
-        # TODO: is it possible to remove the EFProductReparam at all? but EF needs a reparam.
 
         # We need suff_stats_shape before __init__, but submodule can only be registered after.
         self.ef1 = ef1
@@ -126,6 +127,26 @@ class ProdEFLayer(ExpFamilyLayer):
     def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
+        Generally, we cannot calculate the integral in closed form, but in some special cases we \
+        can, as shown below (LogIntegExp is integration w.r.t. x).
+
+        Assume:
+            1. T_2(x) = T_1(x) (so η_1, η_2 are of the same shape);
+            2. log_h_2(x) = log_h_2 (constant).
+        By definition:
+            LogIntegExp(η_1 · T_1(x) + log_h_1(x)) = A_1(η_1).
+        That is:
+            LogIntegExp((η_1 + η_2) · T_1(x) + log_h_1(x)) = A_1(η_1 + η_2).
+        Therefore:
+            LogIntegExp(η · T(x) + log_h(x) - A(η)) \
+            = LogIntegExp((η_1 + η_2) · T_1(x) + (log_h_1(x) + log_h_2) - A(η)) \
+            = A_1(η_1 + η_2) + log_h_2 - A(η).
+
+        The subscripts can be swapped for constant log_h_1, but note that the circuit product is \
+        NOT commutative. For simplicity we further require in practice that f_1 and f_2 are of the \
+        same class (and therefore log_h_* are both constant), and this can be easily extended to \
+        more-than-two product.
+
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
@@ -135,8 +156,61 @@ class ProdEFLayer(ExpFamilyLayer):
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
-        raise NotImplementedError(
-            "The integral of ProdEFLayer other than categorical and normal is not yet defined."
+
+        def _get_leaf_layers_cfg(
+            config: SymbLayerCfg[ExpFamilyLayer],
+        ) -> List[SymbLayerCfg[ExpFamilyLayer]]:
+            """Fetch all actual input layers configs in the product."""
+            if config.layer_cls != ProdEFLayer:
+                return [config]
+            # IGNORE: Unavoidable for kwargs.
+            return _get_leaf_layers_cfg(
+                config.layer_kwargs["ef1_cfg"]  # type: ignore[misc]
+            ) + _get_leaf_layers_cfg(
+                config.layer_kwargs["ef2_cfg"]  # type: ignore[misc]
+            )
+
+        layers_cfgs = _get_leaf_layers_cfg(symb_cfg)
+        assert all(
+            (layer_cfg.layer_cls == layers_cfgs[0].layer_cls) for layer_cfg in layers_cfgs
+        ), "Input layers for the product must be the same class."
+
+        # TODO: Support product partition for categorial input layers.
+        assert all(
+            (layer_cfg.layer_cls == NormalLayer) for layer_cfg in layers_cfgs
+        ), "Currently only support product partition for normal input layers."
+
+        def _func(eta: Tensor) -> Tensor:
+            """Calculate the partition function of the product."""
+            assert (symbl_all := symb_cfg.symb_layer) is not None and (
+                layer_all := symbl_all.concrete_layer
+            ) is not None, (
+                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            )
+            assert (symbl_1 := layers_cfgs[0].symb_layer) is not None and (
+                layer_1 := symbl_1.concrete_layer
+            ) is not None, (
+                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            )
+            pseudo_inputs = torch.zeros(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
+
+            eta_summed = torch.unflatten(
+                eta, dim=-1, sizes=(len(layers_cfgs),) + layer_1.suff_stats_shape
+            ).sum(
+                dim=2
+            )  # shape (H, K, S) -> (H, K, N, *S) -> (H, K, *S).
+
+            log_part_1 = layer_1.log_partition(eta_summed)
+
+            log_h_2 = layer_all.log_base_measure(pseudo_inputs) - layer_1.log_base_measure(
+                pseudo_inputs
+            )
+
+            return torch.sum(log_part_1 + log_h_2 - layer_all.log_partition(eta), dim=0)
+
+        return SymbLayerCfg(
+            layer_cls=ParameterizedConstantLayer,
+            reparam=UnaryReparam(symb_cfg.reparam, func=_func),
         )
 
     @classmethod

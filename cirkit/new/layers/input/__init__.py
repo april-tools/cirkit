@@ -5,3 +5,4 @@ from .exp_family import ExpFamilyLayer as ExpFamilyLayer
 from .exp_family import NormalLayer as NormalLayer
 from .exp_family import ProdEFLayer as ProdEFLayer
 from .input import InputLayer as InputLayer
+from .param_constant import ParameterizedConstantLayer as ParameterizedConstantLayer
