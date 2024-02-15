@@ -62,12 +62,13 @@ class CategoricalLayer(ExpFamilyLayer):
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete.
         # TODO: pylint issue? one_hot is only in pyi
-        suff_stats = F.one_hot(x, self.num_categories).to(  # pylint: disable=not-callable
-            torch.get_default_dtype()
-        )  # shape (H, *B, K, cat).
-        return suff_stats.movedim(0, -3).flatten(
-            start_dim=-2
-        )  # shape (H, *B, K, cat) -> (*B, H, *S=(K, cat)) -> (*B, H, S=K*cat).
+        # shape (H, *B, K, cat) -> (*B, H, *S=(K, cat)) -> (*B, H, S=K*cat).
+        suff_stats = (
+            F.one_hot(x, self.num_categories)  # pylint: disable=not-callable
+            .movedim(0, -3)
+            .flatten(start_dim=-2)
+        )
+        return suff_stats.to(torch.get_default_dtype())
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.

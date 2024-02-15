@@ -273,10 +273,7 @@ def product(
     other_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}
 
     def _copy_layer(
-        circuit: "SymbolicTensorizedCircuit",
-        *,
-        scope: Scope,
-        circuit_is_self: bool,
+        circuit: "SymbolicTensorizedCircuit", *, scope: Scope, circuit_is_self: bool
     ) -> None:
         """Copy layers into the new circuit."""
         for layer in circuit._layers:
@@ -291,10 +288,7 @@ def product(
                 else:
                     other_to_product[layer] = new_layer
 
-    def _product(
-        self_layer: SymbolicLayer,
-        other_layer: SymbolicLayer,
-    ) -> SymbolicLayer:
+    def _product(self_layer: SymbolicLayer, other_layer: SymbolicLayer) -> SymbolicLayer:
         """Perform product between two layers."""
         new_layer: SymbolicLayer
 

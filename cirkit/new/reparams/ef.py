@@ -42,12 +42,10 @@ class EFNormalReparam(UnaryReparam):
     def _func(self, x: Tensor) -> Tensor:
         # In materialize, shape[-2] == 2 is asserted.
         mu = x[..., 0, :]  # shape (..., :).
-        var = (
-            torch.sigmoid(x[..., 1, :]) * (self.max_var - self.min_var) + self.min_var
-        )  # shape (..., :).
-        param = torch.stack(
-            (mu, torch.tensor(-0.5).to(mu).expand_as(mu)), dim=-2
-        )  # shape (..., 2, :).
+        # shape (..., :).
+        var = torch.sigmoid(x[..., 1, :]) * (self.max_var - self.min_var) + self.min_var
+        # shape (..., 2, :).
+        param = torch.stack((mu, torch.tensor(-0.5).to(mu).expand_as(mu)), dim=-2)
         return param / var.unsqueeze(dim=-2)  # shape (..., 2, :).
 
     def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
@@ -105,15 +103,12 @@ class EFProductReparam(BinaryReparam):
 
     @staticmethod
     def _func(param1: Tensor, param2: Tensor) -> Tensor:
-        param1 = param1.flatten(start_dim=2).unsqueeze(
-            dim=2
-        )  # shape (H, K, *S) -> (H, K, S) -> (H, K, 1, S).
-        param2 = param2.flatten(start_dim=2).unsqueeze(
-            dim=1
-        )  # shape (H, K, *S) -> (H, K, S) -> (H, 1, K, S).
+        # shape (H, K, *S) -> (H, K, S) -> (H, K, 1, S).
+        param1 = param1.flatten(start_dim=2).unsqueeze(dim=2)
+        # shape (H, K, *S) -> (H, K, S) -> (H, 1, K, S).
+        param2 = param2.flatten(start_dim=2).unsqueeze(dim=1)
         # IGNORE: broadcast_tensors is not typed.
+        # shape (H, K, K, S+S) -> (H, K*K, S+S).
         return torch.cat(
             torch.broadcast_tensors(param1, param2), dim=-1  # type: ignore[no-untyped-call,misc]
-        ).flatten(
-            start_dim=1, end_dim=2
-        )  # shape (H, K, K, S+S) -> (H, K*K, S+S).
+        ).flatten(start_dim=1, end_dim=2)

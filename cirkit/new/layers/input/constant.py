@@ -120,9 +120,7 @@ class ConstantLayer(InputLayer):
 
     @classmethod
     def get_product(
-        cls,
-        self_symb_cfg: SymbLayerCfg[Self],
-        other_symb_cfg: SymbLayerCfg[InputLayer],
+        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[InputLayer]
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the product of this input layer with the other \
         input layer.

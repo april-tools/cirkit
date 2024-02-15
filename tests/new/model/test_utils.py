@@ -98,12 +98,12 @@ def get_circuit_2x2_param_shapes(
             "layers.3.params.param": (1, 1),  # Dense after input {1}.
             "layers.5.params.param": (1, 1),  # Dense after input {2}.
             "layers.7.params.param": (1, 1),  # Dense after input {3}.
-            "layers.8.sum.params.param": (1, 1),  # CP of {0, 1}.
-            "layers.9.sum.params.param": (1, 1),  # CP of {0, 2}.
-            "layers.10.sum.params.param": (1, 1),  # CP of {1, 3}.
-            "layers.11.sum.params.param": (1, 1),  # CP of {2, 3}.
-            "layers.12.sum.params.param": (1, 1),  # CP of {0, 1 + 2, 3}.
-            "layers.13.sum.params.param": (1, 1),  # CP of {0, 2 + 1, 3}.
+            "layers.8.sum_layer.params.param": (1, 1),  # CP of {0, 1}.
+            "layers.9.sum_layer.params.param": (1, 1),  # CP of {0, 2}.
+            "layers.10.sum_layer.params.param": (1, 1),  # CP of {1, 3}.
+            "layers.11.sum_layer.params.param": (1, 1),  # CP of {2, 3}.
+            "layers.12.sum_layer.params.param": (1, 1),  # CP of {{0, 1}, {2, 3}}.
+            "layers.13.sum_layer.params.param": (1, 1),  # CP of {{0, 2}, {1, 3}}.
             "layers.14.params.param": (1, 2),  # Mixing of {0, 1, 2, 3}.
         }
     )
@@ -157,12 +157,16 @@ def set_circuit_2x2_params(
             "layers.3.params.param": torch.tensor(1 / 1).view(1, 1),  # Dense after input {1}.
             "layers.5.params.param": torch.tensor(1 / 1).view(1, 1),  # Dense after input {2}.
             "layers.7.params.param": torch.tensor(1 / 1).view(1, 1),  # Dense after input {3}.
-            "layers.8.sum.params.param": torch.tensor(2 / 1).view(1, 1),  # CP of {0, 1}.
-            "layers.9.sum.params.param": torch.tensor(2 / 1).view(1, 1),  # CP of {0, 2}.
-            "layers.10.sum.params.param": torch.tensor(1 / 2).view(1, 1),  # CP of {1, 3}.
-            "layers.11.sum.params.param": torch.tensor(1 / 2).view(1, 1),  # CP of {2, 3}.
-            "layers.12.sum.params.param": torch.tensor(1 / 1).view(1, 1),  # CP of {0, 1 + 2, 3}.
-            "layers.13.sum.params.param": torch.tensor(1 / 1).view(1, 1),  # CP of {0, 2 + 1, 3}.
+            "layers.8.sum_layer.params.param": torch.tensor(2 / 1).view(1, 1),  # CP of {0, 1}.
+            "layers.9.sum_layer.params.param": torch.tensor(2 / 1).view(1, 1),  # CP of {0, 2}.
+            "layers.10.sum_layer.params.param": torch.tensor(1 / 2).view(1, 1),  # CP of {1, 3}.
+            "layers.11.sum_layer.params.param": torch.tensor(1 / 2).view(1, 1),  # CP of {2, 3}.
+            "layers.12.sum_layer.params.param": (  # CP of {{0, 1}, {2, 3}}.
+                torch.tensor(1 / 1).view(1, 1)
+            ),
+            "layers.13.sum_layer.params.param": (  # CP of {{0, 2}, {1, 3}}.
+                torch.tensor(1 / 1).view(1, 1)
+            ),
             "layers.14.params.param": (  # Mixing of {0, 1, 2, 3}.
                 torch.tensor([1 / 3, 2 / 3]).view(1, 2)  # type: ignore[misc]
             ),

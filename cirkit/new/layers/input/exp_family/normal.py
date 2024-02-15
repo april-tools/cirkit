@@ -56,9 +56,8 @@ class NormalLayer(ExpFamilyLayer):
             Tensor: The sufficient statistics T, shape (*B, H, S).
         """
         # TODO: torch __pow__ issue
-        return torch.cat((x, cast(Tensor, x**2)), dim=-1).movedim(
-            0, -2
-        )  # shape (H, *B, 2*K) -> (*B, H, S=2*K).
+        # shape (H, *B, 2*K) -> (*B, H, S=2*K).
+        return torch.cat((x, cast(Tensor, x**2)), dim=-1).movedim(0, -2)
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
@@ -83,5 +82,7 @@ class NormalLayer(ExpFamilyLayer):
         eta1 = eta[..., 0, :]  # shape (H, K, Ki).
         eta2 = eta[..., 1, :]  # shape (H, K, Ki).
         # TODO: torch __pow__ issue
-        log_normalizer = -0.25 * cast(Tensor, eta1**2) / eta2 - 0.5 * torch.log(-2 * eta2)
-        return log_normalizer.sum(dim=-1)  # shape (H, K).
+        # shape (H, K, Ki) -> (H, K).
+        return torch.sum(
+            -0.25 * cast(Tensor, eta1**2) / eta2 - 0.5 * torch.log(-2 * eta2), dim=-1
+        )

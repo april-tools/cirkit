@@ -121,9 +121,8 @@ class TensorizedCircuit(nn.Module):
 
             if isinstance(layer, InputLayer):
                 # Tensor slice does not accept iterable but only sequence.
-                layer_input = x[..., tuple(symb_layer.scope), :].movedim(
-                    -2, 0
-                )  # shape (*B, D, C) -> (H=D, *B, K=C).
+                # shape (*B, D, C) -> (H=D, *B, K=C).
+                layer_input = x[..., tuple(symb_layer.scope), :].movedim(-2, 0)
             else:
                 # The placeholder cases are actually handled here. Only arity=1 layers can have
                 # a placeholder input.
@@ -133,14 +132,16 @@ class TensorizedCircuit(nn.Module):
                     else symb_layer.inputs[0].inputs
                 )
                 # TODO: save a copy when arity==1
+                # shape H * (*B, K) -> (H, *B, K).
                 layer_input = torch.stack(
                     [layer_outputs[layer_in] for layer_in in layers_in], dim=0
-                )  # shape H * (*B, K) -> (H, *B, K).
+                )
             layer_outputs[symb_layer] = layer(layer_input)
 
+        # shape num_out * (*B, K) -> (*B, num_out, num_cls=K).
         return torch.stack(
             [layer_outputs[layer_out] for layer_out in self.symb_circuit.output_layers], dim=-2
-        )  # shape num_out * (*B, K) -> (*B, num_out, num_cls=K).
+        )
 
     #######################################    Functional    #######################################
 

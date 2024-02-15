@@ -91,9 +91,6 @@ def RandomBinaryTree(*, num_vars: int, depth: int, num_repetitions: int) -> Regi
     for _ in range(num_repetitions):
         layer = [root]
         for _ in range(depth):
-            layer = sum(
-                (_partition_node_randomly(graph, node, num_parts=2) for node in layer),
-                [],
-            )
+            layer = sum((_partition_node_randomly(graph, node, num_parts=2) for node in layer), [])
 
     return graph.freeze()

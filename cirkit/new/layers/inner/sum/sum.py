@@ -24,9 +24,7 @@ class SumLayer(InnerLayer):
 
     @classmethod
     def get_product(
-        cls,
-        self_symb_cfg: SymbLayerCfg[Self],
-        other_symb_cfg: SymbLayerCfg[Self],
+        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[Self]:
         """Get the symbolic config to construct the product of this sum layer with the other sum \
         layer.

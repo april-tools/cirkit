@@ -37,13 +37,13 @@ class CPLayer(SumProductLayer):
             reparam=reparam,
         )
 
-        self.prod = HadamardLayer(  # Any arity but fixed num_units.
+        self.prod_layer = HadamardLayer(  # Any arity but fixed num_units.
             num_input_units=num_input_units,
             num_output_units=num_input_units,
             arity=arity,
             reparam=None,
         )
-        self.sum = DenseLayer(  # Fixed arity but any num_units.
+        self.sum_layer = DenseLayer(  # Fixed arity but any num_units.
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=1,
@@ -74,7 +74,7 @@ class CPLayer(SumProductLayer):
             Tensor: The output of this layer, shape (*B, K).
         """
         # shape (H, *B, K) -> (*B, K) -> (H, *B, K) -> (*B, K).
-        return self.sum(self.prod(x).unsqueeze(dim=0))
+        return self.sum_layer(self.prod_layer(x).unsqueeze(dim=0))
 
     # NOTE: get_product is inherited from SumLayer. The product between CPLayer leads to the
     #       Kronecker of the param, just like DenseLayer.

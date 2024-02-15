@@ -52,9 +52,7 @@ class InnerLayer(Layer):
     @classmethod
     @abstractmethod
     def get_product(
-        cls,
-        self_symb_cfg: SymbLayerCfg[Self],
-        other_symb_cfg: SymbLayerCfg[Self],
+        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[Self]
     ) -> SymbLayerCfg[Self]:
         """Get the symbolic config to construct the product of this inner layer with the other \
         inner layer.

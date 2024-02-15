@@ -55,19 +55,19 @@ class RGNode(ABC):
         """Compare the node with another node, for < operator implicitly used in sorting.
 
         The comparison between two RGNode is:
-        - If they have different scopes, the one with a smaller scope is smaller;
-        - With the same scope, PartitionNode is smaller than RegionNode;
-        - For same type of node and same scope, an extra sort_key can be provided in \
-            self.metadata to define the order;
-        - If the above cannot compare, __lt__ is always False, indicating "equality for the \
-            purpose of sorting".
+            - If they have different scopes, the one with a smaller scope is smaller;
+            - With the same scope, PartitionNode is smaller than RegionNode;
+            - For same type of node and same scope, an extra sort_key can be provided in \
+                self.metadata to define the order;
+            - If the above cannot compare, __lt__ is always False, indicating "equality for the \
+                purpose of sorting".
 
         With the extra sorting key provided, it is guaranteed to have total ordering, i.e., \
         exactly one of a == b, a < b, a > b is True, and will lead to a deterministic sorted order.
 
         This comparison also guarantees the topological order in a (smooth and decomposable) RG:
-        - For a RegionNode->PartitionNode edge, Region.scope < Partition.scope;
-        - For a PartitionNode->RegionNode edge, they have the same scope and Partition < Region.
+            - For a RegionNode->PartitionNode edge, Region.scope < Partition.scope;
+            - For a PartitionNode->RegionNode edge, they have the same scope and Partition < Region.
 
         Args:
             other (RGNode): The other node to compare with.

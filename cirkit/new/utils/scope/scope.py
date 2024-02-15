@@ -287,9 +287,9 @@ class Scope(Collection[int], Hashable):
         and the order is guaranteed to be always stable.
 
         Two scopes compare by the following:
-        - If the lengths are different, the shorter one is smaller;
-        - If of same length, the one with the smallest non-shared variable id is smaller;
-        - They should be the same scope if the above cannot compare.
+            - If the lengths are different, the shorter one is smaller;
+            - If of same length, the one with the smallest non-shared variable id is smaller;
+            - They should be the same scope if the above cannot compare.
 
         Args:
             other (Scope): The other scope to compare with.

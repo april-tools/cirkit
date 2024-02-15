@@ -268,8 +268,4 @@ class SymbolicInputLayer(GenericSymbolicLayer[InputLayer]):
     @property
     def _repr_dict(self) -> Dict[str, object]:
         """The dict of key-value pairs used in __repr__."""
-        return {
-            "scope": self.scope,
-            "num_units": self.num_units,
-            "layer_cfg": self.layer_cfg,
-        }
+        return {"scope": self.scope, "num_units": self.num_units, "layer_cfg": self.layer_cfg}

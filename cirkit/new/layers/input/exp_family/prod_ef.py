@@ -17,11 +17,11 @@ class ProdEFLayer(ExpFamilyLayer):
     """The product for Exponential Family distribution layers.
 
     Exponential Family dist:
-        f(x|η) = exp(η · T(x) + log_h(x) - A(η)).
+        p(x|η) = exp(η · T(x) + log_h(x) - A(η)).
 
     Product:
-        f_1*f_2(x|η_1,η_2) = exp(η · T(x) + log_h(x) - A(η)),
-        where:
+        p_1*p_2(x|η_1,η_2) = exp(η · T(x) + log_h(x) - A(η)),
+    where:
         - η = concat(η_1, η_2),
         - T(x) = concat(T_1(x), T_2(x)),
         - log_h(x) = log_h_1(x) + log_h_2(x),
@@ -131,8 +131,9 @@ class ProdEFLayer(ExpFamilyLayer):
         can, as shown below (LogIntegExp is integration w.r.t. x).
 
         Assume:
-            1. T_2(x) = T_1(x) (so η_1, η_2 are of the same shape);
-            2. log_h_2(x) = log_h_2 (constant).
+            - T_2(x) = T_1(x) (so η_1, η_2 are of the same shape);
+            - log_h_2(x) = log_h_2 (constant).
+
         By definition:
             LogIntegExp(η_1 · T_1(x) + log_h_1(x)) = A_1(η_1).
         That is:
@@ -194,11 +195,10 @@ class ProdEFLayer(ExpFamilyLayer):
             )
             pseudo_inputs = torch.zeros(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
 
+            # shape (H, K, S) -> (H, K, len, *S) -> (H, K, *S).
             eta_summed = torch.unflatten(
                 eta, dim=-1, sizes=(len(layers_cfgs),) + layer_1.suff_stats_shape
-            ).sum(
-                dim=2
-            )  # shape (H, K, S) -> (H, K, N, *S) -> (H, K, *S).
+            ).sum(dim=2)
 
             log_part_1 = layer_1.log_partition(eta_summed)
 
@@ -209,8 +209,7 @@ class ProdEFLayer(ExpFamilyLayer):
             return torch.sum(log_part_1 + log_h_2 - layer_all.log_partition(eta), dim=0)
 
         return SymbLayerCfg(
-            layer_cls=ParameterizedConstantLayer,
-            reparam=UnaryReparam(symb_cfg.reparam, func=_func),
+            layer_cls=ParameterizedConstantLayer, reparam=UnaryReparam(symb_cfg.reparam, func=_func)
         )
 
     @classmethod
