@@ -5,6 +5,9 @@ from cirkit.new.reparams.unary import UnaryReparam
 
 
 def test_dense_layer() -> None:
+    """
+    Test function for the DenseLayer class.
+    """
     layer = DenseLayer(
         num_input_units=3, num_output_units=3, arity=1, reparam=UnaryReparam(func=torch.tanh)
     )

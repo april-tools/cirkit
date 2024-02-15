@@ -6,21 +6,21 @@ def test_smoothness() -> None:
     rg.add_node(RegionNode((1, 2)))
     rg.freeze()
 
-    assert rg.is_smooth == True
+    assert rg.is_smooth 
 
 
 def test_decomposability() -> None:
     rg = RegionGraph()
     rg.add_node(RegionNode((1, 2)))
     rg.freeze()
-    assert rg.is_decomposable == True
+    assert rg.is_decomposable 
 
 
 def test_structured_decomposablity() -> None:
     rg = RegionGraph()
     rg.add_node(RegionNode((1, 2)))
     rg.freeze()
-    assert rg.is_structured_decomposable == True
+    assert rg.is_structured_decomposable 
 
 
 def test_structure_decomposability2() -> None:
@@ -30,4 +30,4 @@ def test_structure_decomposability2() -> None:
     rg.add_edge(RegionNode((3,)), part)
     rg.add_edge(part, RegionNode((1, 2, 3)))
     rg.freeze()
-    assert rg.is_structured_decomposable == True
+    assert rg.is_structured_decomposable 

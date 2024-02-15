@@ -1,10 +1,7 @@
-import pytest
 import torch
 
-# from torch import Tensor
 from cirkit.new.layers.inner.product.hadamard import HadamardLayer
 
-# from cirkit.new.reparams import Reparameterization
 
 
 def test_hadamard_layer1() -> None:

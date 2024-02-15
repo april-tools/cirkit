@@ -1,10 +1,7 @@
-import pytest
+
 import torch
 
-# from torch import Tensor
 from cirkit.new.layers.inner.product.kronecker import KroneckerLayer
-
-# from cirkit.new.reparams import Reparameterization
 
 
 def test_kronecker_layer1() -> None:
