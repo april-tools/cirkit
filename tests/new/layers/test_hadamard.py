@@ -3,7 +3,6 @@ import torch
 from cirkit.new.layers.inner.product.hadamard import HadamardLayer
 
 
-
 def test_hadamard_layer1() -> None:
     hadamard_layer = HadamardLayer(num_input_units=2, num_output_units=2, arity=2, reparam=None)
     input_tensor = torch.rand((3, 3, 4))

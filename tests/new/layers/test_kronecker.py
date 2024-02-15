@@ -1,4 +1,3 @@
-
 import torch
 
 from cirkit.new.layers.inner.product.kronecker import KroneckerLayer
