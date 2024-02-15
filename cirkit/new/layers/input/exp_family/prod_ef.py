@@ -89,9 +89,16 @@ class ProdEFLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (*B, H, S).
+            Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
-        return torch.cat((self.ef1.sufficient_stats(x), self.ef2.sufficient_stats(x)), dim=-1)
+        # shape (H, *B, *S_1), (H, *B, *S_2) -> (H, *B, flatten(S_1)+flatten(S_2))
+        return torch.cat(
+            (
+                self.ef1.sufficient_stats(x).flatten(start_dim=-len(self.ef1.suff_stats_shape)),
+                self.ef2.sufficient_stats(x).flatten(start_dim=-len(self.ef2.suff_stats_shape)),
+            ),
+            dim=-1,
+        )
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
@@ -100,15 +107,17 @@ class ProdEFLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The natural parameters eta, shape (*B, H).
+            Tensor: The natural parameters eta, shape (H, *B).
         """
         return self.ef1.log_base_measure(x) + self.ef2.log_base_measure(x)
 
-    def log_partition(self, eta: Tensor) -> Tensor:
+    def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
             eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta_normed (bool, optional): Ignored. This layer uses a special reparam for eta. \
+                Defaults to False.
 
         Returns:
             Tensor: The log partition function A, shape (H, K).

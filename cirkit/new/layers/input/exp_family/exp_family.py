@@ -95,17 +95,24 @@ class ExpFamilyLayer(InputLayer):
             Tensor: The log-prob log_p, shape (*B, K).
         """
         eta = self.params()  # shape (H, K, *S).
-        # TODO: ???
-        # We need to flatten because we cannot have two ... in einsum for suff_stats as (*B, H, *S).
-        eta_flat = eta.flatten(start_dim=-len(self.suff_stats_shape))  # shape (H, K, S).
-        suff_stats = self.sufficient_stats(x)  # shape (*B, H, S).
-        log_h = self.log_base_measure(x).unsqueeze(dim=-1)  # shape (*B, H) -> (*B, H, 1).
-        log_part = self.log_partition(eta)  # shape (H, K) = (*1, H, K).
+        suff_stats = self.sufficient_stats(x)  # shape (H, *B, *S).
 
-        # shape (*B, H, K) + (*B, H, 1) + (*1, H, K) -> (*B, H, K) -> (*B, K).
-        return torch.sum(
-            torch.einsum("hks,...hs->...hk", eta_flat, suff_stats) + log_h - log_part, dim=-2
+        # We need to flatten because we cannot have two ... in einsum for suff_stats as (H, *B, *S).
+        # shape (H, K, S), (H, *B, S) -> (H, *B, K).
+        eta_suff = torch.einsum(
+            "hks,h...s->h...k",
+            eta.flatten(start_dim=-(eta.ndim - 2)),
+            suff_stats.flatten(start_dim=-(eta.ndim - 2)),
         )
+
+        log_h = self.log_base_measure(x).unsqueeze(dim=-1)  # shape (H, *B) -> (H, *B, 1).
+        # shape (H, K) -> (H, *1, K).
+        log_part = torch.unflatten(
+            self.log_partition(eta), dim=0, sizes=(x.shape[0],) + (1,) * (x.ndim - 2)
+        )
+
+        # shape (H, *B, K) + (H, *B, 1) + (H, *1, K) -> (H, *B, K) -> (*B, K).
+        return torch.sum(eta_suff + log_h - log_part, dim=0)
 
     @abstractmethod
     def sufficient_stats(self, x: Tensor) -> Tensor:
@@ -115,7 +122,7 @@ class ExpFamilyLayer(InputLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (*B, H, S).
+            Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
 
     @abstractmethod
@@ -126,15 +133,17 @@ class ExpFamilyLayer(InputLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The natural parameters eta, shape (*B, H).
+            Tensor: The natural parameters eta, shape (H, *B).
         """
 
     @abstractmethod
-    def log_partition(self, eta: Tensor) -> Tensor:
+    def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
             eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta_normed (bool, optional): Whether eta is produced by a NormalizedReparam. If True, \
+                implementations may save some computation. Defaults to False.
 
         Returns:
             Tensor: The log partition function A, shape (H, K).
