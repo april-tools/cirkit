@@ -77,7 +77,8 @@ class CPLayer(SumProductLayer):
         return self.sum_layer(self.prod_layer(x).unsqueeze(dim=0))
 
     # NOTE: get_product is inherited from SumLayer. The product between CPLayer leads to the
-    #       Kronecker of the param, just like DenseLayer.
+    #       Kronecker of the param, just like DenseLayer. This method will also be called for
+    #       SymbProdL, but what's returned is still correct with reparam unused.
 
 
 # TODO: Uncollapsed?
