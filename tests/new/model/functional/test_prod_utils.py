@@ -62,7 +62,7 @@ def get_two_circuits(
 
     if setting == "cat":
         input_cls = CategoricalLayer
-        input_kwargs = {"num_categories": 6}
+        input_kwargs = {"num_categories": 2}
         input_reparam = SoftmaxReparam
     elif setting == "norm":
         input_cls = NormalLayer

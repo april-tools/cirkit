@@ -5,6 +5,7 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 import torch
 from torch import Tensor
 
+from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.exp_family.normal import NormalLayer
 from cirkit.new.layers.input.input import InputLayer
@@ -185,10 +186,10 @@ class ProdEFLayer(ExpFamilyLayer):
             (layer_cfg.layer_cls == layers_cfgs[0].layer_cls) for layer_cfg in layers_cfgs
         ), "Input layers for the product must be the same class."
 
-        # TODO: Support product partition for categorial input layers.
         assert all(
-            (layer_cfg.layer_cls == NormalLayer) for layer_cfg in layers_cfgs
-        ), "Currently only support product partition for normal input layers."
+            issubclass(layer_cfg.layer_cls, (NormalLayer, CategoricalLayer))
+            for layer_cfg in layers_cfgs
+        ), "Currently only support product partition for Normal or Categorical."
 
         def _func(eta: Tensor) -> Tensor:
             """Calculate the partition function of the product."""
@@ -242,10 +243,6 @@ class ProdEFLayer(ExpFamilyLayer):
             SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
                 given channel of the given variable.
         """
-        # DISABLE: We must import here to avoid cyclic import.
-        # pylint: disable-next=import-outside-toplevel,cyclic-import
-        from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
-
         # TODO: support nested ProdEFLayer (3 or more products)
         # TODO: how to check continuous/discrete distribution
         # CAST: kwargs.get gives Any.

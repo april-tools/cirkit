@@ -148,10 +148,8 @@ class TensorizedCircuit(nn.Module):
     integrate = TCF.integrate
 
     # Use cached_property to lazily construct the circuit for partition function.
-    @cached_property
-    def partition_circuit(self) -> "TensorizedCircuit":
-        """The circuit calculating the partition function."""
-        return self.integrate(scope=self.scope)
+    partition_circuit = cached_property(integrate)
+    """The circuit calculating the partition function."""
 
     @property
     def partition_func(self) -> Tensor:  # TODO: is this the correct shape?
