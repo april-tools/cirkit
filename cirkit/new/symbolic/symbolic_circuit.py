@@ -31,32 +31,48 @@ class SymbolicTensorizedCircuit:
         /,
         *,
         num_channels: int = 1,
-        num_input_units: int,
-        num_sum_units: int,
+        num_input_units: Optional[int] = None,
+        num_sum_units: Optional[int] = None,
         num_classes: int = 1,
-        input_cfg: SymbLayerCfg[InputLayer],
-        sum_cfg: SymbLayerCfg[SumLayer],
-        prod_cfg: SymbLayerCfg[ProductLayer],
+        input_cfg: Optional[SymbLayerCfg[InputLayer]] = None,
+        sum_cfg: Optional[SymbLayerCfg[SumLayer]] = None,
+        prod_cfg: Optional[SymbLayerCfg[ProductLayer]] = None,
+        layers: Optional[Iterable[SymbolicLayer]] = None,
     ):
-        """Construct symbolic circuit from a region graph.
+        """Construct the symbolic circuit.
+
+        There are two ways to construct:
+            - Provide the number of units and cfgs to construct symbolic layers from the RG;
+            - Provide directly the symbolic layers (must be correctly ordered).
+
+        However in both cases the caller must provide:
+            - The RG, which provides the basic properties;
+            - The number of channels and classes, which specify the sizes of the input and output.
 
         If both configs for sum and product specify SumProductLayer as the layer class, they must \
-        be the same, which will be used for layer fusion. Otherwise, both should be SumProductLayer.
+        be the same, which will be used for layer fusion. Otherwise, both should not be \
+        SumProductLayer. If directly prodiving layers, the use of SumProductLayer must observe the \
+        same rule. This requirement is not checked in symbolic circuit but in TensorizedCircuit.
 
         Args:
-            region_graph (RegionGraph): The region graph to convert.
+            region_graph (RegionGraph): The underlying region graph.
             num_channels (int, optional): The number of channels of the circuit input, i.e., the \
                 number of units for the variables. Defaults to 1.
-            num_input_units (int): The number of units in the input layer.
-            num_sum_units (int): The number of units in the sum layer. Also used to infer the \
-                number of product units.
+            num_input_units (Optional[int], optional): The number of units in the input layer. \
+                Defaults to None.
+            num_sum_units (Optional[int], optional): The number of units in the sum layer. \
+                Defaults to None.
             num_classes (int, optional): The number of classes of the circuit output, i.e., the \
                 number of units in the output layer. Defaults to 1.
-            input_cfg (SymbLayerCfg[InputLayer]): The config for input layers.
-            sum_cfg (SymbLayerCfg[SumLayer]): The config for sum layers. Use SumProductLayer for \
-                layer fusion.
-            prod_cfg (SymbLayerCfg[ProductLayer]): The config for sum layers. Use SumProductLayer \
-                for layer fusion.
+            input_cfg (Optional[SymbLayerCfg[InputLayer]], optional): The config for input layers. \
+                Defaults to None.
+            sum_cfg (Optional[SymbLayerCfg[SumLayer]], optional): The config for sum layers. \
+                Defaults to None.
+            prod_cfg (Optional[SymbLayerCfg[ProductLayer]], optional): The config for product \
+                layers. Defaults to None.
+            layers (Optional[Iterable[SymbolicLayer]], optional): The layers of the circuit, will \
+                override all above for layers if provided. Must be ordered in the same way as \
+                RGNode but this is not checked. Defaults to None.
         """
         self.region_graph = region_graph
         self.scope = region_graph.scope
@@ -68,12 +84,23 @@ class SymbolicTensorizedCircuit:
         self.num_channels = num_channels
         self.num_classes = num_classes
 
-        # ANNOTATE: Specify content for empty container.
-        self._layers: OrderedSet[SymbolicLayer] = OrderedSet()
+        if layers is not None:
+            self._layers = OrderedSet(layers)
+            return
+
+        assert (
+            num_input_units is not None
+            and num_sum_units is not None
+            and input_cfg is not None
+            and sum_cfg is not None
+            and prod_cfg is not None
+        ), "The configs for SymbL to construct SymbC is incomplete."
+
         # The RGNode and SymbolicLayer does not map 1-to-1 but 1-to-many. This still leads to a
         # deterministic order: SymbolicLayer of different RGNode will be naturally sorted by the
         # RGNode order; SymbolicLayer of the same RGNode are adjcent, and ordered based on the order
         # of edges in the RGNode.
+        self._layers = OrderedSet()
 
         # ANNOTATE: Specify content for empty container.
         node_to_layer: Dict[RGNode, SymbolicLayer] = {}  # Map RGNode to its "output" SymbolicLayer.

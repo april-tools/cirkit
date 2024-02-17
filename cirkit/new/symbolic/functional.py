@@ -1,7 +1,3 @@
-# pylint: disable=protected-access
-# DISABLE: For this file we disable the above because the functions defined will also be methods of
-#          SymbolicTensorizedCircuit, so access to its protected members is expected.
-
 import heapq
 import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
@@ -13,7 +9,7 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicProductLayer,
     SymbolicSumLayer,
 )
-from cirkit.new.utils import OrderedSet, Scope
+from cirkit.new.utils import Scope
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
     from cirkit.new.symbolic.symbolic_circuit import SymbolicTensorizedCircuit
@@ -38,25 +34,11 @@ def integrate(
 
     scope = Scope(scope) if scope is not None else self.scope
 
-    integral = object.__new__(type(self))
-    # Skip integral.__init__ and customize initialization as below.
-
-    integral.region_graph = self.region_graph
-    integral.scope = self.scope  # TODO: is this a good definition?
-    integral.num_vars = self.num_vars
-    integral.is_smooth = self.is_smooth
-    integral.is_decomposable = self.is_decomposable
-    integral.is_structured_decomposable = self.is_structured_decomposable
-    integral.is_omni_compatible = self.is_omni_compatible
-    integral.num_channels = self.num_channels
-    integral.num_classes = self.num_classes
-
-    integral._layers = OrderedSet()
-
+    # Map between two SymbC. The layer order is preserved by dict.
     # ANNOTATE: Specify content for empty container.
-    self_to_integral: Dict[SymbolicLayer, SymbolicLayer] = {}  # Map between two SymbC.
+    self_to_integral: Dict[SymbolicLayer, SymbolicLayer] = {}
 
-    for self_layer in self._layers:
+    for self_layer in self.layers:
         # ANNOTATE: Different subclasses are assigned below.
         integral_layer: SymbolicLayer
         if isinstance(self_layer, SymbolicInputLayer) and self_layer.scope & scope:
@@ -70,10 +52,14 @@ def integrate(
             integral_layer = self_layer.transform(
                 self_to_integral[self_layer_in] for self_layer_in in self_layer.inputs
             )  # The same reparam shared to integral_layer.
-        integral._layers.append(integral_layer)
         self_to_integral[self_layer] = integral_layer
 
-    return integral
+    return type(self)(
+        self.region_graph,
+        num_channels=self.num_channels,
+        num_classes=self.num_classes,
+        layers=self_to_integral.values(),
+    )
 
 
 class _ScopeVarAndSymbLayer(NamedTuple):
@@ -116,25 +102,12 @@ def differentiate(
     assert order >= 0, "The order of differential must be non-negative."
     # TODO: does the following work when order=0? tests?
 
-    differential = object.__new__(type(self))
-    # Skip differential.__init__ and customize initialization as below.
-
-    differential.region_graph = self.region_graph
-    differential.scope = self.scope  # TODO: is this a good definition?
-    differential.num_vars = self.num_vars
-    differential.is_smooth = self.is_smooth
-    differential.is_decomposable = self.is_decomposable
-    differential.is_structured_decomposable = self.is_structured_decomposable
-    differential.is_omni_compatible = self.is_omni_compatible
-    differential.num_channels = self.num_channels
-    differential.num_classes = self.num_classes
-
-    differential._layers = OrderedSet()
-
+    # Map between two SymbC. The layer order is preserved by dict. All the diff layers of one layer
+    # are adjacent and in the order as the list.
     # ANNOTATE: Specify content for empty container.
-    self_to_differential: Dict[SymbolicLayer, List[SymbolicLayer]] = {}  # Map between two SymbC.
+    self_to_differential: Dict[SymbolicLayer, List[SymbolicLayer]] = {}
 
-    for self_layer in self._layers:
+    for self_layer in self.layers:
         # ANNOTATE: Different subclasses are assigned below.
         differential_layers: List[SymbolicLayer]
         if isinstance(self_layer, SymbolicInputLayer):
@@ -211,10 +184,14 @@ def differentiate(
                 self_to_differential[self_layer_in][-1] for self_layer_in in self_layer.inputs
             )
         )
-        differential._layers.extend(differential_layers)
         self_to_differential[self_layer] = differential_layers
 
-    return differential
+    return type(self)(
+        self.region_graph,
+        num_channels=self.num_channels,
+        num_classes=self.num_classes,
+        layers=itertools.chain.from_iterable(self_to_differential.values()),
+    )
 
 
 def _product(
@@ -313,25 +290,8 @@ def product(
     ), "Circuits to take product must have same channels for input variables."
     # TODO: assert same region graph? compare RG?
 
-    # TODO: tmp disable
-    product = object.__new__(type(self))  # pylint: disable=redefined-outer-name
-    # Skip product.__init__ and customize initialization as below.
-
-    # TODO: Now we only have same-RG product. may need to be changed later.
-    product.region_graph = self.region_graph
-    product.scope = self.scope | other.scope
-    product.num_vars = len(product.scope)
-    product.is_smooth = self.is_smooth
-    product.is_decomposable = self.is_decomposable
-    # TODO: is the prod struct-decomp?
-    product.is_structured_decomposable = self.is_structured_decomposable
-    # TODO: is this correct?
-    product.is_omni_compatible = self.is_omni_compatible and other.is_omni_compatible
-    product.num_channels = self.num_channels
-    product.num_classes = self.num_classes * other.num_classes
-
+    # Map from (self, other) to product. The layer order will be handled later, as commented below.
     # ANNOTATE: Specify content for empty container.
-    # Map between (self, other) to product.
     pair_to_product: Dict[Tuple[SymbolicLayer, SymbolicLayer], SymbolicLayer] = {}
 
     # We must build the layers from outputs because we don't know which layers to product with which
@@ -353,13 +313,10 @@ def product(
         key=lambda pair: (self_idx[pair[0]], other_idx[pair[1]]),  # type: ignore[misc]
     )
 
-    product._layers = OrderedSet(pair_to_product[pair] for pair in sorted_pairs)
-
-    return product
-
-
-# TODO: refactor SymbC construction? some initial ideas:
-#       - still use __init__ to init, but not hack through __new__
-#       - use layer factories for construction for each layer (also a last common step?)
-#       - self_to_differential[self_layer_in] will be saved and passed to factory
-# TODO: another idea: just optionally provide content of _layer.
+    # TODO: Now we only have same-RG product. may need to be changed later.
+    return type(self)(
+        self.region_graph,
+        num_channels=self.num_channels,
+        num_classes=self.num_classes * other.num_classes,
+        layers=(pair_to_product[pair] for pair in sorted_pairs),
+    )
