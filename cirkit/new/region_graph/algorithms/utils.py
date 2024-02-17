@@ -15,8 +15,8 @@ class HypercubeToScope(Dict[HyperCube, Scope]):
     hypercube.
 
     This is implemented as a dict subclass with customized __missing__, so that:
-    - If a hypercube is already queried, the corresponding scope is retrieved the dict;
-    - If it's not in the dict yet, the scope is calculated and cached to the dict.
+        - If a hypercube is already queried, the corresponding scope is retrieved the dict;
+        - If it's not in the dict yet, the scope is calculated and cached to the dict.
     """
 
     def __init__(self, shape: Sequence[int]) -> None:

@@ -72,9 +72,8 @@ class MixingLayer(SumLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
-        return self.comp_space.sum(
-            self._forward_linear, x, dim=0, keepdim=False
-        )  # shape (H, *B, K) -> (*B, K).
+        # shape (H, *B, K) -> (*B, K).
+        return self.comp_space.sum(self._forward_linear, x, dim=0, keepdim=False)
 
     # NOTE: get_product is inherited from SumLayer. The product between MixingLayer leads to the
     #       Kronecker of the param, with the arity expanded to the product of arities.

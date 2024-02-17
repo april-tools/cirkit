@@ -16,11 +16,11 @@ class ExpFamilyLayer(InputLayer):
     """The abstract base class for Exponential Family distribution layers.
 
     Exponential Family dist:
-        f(x|θ) = exp(η(θ) · T(x) + log_h(x) - A(η)).
+        p(x|θ) = exp(η(θ) · T(x) + log_h(x) - A(η)).
     Ref: https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions.
 
     However here we directly parameterize η instead of θ:
-        f(x|η) = exp(η · T(x) + log_h(x) - A(η)).
+        p(x|η) = exp(η · T(x) + log_h(x) - A(η)).
     Implemtations provide inverse mapping from η to θ.
 
     This implementation is fully factorized over the variables if used as multivariate, i.e., \
@@ -86,28 +86,33 @@ class ExpFamilyLayer(InputLayer):
         return self.comp_space.from_log(self.log_prob(x))
 
     def log_prob(self, x: Tensor) -> Tensor:
-        """Calculate log-probability log(f(x)) from input x.
+        """Calculate log-probability log(p(x)) from input x.
 
         Args:
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The log-prob log(f), shape (*B, K).
+            Tensor: The log-prob log_p, shape (*B, K).
         """
-        # TODO: if we just propagate unnormalized values, we can remove log_part here and move it to
-        #       integration -- by definition integration is partition.
         eta = self.params()  # shape (H, K, *S).
-        suff_stats = self.sufficient_stats(x)  # shape (*B, H, S).
-        log_h = self.log_base_measure(x)  # shape (*B, H).
-        log_part = self.log_partition(eta)  # shape (H, K).
-        # We need to flatten because we cannot have two ... in einsum for suff_stats as (*B, H, *S).
-        eta = eta.flatten(start_dim=-len(self.suff_stats_shape))  # shape (H, K, S).
-        return torch.sum(
-            torch.einsum("hks,...hs->...hk", eta, suff_stats)  # shape (*B, H, K).
-            + log_h.unsqueeze(dim=-1)  # shape (*B, H, 1).
-            - log_part,  # shape (*1, H, K), 1s automatically prepended.
-            dim=-2,
-        )  # shape (*B, H, K) -> (*B, K).
+        suff_stats = self.sufficient_stats(x)  # shape (H, *B, *S).
+
+        # We need to flatten because we cannot have two ... in einsum for suff_stats as (H, *B, *S).
+        # shape (H, K, S), (H, *B, S) -> (H, *B, K).
+        eta_suff = torch.einsum(
+            "hks,h...s->h...k",
+            eta.flatten(start_dim=-(eta.ndim - 2)),
+            suff_stats.flatten(start_dim=-(eta.ndim - 2)),
+        )
+
+        log_h = self.log_base_measure(x).unsqueeze(dim=-1)  # shape (H, *B) -> (H, *B, 1).
+        # shape (H, K) -> (H, *1, K).
+        log_part = torch.unflatten(
+            self.log_partition(eta), dim=0, sizes=(x.shape[0],) + (1,) * (x.ndim - 2)
+        )
+
+        # shape (H, *B, K) + (H, *B, 1) + (H, *1, K) -> (H, *B, K) -> (*B, K).
+        return torch.sum(eta_suff + log_h - log_part, dim=0)
 
     @abstractmethod
     def sufficient_stats(self, x: Tensor) -> Tensor:
@@ -117,7 +122,7 @@ class ExpFamilyLayer(InputLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (*B, H, S).
+            Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
 
     @abstractmethod
@@ -128,15 +133,17 @@ class ExpFamilyLayer(InputLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The natural parameters eta, shape (*B, H).
+            Tensor: The natural parameters eta, shape (H, *B).
         """
 
     @abstractmethod
-    def log_partition(self, eta: Tensor) -> Tensor:
+    def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
             eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta_normed (bool, optional): Whether eta is produced by a NormalizedReparam. If True, \
+                implementations may save some computation. Defaults to False.
 
         Returns:
             Tensor: The log partition function A, shape (H, K).
@@ -152,7 +159,6 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """
-        # TODO: for unnormalized EF, should be ParameterizedConstantLayer
         # We have already normalized with log_partition in forward(), so integral is always 1.
         # IGNORE: Unavoidable for kwargs.
         return SymbLayerCfg(
@@ -202,18 +208,16 @@ class ExpFamilyLayer(InputLayer):
 
     @classmethod
     def get_product(
-        cls,
-        self_symb_cfg: SymbLayerCfg[Self],
-        other_symb_cfg: SymbLayerCfg[InputLayer],
+        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[InputLayer]
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the product of this input layer with the other \
         input layer.
 
         TODO: Cases:
-            - Product with class in ExpFamilyLayer: f_1*f_2(x) according to the construction in \
+            - Product with class in ExpFamilyLayer: p_1*p_2(x) according to the construction in \
                 ProdEFLayer.
-            - Product with ConstantLayer: f(x)*c.
-            - Product with DiffEFLayer: f_1(x)*f_2'(x).
+            - Product with ConstantLayer: p(x)*c.
+            - Product with DiffEFLayer: p_1(x)*p_2'(x).
 
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.

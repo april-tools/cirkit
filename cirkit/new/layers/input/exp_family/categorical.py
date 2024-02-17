@@ -57,17 +57,14 @@ class CategoricalLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (*B, H, S).
+            Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete.
         # TODO: pylint issue? one_hot is only in pyi
-        suff_stats = F.one_hot(x, self.num_categories).to(  # pylint: disable=not-callable
-            torch.get_default_dtype()
-        )  # shape (H, *B, K, cat).
-        return suff_stats.movedim(0, -3).flatten(
-            start_dim=-2
-        )  # shape (H, *B, K, cat) -> (*B, H, *S=(K, cat)) -> (*B, H, S=K*cat).
+        # pylint: disable-next=not-callable
+        suff_stats = F.one_hot(x, self.num_categories)  # shape (H, *B, K) -> (H, *B, K, cat).
+        return suff_stats.to(torch.get_default_dtype())  # The suff stats must be float.
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
@@ -76,20 +73,26 @@ class CategoricalLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The natural parameters eta, shape (*B, H).
+            Tensor: The natural parameters eta, shape (H, *B).
         """
-        return torch.zeros(()).to(x).expand_as(x[..., 0]).movedim(0, -1)
+        return torch.zeros(()).to(x).expand(x.shape[:-1])
 
-    def log_partition(self, eta: Tensor) -> Tensor:
+    def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
             eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta_normed (bool, optional): Whether eta is produced by a NormalizedReparam. If True, \
+                implementations may save some computation. Defaults to False.
 
         Returns:
             Tensor: The log partition function A, shape (H, K).
         """
-        return torch.zeros(()).to(eta).expand(eta.shape[:2])
+        if eta_normed:
+            return torch.zeros(()).to(eta).expand(eta.shape[:2])
+
+        # If eta is not normalized, we need this to make sure the output of EF is normalized.
+        return eta.logsumexp(dim=-1).sum(dim=-1)  # shape (H, K, Ki, cat) -> (H, K, Ki) -> (H, K).
 
     @classmethod
     def get_partial(

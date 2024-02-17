@@ -1,20 +1,15 @@
-# pylint: disable=protected-access
-# DISABLE: For this file we disable the above because the functions defined will also be methods of
-#          SymbolicTensorizedCircuit, so access to its protected members is expected.
-
 import heapq
 import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-from cirkit.new.layers import KroneckerLayer
+from cirkit.new.layers.inner.inner import InnerLayer
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,
     SymbolicProductLayer,
     SymbolicSumLayer,
 )
-from cirkit.new.utils import OrderedSet, Scope
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils import Scope
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
     from cirkit.new.symbolic.symbolic_circuit import SymbolicTensorizedCircuit
@@ -39,45 +34,32 @@ def integrate(
 
     scope = Scope(scope) if scope is not None else self.scope
 
-    integral = object.__new__(type(self))
-    # Skip integral.__init__ and customize initialization as below.
-
-    integral.region_graph = self.region_graph
-    integral.scope = self.scope  # TODO: is this a good definition?
-    integral.num_vars = self.num_vars
-    integral.is_smooth = self.is_smooth
-    integral.is_decomposable = self.is_decomposable
-    integral.is_structured_decomposable = self.is_structured_decomposable
-    integral.is_omni_compatible = self.is_omni_compatible
-    integral.num_channels = self.num_channels
-    integral.num_classes = self.num_classes
-
-    integral._layers = OrderedSet()
-
+    # Map between two SymbC. The layer order is preserved by dict.
     # ANNOTATE: Specify content for empty container.
-    self_to_integral: Dict[SymbolicLayer, SymbolicLayer] = {}  # Map between two SymbC.
+    self_to_integral: Dict[SymbolicLayer, SymbolicLayer] = {}
 
-    for self_layer in self._layers:
+    for self_layer in self.layers:
         # ANNOTATE: Different subclasses are assigned below.
         integral_layer: SymbolicLayer
         if isinstance(self_layer, SymbolicInputLayer) and self_layer.scope & scope:
             assert (
                 self_layer.scope <= scope
             ), "The scope of an input layer must be either all marginalized or all not."
-            integral_layer = SymbolicInputLayer(
-                self_layer.scope,
-                (),
-                num_units=self_layer.num_units,
-                layer_cfg=self_layer.layer_cls.get_integral(self_layer.layer_cfg),
+            integral_layer = self_layer.transform(
+                (), layer_cfg=self_layer.layer_cls.get_integral(self_layer.layer_cfg)
             )
         else:
             integral_layer = self_layer.transform(
                 self_to_integral[self_layer_in] for self_layer_in in self_layer.inputs
             )  # The same reparam shared to integral_layer.
-        integral._layers.append(integral_layer)
         self_to_integral[self_layer] = integral_layer
 
-    return integral
+    return type(self)(
+        self.region_graph,
+        num_channels=self.num_channels,
+        num_classes=self.num_classes,
+        layers=self_to_integral.values(),
+    )
 
 
 class _ScopeVarAndSymbLayer(NamedTuple):
@@ -120,33 +102,18 @@ def differentiate(
     assert order >= 0, "The order of differential must be non-negative."
     # TODO: does the following work when order=0? tests?
 
-    differential = object.__new__(type(self))
-    # Skip differential.__init__ and customize initialization as below.
-
-    differential.region_graph = self.region_graph
-    differential.scope = self.scope  # TODO: is this a good definition?
-    differential.num_vars = self.num_vars
-    differential.is_smooth = self.is_smooth
-    differential.is_decomposable = self.is_decomposable
-    differential.is_structured_decomposable = self.is_structured_decomposable
-    differential.is_omni_compatible = self.is_omni_compatible
-    differential.num_channels = self.num_channels
-    differential.num_classes = self.num_classes
-
-    differential._layers = OrderedSet()
-
+    # Map between two SymbC. The layer order is preserved by dict. All the diff layers of one layer
+    # are adjacent and in the order as the list.
     # ANNOTATE: Specify content for empty container.
-    self_to_differential: Dict[SymbolicLayer, List[SymbolicLayer]] = {}  # Map between two SymbC.
+    self_to_differential: Dict[SymbolicLayer, List[SymbolicLayer]] = {}
 
-    for self_layer in self._layers:
+    for self_layer in self.layers:
         # ANNOTATE: Different subclasses are assigned below.
         differential_layers: List[SymbolicLayer]
         if isinstance(self_layer, SymbolicInputLayer):
             differential_layers = [
-                SymbolicInputLayer(
-                    self_layer.scope,
+                self_layer.transform(
                     (),
-                    num_units=self_layer.num_units,
                     layer_cfg=self_layer.layer_cls.get_partial(
                         self_layer.layer_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx
                     ),
@@ -217,15 +184,91 @@ def differentiate(
                 self_to_differential[self_layer_in][-1] for self_layer_in in self_layer.inputs
             )
         )
-        differential._layers.extend(differential_layers)
         self_to_differential[self_layer] = differential_layers
 
-    return differential
+    return type(self)(
+        self.region_graph,
+        num_channels=self.num_channels,
+        num_classes=self.num_classes,
+        layers=itertools.chain.from_iterable(self_to_differential.values()),
+    )
 
 
-# TODO: assert message? also other styling
-# TODO: refactor: fixed too complex and too many statements
-# pylint: disable-next=too-complex,too-many-statements
+def _product(
+    self_layer: SymbolicLayer,
+    other_layer: SymbolicLayer,
+    pair_to_product: Dict[Tuple[SymbolicLayer, SymbolicLayer], SymbolicLayer],
+) -> SymbolicLayer:
+    """Perform product between two symbolic layers.
+
+    Args:
+        self_layer (SymbolicLayer): The first layer to product (from SymbC self).
+        other_layer (SymbolicLayer): The second layer to product (from SymbC other).
+        pair_to_product (Dict[Tuple[SymbolicLayer, SymbolicLayer], SymbolicLayer]): The mapping \
+            from the pair of layers to their product. The return value is cached here so that we \
+            can reuse instead of recalculate.
+
+    Raises:
+        NotImplementedError: When "not-yet-implemented feature" is invoked.
+
+    Returns:
+        SymbolicLayer: The product of the two layers.
+    """
+    # This can be above the assert because assertion has already been tested when added.
+    if (self_layer, other_layer) in pair_to_product:
+        return pair_to_product[(self_layer, other_layer)]
+
+    # DISABLE: We indeed want to compare classes here.
+    if type(self_layer) != type(other_layer):  # pylint: disable=unidiomatic-typecheck
+        raise NotImplementedError("Product with different RG has not been implemented yet.")
+    if (
+        issubclass(self_layer.layer_cls, InnerLayer)
+        and self_layer.layer_cls != other_layer.layer_cls
+    ):
+        raise NotImplementedError("Product with different InnerLayer has not been implemented yet.")
+    if self_layer.scope != other_layer.scope:
+        raise NotImplementedError("Product with different scope has not been implemented yet.")
+
+    if isinstance(self_layer, SymbolicInputLayer):
+        # Should be empty. Just use this expr to give a type of Generator[SymbL].
+        layers_in = (symbl for symbl in self_layer.inputs)
+    elif isinstance(self_layer, SymbolicSumLayer):
+        # itertools.product gives the same order of torch.kron, so this automatically maps to the
+        # reparam transform of MixingLayer. For DenseLayer there's no ordering because arity=1.
+        layers_in = (
+            _product(self_layer_in, other_layer_in, pair_to_product)
+            for self_layer_in, other_layer_in in itertools.product(
+                self_layer.inputs, other_layer.inputs
+            )
+        )
+    elif isinstance(self_layer, SymbolicProductLayer):
+        # The order of inputs should be guaranteed to correspond to each other due to the order
+        # guaranteed by the layer views.
+        layers_in = (
+            _product(self_layer_in, other_layer_in, pair_to_product)
+            for self_layer_in, other_layer_in in zip(self_layer.inputs, other_layer.inputs)
+        )
+    else:
+        # NOTE: In the above if/elif, we made all conditions explicit to make it more readable
+        #       and also easier for static analysis inside the blocks. Yet the completeness
+        #       cannot be inferred and is only guaranteed by larger picture. Also, should
+        #       anything really go wrong, we will hit this guard statement instead of going into
+        #       a wrong branch.
+        assert False, "This should not happen."
+
+    # TODO: due to Layer.get_prod
+    product_layer = self_layer.transform(
+        layers_in,
+        num_units=self_layer.num_units * other_layer.num_units,
+        layer_cfg=self_layer.layer_cls.get_product(  # type: ignore[misc]
+            self_layer.layer_cfg, other_layer.layer_cfg
+        ),
+    )
+
+    pair_to_product[(self_layer, other_layer)] = product_layer
+    return product_layer
+
+
 def product(
     self: "SymbolicTensorizedCircuit", other: "SymbolicTensorizedCircuit"
 ) -> "SymbolicTensorizedCircuit":
@@ -236,185 +279,44 @@ def product(
         other (SymbolicTensorizedCircuit): The second circuit to perform product.
 
     Returns:
-        SymbolicTensorizedCircuit: The circuit product.
+        SymbolicTensorizedCircuit: The product circuit.
     """
     assert (
-        self.is_smooth and self.is_decomposable
-    ), "Product could only perform on smooth and decomposable circuits."
+        self.is_smooth and self.is_decomposable and other.is_smooth and other.is_decomposable
+    ), "Circuits to take product must be smooth and decomposable."
+    assert self.is_compatible(other), "Circuits to take product must be compatible to each other."
     assert (
-        other.is_smooth and other.is_decomposable
-    ), "Product could only perform on smooth and decomposable circuits."
+        self.num_channels == other.num_channels
+    ), "Circuits to take product must have same channels for input variables."
+    # TODO: assert same region graph? compare RG?
 
-    scope = self.scope & other.scope
-    # assert self.scope == other.scope, "different-scope product is to be implemented."
-    assert self.is_compatible(
-        other, scope=scope
-    ), "Product could only perform on compatible circuits."
-
-    product_circuit = object.__new__(type(self))
-
-    product_circuit.region_graph = self.region_graph  # TODO: implement different-scope product
-    # TODO: do we need region graph? region graph is not self!
-    product_circuit.scope = self.scope | other.scope
-    product_circuit.num_vars = len(product_circuit.scope)
-    product_circuit.is_smooth = self.is_smooth
-    product_circuit.is_decomposable = self.is_decomposable
-    product_circuit.is_structured_decomposable = self.is_structured_decomposable
-    # TODO: is_structured_decomposable?
-    product_circuit.is_omni_compatible = self.is_omni_compatible and other.is_omni_compatible
-    product_circuit.num_channels = self.num_channels
-    product_circuit.num_classes = self.num_classes * other.num_classes
-
-    product_circuit._layers = OrderedSet()
-
+    # Map from (self, other) to product. The layer order will be handled later, as commented below.
     # ANNOTATE: Specify content for empty container.
-    # Map between self circuit to product circuit, other circuit to product circuit.
-    self_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}  # TODO: leftover of different scope
-    other_to_product: Dict[SymbolicLayer, SymbolicLayer] = {}
+    pair_to_product: Dict[Tuple[SymbolicLayer, SymbolicLayer], SymbolicLayer] = {}
 
-    def _copy_layer(
-        circuit: "SymbolicTensorizedCircuit",
-        *,
-        scope: Scope,
-        circuit_is_self: bool,
-    ) -> None:
-        """Copy layers into the new circuit."""
-        for layer in circuit._layers:
-            if layer.scope <= scope:
-                new_layer = layer.transform(
-                    self_to_product[layer_in] if circuit_is_self else other_to_product[layer_in]
-                    for layer_in in layer.inputs
-                )
-                product_circuit._layers.append(new_layer)
-                if circuit_is_self:
-                    self_to_product[layer] = new_layer
-                else:
-                    other_to_product[layer] = new_layer
+    # We must build the layers from outputs because we don't know which layers to product with which
+    # if starting from input. We can only know which-to-which by looking as the inputs to a layer
+    # pair known to product.
+    # TODO: allow "inner product"?
+    for self_layer, other_layer in itertools.product(self.output_layers, other.output_layers):
+        _product(self_layer, other_layer, pair_to_product)
 
-    def _product(
-        self_layer: SymbolicLayer,
-        other_layer: SymbolicLayer,
-    ) -> SymbolicLayer:
-        """Perform product between two layers."""
-        new_layer: SymbolicLayer
+    # Since we build layers from outputs, we must reorder them to preverse the layer ordering. We
+    # reorder by (self_idx, other_idx) so that it's consistent with both the ordering in the two
+    # original circuits and the order of kronecker.
+    self_idx = {layer: idx for idx, layer in enumerate(self.layers)}
+    other_idx = {layer: idx for idx, layer in enumerate(other.layers)}
 
-        # TODO: leftover of different scope prod
-        # product layer is already generated
-        if self_layer in self_to_product and other_layer in other_to_product:
-            assert (
-                self_to_product[self_layer] is other_to_product[other_layer]
-            )  # TODO: different-scope product
-            return self_to_product[self_layer]
+    # TODO: mypy cannot infer this lambda?
+    sorted_pairs = sorted(
+        pair_to_product.keys(),
+        key=lambda pair: (self_idx[pair[0]], other_idx[pair[1]]),  # type: ignore[misc]
+    )
 
-        if not self_layer.scope & other_layer.scope:
-            _copy_layer(self, scope=self_layer.scope, circuit_is_self=True)
-            _copy_layer(other, scope=other_layer.scope, circuit_is_self=False)
-
-            new_layer = SymbolicProductLayer(
-                Scope(self_layer.scope | other_layer.scope),
-                (self_to_product[self_layer], other_to_product[other_layer]),
-                num_units=self_layer.num_units,
-                # Kroneker product configuration to connect two sub-circuits with distinct scope.
-                layer_cfg=SymbLayerCfg(layer_cls=KroneckerLayer),
-            )
-        # TODO: leftover of different scope prod
-
-        # TODO: fuse the following cases for get_product?
-        elif isinstance(self_layer, SymbolicInputLayer) and isinstance(
-            other_layer, SymbolicInputLayer
-        ):
-            assert self_layer.scope == other_layer.scope, "input layers have different scope"
-
-            if self_layer.layer_cfg.reparam is None or other_layer.layer_cfg.reparam is None:
-                raise ValueError("Both layers must have a reparameterization")
-
-            # IGNORE: Unavoidable for kwargs.
-            new_layer = type(self_layer)(
-                self_layer.scope,
-                (),
-                num_units=self_layer.num_units * other_layer.num_units,
-                # TODO: implement product between circuits with different units
-                layer_cfg=self_layer.layer_cls.get_product(
-                    self_layer.layer_cfg, other_layer.layer_cfg
-                ),
-            )
-
-        elif isinstance(self_layer, SymbolicSumLayer) and isinstance(other_layer, SymbolicSumLayer):
-            self_layer_input = self_layer.inputs
-            other_layer_input = other_layer.inputs
-
-            assert (
-                len(self_layer_input) == 1 and len(other_layer_input) == 1
-            ), "Only 1 input is allowed for sum layers"
-
-            new_layer = SymbolicSumLayer(
-                Scope(self_layer.scope | other_layer.scope),
-                (_product(self_layer_input[0], other_layer_input[0]),),
-                num_units=self_layer.num_units * other_layer.num_units,
-                # TODO: implement product between circuits with different units
-                layer_cfg=self_layer.layer_cls.get_product(
-                    self_layer.layer_cfg, other_layer.layer_cfg
-                ),
-            )
-
-        elif isinstance(self_layer, SymbolicProductLayer) and isinstance(
-            other_layer, SymbolicProductLayer
-        ):
-            self_layer_inputs = self_layer.inputs
-            other_layer_inputs = other_layer.inputs
-
-            assert (
-                len(self_layer_inputs) == 2 and len(other_layer_inputs) == 2
-            ), "product layers only allow for 2 inputs"
-
-            # TODO: automatically aligned due to scope sorting?
-            # align the inputs to have the same or similar scope
-            aligned_inputs = [
-                (self_input, other_input)
-                for self_input in self_layer_inputs
-                for other_input in other_layer_inputs
-                if len(self_input.scope & other_input.scope)
-            ]
-            self_remaining_inputs = [
-                inp
-                for inp in self_layer_inputs
-                if not any(inp == inputs[0] for inputs in aligned_inputs)
-            ]
-            other_remaining_inputs = [
-                inp
-                for inp in other_layer_inputs
-                if not any(inp == inputs[1] for inputs in aligned_inputs)
-            ]
-            aligned_inputs.extend(zip(self_remaining_inputs, other_remaining_inputs))
-            # obtain child layers recursively
-
-            new_layer = SymbolicProductLayer(
-                Scope(self_layer.scope | other_layer.scope),
-                ([_product(pair[0], pair[1]) for pair in aligned_inputs]),
-                num_units=self_layer.num_units * other_layer.num_units,
-                # TODO: implement product between circuits with different units
-                layer_cfg=self_layer.layer_cls.get_product(
-                    self_layer.layer_cfg, other_layer.layer_cfg
-                ),
-            )
-
-        else:
-            raise NotImplementedError("Product with diff scope has not been implemented yet.")
-
-        product_circuit._layers.append(new_layer)
-        self_to_product[self_layer] = new_layer
-        other_to_product[other_layer] = new_layer
-        return new_layer
-
-    # obtain circuit product recursively from the output layers
-    for self_layer in self.output_layers:
-        for other_layer in other.output_layers:
-            _ = _product(self_layer, other_layer)
-
-    return product_circuit
-
-
-# TODO: refactor SymbC construction? some initial ideas:
-#       - still use __init__ to init, but not hack through __new__
-#       - use layer factories for construction for each layer (also a last common step?)
-#       - self_to_differential[self_layer_in] will be saved and passed to factory
+    # TODO: Now we only have same-RG product. may need to be changed later.
+    return type(self)(
+        self.region_graph,
+        num_channels=self.num_channels,
+        num_classes=self.num_classes * other.num_classes,
+        layers=(pair_to_product[pair] for pair in sorted_pairs),
+    )

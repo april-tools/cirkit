@@ -124,8 +124,8 @@ class OrderedSet(Collection[T]):
         The elements must support __lt__ comparison.
 
         It stably sorts the elements from the insertion order to the comparison order:
-        - If a < b, a always precedes b in the sorted order;
-        - If neither a < b nor b < a, the existing order is preserved.
+            - If a < b, a always precedes b in the sorted order;
+            - If neither a < b nor b < a, the existing order is preserved.
 
         Returns:
             Self: The self object.

@@ -1,36 +1,57 @@
-# pylint: disable=too-many-locals
-# TODO: add to pyproject.toml
+import itertools
+from typing import cast
+
 import torch
 
-from cirkit.new import set_layer_comp_space
-from tests.new.model.test_prod_utils import get_two_circuits
+from cirkit.new.layers import InputLayer, ParameterizedConstantLayer
+from cirkit.new.reparams import UnaryReparam
+from tests import floats
+from tests.new.model.functional.test_prod_utils import get_two_circuits, pf_of_product_of_normal
 
 
-def test_circuit_product_same_scope() -> None:
-    set_layer_comp_space("linear")  # TODO: what happens in log-space? will log(-1) appear?
-    (circuit1, circuit2) = get_two_circuits(same_scope=True, setting="norm")
-    inputs = torch.rand(2, 4, 1) * 10  # shape (B=2, D=4, C=1).
+def test_circuit_product_norm() -> None:
+    circuit1, circuit2 = get_two_circuits(same_scope=True, setting="norm")
+    inputs = torch.randn(2, 4, 1)  # shape (B=2, D=4, C=1).
 
     product_circuit = circuit1.product(circuit2)
-    product_circuit_output = product_circuit(inputs)
+    product_output = product_circuit(inputs)
 
     output1 = circuit1(inputs)
     output2 = circuit2(inputs)
-    outputs_product = output1 * output2
+    outputs_product = output1 + output2  # Product is sum in log-space.
 
-    assert torch.allclose(product_circuit_output, outputs_product)
+    assert floats.allclose(product_output, outputs_product)
 
-    # Test categorical
-    (circuit1_cat, circuit2_cat) = get_two_circuits(same_scope=True, setting="cat")
-    inputs_cat = torch.randint(5, (2, 4, 1)).float()  # shape (B=2, D=4, C=1).
+    product_part_circuit = product_circuit.partition_circuit
 
-    product_circuit_cat = circuit1_cat.product(circuit2_cat)
-    product_circuit_output_cat = product_circuit_cat(inputs_cat)
+    # We don't know what the partition should be for the whole product circuit.
+    for layer in product_part_circuit.layers:  # type: ignore[misc]
+        if isinstance(layer, InputLayer):  # type: ignore[misc]
+            assert isinstance(layer, ParameterizedConstantLayer)
+            pf_output_by_expression = pf_of_product_of_normal(
+                cast(UnaryReparam, layer.params).reparams[0]()
+            )
+            pf_output_by_layer = layer.forward(inputs)  # Only need a dummy input here.
+            assert floats.allclose(pf_output_by_expression, pf_output_by_layer)
 
-    output1_cat = circuit1_cat(inputs_cat)
-    output2_cat = circuit2_cat(inputs_cat)
-    outputs_product_cat = output1_cat * output2_cat
 
-    assert torch.allclose(product_circuit_output_cat, outputs_product_cat)
+def test_circuit_product_cat() -> None:
+    circuit1, circuit2 = get_two_circuits(same_scope=True, setting="cat")
+    # shape (B=16, D=4, C=1).
+    inputs = torch.tensor(
+        list(itertools.product([0, 1], repeat=4))  # type: ignore[misc]
+    ).unsqueeze(dim=-1)
 
-    set_layer_comp_space("log")  # TODO: use a with to tmp set default?
+    product_circuit = circuit1.product(circuit2)
+    product_output = product_circuit(inputs)
+
+    output1 = circuit1(inputs)
+    output2 = circuit2(inputs)
+    outputs_product = output1 + output2  # Product is sum in log-space.
+
+    assert floats.allclose(product_output, outputs_product)
+
+    sum_prod_output = torch.logsumexp(product_output, dim=0)
+    product_part_func = product_circuit.partition_func
+
+    assert floats.allclose(product_part_func, sum_prod_output)

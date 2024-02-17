@@ -23,11 +23,10 @@ def test_circuit_output_linear() -> None:
     set_layer_comp_space("linear")
     circuit = get_circuit_2x2()
     set_circuit_2x2_params(circuit)
+    # shape (B=16, D=4, C=1).
     all_inputs = torch.tensor(
         list(itertools.product([0, 1], repeat=4))  # type: ignore[misc]
-    ).unsqueeze(
-        dim=-1
-    )  # shape (B=16, D=4, C=1).
+    ).unsqueeze(dim=-1)
     output = circuit(all_inputs)
     assert output.shape == (16, 1, 1)  # shape (B=16, num_out=1, num_cls=1).
     assert floats.allclose(output, get_circuit_2x2_output())
@@ -37,11 +36,10 @@ def test_circuit_output_linear() -> None:
 def test_circuit_output_log() -> None:
     circuit = get_circuit_2x2()
     set_circuit_2x2_params(circuit)
+    # shape (B=16, D=4, C=1).
     all_inputs = torch.tensor(
         list(itertools.product([0, 1], repeat=4))  # type: ignore[misc]
-    ).unsqueeze(
-        dim=-1
-    )  # shape (B=16, D=4, C=1).
+    ).unsqueeze(dim=-1)
     output = circuit(all_inputs)
     assert output.shape == (16, 1, 1)  # shape (B=16, num_out=1, num_cls=1).
     assert floats.allclose(output, get_circuit_2x2_output().log())

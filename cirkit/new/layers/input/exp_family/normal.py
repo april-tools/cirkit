@@ -43,7 +43,8 @@ class NormalLayer(ExpFamilyLayer):
             reparam=reparam,
         )
 
-        # log_h is a fixed value, so calc in __init__ instead of on the fly.
+        # log_h is a fixed value, so calc in __init__ instead of on the fly. We don't convert to
+        # Tensor now so that the default_dtype may still be changed later.
         self._log_h = -0.5 * self.num_input_units * math.log(2 * math.pi)
 
     def sufficient_stats(self, x: Tensor) -> Tensor:
@@ -53,12 +54,10 @@ class NormalLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (*B, H, S).
+            Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
         # TODO: torch __pow__ issue
-        return torch.cat((x, cast(Tensor, x**2)), dim=-1).movedim(
-            0, -2
-        )  # shape (H, *B, 2*K) -> (*B, H, S=2*K).
+        return torch.stack((x, cast(Tensor, x**2)), dim=-2)  # shape (H, *B, 2, K).
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
@@ -67,15 +66,17 @@ class NormalLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The natural parameters eta, shape (*B, H).
+            Tensor: The natural parameters eta, shape (H, *B).
         """
-        return torch.tensor(self._log_h).to(x).expand_as(x[..., 0]).movedim(0, -1)
+        return torch.tensor(self._log_h).to(x).expand(x.shape[:-1])
 
-    def log_partition(self, eta: Tensor) -> Tensor:
+    def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
             eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta_normed (bool, optional): Ignored. This layer uses a special reparam for eta. \
+                Defaults to False.
 
         Returns:
             Tensor: The log partition function A, shape (H, K).
@@ -83,5 +84,7 @@ class NormalLayer(ExpFamilyLayer):
         eta1 = eta[..., 0, :]  # shape (H, K, Ki).
         eta2 = eta[..., 1, :]  # shape (H, K, Ki).
         # TODO: torch __pow__ issue
-        log_normalizer = -0.25 * cast(Tensor, eta1**2) / eta2 - 0.5 * torch.log(-2 * eta2)
-        return log_normalizer.sum(dim=-1)  # shape (H, K).
+        # shape (H, K, Ki) -> (H, K).
+        return torch.sum(
+            -0.25 * cast(Tensor, eta1**2) / eta2 - 0.5 * torch.log(-2 * eta2), dim=-1
+        )

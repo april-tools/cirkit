@@ -14,12 +14,11 @@ class DiffEFLayer(InputLayer):
     """The partial differential for Exponential Family distribution layers.
 
     Exponential Family dist:
-        f(x) = exp(η · T(x) + log_h(x) - A(η)) = exp(g(x)),
-    where g(x) is log-prob.
+        p(x) = exp(η · T(x) + log_h(x) - A(η)) = exp(log_p(x)).
 
     Differentials:
-        f'(x) = f(x)g'(x);
-        f''(x) = f(x)(g'(x)^2 + g''(x)).
+        p'(x) = p(x)log_p'(x);
+        p''(x) = p(x)(log_p'(x)^2 + log_p''(x)).
     """
 
     # DISABLE: It's designed to have these arguments.
@@ -91,24 +90,24 @@ class DiffEFLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
-        g_diffs = batch_high_order_at(
+        logp_diffs = batch_high_order_at(
             self.ef.log_prob, x, [self.var_idx, ..., self.ch_idx], order=self.order
         )
-        log_p = g_diffs[0]  # g(x) = log_p.
+        log_p = logp_diffs[0]
 
         # order >= 1 is asserted in __init__.
         if self.order == 1:
-            # g_factor: G(x) = f'(x)/f(x) = g'(x).
-            g_factor = g_diffs[1]
+            # factor = p'(x)/p(x) = log_p'(x).
+            factor = logp_diffs[1]
         elif self.order == 2:
-            # g_factor: G(x) = f''(x)/f(x) = g'(x)^2 + g''(x).
-            g_factor = g_diffs[1] ** 2 + g_diffs[2]  # type: ignore[misc]  # TODO: __pow__ issue
+            # factor = p''(x)/p(x) = log_p'(x)^2 + log_p''(x).
+            factor = logp_diffs[1] ** 2 + logp_diffs[2]  # type: ignore[misc]  # TODO: __pow__ issue
         else:
             # TODO: or no specific for EF, but generalize to all input layers using jac_functional?
             raise NotImplementedError("order>2 is not yet implemented for DiffEFLayer.")
 
         return self.comp_space.mul(
-            self.comp_space.from_log(log_p), self.comp_space.from_linear(g_factor)
+            self.comp_space.from_log(log_p), self.comp_space.from_linear(factor)
         )
 
     @classmethod
@@ -158,17 +157,15 @@ class DiffEFLayer(InputLayer):
 
     @classmethod
     def get_product(
-        cls,
-        self_symb_cfg: SymbLayerCfg[Self],
-        other_symb_cfg: SymbLayerCfg[InputLayer],
+        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[InputLayer]
     ) -> SymbLayerCfg[InputLayer]:
         """Get the symbolic config to construct the product of this input layer with the other \
         input layer.
 
         TODO: Cases:
-            - Product with DiffEFLayer: f_1'(x)*f_2'(x).
-            - Product with class in ExpFamilyLayer: f_1'(x)*f_2(x).
-            - Product with ConstantLayer: f'(x)*c.
+            - Product with DiffEFLayer: p_1'(x)*p_2'(x).
+            - Product with class in ExpFamilyLayer: p_1'(x)*p_2(x).
+            - Product with ConstantLayer: p'(x)*c.
 
         Args:
             self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.

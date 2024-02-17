@@ -116,9 +116,9 @@ class RegionGraph:
         """Freeze the RG to mark the end of construction and return self.
 
         The work here includes:
-        - Finalizing the maintenance on internal data structures;
-        - Validating the RG structure;
-        - Assigning public attributes/properties.
+            - Finalizing the maintenance on internal data structures;
+            - Validating the RG structure;
+            - Assigning public attributes/properties.
 
         Returns:
             Self: The self object.

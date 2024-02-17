@@ -62,7 +62,7 @@ def get_two_circuits(
 
     if setting == "cat":
         input_cls = CategoricalLayer
-        input_kwargs = {"num_categories": 6}
+        input_kwargs = {"num_categories": 2}
         input_reparam = SoftmaxReparam
     elif setting == "norm":
         input_cls = NormalLayer
@@ -78,14 +78,10 @@ def get_two_circuits(
         num_channels=num_channels,
         num_classes=num_classes,
         input_cfg=SymbLayerCfg(
-            layer_cls=input_cls,
-            layer_kwargs=input_kwargs,
-            reparam_factory=input_reparam,
+            layer_cls=input_cls, layer_kwargs=input_kwargs, reparam_factory=input_reparam
         ),
         sum_cfg=SymbLayerCfg(
-            layer_cls=inner_cls,
-            layer_kwargs=inner_kwargs,
-            reparam_factory=inner_reparam,
+            layer_cls=inner_cls, layer_kwargs=inner_kwargs, reparam_factory=inner_reparam
         ),
         prod_cfg=SymbLayerCfg(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
     )
@@ -97,14 +93,10 @@ def get_two_circuits(
         num_channels=num_channels,
         num_classes=num_classes,
         input_cfg=SymbLayerCfg(
-            layer_cls=input_cls,
-            layer_kwargs=input_kwargs,
-            reparam_factory=input_reparam,
+            layer_cls=input_cls, layer_kwargs=input_kwargs, reparam_factory=input_reparam
         ),
         sum_cfg=SymbLayerCfg(
-            layer_cls=inner_cls,
-            layer_kwargs=inner_kwargs,
-            reparam_factory=inner_reparam,
+            layer_cls=inner_cls, layer_kwargs=inner_kwargs, reparam_factory=inner_reparam
         ),
         prod_cfg=SymbLayerCfg(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
     )
@@ -134,4 +126,4 @@ def pf_of_product_of_normal(eta: Tensor) -> Tensor:
         4 * eta[:, :, 1] * eta[:, :, 3] * (eta[:, :, 1] + eta[:, :, 3])
     )
     normalizer = 0.5 * torch.log((-eta[:, :, 1] - eta[:, :, 3]) / (eta[:, :, 1] * eta[:, :, 3]))
-    return torch.sum((exponent - log_sq_pi - normalizer), dim=0)  # type: ignore[misc]
+    return torch.sum(exponent - log_sq_pi - normalizer, dim=0)  # type: ignore[misc]

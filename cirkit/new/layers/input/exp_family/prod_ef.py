@@ -5,6 +5,7 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 import torch
 from torch import Tensor
 
+from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
 from cirkit.new.layers.input.exp_family.exp_family import ExpFamilyLayer
 from cirkit.new.layers.input.exp_family.normal import NormalLayer
 from cirkit.new.layers.input.input import InputLayer
@@ -17,11 +18,11 @@ class ProdEFLayer(ExpFamilyLayer):
     """The product for Exponential Family distribution layers.
 
     Exponential Family dist:
-        f(x|η) = exp(η · T(x) + log_h(x) - A(η)).
+        p(x|η) = exp(η · T(x) + log_h(x) - A(η)).
 
     Product:
-        f_1*f_2(x|η_1,η_2) = exp(η · T(x) + log_h(x) - A(η)),
-        where:
+        p_1*p_2(x|η_1,η_2) = exp(η · T(x) + log_h(x) - A(η)),
+    where:
         - η = concat(η_1, η_2),
         - T(x) = concat(T_1(x), T_2(x)),
         - log_h(x) = log_h_1(x) + log_h_2(x),
@@ -89,9 +90,16 @@ class ProdEFLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (*B, H, S).
+            Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
-        return torch.cat((self.ef1.sufficient_stats(x), self.ef2.sufficient_stats(x)), dim=-1)
+        # shape (H, *B, *S_1), (H, *B, *S_2) -> (H, *B, flatten(S_1)+flatten(S_2))
+        return torch.cat(
+            (
+                self.ef1.sufficient_stats(x).flatten(start_dim=-len(self.ef1.suff_stats_shape)),
+                self.ef2.sufficient_stats(x).flatten(start_dim=-len(self.ef2.suff_stats_shape)),
+            ),
+            dim=-1,
+        )
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
@@ -100,15 +108,17 @@ class ProdEFLayer(ExpFamilyLayer):
             x (Tensor): The input x, shape (H, *B, K).
 
         Returns:
-            Tensor: The natural parameters eta, shape (*B, H).
+            Tensor: The natural parameters eta, shape (H, *B).
         """
         return self.ef1.log_base_measure(x) + self.ef2.log_base_measure(x)
 
-    def log_partition(self, eta: Tensor) -> Tensor:
+    def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
             eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta_normed (bool, optional): Ignored. This layer uses a special reparam for eta. \
+                Defaults to False.
 
         Returns:
             Tensor: The log partition function A, shape (H, K).
@@ -131,8 +141,9 @@ class ProdEFLayer(ExpFamilyLayer):
         can, as shown below (LogIntegExp is integration w.r.t. x).
 
         Assume:
-            1. T_2(x) = T_1(x) (so η_1, η_2 are of the same shape);
-            2. log_h_2(x) = log_h_2 (constant).
+            - T_2(x) = T_1(x) (so η_1, η_2 are of the same shape);
+            - log_h_2(x) = log_h_2 (constant).
+
         By definition:
             LogIntegExp(η_1 · T_1(x) + log_h_1(x)) = A_1(η_1).
         That is:
@@ -175,10 +186,10 @@ class ProdEFLayer(ExpFamilyLayer):
             (layer_cfg.layer_cls == layers_cfgs[0].layer_cls) for layer_cfg in layers_cfgs
         ), "Input layers for the product must be the same class."
 
-        # TODO: Support product partition for categorial input layers.
         assert all(
-            (layer_cfg.layer_cls == NormalLayer) for layer_cfg in layers_cfgs
-        ), "Currently only support product partition for normal input layers."
+            issubclass(layer_cfg.layer_cls, (NormalLayer, CategoricalLayer))
+            for layer_cfg in layers_cfgs
+        ), "Currently only support product partition for Normal or Categorical."
 
         def _func(eta: Tensor) -> Tensor:
             """Calculate the partition function of the product."""
@@ -194,11 +205,10 @@ class ProdEFLayer(ExpFamilyLayer):
             )
             pseudo_inputs = torch.zeros(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
 
+            # shape (H, K, S) -> (H, K, len, *S) -> (H, K, *S).
             eta_summed = torch.unflatten(
                 eta, dim=-1, sizes=(len(layers_cfgs),) + layer_1.suff_stats_shape
-            ).sum(
-                dim=2
-            )  # shape (H, K, S) -> (H, K, N, *S) -> (H, K, *S).
+            ).sum(dim=2)
 
             log_part_1 = layer_1.log_partition(eta_summed)
 
@@ -209,8 +219,7 @@ class ProdEFLayer(ExpFamilyLayer):
             return torch.sum(log_part_1 + log_h_2 - layer_all.log_partition(eta), dim=0)
 
         return SymbLayerCfg(
-            layer_cls=ParameterizedConstantLayer,
-            reparam=UnaryReparam(symb_cfg.reparam, func=_func),
+            layer_cls=ParameterizedConstantLayer, reparam=UnaryReparam(symb_cfg.reparam, func=_func)
         )
 
     @classmethod
@@ -234,10 +243,6 @@ class ProdEFLayer(ExpFamilyLayer):
             SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
                 given channel of the given variable.
         """
-        # DISABLE: We must import here to avoid cyclic import.
-        # pylint: disable-next=import-outside-toplevel,cyclic-import
-        from cirkit.new.layers.input.exp_family.categorical import CategoricalLayer
-
         # TODO: support nested ProdEFLayer (3 or more products)
         # TODO: how to check continuous/discrete distribution
         # CAST: kwargs.get gives Any.

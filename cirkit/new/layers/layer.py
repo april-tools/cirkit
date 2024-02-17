@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import ClassVar, Optional, Type
+from typing import Any, ClassVar, Optional, Type
 
 from torch import Tensor, nn
 
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils import ComputationSapce
+from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class Layer(nn.Module, ABC):
@@ -89,4 +90,25 @@ class Layer(nn.Module, ABC):
 
         Returns:
             Tensor: The output of this layer, shape (*B, K).
+        """
+
+    # TODO: fix typing
+    # TODO: rework docstring
+    @classmethod
+    @abstractmethod
+    def get_product(  # type: ignore[misc]
+        cls, self_symb_cfg: SymbLayerCfg[Any], other_symb_cfg: SymbLayerCfg[Any]
+    ) -> SymbLayerCfg[Any]:
+        """Get the symbolic config to construct the product of this inner layer with the other \
+        inner layer.
+
+        The two inner layers for product must be of the same layer class. This means that the \
+        product must be performed between two circuits with the same region graph.
+
+        Args:
+            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+
+        Returns:
+            SymbLayerCfg[Self]: The symbolic config for the product of the two inner layers.
         """

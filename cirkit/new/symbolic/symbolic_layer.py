@@ -108,7 +108,8 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
                 self.num_units. Defaults to None.
             layer_cfg (Optional[SymbLayerCfg[LayerT_co]], optional): If provided, will override \
                 the default of self.layer_cfg. The layer_cls must be compatible to self.layer_cls. \
-                Note that the reparam object will be shared by default. Defaults to None.
+                Note that the reparam object in self.layer_cfg will be shared by default. \
+                Defaults to None.
 
         Returns:
             Self: A new SymbolicLayer of the same type as self.
@@ -268,8 +269,4 @@ class SymbolicInputLayer(GenericSymbolicLayer[InputLayer]):
     @property
     def _repr_dict(self) -> Dict[str, object]:
         """The dict of key-value pairs used in __repr__."""
-        return {
-            "scope": self.scope,
-            "num_units": self.num_units,
-            "layer_cfg": self.layer_cfg,
-        }
+        return {"scope": self.scope, "num_units": self.num_units, "layer_cfg": self.layer_cfg}

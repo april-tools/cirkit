@@ -80,9 +80,8 @@ def test_batch_diff_orig(order: int) -> None:
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_batch_diff_1st(order: int) -> None:
     x = torch.rand(B, N, M, requires_grad=True)
-    diff_1st = (
-        _bw_1st(batched_func, x).diagonal(dim1=0, dim2=3).movedim(-1, 0)
-    )  # shape (B, M, M, B, N, M) -> (M, M, N, M, B) -> (B, M, M, N, M).
+    # shape (B, M, M, B, N, M) -> (M, M, N, M, B) -> (B, M, M, N, M).
+    diff_1st = _bw_1st(batched_func, x).diagonal(dim1=0, dim2=3).movedim(-1, 0)
 
     for i, j in itertools.product(range(N), range(M)):
         diffs = batch_high_order_at(batched_func, x, [slice(None), i, j], order=order)
@@ -92,9 +91,8 @@ def test_batch_diff_1st(order: int) -> None:
 @pytest.mark.parametrize("order", [2, 3])
 def test_batch_diff_2nd(order: int) -> None:
     x = torch.rand(B, N, M, requires_grad=True)
-    diff_2nd = (
-        _bw_2nd(batched_func, x).diagonal(dim1=0, dim2=3).movedim(-1, 0)
-    )  # shape (B, M, M, B, N, M) -> (M, M, N, M, B) -> (B, M, M, N, M).
+    # shape (B, M, M, B, N, M) -> (M, M, N, M, B) -> (B, M, M, N, M).
+    diff_2nd = _bw_2nd(batched_func, x).diagonal(dim1=0, dim2=3).movedim(-1, 0)
 
     for i, j in itertools.product(range(N), range(M)):
         diffs = batch_high_order_at(batched_func, x, [slice(None), i, j], order=order)
