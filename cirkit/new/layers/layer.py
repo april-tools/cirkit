@@ -100,10 +100,10 @@ class Layer(nn.Module, ABC):
         """Get the symbolic config to construct the product of this layer and the other layer.
 
         Because layer product (Kronecker of units) is not commutative, here we allow any one of \
-        the two operands to be of self class, but there should be at least one. The detail is \
-        slightly different for different Layer subclasses:
-            - For InputLayer, we allow product between any two implementations;
-            - For InnerLayer, we only allow product of the same implementation.
+        the two operands to be of self class to enable reflected implementation, but at least one \
+        of them should be. The detail is slightly different for different Layer subclasses:
+            - For InputLayer, we allow any two (or same) InputLayer to be multiplied;
+            - For InnerLayer, we require both left and right to be the same class.
 
         NOTE: To avoid excessive repetition of overloads, the signature typing is not narrowed \
               down, and potential errors will not be captured by static checkers but only during \

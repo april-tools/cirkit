@@ -68,7 +68,7 @@ class HadamardLayer(ProductLayer):
     ) -> SymbLayerCfg[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
-        HadamardLayer only allows product with the same class. However, the signature typing is \
+        HadamardLayer can only be multiplied with the same class. However, the signature typing is \
         not narrowed down, and wrong arg type will not be captured by static checkers but only \
         during runtime.
 

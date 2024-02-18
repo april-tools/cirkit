@@ -262,7 +262,10 @@ class SymbolicTensorizedCircuit:
 
     integrate = STCF.integrate
     differentiate = STCF.differentiate
-    product = STCF.product
+    multiply = STCF.multiply
+    mul = STCF.multiply
+    __matmul__ = STCF.multiply
+    # TODO: __mul__ and __matmul__? first investigate need for "inner product"
 
     ####################################    (De)Serialization    ###################################
     # TODO: impl? or just save RG and kwargs of SymbC?

@@ -51,9 +51,9 @@ class ProdEFLayer(ExpFamilyLayer):
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
             reparam (EFProductReparam): The reparameterization for layer parameters.
-            ef1_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the first ExpFamilyLayer for \
+            ef1_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the left ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
-            ef2_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the second ExpFamilyLayer for \
+            ef2_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the right ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
         """
         assert isinstance(reparam, EFProductReparam), "Must use a EFProductReparam for ProdEFLayer."
@@ -153,10 +153,10 @@ class ProdEFLayer(ExpFamilyLayer):
             = LogIntegExp((η_1 + η_2) · T_1(x) + (log_h_1(x) + log_h_2) - A(η)) \
             = A_1(η_1 + η_2) + log_h_2 - A(η).
 
-        The subscripts can be swapped for constant log_h_1, but note that the circuit product is \
-        NOT commutative. For simplicity we further require in practice that f_1 and f_2 are of the \
-        same class (and therefore log_h_* are both constant), and this can be easily extended to \
-        more-than-two product.
+        The subscripts can be swapped for constant log_h_1, but note that layer product is NOT \
+        commutative. For simplicity we further require in practice that p_1 and p_2 are of the \
+        same class (and therefore log_h_* are both constant), which also makes it easy to exteed \
+        beyond binary product.
 
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
@@ -258,5 +258,5 @@ class ProdEFLayer(ExpFamilyLayer):
 
         return super().get_partial(symb_cfg, order=order, var_idx=var_idx, ch_idx=ch_idx)
 
-    # NOTE: get_product is inherited from ExpFamilyLayer. For cascaded product this will lead to a
-    #       binary tree of ProdEFLayer.
+    # NOTE: get_product is inherited from ExpFamilyLayer. For cascaded multiplication this will lead
+    #       to a binary tree of ProdEFLayer.

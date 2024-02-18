@@ -194,16 +194,16 @@ def differentiate(
     )
 
 
-def _product(
+def _multiply_layer(
     self_layer: SymbolicLayer,
     other_layer: SymbolicLayer,
     pair_to_product: Dict[Tuple[SymbolicLayer, SymbolicLayer], SymbolicLayer],
 ) -> SymbolicLayer:
-    """Perform product between two symbolic layers.
+    """Multiply two symbolic layers.
 
     Args:
-        self_layer (SymbolicLayer): The first layer to product (from SymbC self).
-        other_layer (SymbolicLayer): The second layer to product (from SymbC other).
+        self_layer (SymbolicLayer): The left operand layer (from SymbC self).
+        other_layer (SymbolicLayer): The right operand layer (from SymbC other).
         pair_to_product (Dict[Tuple[SymbolicLayer, SymbolicLayer], SymbolicLayer]): The mapping \
             from the pair of layers to their product. The return value is cached here so that we \
             can reuse instead of recalculate.
@@ -236,7 +236,7 @@ def _product(
         # itertools.product gives the same order of torch.kron, so this automatically maps to the
         # reparam transform of MixingLayer. For DenseLayer there's no ordering because arity=1.
         layers_in = (
-            _product(self_layer_in, other_layer_in, pair_to_product)
+            _multiply_layer(self_layer_in, other_layer_in, pair_to_product)
             for self_layer_in, other_layer_in in itertools.product(
                 self_layer.inputs, other_layer.inputs
             )
@@ -245,7 +245,7 @@ def _product(
         # The order of inputs should be guaranteed to correspond to each other due to the order
         # guaranteed by the layer views.
         layers_in = (
-            _product(self_layer_in, other_layer_in, pair_to_product)
+            _multiply_layer(self_layer_in, other_layer_in, pair_to_product)
             for self_layer_in, other_layer_in in zip(self_layer.inputs, other_layer.inputs)
         )
     else:
@@ -273,37 +273,37 @@ def _product(
     return product_layer
 
 
-def product(
+def multiply(
     self: "SymbolicTensorizedCircuit", other: "SymbolicTensorizedCircuit"
 ) -> "SymbolicTensorizedCircuit":
-    """Perform product between two symbolic circuits over the intersected scope.
+    """Multiply two symbolic circuits over the intersection of their scopes.
 
     Args:
-        self (SymbolicTensorizedCircuit): The first circuit to perform product.
-        other (SymbolicTensorizedCircuit): The second circuit to perform product.
+        self (SymbolicTensorizedCircuit): The left operand circuit (the self circuit).
+        other (SymbolicTensorizedCircuit): The right operand circuit (the other circuit).
 
     Returns:
         SymbolicTensorizedCircuit: The product circuit.
     """
     assert (
         self.is_smooth and self.is_decomposable and other.is_smooth and other.is_decomposable
-    ), "Circuits to take product must be smooth and decomposable."
-    assert self.is_compatible(other), "Circuits to take product must be compatible to each other."
+    ), "Circuits to multiply must be smooth and decomposable."
+    assert self.is_compatible(other), "Circuits to multiply must be compatible to each other."
     assert (
         self.num_channels == other.num_channels
-    ), "Circuits to take product must have same channels for input variables."
+    ), "Circuits to multiply must have same channels for input variables."
     # TODO: assert same region graph? compare RG?
 
     # Map from (self, other) to product. The layer order will be handled later, as commented below.
     # ANNOTATE: Specify content for empty container.
     pair_to_product: Dict[Tuple[SymbolicLayer, SymbolicLayer], SymbolicLayer] = {}
 
-    # We must build the layers from outputs because we don't know which layers to product with which
-    # if starting from input. We can only know which-to-which by looking as the inputs to a layer
-    # pair known to product.
+    # We must build the layers from outputs because we don't know which layers to multiply with
+    # which if starting from input. We can only know which-to-which by looking as the inputs to a
+    # layer pair known to product.
     # TODO: allow "inner product"?
     for self_layer, other_layer in itertools.product(self.output_layers, other.output_layers):
-        _product(self_layer, other_layer, pair_to_product)
+        _multiply_layer(self_layer, other_layer, pair_to_product)
 
     # Since we build layers from outputs, we must reorder them to preverse the layer ordering. We
     # reorder by (self_idx, other_idx) so that it's consistent with both the ordering in the two

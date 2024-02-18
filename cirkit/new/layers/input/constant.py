@@ -125,9 +125,9 @@ class ConstantLayer(InputLayer):
     ) -> SymbLayerCfg[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
-        InputLayer generally allows product with any InputLayer, yet specific combinations may be \
-        unimplemented. However, the signature typing is not narrowed down, and wrong arg type will \
-        not be captured by static checkers but only during runtime.
+        InputLayer generally can be multiplied with any InputLayer, yet specific combinations may \
+        be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
+        will not be captured by static checkers but only during runtime.
 
         The product with the ConstantLayer is still ConstantLayer, with product of const_value.
 

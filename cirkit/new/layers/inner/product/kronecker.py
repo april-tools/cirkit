@@ -28,9 +28,10 @@ class KroneckerLayer(ProductLayer):
             reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
                 Defaults to None.
         """
-        assert (
-            num_output_units == num_input_units**arity
-        ), "The number of input and output units must be the same for Hadamard product."
+        assert num_output_units == num_input_units**arity, (
+            "The number of output units must be the number of input units raised to the power of "
+            "arity for Kronecker product."
+        )
         if arity != 2:
             raise NotImplementedError("Kronecker only implemented for binary product units.")
         super().__init__(
@@ -73,8 +74,8 @@ class KroneckerLayer(ProductLayer):
     ) -> SymbLayerCfg[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
-        KroneckerLayer only allows product with the same class. However, the signature typing is \
-        not narrowed down, and wrong arg type will not be captured by static checkers but only \
+        KroneckerLayer can only be multiplied with the same class. However, the signature typing \
+        is not narrowed down, and wrong arg type will not be captured by static checkers but only \
         during runtime.
 
         The product with the same class is:
