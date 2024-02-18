@@ -5,6 +5,7 @@ from .ef import EFNormalReparam as EFNormalReparam
 from .ef import EFProductReparam as EFProductReparam
 from .leaf import LeafReparam as LeafReparam
 from .normalized import LogSoftmaxReparam as LogSoftmaxReparam
+from .normalized import NormalizedReparam as NormalizedReparam
 from .normalized import SoftmaxReparam as SoftmaxReparam
 from .reparam import Reparameterization as Reparameterization
 from .unary import ClampReparam as ClampReparam

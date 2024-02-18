@@ -131,6 +131,7 @@ class ProdEFLayer(ExpFamilyLayer):
             eta[..., self.suff_split_point :], dim=-1, sizes=self.ef2.suff_stats_shape
         )
 
+        # TODO: eta_normed?
         return self.ef1.log_partition(eta1) + self.ef2.log_partition(eta2)
 
     @classmethod

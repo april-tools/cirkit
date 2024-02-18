@@ -9,7 +9,7 @@ from torch import Tensor, nn
 from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.layer import Layer
-from cirkit.new.reparams import EFProductReparam, Reparameterization
+from cirkit.new.reparams import EFProductReparam, NormalizedReparam, Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -109,7 +109,9 @@ class ExpFamilyLayer(InputLayer):
         log_h = self.log_base_measure(x).unsqueeze(dim=-1)  # shape (H, *B) -> (H, *B, 1).
         # shape (H, K) -> (H, *1, K).
         log_part = torch.unflatten(
-            self.log_partition(eta), dim=0, sizes=(x.shape[0],) + (1,) * (x.ndim - 2)
+            self.log_partition(eta, eta_normed=isinstance(self.params, NormalizedReparam)),
+            dim=0,
+            sizes=(x.shape[0],) + (1,) * (x.ndim - 2),
         )
 
         # shape (H, *B, K) + (H, *B, 1) + (H, *1, K) -> (H, *B, K) -> (*B, K).

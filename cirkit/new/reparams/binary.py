@@ -57,4 +57,4 @@ class KroneckerReparam(BinaryReparam):
             reparam2 (Optional[Reparameterization], optional): The input reparameterization to be \
                 composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
         """
-        super().__init__(reparam1, reparam2, func=torch.kron, inv_func=None)
+        super().__init__(reparam1, reparam2, func=torch.kron)
