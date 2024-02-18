@@ -4,6 +4,7 @@ from torch import Tensor
 
 from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
+from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
@@ -99,21 +100,23 @@ class ParameterizedConstantLayer(InputLayer):
 
     @classmethod
     def get_product(
-        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[InputLayer]
-    ) -> SymbLayerCfg[InputLayer]:
-        """Get the symbolic config to construct the product of this input layer with the other \
-        input layer.
+        cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
+    ) -> SymbLayerCfg[Layer]:
+        """Get the symbolic config to construct the product of this layer and the other layer.
+
+        InputLayer generally allows product with any InputLayer, yet specific combinations may be \
+        unimplemented. However, the signature typing is not narrowed down, and wrong arg type will \
+        not be captured by static checkers but only during runtime.
 
         Args:
-            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer, \
-                must be of InputLayer.
+            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
+            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Raises:
             NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the product of the two input layers.
+            SymbLayerCfg[Layer]: The symbolic config for the product.
         """
         raise NotImplementedError(
             "Product for constant input layer and other input layers not implemented."

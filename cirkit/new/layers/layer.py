@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, ClassVar, Optional, Type
+from typing import ClassVar, Optional, Type
 
 from torch import Tensor, nn
 
@@ -96,19 +96,25 @@ class Layer(nn.Module, ABC):
     # TODO: rework docstring
     @classmethod
     @abstractmethod
-    def get_product(  # type: ignore[misc]
-        cls, self_symb_cfg: SymbLayerCfg[Any], other_symb_cfg: SymbLayerCfg[Any]
-    ) -> SymbLayerCfg[Any]:
-        """Get the symbolic config to construct the product of this inner layer with the other \
-        inner layer.
+    def get_product(
+        cls, left_symb_cfg: SymbLayerCfg["Layer"], right_symb_cfg: SymbLayerCfg["Layer"]
+    ) -> SymbLayerCfg["Layer"]:
+        """Get the symbolic config to construct the product of this layer and the other layer.
 
-        The two inner layers for product must be of the same layer class. This means that the \
-        product must be performed between two circuits with the same region graph.
+        Because layer product (Kronecker of units) is not commutative, here we allow any one of \
+        the two operands to be of self class, but there should be at least one. The detail is \
+        slightly different for different Layer subclasses:
+            - For InputLayer, we allow product between any two implementations;
+            - For InnerLayer, we only allow product of the same implementation.
+
+        NOTE: To avoid excessive repetition of overloads, the signature typing is not narrowed \
+              down, and potential errors will not be captured by static checkers but only during \
+              runtime. Implementation should check and may impose further constraints.
 
         Args:
-            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
+            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of the two inner layers.
+            SymbLayerCfg[Layer]: The symbolic config for the product.
         """
