@@ -81,7 +81,8 @@ class HadamardLayer(ProductLayer):
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         assert (
             issubclass(left_symb_cfg.layer_cls, cls)

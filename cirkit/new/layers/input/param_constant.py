@@ -112,12 +112,9 @@ class ParameterizedConstantLayer(InputLayer):
             left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
-        Raises:
-            NotImplementedError: When "not-yet-implemented feature" is invoked.
-
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
-        raise NotImplementedError(
-            "Product for constant input layer and other input layers not implemented."
-        )
+        # TODO: merge with ConstL?
+        return NotImplemented

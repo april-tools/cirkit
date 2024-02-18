@@ -223,11 +223,9 @@ class ExpFamilyLayer(InputLayer):
             left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
-        Raises:
-            NotImplementedError: When "not-yet-implemented feature" is invoked.
-
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         # DISABLE: We must import here to avoid cyclic import.
         # pylint: disable-next=import-outside-toplevel,cyclic-import
@@ -249,6 +247,4 @@ class ExpFamilyLayer(InputLayer):
         # TODO: Cases:
         #       - Product with ConstantLayer: p(x)*c.
         #       - Product with DiffEFLayer: p_1(x)*p_2'(x).
-        raise NotImplementedError(
-            "Product for EF input layer and other input layers not implemented."
-        )
+        return NotImplemented

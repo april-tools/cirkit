@@ -92,8 +92,6 @@ class Layer(nn.Module, ABC):
             Tensor: The output of this layer, shape (*B, K).
         """
 
-    # TODO: fix typing
-    # TODO: rework docstring
     @classmethod
     @abstractmethod
     def get_product(
@@ -116,5 +114,6 @@ class Layer(nn.Module, ABC):
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """

@@ -170,14 +170,12 @@ class DiffEFLayer(InputLayer):
             left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
-        Raises:
-            NotImplementedError: When "not-yet-implemented feature" is invoked.
-
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         # TODO: Cases:
         #       - Product with DiffEFLayer: p_1'(x)*p_2'(x).
         #       - Product with class in ExpFamilyLayer: p_1'(x)*p_2(x).
         #       - Product with ConstantLayer: p'(x)*c.
-        raise NotImplementedError("The product of DiffEFLayer is not yet implemented.")
+        return NotImplemented

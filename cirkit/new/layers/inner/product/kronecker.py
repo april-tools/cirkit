@@ -88,7 +88,8 @@ class KroneckerLayer(ProductLayer):
             NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
-        # TODO: we need permutation
+        # TODO: we need permutation. Also, don't forget to add the cls check, see HadamardLayer
         raise NotImplementedError("Product between two kroneker layers is not implemented yet.")

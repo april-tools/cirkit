@@ -161,9 +161,6 @@ class ProdEFLayer(ExpFamilyLayer):
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
-        Raises:
-            NotImplementedError: When "not-yet-implemented feature" is invoked.
-
         Returns:
             SymbLayerCfg[InputLayer]: The symbolic config for the integral.
         """

@@ -256,12 +256,17 @@ def _product(
         #       a wrong branch.
         assert False, "This should not happen."
 
-    # TODO: allow get_product to return NotImplemeted and try other_layer.get_prod.
-    #       in this way get_prod should not raise NotImplementedError.
+    prod_cfg = self_layer.layer_cls.get_product(self_layer.layer_cfg, other_layer.layer_cfg)
+    if prod_cfg is NotImplemented:
+        prod_cfg = other_layer.layer_cls.get_product(self_layer.layer_cfg, other_layer.layer_cfg)
+        if prod_cfg is NotImplemented:
+            raise NotImplementedError(
+                f"The product bewteen {self_layer.layer_cls} and {other_layer.layer_cls} is "
+                "not implemented."
+            )
+
     product_layer = self_layer.transform(
-        layers_in,
-        num_units=self_layer.num_units * other_layer.num_units,
-        layer_cfg=self_layer.layer_cls.get_product(self_layer.layer_cfg, other_layer.layer_cfg),
+        layers_in, num_units=self_layer.num_units * other_layer.num_units, layer_cfg=prod_cfg
     )
 
     pair_to_product[(self_layer, other_layer)] = product_layer
