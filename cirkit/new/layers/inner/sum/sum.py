@@ -1,11 +1,11 @@
 import functools
+from typing import Callable
 
-import torch
-from torch import nn
+from torch import Tensor, nn
 
 from cirkit.new.layers.inner.inner import InnerLayer
 from cirkit.new.layers.layer import Layer
-from cirkit.new.reparams import KroneckerReparam, Reparameterization
+from cirkit.new.reparams import KroneckerReparam
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -15,12 +15,13 @@ class SumLayer(InnerLayer):
     # NOTE: We don't change the __init__ of InnerLayer here. Although sum layers typically have
     #       parameters, we still allow it to be optional for flexibility.
 
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        """Reset parameters to default: U(0.01, 0.99)."""
-        for child in self.children():
-            if isinstance(child, Reparameterization):
-                child.initialize(functools.partial(nn.init.uniform_, a=0.01, b=0.99))
+    @property
+    def _default_initializer_(self) -> Callable[[Tensor], Tensor]:
+        """The default inplace initializer for the parameters of this layer.
+
+        The sum weights are initialized to U(0.01, 0.99).
+        """
+        return functools.partial(nn.init.uniform_, a=0.01, b=0.99)
 
     @classmethod
     def get_product(
@@ -49,9 +50,15 @@ class SumLayer(InnerLayer):
             and left_symb_cfg.layer_cls == right_symb_cfg.layer_cls
         ), "Both inputs of SumLayer.get_product must be of self class."
 
+        # SumLayer may also be SumProdLayer, and we use the existence of reparam to determine.
+        reparam = (
+            KroneckerReparam(left_symb_cfg.reparam, right_symb_cfg.reparam)
+            if left_symb_cfg.reparam is not None and right_symb_cfg.reparam is not None
+            else None
+        )
         # IGNORE: Unavoidable for kwargs.
         return SymbLayerCfg(
             layer_cls=left_symb_cfg.layer_cls,
             layer_kwargs=left_symb_cfg.layer_kwargs,  # type: ignore[misc]
-            reparam=KroneckerReparam(left_symb_cfg.reparam, right_symb_cfg.reparam),
+            reparam=reparam,
         )

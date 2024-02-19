@@ -45,8 +45,13 @@ class ConstantLayer(InputLayer):
 
         self.const_value = const_value
 
-    def reset_parameters(self) -> None:
-        """Do nothing, as constant layers do not have parameters."""
+    @property
+    def _default_initializer_(self) -> None:
+        """The default inplace initializer for the parameters of this layer.
+
+        No initialization, as ConstantLayer has no parameters.
+        """
+        return None
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

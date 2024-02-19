@@ -40,8 +40,13 @@ class ParameterizedConstantLayer(InputLayer):
         self.params = reparam
         self.params.materialize((num_output_units,), dim=())
 
-    def reset_parameters(self) -> None:
-        """Do nothing, as the parameters should be handled by other layers."""
+    @property
+    def _default_initializer_(self) -> None:
+        """The default inplace initializer for the parameters of this layer.
+
+        No initialization, as ParameterizedConstantLayer's parameters should come from other layers.
+        """
+        return None
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

@@ -76,8 +76,13 @@ class DiffEFLayer(InputLayer):
         self.var_idx = var_idx
         self.ch_idx = ch_idx
 
-    def reset_parameters(self) -> None:
-        """Do nothing, as the parameters belong to the wrapped EF layer."""
+    @property
+    def _default_initializer_(self) -> None:
+        """The default inplace initializer for the parameters of this layer.
+
+        No initialization, as DiffEFLayer's parameters should come from other layers.
+        """
+        return None
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

@@ -1,6 +1,6 @@
 import functools
 from abc import abstractmethod
-from typing import Tuple
+from typing import Callable, Tuple
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
@@ -68,12 +68,13 @@ class ExpFamilyLayer(InputLayer):
         if self.params.materialize((arity, num_output_units, *self.suff_stats_shape), dim=-1):
             self.reset_parameters()  # Only reset if newly materialized.
 
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        """Reset parameters to default: N(0, 1)."""
-        for child in self.children():
-            if isinstance(child, Reparameterization):
-                child.initialize(functools.partial(nn.init.normal_, mean=0, std=1))
+    @property
+    def _default_initializer_(self) -> Callable[[Tensor], Tensor]:
+        """The default inplace initializer for the parameters of this layer.
+
+        The EF natural params are initialized to N(0, 1).
+        """
+        return functools.partial(nn.init.normal_, mean=0, std=1)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -236,6 +237,10 @@ class ExpFamilyLayer(InputLayer):
         if issubclass(left_symb_cfg.layer_cls, ExpFamilyLayer) and issubclass(
             right_symb_cfg.layer_cls, ExpFamilyLayer
         ):
+            assert (
+                left_symb_cfg.reparam is not None and right_symb_cfg.reparam is not None
+            ), "Reparams for ExpFamilyLayer should not be None."
+
             # IGNORE: Unavoidable for kwargs.
             return SymbLayerCfg(
                 layer_cls=ProdEFLayer,
