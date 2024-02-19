@@ -152,6 +152,8 @@ disable = [
 per-file-ignores = [  # TODO: wait for native support in pylint
     "/tests/:missing-function-docstring,missing-return-doc",
 ]
+[tool.pylint.dunder]
+good-dunder-names = ["_default_initializer_"]  # intended to be named this way
 [tool.pylint.import]
 allow-reexport-from-package = true
 [tool.pylint.parameter_documentation]
