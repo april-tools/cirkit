@@ -75,8 +75,8 @@ class SoftmaxReparam(NormalizedReparam, _ApplySingleDimFuncMixin):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
         """
         # Softmax is just scaled exp, so we take log as inv.
         super().__init__(reparam, func=self._func, inv_func=torch.log)
@@ -84,7 +84,7 @@ class SoftmaxReparam(NormalizedReparam, _ApplySingleDimFuncMixin):
     def _func(self, x: Tensor) -> Tensor:
         # torch.softmax only accepts a single dim, so we need the applier.
         x = self._apply_single_dim_func(torch.softmax, x)
-        # nan will appear when there's only 1 element and it's masked. In that case we projecte nan
+        # nan will appear when there's only one element and it's masked. In that case we project nan
         # as 1 (0 in log-sapce). +inf and -inf are (unsafely) projected but will not appear.
         return torch.nan_to_num(x, nan=1)
 
@@ -100,10 +100,10 @@ class LogSoftmaxReparam(NormalizedReparam, _ApplySingleDimFuncMixin):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
         """
-        # Log_softmax is just an offset, so we take identity as inv.
+        # LogSoftmax is just additive offset, so we take identity as inv.
         super().__init__(reparam, func=self._func)
 
     def _func(self, x: Tensor) -> Tensor:

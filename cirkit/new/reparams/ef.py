@@ -1,7 +1,7 @@
 # pylint: disable=too-few-public-methods
 # DISABLE: For this file we disable the above because all classes trigger it and it's intended.
 
-from typing import Optional, Sequence, Union
+from typing import Callable, Optional, Sequence, Union
 
 import torch
 from torch import Tensor
@@ -27,8 +27,8 @@ class EFNormalReparam(UnaryReparam):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
             min_var (float, optional): The min variance. Defaults to 0.0001.
             max_var (float, optional): The max variance. Defaults to 10.0.
         """
@@ -48,31 +48,42 @@ class EFNormalReparam(UnaryReparam):
         param = torch.stack((mu, torch.tensor(-0.5).to(mu).expand_as(mu)), dim=-2)
         return param / var.unsqueeze(dim=-2)  # shape (..., 2, :).
 
-    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
-        """Materialize the internal parameter tensors with given shape.
+    def materialize(
+        self,
+        shape: Sequence[int],
+        /,
+        *,
+        dim: Union[int, Sequence[int]],
+        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
+    ) -> bool:
+        """Materialize the internal parameter tensor(s) with given shape and initialize if required.
 
-        If it is already materialized, False will be returned to indicate no materialization. \
-        However, a second call to materialize must give the same config, so that the underlying \
-        params can indeed be reused.
+        Materialization (and optionally initialization) is only executed if it's not materialized \
+        yet. Otherwise this function will become a silent no-op, providing safe reuse of the same \
+        reparam. However, the arguments must be the same among re-materialization attempts, to \
+        make sure the reuse is consistent. The return value will indicate whether there's \
+        materialization happening.
 
-        The initial value of the parameter after materialization is not guaranteed, and explicit \
-        initialization is expected.
+        The normalization dim is ignored because Normal distributin is not normalized through the \
+        params but through its own partition function.
 
-        The kwarg, dim, is used to hint the normalization of sum weights. It's not always used but \
-        must be supplied with the sum-to-1 dimension(s) so that it's guaranteed to be available \
-        when a normalized reparam is passed as self.
+        If an initializer_ is provided, it will be used to fill the initial value. If no \
+        initializer is given, the internal storage will contain random memory.
 
         Args:
             shape (Sequence[int]): The shape of the output parameter.
-            dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
-                be applied. However a subclass impl may choose to ignore this.
+            dim (Union[int, Sequence[int]]): Ignored. This reparam is not normalized.
+            initializer_ (Optional[Callable[[Tensor], Tensor]], optional): The function that \
+                initialize a Tensor inplace while also returning the value. Leave default for no \
+                initialization. Defaults to None.
 
         Returns:
-            bool: Whether the materialization is done.
+            bool: Whether the materialization is actually performed.
         """
         # TODO: how should this chain with mask? need to doc the usage. or do we need mask at all?
         assert shape[-2] == 2, "The shape does not fit the requirement of EF-Normal."
-        return super().materialize(shape, dim=dim)
+        # Check shape and delegate everything else to super().
+        return super().materialize(shape, dim=dim, initializer_=initializer_)
 
 
 class EFProductReparam(BinaryReparam):
@@ -85,24 +96,20 @@ class EFProductReparam(BinaryReparam):
 
     def __init__(
         self,
-        reparam1: Optional[Reparameterization] = None,
-        reparam2: Optional[Reparameterization] = None,
+        reparam1: Reparameterization,
+        reparam2: Reparameterization,
         /,
     ) -> None:
         """Init class.
 
-        NOTE: Be careful about passing None for this reparam. It might be unexpected.
-
         Args:
-            reparam1 (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
-            reparam2 (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam1 (Reparameterization): The first input reparam to be composed.
+            reparam2 (Reparameterization): The second input reparam to be composed.
         """
         super().__init__(reparam1, reparam2, func=self._func)
 
-    @staticmethod
-    def _func(param1: Tensor, param2: Tensor) -> Tensor:
+    @classmethod
+    def _func(cls, param1: Tensor, param2: Tensor) -> Tensor:
         # shape (H, K, *S) -> (H, K, S) -> (H, K, 1, S).
         param1 = param1.flatten(start_dim=2).unsqueeze(dim=2)
         # shape (H, K, *S) -> (H, K, S) -> (H, 1, K, S).

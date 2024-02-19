@@ -2,41 +2,40 @@
 # DISABLE: For this file we disable the above because all classes trigger it and it's intended.
 
 import functools
-from typing import Callable, Optional, Sequence, Tuple, Union
+from typing import Callable, Optional, Sequence, Union
 
 import torch
 from torch import Tensor
 
 from cirkit.new.reparams.composed import ComposedReparam
+from cirkit.new.reparams.leaf import LeafReparam
 from cirkit.new.reparams.reparam import Reparameterization
 
 
 class UnaryReparam(ComposedReparam[Tensor]):
     """The base class for unary composed reparameterization."""
 
-    # TODO: pylint is wrong?
-    # DISABLE: This is not useless as the signature of __init__ has changed.
-    # pylint: disable-next=useless-parent-delegation
     def __init__(
         self,
         reparam: Optional[Reparameterization] = None,
         /,
         *,
         func: Callable[[Tensor], Tensor],
-        inv_func: Optional[Callable[[Tensor], Union[Tuple[Tensor], Tensor]]] = None,
+        inv_func: Callable[[Tensor], Tensor] = lambda x: x,
     ) -> None:
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
             func (Callable[[Tensor], Tensor]): The function to compose the output from the \
-                parameters given by reparam.
-            inv_func (Optional[Callable[[Tensor], Union[Tuple[Tensor], Tensor]]], optional): The \
-                inverse of func, used to transform the intialization. The initializer will \
-                directly pass through if no inv_func provided. Defaults to None.
+                parameters given by the input reparam.
+            inv_func (Optional[Callable[[Tensor], Tensor]], optional): The inverse of func, used \
+                to transform the intialization. Defaults to lambda x: x.
         """
-        super().__init__(reparam, func=func, inv_func=inv_func)
+        super().__init__(
+            reparam if reparam is not None else LeafReparam(), func=func, inv_func=inv_func
+        )
 
 
 # TODO: how do we annotate the range? or use some way to calc and propagate it?
@@ -65,8 +64,8 @@ class LogMaskReparam(UnaryReparam):
         provided or the mask is full (nothing masked out).
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
             mask (Optional[Tensor], optional): The 0/1 mask for valid positions. None for the \
                 other or no masking. If not None, the shape must be broadcastable to the shape \
                 used in materialization. Defaults to None.
@@ -80,43 +79,58 @@ class LogMaskReparam(UnaryReparam):
         if mask is not None:
             log_mask = torch.log(mask)
 
-        # A non-0, i.e., -inf, element means that position is masked out, so mask is not full.
+        # A non-0, i.e. -inf, element means that position is masked out, so mask is not full.
         if log_mask is not None and log_mask.any():
             # TODO: check if it's ok to pass through -inf in inv?
             # We assume the inv is also masked.
             super().__init__(reparam, func=lambda x: x + log_mask, inv_func=lambda x: x + log_mask)
-            self.register_buffer("log_mask", log_mask)  # register_* only work after __init__().
         else:
-            super().__init__(reparam, func=lambda x: x)  # inv_func is identity by default.
-            self.register_buffer("log_mask", None)
+            log_mask = None  # All-0, i.e. log(1), mask is not useful.
+            super().__init__(reparam, func=lambda x: x)  # Saves a +0.
 
-    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
-        """Materialize the internal parameter tensors with given shape.
+        self.register_buffer("log_mask", log_mask)  # register_* only work after __init__().
 
-        If it is already materialized, False will be returned to indicate no materialization. \
-        However, a second call to materialize must give the same config, so that the underlying \
-        params can indeed be reused.
+    def materialize(
+        self,
+        shape: Sequence[int],
+        /,
+        *,
+        dim: Union[int, Sequence[int]],
+        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
+    ) -> bool:
+        """Materialize the internal parameter tensor(s) with given shape and initialize if required.
 
-        The initial value of the parameter after materialization is not guaranteed, and explicit \
-        initialization is expected.
+        Materialization (and optionally initialization) is only executed if it's not materialized \
+        yet. Otherwise this function will become a silent no-op, providing safe reuse of the same \
+        reparam. However, the arguments must be the same among re-materialization attempts, to \
+        make sure the reuse is consistent. The return value will indicate whether there's \
+        materialization happening.
 
-        The kwarg, dim, is used to hint the normalization of sum weights. It's not always used but \
-        must be supplied with the sum-to-1 dimension(s) so that it's guaranteed to be available \
-        when a normalized reparam is passed as self.
+        The kwarg-only dim, is used to hint the normalization of sum weights (or some input params \
+        that may expect normalization). It's not always used by all layers but is required to be\
+        supplied with the sum-to-1 dimension(s) so that both normalized and unnormalized reparams \
+        will work under the same materialization setting.
+
+        If an initializer_ is provided, it will be used to fill the initial value of the "output" \
+        parameter, and it will be masked to be passed to input. If no initializer is given, the \
+        internal storage will contain random memory.
 
         Args:
             shape (Sequence[int]): The shape of the output parameter.
             dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
-                be applied. However a subclass impl may choose to ignore this.
+                be applied. Unnormalized implementations may choose to ignore this.
+            initializer_ (Optional[Callable[[Tensor], Tensor]], optional): The function that \
+                initialize a Tensor inplace while also returning the value. Leave default for no \
+                initialization. Defaults to None.
 
         Returns:
-            bool: Whether the materialization is done.
+            bool: Whether the materialization is actually performed.
         """
         if self.log_mask is not None:
             # An easy way to check if broadcastable: broadcast_to raises RuntimeError when not.
             self.log_mask.broadcast_to(shape)
         # Here we only check shape broadcast. Delegate everything else to super().
-        return super().materialize(shape, dim=dim)
+        return super().materialize(shape, dim=dim, initializer_=initializer_)
 
 
 class LinearReparam(UnaryReparam):
@@ -131,8 +145,8 @@ class LinearReparam(UnaryReparam):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
             a (float, optional): The slope for the linear function. Defaults to 1.
             b (float, optional): The intercept for the linear function. Defaults to 0.
         """
@@ -170,8 +184,8 @@ class ExpReparam(UnaryReparam):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
         """
         super().__init__(reparam, func=torch.exp, inv_func=torch.log)
 
@@ -186,8 +200,8 @@ class SquareReparam(UnaryReparam):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
         """
         super().__init__(reparam, func=torch.square, inv_func=torch.sqrt)
 
@@ -210,8 +224,8 @@ class ClampReparam(UnaryReparam):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
             min (Optional[float], optional): The lower-bound for clamping, None for no clamping in \
                 this direction. Defaults to None.
             max (Optional[float], optional): The upper-bound for clamping, None for no clamping in \
@@ -231,7 +245,7 @@ class SigmoidReparam(UnaryReparam):
         """Init class.
 
         Args:
-            reparam (Optional[Reparameterization], optional): The input reparameterization to be \
-                composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
+            reparam (Optional[Reparameterization], optional): The input reparam to be composed. If \
+                None, a LeafReparam will be automatically constructed. Defaults to None.
         """
         super().__init__(reparam, func=torch.sigmoid, inv_func=torch.logit)
