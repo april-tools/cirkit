@@ -201,7 +201,7 @@ class ProdEFLayer(ExpFamilyLayer):
             ) is not None, (
                 "There should be a concrete Layer corresponding to the SymbCfg at this stage."
             )
-            pseudo_inputs = torch.zeros(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
+            pseudo_inputs = torch.empty(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
 
             # shape (H, K, S) -> (H, K, len, *S) -> (H, K, *S).
             eta_summed = torch.unflatten(

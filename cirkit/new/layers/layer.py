@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import ClassVar, Optional, Type
+from typing import Callable, ClassVar, Optional, Type
 
+import torch
 from torch import Tensor, nn
 
 from cirkit.new.reparams import Reparameterization
@@ -41,15 +42,26 @@ class Layer(nn.Module, ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
-        # NOTE: Subclasses should call self.reset_parameters() in __init__ after setting the params.
-        # TODO: how to avoid re-init the composed params?
 
-    # We enforce subclasses to implement this methods so that we don't forget it. For layers that
-    # don't have parameters, just implement as a no-op.
-    # NOTE: Remember to use @torch.no_grad() as initialization should not have grad.
+    # We enforce subclasses to implement this property so that we don't forget it. For layers that
+    # don't have parameters, just return None.
+    @property
     @abstractmethod
+    def _default_initializer_(self) -> Optional[Callable[[Tensor], Tensor]]:
+        """The default inplace initializer for the parameters of this layer.
+
+        The function should modify a Tensor inplace and also return its value. Or use None for no \
+        initialization.
+        """
+
+    @torch.no_grad()
     def reset_parameters(self) -> None:
         """Reset parameters with default initialization."""
+        if (initializer_ := self._default_initializer_) is None:
+            return
+        for child in self.children():  # Only immediate children, not all modules().
+            if isinstance(child, Reparameterization):
+                child.initialize(initializer_)
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property

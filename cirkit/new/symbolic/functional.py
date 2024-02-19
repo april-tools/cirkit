@@ -2,7 +2,7 @@ import heapq
 import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-from cirkit.new.layers.inner.inner import InnerLayer
+from cirkit.new.layers import InnerLayer
 from cirkit.new.symbolic.symbolic_layer import (
     SymbolicInputLayer,
     SymbolicLayer,

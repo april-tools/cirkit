@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Sequence, Tuple, Union
+from typing import Callable, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import Tensor, nn
@@ -8,8 +8,9 @@ from torch import Tensor, nn
 class Reparameterization(nn.Module, ABC):
     """The abstract base class for all reparameterizations.
 
-    NOTE: This can be materialized only once. Another Reparameterization instance should be \
-          constructed if we want to re-materialize.
+    NOTE: An instance of this class can be materialized only once, and following materializations \
+          are all no-op. If we do want to a true re-materialize, another instance should be \
+          constructed.
     """
 
     def __init__(self) -> None:
@@ -45,37 +46,49 @@ class Reparameterization(nn.Module, ABC):
     # unnormalized, just explicitly pass dim=().
     # NOTE: We provide a default materialization, but subclasses are still expected to override, and
     #       therefore this is marked @abstractmethod. Yet subclasses are still expected to call
-    #       super().materialize(...).
+    #       super().materialize(...) to initialize shape and dims and optionally value.
     @abstractmethod
-    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
-        """Materialize the internal parameter tensors with given shape.
+    def materialize(
+        self,
+        shape: Sequence[int],
+        /,
+        *,
+        dim: Union[int, Sequence[int]],
+        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
+    ) -> bool:
+        """Materialize the internal parameter tensor(s) with given shape and initialize if required.
 
-        If it is already materialized, False will be returned to indicate no materialization. \
-        However, a second call to materialize must give the same config, so that the underlying \
-        params can indeed be reused.
+        Materialization (and optionally initialization) is only executed if it's not materialized \
+        yet. Otherwise this function will become a silent no-op, providing safe reuse of the same \
+        reparam. However, the arguments must be the same among re-materialization attempts, to \
+        make sure the reuse is consistent. The return value will indicate whether there's \
+        materialization happening.
 
-        The initial value of the parameter after materialization is not guaranteed, and explicit \
-        initialization is expected.
+        The kwarg-only dim, is used to hint the normalization of sum weights (or some input params \
+        that may expect normalization). It's not always used by all layers but is required to be\
+        supplied with the sum-to-1 dimension(s) so that both normalized and unnormalized reparams \
+        will work under the same materialization setting.
 
-        The kwarg, dim, is used to hint the normalization of sum weights. It's not always used but \
-        must be supplied with the sum-to-1 dimension(s) so that it's guaranteed to be available \
-        when a normalized reparam is passed as self.
+        If an initializer_ is provided, it will be used to fill the initial value of the "output" \
+        parameter, and implementations may define how the value is propagated to the internal \
+        tensor(s). If no initializer is given, the internal storage will contain random memory.
 
         Args:
             shape (Sequence[int]): The shape of the output parameter.
             dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
-                be applied. However a subclass impl may choose to ignore this.
+                be applied. Unnormalized implementations may choose to ignore this.
+            initializer_ (Optional[Callable[[Tensor], Tensor]], optional): The function that \
+                initialize a Tensor inplace while also returning the value. Leave default for no \
+                initialization. Defaults to None.
 
         Returns:
-            bool: Whether the materialization is done.
+            bool: Whether the materialization is actually performed.
         """
+        assert shape, "The parameter shape cannot be empty. Use shape (1,) for scalar param."
         shape = tuple(shape)
 
-        dims = (
-            tuple(sorted(d if d >= 0 else d + len(shape) for d in dim))
-            if isinstance(dim, Sequence)
-            else (dim if dim >= 0 else dim + len(shape),)
-        )
+        dims = dim if isinstance(dim, Sequence) else (dim,)
+        dims = tuple(sorted(d if d >= 0 else d + len(shape) for d in dims))
         assert all(0 <= d < len(shape) for d in dims), f"dim={dim} out of range for {len(shape)}-d."
 
         if self.is_materialized:
@@ -86,19 +99,25 @@ class Reparameterization(nn.Module, ABC):
 
         self.shape = shape
         self.dims = dims
+        # NOTE: initializer_ will not be called here because materialization is not finished yet.
+        #       Subclasses should call it upon receiving the True return.
         return True
 
+    # NOTE: Subclasses should include @torch.no_grad() to disable grad for initialization.
     @abstractmethod
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
-        """Initialize the internal parameter tensors with the given initializer.
+        """Initialize the internal parameter tensor(s) with the given initializer.
 
-        Initialization will cause error if not materialized first.
+        This can only be called after materialization and will always overwrite whatever is \
+        already in the internal param. To safely provide an initial value to a possibly reused \
+        reparam, initialize through materialize() instead.
 
-        Subclasses may choose how to use the value given by the initializer, and transformations \
-        may be applied depending on the implementation.
+        The provided initializer_ is expected to provide an initial value for the output \
+        parameter, and implementations may define how the value is transformated to initialize the \
+        internal tensor(s).
 
         Args:
-            initializer_ (Callable[[Tensor], Tensor]): A function that can initialize a tensor \
+            initializer_ (Callable[[Tensor], Tensor]): The function that initialize a Tensor \
                 inplace while also returning the value.
         """
 

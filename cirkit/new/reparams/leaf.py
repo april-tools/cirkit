@@ -1,4 +1,4 @@
-from typing import Callable, Sequence, Union, final
+from typing import Callable, Optional, Sequence, Union, final
 
 import torch
 from torch import Tensor, nn
@@ -27,36 +27,59 @@ class LeafReparam(Reparameterization):
         """The device of the output parameter."""
         return self.param.device
 
-    def materialize(self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]) -> bool:
-        """Materialize the internal parameter tensors with given shape.
+    def materialize(
+        self,
+        shape: Sequence[int],
+        /,
+        *,
+        dim: Union[int, Sequence[int]],
+        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
+    ) -> bool:
+        """Materialize the internal parameter tensor with given shape and initialize if required.
 
-        If it is already materialized, False will be returned to indicate no materialization. \
-        However, a second call to materialize must give the same config, so that the underlying \
-        params can indeed be reused.
+        Materialization (and optionally initialization) is only executed if it's not materialized \
+        yet. Otherwise this function will become a silent no-op, providing safe reuse of the same \
+        reparam. However, the arguments must be the same among re-materialization attempts, to \
+        make sure the reuse is consistent.
 
-        The initial value of the parameter after materialization is not guaranteed, and explicit \
-        initialization is expected.
+        The normalization dim is ignored for LeafReparam and normalization should be done in \
+        another reparam what contains transformation.
+
+        If an initializer_ is provided, it will be used to fill the initial value. If no \
+        initializer is given, the internal storage will contain random memory.
 
         Args:
             shape (Sequence[int]): The shape of the output parameter.
-            dim (Union[int, Sequence[int]]): Ignored. A leaf is always unnormalized.
+            dim (Union[int, Sequence[int]]): Ignored. This reparam is not normalized.
+            initializer_ (Optional[Callable[[Tensor], Tensor]], optional): The function that \
+                initialize a Tensor inplace while also returning the value. Leave default for no \
+                initialization. Defaults to None.
 
         Returns:
-            bool: Whether the materialization is done.
+            bool: Whether the materialization is actually performed.
         """
-        if not super().materialize(shape, dim=()):
+        if not super().materialize(shape, dim=()):  # super() does not use initializer_.
             return False
+
         # Not materialized before, i.e., self.param is still nn.UninitializedParameter.
         self.param.materialize(self.shape)
+        if initializer_ is not None:
+            self.initialize(initializer_)
         return True
 
+    @torch.no_grad()
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
-        """Initialize the internal parameter tensors with the given initializer.
+        """Initialize the internal parameter tensor with the given initializer.
 
-        Initialization will cause error if not materialized first.
+        This can only be called after materialization and will always overwrite whatever is \
+        already in the internal param. To safely provide an initial value to a possibly reused \
+        reparam, initialize through materialize() instead.
+
+        The provided initializer_ is expected to provide an initial value which will be filled \
+        into the underlying tensor.
 
         Args:
-            initializer_ (Callable[[Tensor], Tensor]): A function that can initialize a tensor \
+            initializer_ (Callable[[Tensor], Tensor]): The function that initialize a Tensor \
                 inplace while also returning the value.
         """
         initializer_(self.param)
