@@ -386,8 +386,6 @@ class RegionGraph:
     # The RG can be dumped and loaded from json files, which can be useful when we want to save and
     # share it. The load() is another way to construct a RG other than the RG algorithms.
 
-    # TODO: The RG json is only defined to 2-partition.
-
     def dump(self, filename: str, with_meta: bool = True) -> None:
         """Dump the region graph to the json file.
 

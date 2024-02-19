@@ -20,6 +20,7 @@ class RGNode(ABC):
         assert self.scope, "The scope of a node in RG must not be empty."
 
         # NOTE: metadata is used for anything that is not part of the RG but is useful for node.
+        # ANNOTATE: Specify content for empty container.
         self.metadata: RGNodeMetadata = {}
 
     # NOTE: These two edge tables are initiated empty because a node may be contructed without
