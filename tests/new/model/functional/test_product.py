@@ -13,12 +13,12 @@ def test_circuit_product_norm() -> None:
     circuit1, circuit2 = get_two_circuits(same_scope=True, setting="norm")
     inputs = torch.randn(2, 4, 1)  # shape (B=2, D=4, C=1).
 
-    product_circuit = circuit1 @ circuit2
-    product_output = product_circuit(inputs)
-
     output1 = circuit1(inputs)
     output2 = circuit2(inputs)
     outputs_product = output1 + output2  # Product is sum in log-space.
+
+    product_circuit = circuit1 @ circuit2
+    product_output = product_circuit(inputs)
 
     assert floats.allclose(product_output, outputs_product)
 
@@ -42,12 +42,12 @@ def test_circuit_product_cat() -> None:
         list(itertools.product([0, 1], repeat=4))  # type: ignore[misc]
     ).unsqueeze(dim=-1)
 
-    product_circuit = circuit1 @ circuit2
-    product_output = product_circuit(inputs)
-
     output1 = circuit1(inputs)
     output2 = circuit2(inputs)
     outputs_product = output1 + output2  # Product is sum in log-space.
+
+    product_circuit = circuit1 @ circuit2
+    product_output = product_circuit(inputs)
 
     assert floats.allclose(product_output, outputs_product)
 
