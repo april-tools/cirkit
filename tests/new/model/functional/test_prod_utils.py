@@ -9,7 +9,7 @@ from torch import Tensor
 from cirkit.new.layers import CategoricalLayer, CPLayer, InputLayer, NormalLayer
 from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import RegionGraph, RegionNode
-from cirkit.new.reparams import EFNormalReparam, ExpReparam, Reparameterization, SoftmaxReparam
+from cirkit.new.reparams import EFNormalReparam, ExpReparam, LogSoftmaxReparam, Reparameterization
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
@@ -63,7 +63,7 @@ def get_two_circuits(
     if setting == "cat":
         input_cls = CategoricalLayer
         input_kwargs = {"num_categories": 2}
-        input_reparam = SoftmaxReparam
+        input_reparam = LogSoftmaxReparam
     elif setting == "norm":
         input_cls = NormalLayer
         input_kwargs = {}

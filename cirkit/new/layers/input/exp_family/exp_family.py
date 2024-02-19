@@ -8,7 +8,8 @@ from torch import Tensor, nn
 
 from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
-from cirkit.new.reparams import EFProductReparam, Reparameterization
+from cirkit.new.layers.layer import Layer
+from cirkit.new.reparams import EFProductReparam, NormalizedReparam, Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
@@ -108,7 +109,9 @@ class ExpFamilyLayer(InputLayer):
         log_h = self.log_base_measure(x).unsqueeze(dim=-1)  # shape (H, *B) -> (H, *B, 1).
         # shape (H, K) -> (H, *1, K).
         log_part = torch.unflatten(
-            self.log_partition(eta), dim=0, sizes=(x.shape[0],) + (1,) * (x.ndim - 2)
+            self.log_partition(eta, eta_normed=isinstance(self.params, NormalizedReparam)),
+            dim=0,
+            sizes=(x.shape[0],) + (1,) * (x.ndim - 2),
         )
 
         # shape (H, *B, K) + (H, *B, 1) + (H, *1, K) -> (H, *B, K) -> (*B, K).
@@ -208,43 +211,42 @@ class ExpFamilyLayer(InputLayer):
 
     @classmethod
     def get_product(
-        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[InputLayer]
-    ) -> SymbLayerCfg[InputLayer]:
-        """Get the symbolic config to construct the product of this input layer with the other \
-        input layer.
+        cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
+    ) -> SymbLayerCfg[Layer]:
+        """Get the symbolic config to construct the product of this layer and the other layer.
 
-        TODO: Cases:
-            - Product with class in ExpFamilyLayer: p_1*p_2(x) according to the construction in \
-                ProdEFLayer.
-            - Product with ConstantLayer: p(x)*c.
-            - Product with DiffEFLayer: p_1(x)*p_2'(x).
+        InputLayer generally can be multiplied with any InputLayer, yet specific combinations may \
+        be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
+        will not be captured by static checkers but only during runtime.
+
+        The product with the ExpFamilyLayer is ProdEFLayer, a specifically designed subclass.
 
         Args:
-            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[InputLayer]): The symbolic config for the other layer, \
-                must be of InputLayer.
-
-        Raises:
-            NotImplementedError: When "not-yet-implemented feature" is invoked.
+            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
+            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the product of the two input layers.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         # DISABLE: We must import here to avoid cyclic import.
         # pylint: disable-next=import-outside-toplevel,cyclic-import
         from cirkit.new.layers.input.exp_family.prod_ef import ProdEFLayer
 
-        if issubclass(other_symb_cfg.layer_cls, ExpFamilyLayer):
+        if issubclass(left_symb_cfg.layer_cls, ExpFamilyLayer) and issubclass(
+            right_symb_cfg.layer_cls, ExpFamilyLayer
+        ):
             # IGNORE: Unavoidable for kwargs.
             return SymbLayerCfg(
                 layer_cls=ProdEFLayer,
                 layer_kwargs={  # type: ignore[misc]
-                    "ef1_cfg": self_symb_cfg,
-                    "ef2_cfg": other_symb_cfg,
+                    "ef1_cfg": left_symb_cfg,
+                    "ef2_cfg": right_symb_cfg,
                 },
-                reparam=EFProductReparam(self_symb_cfg.reparam, other_symb_cfg.reparam),
+                reparam=EFProductReparam(left_symb_cfg.reparam, right_symb_cfg.reparam),
             )
 
-        raise NotImplementedError(
-            "Product for EF input layer and other input layers not implemented."
-        )
+        # TODO: Cases:
+        #       - Product with ConstantLayer: p(x)*c.
+        #       - Product with DiffEFLayer: p_1(x)*p_2'(x).
+        return NotImplemented

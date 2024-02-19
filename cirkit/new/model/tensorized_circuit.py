@@ -164,4 +164,7 @@ class TensorizedCircuit(nn.Module):
     grad_circuit = cached_property(functools.partial(differentiate, order=1))
     """The circuit calculating the gradient."""
 
-    product = TCF.product
+    multiply = TCF.multiply
+    mul = TCF.multiply
+    __matmul__ = TCF.multiply
+    # TODO: __mul__ and __matmul__? match symbolic

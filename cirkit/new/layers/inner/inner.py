@@ -1,10 +1,8 @@
 from abc import abstractmethod
 from typing import Optional
-from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils.type_aliases import SymbLayerCfg
 
 
 class InnerLayer(Layer):
@@ -47,23 +45,4 @@ class InnerLayer(Layer):
 
         Returns:
             int: The inferred number of product units.
-        """
-
-    @classmethod
-    @abstractmethod
-    def get_product(
-        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this inner layer with the other \
-        inner layer.
-
-        The two inner layers for product must be of the same layer class. This means that the \
-        product must be performed between two circuits with the same region graph.
-
-        Args:
-            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
-
-        Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of the two inner layers.
         """

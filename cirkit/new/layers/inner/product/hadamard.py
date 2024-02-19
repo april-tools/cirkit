@@ -1,9 +1,9 @@
 from typing import Optional
-from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
 from cirkit.new.layers.inner.product.product import ProductLayer
+from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
@@ -64,23 +64,29 @@ class HadamardLayer(ProductLayer):
 
     @classmethod
     def get_product(
-        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this Hadamard layer with the other \
-        Hadamard layer.
+        cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
+    ) -> SymbLayerCfg[Layer]:
+        """Get the symbolic config to construct the product of this layer and the other layer.
 
-        The two inner layers for product must be of the same layer class. This means that the \
-        product must be performed between two circuits with the same region graph.
+        HadamardLayer can only be multiplied with the same class. However, the signature typing is \
+        not narrowed down, and wrong arg type will not be captured by static checkers but only \
+        during runtime.
 
-        The layer config is unchanged, because:
-            (a_1 ⊙ a_2 ⊙ ... ⊙ a_n) ⊗ (b_1 ⊙ b_2 ⊙ ... ⊙ b_n)
+        The product with the same class is:
+            (a_1 ⊙ a_2 ⊙ ... ⊙ a_n) ⊗ (b_1 ⊙ b_2 ⊙ ... ⊙ b_n) \
             = (a_1 ⊗ b_1) ⊙ (a_2 ⊗ b_2) ⊙ ... ⊙ (a_n ⊗ b_n).
 
         Args:
-            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
+            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of the two Hadamard layers.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
-        return self_symb_cfg
+        assert (
+            issubclass(left_symb_cfg.layer_cls, cls)
+            and left_symb_cfg.layer_cls == right_symb_cfg.layer_cls
+        ), "Both inputs of HadamardLayer.get_product must be of self class."
+
+        return left_symb_cfg  # Just reuse the same config.

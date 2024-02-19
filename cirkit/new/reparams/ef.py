@@ -99,7 +99,7 @@ class EFProductReparam(BinaryReparam):
             reparam2 (Optional[Reparameterization], optional): The input reparameterization to be \
                 composed. If None, a LeafReparam will be constructed in its place. Defaults to None.
         """
-        super().__init__(reparam1, reparam2, func=self._func, inv_func=None)
+        super().__init__(reparam1, reparam2, func=self._func)
 
     @staticmethod
     def _func(param1: Tensor, param2: Tensor) -> Tensor:

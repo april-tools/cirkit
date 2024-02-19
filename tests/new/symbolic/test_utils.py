@@ -2,7 +2,7 @@ from typing import Dict, Literal, Type
 
 from cirkit.new.layers import CategoricalLayer, CPLayer, InputLayer, NormalLayer
 from cirkit.new.region_graph import RegionGraph, RegionNode
-from cirkit.new.reparams import EFNormalReparam, ExpReparam, Reparameterization, SoftmaxReparam
+from cirkit.new.reparams import EFNormalReparam, ExpReparam, LogSoftmaxReparam, Reparameterization
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
@@ -23,7 +23,7 @@ def get_symbolic_circuit_on_rg(
     if setting == "cat":
         input_cls: Type[InputLayer] = CategoricalLayer
         input_kwargs = {"num_categories": 256}
-        input_reparam: Type[Reparameterization] = SoftmaxReparam
+        input_reparam: Type[Reparameterization] = LogSoftmaxReparam
     elif setting == "norm":
         input_cls = NormalLayer
         input_kwargs = {}

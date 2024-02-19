@@ -1,10 +1,10 @@
 import functools
-from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import nn
 
 from cirkit.new.layers.inner.inner import InnerLayer
+from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import KroneckerReparam, Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
@@ -24,31 +24,34 @@ class SumLayer(InnerLayer):
 
     @classmethod
     def get_product(
-        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this sum layer with the other sum \
-        layer.
+        cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
+    ) -> SymbLayerCfg[Layer]:
+        """Get the symbolic config to construct the product of this layer and the other layer.
 
-        The two inner layers for product must be of the same layer class. This means that the \
-        product must be performed between two circuits with the same region graph.
+        Subclasses of SumLayer can only be multiplied with the same class. However, the signature \
+        typing is not narrowed down, and wrong arg type will not be captured by static checkers \
+        but only during runtime.
 
-        This will construct a new layer config with param = param_self ⊗ param_other. This \
-        applies to all sum layers and sum-product layers. See each layer for details.
+        For any layer with sum weights, the product with the same class is still the class, with:
+            param = param_a ⊗ param_b,
+        unless a specific implementation need to change this behaviour.
 
         Args:
-            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
+            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of the two sum layers.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         assert (
-            self_symb_cfg.layer_cls == other_symb_cfg.layer_cls
-        ), "Both layers must be of the same class."
+            issubclass(left_symb_cfg.layer_cls, cls)
+            and left_symb_cfg.layer_cls == right_symb_cfg.layer_cls
+        ), "Both inputs of SumLayer.get_product must be of self class."
 
         # IGNORE: Unavoidable for kwargs.
         return SymbLayerCfg(
-            layer_cls=self_symb_cfg.layer_cls,
-            layer_kwargs=self_symb_cfg.layer_kwargs,  # type: ignore[misc]
-            reparam=KroneckerReparam(self_symb_cfg.reparam, other_symb_cfg.reparam),
+            layer_cls=left_symb_cfg.layer_cls,
+            layer_kwargs=left_symb_cfg.layer_kwargs,  # type: ignore[misc]
+            reparam=KroneckerReparam(left_symb_cfg.reparam, right_symb_cfg.reparam),
         )

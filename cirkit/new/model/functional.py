@@ -40,14 +40,14 @@ def differentiate(self: "TensorizedCircuit", *, order: int = 1) -> "TensorizedCi
     return type(self)(self.symb_circuit.differentiate(order=order))
 
 
-def product(self: "TensorizedCircuit", other: "TensorizedCircuit") -> "TensorizedCircuit":
-    """Perform product between two circuits over their intersected scope.
+def multiply(self: "TensorizedCircuit", other: "TensorizedCircuit") -> "TensorizedCircuit":
+    """Multiply two circuits over the intersection of their scopes.
 
     Args:
-        self (TensorizedCircuit): The first circuit to perform product.
-        other (TensorizedCircuit): The second circuit to perform product.
+        self (TensorizedCircuit): The left operand circuit (the self circuit).
+        other (TensorizedCircuit): The right operand circuit (the other circuit).
 
     Returns:
-        SymbolicTensorizedCircuit: The circuit product.
+        SymbolicTensorizedCircuit: The product circuit.
     """
-    return type(self)(self.symb_circuit.product(other.symb_circuit))
+    return type(self)(self.symb_circuit.multiply(other.symb_circuit))

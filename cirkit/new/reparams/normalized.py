@@ -10,8 +10,7 @@ from cirkit.new.reparams.reparam import Reparameterization
 from cirkit.new.reparams.unary import UnaryReparam
 from cirkit.new.utils import flatten_dims, unflatten_dims
 
-# This file is for unary reparams that includes normalization. unary.py should be preferred for
-# simple reparams.
+# This file is for and only for unary reparams that include normalization.
 
 
 class _TensorFuncWithDim(Protocol):
@@ -34,29 +33,38 @@ class _HasDimsTuple(Protocol):
         ...
 
 
-class _NormalizedReparamMixin:
-    """A mixin for helpers useful for reparams with normalization on some dims."""
+class _ApplySingleDimFuncMixin:
+    """A mixin with a helper method that applies a function accepting a single dim to multiple \
+    dims specified by self.dims.
+    
+    This is useful for NormalizedReparam with certain normalizers.
+    """
 
-    def _apply_normalizer(
-        self: _HasDimsTuple, normalizer: _TensorFuncWithDim, x: Tensor, /
+    def _apply_single_dim_func(
+        self: _HasDimsTuple, func: _TensorFuncWithDim, x: Tensor, /
     ) -> Tensor:
-        """Apply a normalizer function on a Tensor over self.dims.
+        """Apply a tensor function accepting a single dim over self.dims.
 
         Args:
-            normalizer (_TensorFuncWithDim): The normalizer of a tensor with a dim arg.
+            func (_TensorFuncWithDim): The function with a single dim.
             x (Tensor): The tensor input.
 
         Returns:
-            Tensor: The normalized output.
+            Tensor: The tensor output.
         """
         return unflatten_dims(
-            normalizer(flatten_dims(x, dims=self.dims), dim=self.dims[0]),
-            dims=self.dims,
-            shape=x.shape,
+            func(flatten_dims(x, dims=self.dims), dim=self.dims[0]), dims=self.dims, shape=x.shape
         )
 
 
-class SoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
+class NormalizedReparam(UnaryReparam):
+    """The base class for normalized reparameterization."""
+
+    # NOTE: This class only serves as the common base of all normalized reparams, but include
+    #       nothing more. It's up to the implementations to define further details.
+
+
+class SoftmaxReparam(NormalizedReparam, _ApplySingleDimFuncMixin):
     """Softmax reparameterization.
 
     Range: (0, 1), 0 available if input is masked, 1 available when only one element valid.
@@ -74,14 +82,14 @@ class SoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
         super().__init__(reparam, func=self._func, inv_func=torch.log)
 
     def _func(self, x: Tensor) -> Tensor:
-        # torch.softmax can only accept one dim, so we need to rearrange dims.
-        x = self._apply_normalizer(torch.softmax, x)
+        # torch.softmax only accepts a single dim, so we need the applier.
+        x = self._apply_single_dim_func(torch.softmax, x)
         # nan will appear when there's only 1 element and it's masked. In that case we projecte nan
         # as 1 (0 in log-sapce). +inf and -inf are (unsafely) projected but will not appear.
         return torch.nan_to_num(x, nan=1)
 
 
-class LogSoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
+class LogSoftmaxReparam(NormalizedReparam, _ApplySingleDimFuncMixin):
     """LogSoftmax reparameterization, which is more numarically-stable than log(softmax(...)).
 
     Range: (-inf, 0), -inf available if input is masked, 0 available when only one element valid.
@@ -99,8 +107,8 @@ class LogSoftmaxReparam(UnaryReparam, _NormalizedReparamMixin):
         super().__init__(reparam, func=self._func)
 
     def _func(self, x: Tensor) -> Tensor:
-        # torch.log_softmax can only accept one dim, so we need to rearrange dims.
-        x = self._apply_normalizer(torch.log_softmax, x)
+        # torch.log_softmax only accepts a single dim, so we need the applier.
+        x = self._apply_single_dim_func(torch.log_softmax, x)
         # -inf still passes gradients, so we use a redundant projection to stop it. nan is the same
         # as SoftmaxReparam, projected to 0 (in log-space). +inf will not appear.
         return torch.nan_to_num(x, nan=0, neginf=float("-inf"))

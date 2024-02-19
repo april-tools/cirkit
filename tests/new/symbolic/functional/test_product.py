@@ -7,7 +7,7 @@ def test_symbolic_product_qt() -> None:
 
     symb_circuit = get_symbolic_circuit_on_rg(rg, setting="norm")
 
-    prod_circuit = symb_circuit.product(symb_circuit)
+    prod_circuit = symb_circuit @ symb_circuit
 
     pf_of_prod = prod_circuit.integrate()
 

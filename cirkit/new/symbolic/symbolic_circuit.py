@@ -22,7 +22,6 @@ from cirkit.new.utils.type_aliases import SymbLayerCfg
 class SymbolicTensorizedCircuit:
     """The symbolic representation of a tensorized circuit."""
 
-    # TODO: Use a whole SymbC_Cfg?
     # DISABLE: It's designed to have these arguments.
     # pylint: disable-next=too-many-arguments
     def __init__(
@@ -139,7 +138,7 @@ class SymbolicTensorizedCircuit:
                     layer_cfg=SymbLayerCfg(
                         layer_cls=DenseLayer,
                         layer_kwargs={},  # type: ignore[misc]
-                        reparam_factory=sum_cfg.reparam_factory,  # TODO: should not reuse?
+                        reparam_factory=sum_cfg.reparam_factory,
                     ),
                 )
             elif isinstance(rg_node, RegionNode) and len(rg_node.inputs) == 1:  # Simple inner.
@@ -162,7 +161,7 @@ class SymbolicTensorizedCircuit:
                     layer_cfg=SymbLayerCfg(
                         layer_cls=MixingLayer,
                         layer_kwargs={},  # type: ignore[misc]
-                        reparam_factory=sum_cfg.reparam_factory,  # TODO: should not reuse?
+                        reparam_factory=sum_cfg.reparam_factory,
                     ),
                 )
             elif isinstance(rg_node, PartitionNode):
@@ -262,7 +261,10 @@ class SymbolicTensorizedCircuit:
 
     integrate = STCF.integrate
     differentiate = STCF.differentiate
-    product = STCF.product
+    multiply = STCF.multiply
+    mul = STCF.multiply
+    __matmul__ = STCF.multiply
+    # TODO: __mul__ and __matmul__? first investigate need for "inner product"
 
     ####################################    (De)Serialization    ###################################
     # TODO: impl? or just save RG and kwargs of SymbC?

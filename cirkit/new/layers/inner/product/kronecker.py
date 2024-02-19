@@ -1,9 +1,9 @@
 from typing import Literal, Optional, cast
-from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
 from cirkit.new.layers.inner.product.product import ProductLayer
+from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils.type_aliases import SymbLayerCfg
 
@@ -28,9 +28,10 @@ class KroneckerLayer(ProductLayer):
             reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
                 Defaults to None.
         """
-        assert (
-            num_output_units == num_input_units**arity
-        ), "The number of input and output units must be the same for Hadamard product."
+        assert num_output_units == num_input_units**arity, (
+            "The number of output units must be the number of input units raised to the power of "
+            "arity for Kronecker product."
+        )
         if arity != 2:
             raise NotImplementedError("Kronecker only implemented for binary product units.")
         super().__init__(
@@ -69,25 +70,27 @@ class KroneckerLayer(ProductLayer):
 
     @classmethod
     def get_product(
-        cls, self_symb_cfg: SymbLayerCfg[Self], other_symb_cfg: SymbLayerCfg[Self]
-    ) -> SymbLayerCfg[Self]:
-        """Get the symbolic config to construct the product of this Kronecker layer with the other \
-        Kronecker layer.
+        cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
+    ) -> SymbLayerCfg[Layer]:
+        """Get the symbolic config to construct the product of this layer and the other layer.
 
-        The two inner layers for product must be of the same layer class. This means that the \
-        product must be performed between two circuits with the same region graph.
+        KroneckerLayer can only be multiplied with the same class. However, the signature typing \
+        is not narrowed down, and wrong arg type will not be captured by static checkers but only \
+        during runtime.
 
-        TODO: we need permutation: \
-            (a_1 ⊗ a_2) ⊗ (b_1 ⊗ b_2) = PermuteMatrix((a_1 ⊗ b_1) ⊗ (a_2 ⊗ b_2)).
+        The product with the same class is:
+            (a_1 ⊗ a_2) ⊗ (b_1 ⊗ b_2) = permute4D((a_1 ⊗ b_1) ⊗ (a_2 ⊗ b_2)).
 
         Args:
-            self_symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            other_symb_cfg (SymbLayerCfg[Self]): The symbolic config for the other layer.
+            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
+            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Raises:
             NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
-            SymbLayerCfg[Self]: The symbolic config for the product of the two Kronecker layers.
+            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+                NotImplemented may also be returned, which indicates the reflection should be tried.
         """
+        # TODO: we need permutation. Also, don't forget to add the cls check, see HadamardLayer
         raise NotImplementedError("Product between two kroneker layers is not implemented yet.")
