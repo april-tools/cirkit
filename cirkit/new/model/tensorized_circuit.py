@@ -154,9 +154,9 @@ class TensorizedCircuit(nn.Module):
     @property
     def partition_func(self) -> Tensor:  # TODO: is this the correct shape?
         """The partition function of the circuit, shape (num_out, num_cls)."""
-        # For partition_circuit, the input is irrelevant, so just use zeros.
+        # For partition_circuit, the input is irrelevant, so just use empty.
         # shape (*B, D, C) -> (*B, num_out, num_cls) where *B = ().
-        return self.partition_circuit(torch.zeros((self.num_vars, self.num_channels)))
+        return self.partition_circuit(torch.empty((self.num_vars, self.num_channels)))
 
     differentiate = TCF.differentiate
 
