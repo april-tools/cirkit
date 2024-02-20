@@ -67,10 +67,10 @@ class TuckerLayer(SumProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
         return self.comp_space.sum(self._forward_linear, x[0], x[1], dim=-1, keepdim=True)
 

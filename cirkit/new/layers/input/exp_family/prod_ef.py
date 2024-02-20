@@ -87,12 +87,12 @@ class ProdEFLayer(ExpFamilyLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
-        # shape (H, *B, *S_1), (H, *B, *S_2) -> (H, *B, flatten(S_1)+flatten(S_2))
+        # shape (H, *B, *S_1), (H, *B, *S_2) -> (H, *B, flatten(S_1)+flatten(S_2)).
         return torch.cat(
             (
                 self.ef1.sufficient_stats(x).flatten(start_dim=-len(self.ef1.suff_stats_shape)),
@@ -105,7 +105,7 @@ class ProdEFLayer(ExpFamilyLayer):
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The natural parameters eta, shape (H, *B).
@@ -116,12 +116,12 @@ class ProdEFLayer(ExpFamilyLayer):
         """Calculate log partition function A from natural parameters eta.
 
         Args:
-            eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta (Tensor): The natural parameters eta, shape (H, Ko, *S).
             eta_normed (bool, optional): Ignored. This layer uses a special reparam for eta. \
                 Defaults to False.
 
         Returns:
-            Tensor: The log partition function A, shape (H, K).
+            Tensor: The log partition function A, shape (H, Ko).
         """
         # TODO: x.unflatten is not typed
         eta1 = torch.unflatten(
@@ -203,7 +203,7 @@ class ProdEFLayer(ExpFamilyLayer):
             )
             pseudo_inputs = torch.empty(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
 
-            # shape (H, K, S) -> (H, K, len, *S) -> (H, K, *S).
+            # shape (H, Ko, S) -> (H, Ko, len, *S) -> (H, Ko, *S).
             eta_summed = torch.unflatten(
                 eta, dim=-1, sizes=(len(layers_cfgs),) + layer_1.suff_stats_shape
             ).sum(dim=2)

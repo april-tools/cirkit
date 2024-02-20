@@ -88,13 +88,13 @@ class DiffEFLayer(InputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Raises:
             NotImplementedError: When "not-yet-implemented feature" is invoked -- order > 2.
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
         logp_diffs = batch_high_order_at(
             self.ef.log_prob, x, [self.var_idx, ..., self.ch_idx], order=self.order

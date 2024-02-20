@@ -117,7 +117,7 @@ def pf_of_product_of_normal(eta: Tensor) -> Tensor:
         eta (Tensor): The parameters of two Gaussians, shape (H, K*K, 4).
 
     Returns:
-        Tensor: The partition functions, shape (K*K).
+        Tensor: The partition functions, shape (K*K,).
     """
     log_sq_pi = 0.5 * math.log(math.pi)
     square_term = (

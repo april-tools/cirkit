@@ -61,13 +61,13 @@ class DenseLayer(SumLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
-        x = x.squeeze(dim=0)  # shape (H=1, *B, K) -> (*B, K).
-        return self.comp_space.sum(self._forward_linear, x, dim=-1, keepdim=True)  # shape (*B, K).
+        x = x.squeeze(dim=0)  # shape (H=1, *B, Ki) -> (*B, Ki).
+        return self.comp_space.sum(self._forward_linear, x, dim=-1, keepdim=True)  # shape (*B, Ko).
 
     # NOTE: get_product is inherited from SumLayer. The product between DesnLayer leads to the
     #       Kronecker of the param.

@@ -54,7 +54,7 @@ class CategoricalLayer(ExpFamilyLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The sufficient statistics T, shape (H, *B, *S).
@@ -63,14 +63,14 @@ class CategoricalLayer(ExpFamilyLayer):
             x = x.long()  # The input to Categorical should be discrete.
         # TODO: pylint issue? one_hot is only in pyi
         # pylint: disable-next=not-callable
-        suff_stats = F.one_hot(x, self.num_categories)  # shape (H, *B, K) -> (H, *B, K, cat).
+        suff_stats = F.one_hot(x, self.num_categories)  # shape (H, *B, Ki) -> (H, *B, Ki, cat).
         return suff_stats.to(torch.get_default_dtype())  # The suff stats must be float.
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The natural parameters eta, shape (H, *B).
@@ -81,18 +81,19 @@ class CategoricalLayer(ExpFamilyLayer):
         """Calculate log partition function A from natural parameters eta.
 
         Args:
-            eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta (Tensor): The natural parameters eta, shape (H, Ko, *S).
             eta_normed (bool, optional): Whether eta is produced by a NormalizedReparam. If True, \
                 implementations may save some computation. Defaults to False.
 
         Returns:
-            Tensor: The log partition function A, shape (H, K).
+            Tensor: The log partition function A, shape (H, Ko).
         """
         if eta_normed:
             return torch.zeros(()).to(eta).expand(eta.shape[:2])
 
         # If eta is not normalized, we need this to make sure the output of EF is normalized.
-        return eta.logsumexp(dim=-1).sum(dim=-1)  # shape (H, K, Ki, cat) -> (H, K, Ki) -> (H, K).
+        # shape (H, Ko, Ki, cat) -> (H, Ko, Ki) -> (H, Ko).
+        return eta.logsumexp(dim=-1).sum(dim=-1)
 
     @classmethod
     def get_partial(
