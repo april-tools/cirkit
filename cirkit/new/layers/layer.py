@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Callable, ClassVar, Optional, Type
+from typing import Callable, ClassVar, Optional, Sequence, Type, Union
 
 import torch
 from torch import Tensor, nn
@@ -54,14 +54,35 @@ class Layer(nn.Module, ABC):
         initialization.
         """
 
+    def materialize_params(
+        self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]
+    ) -> None:
+        """Wrap self.params.materialize() with initializer_=self._default_initializer_, if \
+        self.params is a valid Reparameterization.
+
+        For details of the args and kwargs, see Reparameterization.materialize().
+
+        Args:
+            shape (Sequence[int]): The shape for self.params.
+            dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
+                be applied.
+        """
+        # IGNORE: getattr gives Any.
+        if not isinstance(
+            self_params := getattr(self, "params", None), Reparameterization  # type: ignore[misc]
+        ):
+            return
+        self_params.materialize(shape, dim=dim, initializer_=self._default_initializer_)
+
     @torch.no_grad()
     def reset_parameters(self) -> None:
         """Reset parameters with default initialization."""
-        if (initializer_ := self._default_initializer_) is None:
-            return
+        initializer_ = self._default_initializer_
         for child in self.children():  # Only immediate children, not all modules().
-            if isinstance(child, Reparameterization):
+            if isinstance(child, Reparameterization) and initializer_ is not None:
                 child.initialize(initializer_)
+            if isinstance(child, Layer):  # Recursively reset with their own initializer_.
+                child.reset_parameters()
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property

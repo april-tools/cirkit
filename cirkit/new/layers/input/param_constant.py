@@ -38,7 +38,7 @@ class ParameterizedConstantLayer(InputLayer):
         )
 
         self.params = reparam
-        self.params.materialize((num_output_units,), dim=())
+        self.materialize_params((num_output_units,), dim=())
 
     @property
     def _default_initializer_(self) -> None:

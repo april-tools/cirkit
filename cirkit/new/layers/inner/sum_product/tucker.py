@@ -39,11 +39,7 @@ class TuckerLayer(SumProductLayer):
         )
 
         self.params = reparam
-        self.params.materialize(
-            (num_output_units, num_input_units, num_input_units),
-            dim=(1, 2),
-            initializer_=self._default_initializer_,
-        )
+        self.materialize_params((num_output_units, num_input_units, num_input_units), dim=(1, 2))
 
     @classmethod
     def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> int:

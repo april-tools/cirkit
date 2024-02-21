@@ -65,8 +65,7 @@ class ExpFamilyLayer(InputLayer):
         )
 
         self.params = reparam
-        if self.params.materialize((arity, num_output_units, *self.suff_stats_shape), dim=-1):
-            self.reset_parameters()  # Only reset if newly materialized.
+        self.materialize_params((arity, num_output_units, *self.suff_stats_shape), dim=-1)
 
     @property
     def _default_initializer_(self) -> Callable[[Tensor], Tensor]:

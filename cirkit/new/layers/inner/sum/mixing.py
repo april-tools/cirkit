@@ -42,9 +42,7 @@ class MixingLayer(SumLayer):
         )
 
         self.params = reparam
-        self.params.materialize(
-            (num_output_units, arity), dim=1, initializer_=self._default_initializer_
-        )
+        self.materialize_params((num_output_units, arity), dim=1)
 
     @classmethod
     def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> Literal[0]:
