@@ -10,7 +10,7 @@ from cirkit.new.symbolic.symbolic_layer import (
     SymbolicSumLayer,
 )
 from cirkit.new.utils import OrderedSet, Scope
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory
 
 # TODO: __repr__?
 
@@ -33,15 +33,15 @@ class SymbolicTensorizedCircuit:
         num_input_units: Optional[int] = None,
         num_sum_units: Optional[int] = None,
         num_classes: int = 1,
-        input_cfg: Optional[SymbLayerCfg[InputLayer]] = None,
-        sum_cfg: Optional[SymbLayerCfg[SumLayer]] = None,
-        prod_cfg: Optional[SymbLayerCfg[ProductLayer]] = None,
+        input_cfg: Optional[SymbCfgFactory[InputLayer]] = None,
+        sum_cfg: Optional[SymbCfgFactory[SumLayer]] = None,
+        prod_cfg: Optional[SymbCfgFactory[ProductLayer]] = None,
         layers: Optional[Iterable[SymbolicLayer]] = None,
     ):
         """Construct the symbolic circuit.
 
         There are two ways to construct:
-            - Provide the number of units and cfgs to construct symbolic layers from the RG;
+            - Provide the number of units and configs to construct symbolic layers from the RG;
             - Provide directly the symbolic layers (must be correctly ordered).
 
         However in both cases the caller must provide:
@@ -63,12 +63,12 @@ class SymbolicTensorizedCircuit:
                 Defaults to None.
             num_classes (int, optional): The number of classes of the circuit output, i.e., the \
                 number of units in the output layer. Defaults to 1.
-            input_cfg (Optional[SymbLayerCfg[InputLayer]], optional): The config for input layers. \
-                Defaults to None.
-            sum_cfg (Optional[SymbLayerCfg[SumLayer]], optional): The config for sum layers. \
-                Defaults to None.
-            prod_cfg (Optional[SymbLayerCfg[ProductLayer]], optional): The config for product \
+            input_cfg (Optional[SymbCfgFactory[InputLayer]], optional): The config factory for \
+                input layers. Defaults to None.
+            sum_cfg (Optional[SymbCfgFactory[SumLayer]], optional): The config factory for sum \
                 layers. Defaults to None.
+            prod_cfg (Optional[SymbCfgFactory[ProductLayer]], optional): The config factory for \
+                product layers. Defaults to None.
             layers (Optional[Iterable[SymbolicLayer]], optional): The layers of the circuit, will \
                 override all above for layers if provided. Must be ordered in the same way as \
                 RGNode but this is not checked. Defaults to None.
@@ -135,7 +135,7 @@ class SymbolicTensorizedCircuit:
                     rg_node.scope,
                     layers_in,
                     num_units=num_units,
-                    layer_cfg=SymbLayerCfg(
+                    layer_cfg=SymbCfgFactory(
                         layer_cls=DenseLayer,
                         layer_kwargs={},  # type: ignore[misc]
                         reparam_factory=sum_cfg.reparam_factory,
@@ -158,7 +158,7 @@ class SymbolicTensorizedCircuit:
                     rg_node.scope,
                     layers_in,
                     num_units=num_sum_units if rg_node.outputs else num_classes,
-                    layer_cfg=SymbLayerCfg(
+                    layer_cfg=SymbCfgFactory(
                         layer_cls=MixingLayer,
                         layer_kwargs={},  # type: ignore[misc]
                         reparam_factory=sum_cfg.reparam_factory,

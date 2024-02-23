@@ -4,14 +4,14 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from cirkit.new.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.new.utils import Scope
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory
 
 LayerT_co = TypeVar("LayerT_co", bound=Layer, covariant=True)
 
 
 # NOTE: This is generic corresponding to SymbLayerCfg, so that subclasses can refine internal types.
-#       In most cases we use SymbolicLayer instead of GenericSymbolicLayer, so this class is not
-#       included in __init__.py. Yet we still name it as public in case it need to be used.
+#       In most cases we use SymbolicLayer instead of GenericSymbolicLayer, but we still make it
+#       public in case it need to be used.
 # DISABLE: It's designed to have these attributes.
 # pylint: disable-next=too-many-instance-attributes
 class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
@@ -27,7 +27,7 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
         layers_in: Iterable["SymbolicLayer"],
         *,
         num_units: int,
-        layer_cfg: SymbLayerCfg[LayerT_co],
+        layer_cfg: SymbCfgFactory[LayerT_co],
     ) -> None:
         """Construct the SymbolicLayer.
 
@@ -35,7 +35,8 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer, empty for input layers.
             num_units (int): The number of units in this layer.
-            layer_cfg (SymbLayerCfg[LayerT_co]): The config for the concrete layer in symbolic form.
+            layer_cfg (SymbCfgFactory[LayerT_co]): The config (with factory) for this symbolic \
+                layer.
         """
         super().__init__()
         self.scope = scope
@@ -52,20 +53,7 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
 
         self.arity = len(self.inputs)
         self.num_units = num_units
-        # A SymbLayer should hold its own instance of SymbLayerCfg, so the cfg passed in is always
-        # copied; it should bind to a reparam instance but not just factory, to enable reusing the
-        # same reparam in transforms.
-        # IGNORE: Unavoidable for kwargs.
-        # TODO: better way to construct SymbLayerCfg than untyped replace?
-        #       reparam_factory only called here
-        self.layer_cfg = SymbLayerCfg(
-            layer_cls=layer_cfg.layer_cls,
-            layer_kwargs=layer_cfg.layer_kwargs,  # type: ignore[misc]
-            reparam=layer_cfg.reparam_factory()
-            if layer_cfg.reparam_factory is not None
-            else layer_cfg.reparam,
-            symb_layer=self,
-        )
+        self.layer_cfg = layer_cfg.instantiate(self)
         self.layer_cls = layer_cfg.layer_cls  # Commonly used, so shorten reference.
         self.concrete_layer: Optional[LayerT_co] = None  # Set in concretize().
 
@@ -94,7 +82,7 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
         layers_in: Iterable["SymbolicLayer"],
         *,
         num_units: Optional[int] = None,
-        layer_cfg: Optional[SymbLayerCfg[LayerT_co]] = None,
+        layer_cfg: Optional[SymbCfgFactory[LayerT_co]] = None,
     ) -> Self:
         """Transform the SymbolicLayer into another SymbolicLayer with given input connections and \
         optionally some config overrides.
@@ -106,7 +94,7 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
             layers_in (Iterable[SymbolicLayer]): The inputs to the new SymbolicLayer.
             num_units (Optional[int], optional): If provided, will override the default of \
                 self.num_units. Defaults to None.
-            layer_cfg (Optional[SymbLayerCfg[LayerT_co]], optional): If provided, will override \
+            layer_cfg (Optional[SymbCfgFactory[LayerT_co]], optional): If provided, will override \
                 the default of self.layer_cfg. The layer_cls must be compatible to self.layer_cls. \
                 Note that the reparam object in self.layer_cfg will be shared by default. \
                 Defaults to None.
@@ -147,9 +135,6 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
         Returns:
             LayerT_co: The concrete Layer.
         """
-        assert (  # TODO: do we need this?
-            self.layer_cfg.reparam_factory is None
-        ), "A SymbL must hold an instance of reparam instead of a factory."
         assert self.concrete_layer is None, "A SymbL can be concretized only once."
         num_input_units = self.inputs[0].num_units if num_input_units is None else num_input_units
         num_output_units = self.num_units if num_output_units is None else num_output_units
@@ -183,7 +168,7 @@ class SymbolicSumLayer(GenericSymbolicLayer[SumLayer]):
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cfg: SymbLayerCfg[SumLayer],
+        layer_cfg: SymbCfgFactory[SumLayer],
     ) -> None:
         """Construct the SymbolicSumLayer.
 
@@ -191,7 +176,7 @@ class SymbolicSumLayer(GenericSymbolicLayer[SumLayer]):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cfg (SymbLayerCfg[SumLayer]): The config for the concrete layer in symbolic form.
+            layer_cfg (SymbCfgFactory[SumLayer]): The config (with factory) for this symbolic layer.
         """
         super().__init__(scope, layers_in, num_units=num_units, layer_cfg=layer_cfg)
         # NOTE: layers_in may not support len(), so must check after __init__. Same for the
@@ -218,7 +203,7 @@ class SymbolicProductLayer(GenericSymbolicLayer[ProductLayer]):
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cfg: SymbLayerCfg[ProductLayer],
+        layer_cfg: SymbCfgFactory[ProductLayer],
     ) -> None:
         """Construct the SymbolicProductLayer.
 
@@ -226,8 +211,8 @@ class SymbolicProductLayer(GenericSymbolicLayer[ProductLayer]):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer.
             num_units (int): The number of units in this layer.
-            layer_cfg (SymbLayerCfg[ProductLayer]): The config for the concrete layer in symbolic \
-                form.
+            layer_cfg (SymbCfgFactory[ProductLayer]): The config (with factory) for this symbolic \
+                layer.
         """
         super().__init__(scope, layers_in, num_units=num_units, layer_cfg=layer_cfg)
         assert self.inputs, "SymbolicProductLayer must be an inner layer of the SymbC."
@@ -252,7 +237,7 @@ class SymbolicInputLayer(GenericSymbolicLayer[InputLayer]):
         layers_in: Iterable[SymbolicLayer],
         *,
         num_units: int,
-        layer_cfg: SymbLayerCfg[InputLayer],
+        layer_cfg: SymbCfgFactory[InputLayer],
     ) -> None:
         """Construct the SymbolicInputLayer.
 
@@ -260,8 +245,8 @@ class SymbolicInputLayer(GenericSymbolicLayer[InputLayer]):
             scope (Scope): The scope of this layer.
             layers_in (Iterable[SymbolicLayer]): The input to this layer, empty.
             num_units (int): The number of units in this layer.
-            layer_cfg (SymbLayerCfg[InputLayer]): The config for the concrete layer in symbolic \
-                form.
+            layer_cfg (SymbCfgFactory[InputLayer]): The config (with factory) for this symbolic \
+                layer.
         """
         super().__init__(scope, layers_in, num_units=num_units, layer_cfg=layer_cfg)
         assert not self.inputs, "SymbolicInputLayer must be an input layer of the SymbC."

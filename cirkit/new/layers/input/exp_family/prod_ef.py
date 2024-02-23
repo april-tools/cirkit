@@ -11,7 +11,7 @@ from cirkit.new.layers.input.exp_family.normal import NormalLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.input.param_constant import ParameterizedConstantLayer
 from cirkit.new.reparams import EFProductReparam, UnaryReparam
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class ProdEFLayer(ExpFamilyLayer):
@@ -57,21 +57,21 @@ class ProdEFLayer(ExpFamilyLayer):
                 product, should include a reference to a concretized SymbL for EF.
         """
         assert isinstance(reparam, EFProductReparam), "Must use a EFProductReparam for ProdEFLayer."
-        assert (symbl1 := ef1_cfg.symb_layer) is not None and (
-            ef1 := symbl1.concrete_layer
+        assert (
+            ef1 := ef1_cfg.symb_layer.concrete_layer
         ) is not None, (
-            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
         )
-        assert (symbl2 := ef2_cfg.symb_layer) is not None and (
-            ef2 := symbl2.concrete_layer
+        assert (
+            ef2 := ef2_cfg.symb_layer.concrete_layer
         ) is not None, (
-            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
         )
 
         self.suff_split_point = math.prod(ef1.suff_stats_shape)
         self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)
 
-        # NOTE: We need a reparam to be provided in SymbCfg and registered for EFLayer.
+        # NOTE: We need a reparam to be provided in SymbLayerCfg and registered for EFLayer.
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
@@ -135,7 +135,7 @@ class ProdEFLayer(ExpFamilyLayer):
         return self.ef1.log_partition(eta1) + self.ef2.log_partition(eta2)
 
     @classmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbCfgFactory[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Generally, we cannot calculate the integral in closed form, but in some special cases we \
@@ -163,7 +163,7 @@ class ProdEFLayer(ExpFamilyLayer):
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
+            SymbCfgFactory[InputLayer]: The symbolic config for the integral.
         """
 
         def _get_leaf_layers_cfg(
@@ -191,15 +191,15 @@ class ProdEFLayer(ExpFamilyLayer):
 
         def _func(eta: Tensor) -> Tensor:
             """Calculate the partition function of the product."""
-            assert (symbl_all := symb_cfg.symb_layer) is not None and (
-                layer_all := symbl_all.concrete_layer
+            assert (
+                layer_all := symb_cfg.symb_layer.concrete_layer
             ) is not None, (
-                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+                "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
             )
-            assert (symbl_1 := layers_cfgs[0].symb_layer) is not None and (
-                layer_1 := symbl_1.concrete_layer
+            assert (
+                layer_1 := layers_cfgs[0].symb_layer.concrete_layer
             ) is not None, (
-                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+                "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
             )
             pseudo_inputs = torch.empty(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
 
@@ -216,14 +216,14 @@ class ProdEFLayer(ExpFamilyLayer):
 
             return torch.sum(log_part_1 + log_h_2 - layer_all.log_partition(eta), dim=0)
 
-        return SymbLayerCfg(
+        return SymbCfgFactory(
             layer_cls=ParameterizedConstantLayer, reparam=UnaryReparam(symb_cfg.reparam, func=_func)
         )
 
     @classmethod
     def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> SymbLayerCfg[InputLayer]:
+    ) -> SymbCfgFactory[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
         of the given variable in the scope of this layer.
 
@@ -238,8 +238,8 @@ class ProdEFLayer(ExpFamilyLayer):
             TypeError: When this method is called on CategoricalLayer.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
-                given channel of the given variable.
+            SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
+                the given channel of the given variable.
         """
         # TODO: support nested ProdEFLayer (3 or more products)
         # TODO: how to check continuous/discrete distribution

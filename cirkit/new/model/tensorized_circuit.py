@@ -64,8 +64,8 @@ class TensorizedCircuit(nn.Module):
                     and isinstance(prev_layer, SymbolicProductLayer)
                     and prev_layer.layer_cls == symb_layer.layer_cls
                 ), "Sum-product fusion inconsistent."
-                # Concretize based on the cfg and the output num_units of the SymbolicSumLayer, but
-                # the input num_units and the arity of the SymbolicProductLayer.
+                # Concretize based on the config and the output num_units of the SymbolicSumLayer,
+                # but the input num_units and the arity of the SymbolicProductLayer.
                 layer = symb_layer.concretize(
                     num_input_units=prev_layer.inputs[0].num_units, arity=prev_layer.arity
                 )

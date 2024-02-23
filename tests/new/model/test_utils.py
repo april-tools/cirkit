@@ -15,7 +15,7 @@ from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import QuadTree
 from cirkit.new.reparams import EFNormalReparam, LeafReparam, LogSoftmaxReparam
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
-from cirkit.new.utils.type_aliases import ReparamFactory, SymbLayerCfg
+from cirkit.new.utils.type_aliases import ReparamFactory, SymbCfgFactory
 
 
 # pylint: disable-next=too-many-arguments,dangerous-default-value
@@ -41,17 +41,17 @@ def get_circuit_2x2_fullcfg(  # type: ignore[misc]
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
         num_classes=num_classes,
-        input_cfg=SymbLayerCfg(
+        input_cfg=SymbCfgFactory(
             layer_cls=input_layer_cls,
             layer_kwargs=input_layer_kwargs,  # type: ignore[misc]
             reparam_factory=input_reparam,
         ),
-        sum_cfg=SymbLayerCfg(
+        sum_cfg=SymbCfgFactory(
             layer_cls=sum_layer_cls,
             layer_kwargs=sum_layer_kwargs,  # type: ignore[misc]
             reparam_factory=sum_reparam,
         ),
-        prod_cfg=SymbLayerCfg(
+        prod_cfg=SymbCfgFactory(
             layer_cls=prod_layer_cls, layer_kwargs=prod_layer_kwargs  # type: ignore[misc]
         ),
     )

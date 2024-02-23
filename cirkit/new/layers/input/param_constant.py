@@ -6,7 +6,7 @@ from cirkit.new.layers.input.constant import ConstantLayer
 from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class ParameterizedConstantLayer(InputLayer):
@@ -57,6 +57,7 @@ class ParameterizedConstantLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, K).
         """
+        # TODO: comp_space?
         return self.params().expand(*x.shape[1:-1], self.num_output_units)
 
     @classmethod
@@ -79,7 +80,7 @@ class ParameterizedConstantLayer(InputLayer):
     @classmethod
     def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> SymbLayerCfg[InputLayer]:
+    ) -> SymbCfgFactory[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
         of the given variable in the scope of this layer.
 
@@ -91,22 +92,22 @@ class ParameterizedConstantLayer(InputLayer):
             ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
-                given channel of the given variable.
+            SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
+                the given channel of the given variable.
         """
         assert order >= 0, "The order of differential must be non-negative."
         if not order:
             return symb_cfg
 
         # IGNORE: Unavoidable for kwargs.
-        return SymbLayerCfg(
+        return SymbCfgFactory(
             layer_cls=ConstantLayer, layer_kwargs={"const_value": 0.0}  # type: ignore[misc]
         )
 
     @classmethod
     def get_product(
         cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
-    ) -> SymbLayerCfg[Layer]:
+    ) -> SymbCfgFactory[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
         InputLayer generally can be multiplied with any InputLayer, yet specific combinations may \
@@ -118,7 +119,7 @@ class ParameterizedConstantLayer(InputLayer):
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         # TODO: merge with ConstL?

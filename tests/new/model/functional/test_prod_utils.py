@@ -11,12 +11,13 @@ from cirkit.new.model import TensorizedCircuit
 from cirkit.new.region_graph import RegionGraph, RegionNode
 from cirkit.new.reparams import EFNormalReparam, ExpReparam, LogSoftmaxReparam, Reparameterization
 from cirkit.new.symbolic import SymbolicTensorizedCircuit
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory
 
 
 def get_two_circuits(
     *, same_scope: bool = True, setting: Literal["cat", "norm"] = "cat"
 ) -> Tuple[TensorizedCircuit, TensorizedCircuit]:
+    # TODO: duplicated code?
     # Build RG
     rg1 = RegionGraph()
     node0 = RegionNode({0})
@@ -77,13 +78,13 @@ def get_two_circuits(
         num_sum_units=num_units_1,
         num_channels=num_channels,
         num_classes=num_classes,
-        input_cfg=SymbLayerCfg(
+        input_cfg=SymbCfgFactory(
             layer_cls=input_cls, layer_kwargs=input_kwargs, reparam_factory=input_reparam
         ),
-        sum_cfg=SymbLayerCfg(
+        sum_cfg=SymbCfgFactory(
             layer_cls=inner_cls, layer_kwargs=inner_kwargs, reparam_factory=inner_reparam
         ),
-        prod_cfg=SymbLayerCfg(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
+        prod_cfg=SymbCfgFactory(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
     )
 
     symbolic_circuit_2 = SymbolicTensorizedCircuit(
@@ -92,13 +93,13 @@ def get_two_circuits(
         num_sum_units=num_units_2,
         num_channels=num_channels,
         num_classes=num_classes,
-        input_cfg=SymbLayerCfg(
+        input_cfg=SymbCfgFactory(
             layer_cls=input_cls, layer_kwargs=input_kwargs, reparam_factory=input_reparam
         ),
-        sum_cfg=SymbLayerCfg(
+        sum_cfg=SymbCfgFactory(
             layer_cls=inner_cls, layer_kwargs=inner_kwargs, reparam_factory=inner_reparam
         ),
-        prod_cfg=SymbLayerCfg(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
+        prod_cfg=SymbCfgFactory(layer_cls=inner_cls, layer_kwargs=inner_kwargs),
     )
 
     return (TensorizedCircuit(symbolic_circuit_1), TensorizedCircuit(symbolic_circuit_2))

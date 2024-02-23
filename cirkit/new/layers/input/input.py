@@ -4,7 +4,7 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class InputLayer(Layer):
@@ -44,21 +44,21 @@ class InputLayer(Layer):
     # TODO: enable integ on part of H dim? if yes, also lift assert subset in functional
     @classmethod
     @abstractmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg["InputLayer"]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbCfgFactory["InputLayer"]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
             symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
+            SymbCfgFactory[InputLayer]: The symbolic config for the integral.
         """
 
     @classmethod
     @abstractmethod
     def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> SymbLayerCfg["InputLayer"]:
+    ) -> SymbCfgFactory["InputLayer"]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
         of the given variable in the scope of this layer.
 
@@ -70,6 +70,6 @@ class InputLayer(Layer):
             ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
-                given channel of the given variable.
+            SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
+                the given channel of the given variable.
         """

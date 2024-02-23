@@ -5,7 +5,7 @@ from torch import Tensor
 from cirkit.new.layers.inner.product.product import ProductLayer
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class KroneckerLayer(ProductLayer):
@@ -71,7 +71,7 @@ class KroneckerLayer(ProductLayer):
     @classmethod
     def get_product(
         cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
-    ) -> SymbLayerCfg[Layer]:
+    ) -> SymbCfgFactory[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
         KroneckerLayer can only be multiplied with the same class. However, the signature typing \
@@ -89,7 +89,7 @@ class KroneckerLayer(ProductLayer):
             NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         # TODO: we need permutation. Also, don't forget to add the cls check, see HadamardLayer
