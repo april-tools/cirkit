@@ -3,7 +3,7 @@ from typing import Dict
 from cirkit.new.layers import CategoricalLayer, DenseLayer, HadamardLayer, TuckerLayer
 from cirkit.new.reparams import ExpReparam
 from cirkit.new.symbolic import SymbolicInputLayer, SymbolicProductLayer, SymbolicSumLayer
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory
 from tests.new.symbolic.test_utils import get_simple_rg
 
 # TODO: avoid repetition?
@@ -24,7 +24,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
         input_node0.scope,
         (),
         num_units=num_units,
-        layer_cfg=SymbLayerCfg(
+        layer_cfg=SymbCfgFactory(
             layer_cls=CategoricalLayer, layer_kwargs=input_kwargs, reparam=reparam
         ),
     )
@@ -39,7 +39,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
         input_node1.scope,
         (),
         num_units=num_units,
-        layer_cfg=SymbLayerCfg(
+        layer_cfg=SymbCfgFactory(
             layer_cls=CategoricalLayer, layer_kwargs=input_kwargs, reparam=reparam
         ),
     )
@@ -48,7 +48,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
         partition_node.scope,
         (input_layer0, input_layer1),
         num_units=num_units,
-        layer_cfg=SymbLayerCfg(layer_cls=HadamardLayer),
+        layer_cfg=SymbCfgFactory(layer_cls=HadamardLayer),
     )
     assert (
         repr(prod_layer).splitlines()[0] == f"SymbolicProductLayer@0x{id(prod_layer):x}("
@@ -63,7 +63,7 @@ def test_symbolic_layers_sum_and_prod() -> None:
         region_node.scope,
         (prod_layer,),
         num_units=num_units,
-        layer_cfg=SymbLayerCfg(layer_cls=DenseLayer, layer_kwargs=sum_kwargs, reparam=reparam),
+        layer_cfg=SymbCfgFactory(layer_cls=DenseLayer, layer_kwargs=sum_kwargs, reparam=reparam),
     )
     assert (
         repr(sum_layer).splitlines()[0] == f"SymbolicSumLayer@0x{id(sum_layer):x}("
@@ -87,7 +87,7 @@ def test_symbolic_layers_sum_prod() -> None:
         input_node0.scope,
         (),
         num_units=num_units,
-        layer_cfg=SymbLayerCfg(
+        layer_cfg=SymbCfgFactory(
             layer_cls=CategoricalLayer, layer_kwargs=input_kwargs, reparam=reparam
         ),
     )
@@ -101,7 +101,7 @@ def test_symbolic_layers_sum_prod() -> None:
         input_node1.scope,
         (),
         num_units=num_units,
-        layer_cfg=SymbLayerCfg(
+        layer_cfg=SymbCfgFactory(
             layer_cls=CategoricalLayer, layer_kwargs=input_kwargs, reparam=reparam
         ),
     )
@@ -110,7 +110,7 @@ def test_symbolic_layers_sum_prod() -> None:
         partition_node.scope,
         (input_layer0, input_layer1),
         num_units=num_units**2,
-        layer_cfg=SymbLayerCfg(layer_cls=TuckerLayer),
+        layer_cfg=SymbCfgFactory(layer_cls=TuckerLayer),
     )
     assert (
         repr(prod_layer).splitlines()[0] == f"SymbolicProductLayer@0x{id(prod_layer):x}("
@@ -125,7 +125,7 @@ def test_symbolic_layers_sum_prod() -> None:
         region_node.scope,
         (prod_layer,),
         num_units=num_units,
-        layer_cfg=SymbLayerCfg(layer_cls=TuckerLayer, layer_kwargs=sum_kwargs, reparam=reparam),
+        layer_cfg=SymbCfgFactory(layer_cls=TuckerLayer, layer_kwargs=sum_kwargs, reparam=reparam),
     )
     assert (
         repr(sum_layer).splitlines()[0] == f"SymbolicSumLayer@0x{id(sum_layer):x}("
