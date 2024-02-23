@@ -5,7 +5,7 @@ from torch import Tensor
 from cirkit.new.layers.inner.product.product import ProductLayer
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class HadamardLayer(ProductLayer):
@@ -65,7 +65,7 @@ class HadamardLayer(ProductLayer):
     @classmethod
     def get_product(
         cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
-    ) -> SymbLayerCfg[Layer]:
+    ) -> SymbCfgFactory[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
         HadamardLayer can only be multiplied with the same class. However, the signature typing is \
@@ -81,7 +81,7 @@ class HadamardLayer(ProductLayer):
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         assert (

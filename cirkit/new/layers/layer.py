@@ -7,7 +7,7 @@ from torch import Tensor, nn
 
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils import ComputationSapce
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class Layer(nn.Module, ABC):
@@ -108,7 +108,7 @@ class Layer(nn.Module, ABC):
     @abstractmethod
     def get_product(
         cls, left_symb_cfg: SymbLayerCfg["Layer"], right_symb_cfg: SymbLayerCfg["Layer"]
-    ) -> SymbLayerCfg["Layer"]:
+    ) -> SymbCfgFactory["Layer"]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
         Because layer product (Kronecker of units) is not commutative, here we allow any one of \
@@ -126,6 +126,6 @@ class Layer(nn.Module, ABC):
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """

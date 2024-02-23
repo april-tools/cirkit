@@ -6,7 +6,7 @@ from torch import Tensor, nn
 from cirkit.new.layers.inner.inner import InnerLayer
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import KroneckerReparam
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class SumLayer(InnerLayer):
@@ -26,7 +26,7 @@ class SumLayer(InnerLayer):
     @classmethod
     def get_product(
         cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
-    ) -> SymbLayerCfg[Layer]:
+    ) -> SymbCfgFactory[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
         Subclasses of SumLayer can only be multiplied with the same class. However, the signature \
@@ -42,7 +42,7 @@ class SumLayer(InnerLayer):
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         assert (
@@ -57,7 +57,7 @@ class SumLayer(InnerLayer):
             else None
         )
         # IGNORE: Unavoidable for kwargs.
-        return SymbLayerCfg(
+        return SymbCfgFactory(
             layer_cls=left_symb_cfg.layer_cls,
             layer_kwargs=left_symb_cfg.layer_kwargs,  # type: ignore[misc]
             reparam=reparam,

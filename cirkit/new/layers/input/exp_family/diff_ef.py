@@ -8,7 +8,7 @@ from cirkit.new.layers.input.input import InputLayer
 from cirkit.new.layers.layer import Layer
 from cirkit.new.reparams import Reparameterization
 from cirkit.new.utils import batch_high_order_at
-from cirkit.new.utils.type_aliases import SymbLayerCfg
+from cirkit.new.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class DiffEFLayer(InputLayer):
@@ -65,8 +65,8 @@ class DiffEFLayer(InputLayer):
             reparam=None,
         )
 
-        assert (symbl := ef_cfg.symb_layer) is not None and (
-            ef := symbl.concrete_layer
+        assert (
+            ef := ef_cfg.symb_layer.concrete_layer
         ) is not None, (
             "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
         )
@@ -117,7 +117,7 @@ class DiffEFLayer(InputLayer):
         )
 
     @classmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbLayerCfg[InputLayer]:
+    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbCfgFactory[InputLayer]:
         """Get the symbolic config to construct the definite integral of this layer.
 
         Args:
@@ -127,14 +127,14 @@ class DiffEFLayer(InputLayer):
             NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the integral.
+            SymbCfgFactory[InputLayer]: The symbolic config for the integral.
         """
         raise NotImplementedError("The integral of DiffEFLayer is not yet defined.")
 
     @classmethod
     def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> SymbLayerCfg[InputLayer]:
+    ) -> SymbCfgFactory[InputLayer]:
         """Get the symbolic config to construct the partial differential w.r.t. the given channel \
         of the given variable in the scope of this layer.
 
@@ -149,8 +149,8 @@ class DiffEFLayer(InputLayer):
             NotImplementedError: When "not-yet-implemented feature" is invoked.
 
         Returns:
-            SymbLayerCfg[InputLayer]: The symbolic config for the partial differential w.r.t. the \
-                given channel of the given variable.
+            SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
+                the given channel of the given variable.
         """
         # TODO: duplicate code?
         assert order >= 0, "The order of differential must be non-negative."
@@ -164,7 +164,7 @@ class DiffEFLayer(InputLayer):
     @classmethod
     def get_product(
         cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
-    ) -> SymbLayerCfg[Layer]:
+    ) -> SymbCfgFactory[Layer]:
         """Get the symbolic config to construct the product of this layer and the other layer.
 
         InputLayer generally can be multiplied with any InputLayer, yet specific combinations may \
@@ -176,7 +176,7 @@ class DiffEFLayer(InputLayer):
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
 
         Returns:
-            SymbLayerCfg[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
+            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
         # TODO: Cases:
