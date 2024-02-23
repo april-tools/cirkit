@@ -69,6 +69,11 @@ class RegionGraphJson(TypedDict):
 ReparamFactory: TypeAlias = Callable[[], Optional["Reparameterization"]]
 
 
+# NOTE: The following related to symbolic config. Although there are definitions on actual behaviour
+#       aside from type definitions, we put them here because they are mainly for type def, and are
+#       too widely used that may cause cyclic import if put elsewhere.
+
+
 # For subclass compatibility, covariance is needed.
 LayerT_co = TypeVar("LayerT_co", bound="Layer", covariant=True)
 
@@ -76,19 +81,16 @@ LayerT_co = TypeVar("LayerT_co", bound="Layer", covariant=True)
 # NOTE: We add frozen=True because this should be immutable. Also covariant TypeVar should only
 #       appear in immutable generic classes.
 # FUTURE: kw_only=True in 3.10
-# IGNORE: SymbLayerCfg contains Any (due to kwargs).
+# IGNORE: SymbCfgFactory contains Any.
 @dataclass(frozen=True)  # type: ignore[misc]
-class SymbLayerCfg(Generic[LayerT_co]):  # type: ignore[misc]
-    """The config of a layer in symbolic form, which is part of SymbolicLayer constructor that \
-    saves the info of the corresponding Layer.
+class SymbCfgFactory(Generic[LayerT_co]):  # type: ignore[misc]
+    """The config to construct a symbolic layer, possibly including a factory.
 
-    The reparam can be provided as a factory function, for use as a configuration on how to \
-    construct a reparam instance when we want a different instance each time. But in a SymbLayer, \
-    an instantiated reparam should be used, so that the same instance can be reused if needed.
-
-    When a SymbolicLayer is constructed based on a cfg, it saves a **copy** of the cfg, and saves \
-    a reference to self (the SymbL). This cfg should be held by only this one SymbL so that we can \
-    find the layer corresponding to the cfg.
+    This is part of the SymbolicLayer constructor and provides the basic specification of how a \
+    SymbL is tensorized, by referencing the corresponding Layer class. It also includes a \
+    Reparameterization object which can be useful to parameter sharing. Optionally, a \
+    ReparamFactory can be provided, which will take precedence, to be used for constructing new \
+    reparams instead of reusing.
 
     We make this class generic so that it can be specific on a Layer subclass.
     """
@@ -98,4 +100,41 @@ class SymbLayerCfg(Generic[LayerT_co]):  # type: ignore[misc]
     layer_kwargs: Mapping[str, Any] = field(default_factory=dict)  # type: ignore[misc]
     reparam: Optional["Reparameterization"] = None
     reparam_factory: Optional[ReparamFactory] = None
-    symb_layer: Optional["GenericSymbolicLayer[LayerT_co]"] = None
+
+    def instantiate(
+        self, symb_layer: "GenericSymbolicLayer[LayerT_co]"
+    ) -> "SymbLayerCfg[LayerT_co]":
+        """Instantiate a SymbLayerCfg for a SymbolicLayer, optionally also instantiate the reparam \
+        from factory.
+
+        Args:
+            symb_layer (GenericSymbolicLayer[LayerT_co]): The SymbL for the instantiated config.
+
+        Returns:
+            SymbLayerCfg[LayerT_co]: The config for the SymbL.
+        """
+        # IGNORE: Unavoidable for kwargs.
+        return SymbLayerCfg(
+            layer_cls=self.layer_cls,
+            layer_kwargs=self.layer_kwargs,  # type: ignore[misc]
+            reparam=self.reparam_factory() if self.reparam_factory is not None else self.reparam,
+            symb_layer=symb_layer,
+        )
+
+
+# FUTURE: kw_only=True in 3.10
+# IGNORE: SymbLayerCfg contains Any.
+@dataclass(frozen=True)  # type: ignore[misc]
+class SymbLayerCfg(SymbCfgFactory[LayerT_co]):  # type: ignore[misc]
+    """The config for a symbolic layer.
+
+    When a SymbolicLayer is constructed based on a config (factory), it saves an instantiated \
+    version of the config, which keeps a reference to self (the SymbL). This layer config should \
+    be held by only this one SymbL, so that we can track the SymbL corresponding to the config.
+    """
+
+    reparam_factory: None = None
+    # IGNORE: This is expected to be kw_only (with future 3.10).
+    symb_layer: "GenericSymbolicLayer[LayerT_co]" = None  # type: ignore[assignment]
+
+    # NOTE: Inherited instantiate() can provide "copy" with symb_layer replaced.
