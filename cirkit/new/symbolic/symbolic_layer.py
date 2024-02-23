@@ -52,9 +52,9 @@ class GenericSymbolicLayer(ABC, Generic[LayerT_co]):
 
         self.arity = len(self.inputs)
         self.num_units = num_units
-        # A SymbLayer should hold its own instance of SymbLayerCfg, so the cfg passed in is always
-        # copied; it should bind to a reparam instance but not just factory, to enable reusing the
-        # same reparam in transforms.
+        # A SymbLayer should hold its own instance of SymbLayerCfg, so the config passed in is
+        # always copied; it should bind to a reparam instance but not just factory, to enable
+        # reusing the same reparam in transforms.
         # IGNORE: Unavoidable for kwargs.
         # TODO: better way to construct SymbLayerCfg than untyped replace?
         #       reparam_factory only called here

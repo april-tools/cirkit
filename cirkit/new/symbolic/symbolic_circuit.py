@@ -41,7 +41,7 @@ class SymbolicTensorizedCircuit:
         """Construct the symbolic circuit.
 
         There are two ways to construct:
-            - Provide the number of units and cfgs to construct symbolic layers from the RG;
+            - Provide the number of units and configs to construct symbolic layers from the RG;
             - Provide directly the symbolic layers (must be correctly ordered).
 
         However in both cases the caller must provide:

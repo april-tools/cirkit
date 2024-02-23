@@ -60,18 +60,18 @@ class ProdEFLayer(ExpFamilyLayer):
         assert (symbl1 := ef1_cfg.symb_layer) is not None and (
             ef1 := symbl1.concrete_layer
         ) is not None, (
-            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
         )
         assert (symbl2 := ef2_cfg.symb_layer) is not None and (
             ef2 := symbl2.concrete_layer
         ) is not None, (
-            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
         )
 
         self.suff_split_point = math.prod(ef1.suff_stats_shape)
         self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)
 
-        # NOTE: We need a reparam to be provided in SymbCfg and registered for EFLayer.
+        # NOTE: We need a reparam to be provided in SymbLayerCfg and registered for EFLayer.
         super().__init__(
             num_input_units=num_input_units,
             num_output_units=num_output_units,
@@ -194,12 +194,12 @@ class ProdEFLayer(ExpFamilyLayer):
             assert (symbl_all := symb_cfg.symb_layer) is not None and (
                 layer_all := symbl_all.concrete_layer
             ) is not None, (
-                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+                "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
             )
             assert (symbl_1 := layers_cfgs[0].symb_layer) is not None and (
                 layer_1 := symbl_1.concrete_layer
             ) is not None, (
-                "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+                "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
             )
             pseudo_inputs = torch.empty(layer_1.arity, layer_1.num_input_units)  # Using *B = ().
 

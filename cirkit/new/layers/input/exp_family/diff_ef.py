@@ -68,7 +68,7 @@ class DiffEFLayer(InputLayer):
         assert (symbl := ef_cfg.symb_layer) is not None and (
             ef := symbl.concrete_layer
         ) is not None, (
-            "There should be a concrete Layer corresponding to the SymbCfg at this stage."
+            "There should be a concrete Layer corresponding to the SymbLayerCfg at this stage."
         )
         self.ef = ef
 
