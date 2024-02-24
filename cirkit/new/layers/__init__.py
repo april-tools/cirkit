@@ -15,4 +15,5 @@ from .input import InputLayer as InputLayer
 from .input import NormalLayer as NormalLayer
 from .input import ParameterizedConstantLayer as ParameterizedConstantLayer
 from .input import ProdEFLayer as ProdEFLayer
+from .input import UnivariateInputLayer as UnivariateInputLayer
 from .layer import Layer as Layer
