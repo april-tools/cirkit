@@ -75,7 +75,7 @@ class CategoricalLayer(ExpFamilyLayer):
         Returns:
             Tensor: The natural parameters eta, shape (H, *B).
         """
-        return torch.zeros(()).to(x).expand(x.shape[:-1])
+        return x.new_zeros(()).expand(x.shape[:-1])
 
     def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
@@ -89,7 +89,7 @@ class CategoricalLayer(ExpFamilyLayer):
             Tensor: The log partition function A, shape (H, Ko).
         """
         if eta_normed:
-            return torch.zeros(()).to(eta).expand(eta.shape[:2])
+            return eta.new_zeros(()).expand(eta.shape[:2])
 
         # If eta is not normalized, we need this to make sure the output of EF is normalized.
         # shape (H, Ko, Ki, cat) -> (H, Ko, Ki) -> (H, Ko).

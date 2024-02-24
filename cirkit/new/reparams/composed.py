@@ -145,7 +145,7 @@ class ComposedReparam(Reparameterization, Generic[Unpack[Ts]]):
 
         # Construct a tmp Tensor -> initialize it -> transform by inv_func -> fill into x.
         self.reparams[0].initialize(
-            lambda x: x.copy_(self.inv_func(initializer_(torch.empty(self.shape).to(x))))
+            lambda x: x.copy_(self.inv_func(initializer_(x.new_empty(self.shape))))
         )
 
     def forward(self) -> Tensor:

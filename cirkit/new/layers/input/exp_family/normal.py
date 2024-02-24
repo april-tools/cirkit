@@ -68,7 +68,7 @@ class NormalLayer(ExpFamilyLayer):
         Returns:
             Tensor: The natural parameters eta, shape (H, *B).
         """
-        return torch.tensor(self._log_h).to(x).expand(x.shape[:-1])
+        return x.new_full((), self._log_h).expand(x.shape[:-1])
 
     def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.

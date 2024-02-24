@@ -1,7 +1,6 @@
 from typing import Optional
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
-import torch
 from torch import Tensor
 
 from cirkit.new.layers.input.input import InputLayer
@@ -62,10 +61,8 @@ class ConstantLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, Ko).
         """
-        return (
-            self.comp_space.from_linear(torch.tensor(self.const_value))
-            .to(x)
-            .expand(*x.shape[1:-1], self.num_output_units)
+        return self.comp_space.from_linear(x.new_full((), self.const_value)).expand(
+            *x.shape[1:-1], self.num_output_units
         )
 
     @classmethod
