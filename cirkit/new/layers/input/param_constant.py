@@ -95,9 +95,7 @@ class ParameterizedConstantLayer(InputLayer):
             SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
                 the given channel of the given variable.
         """
-        assert order >= 0, "The order of differential must be non-negative."
-        if not order:
-            return symb_cfg
+        assert order > 0, "The order of differentiation must be positive."
 
         # IGNORE: Unavoidable for kwargs.
         return SymbCfgFactory(

@@ -67,7 +67,7 @@ def _bw_2nd(func: Callable[[Tensor], Tensor], x: Tensor) -> Tensor:
 # NOTE: We only test batch_high_order_at() here and it should be enough to guarantee batch_diff_at.
 
 
-@pytest.mark.parametrize("order", [0, 1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 3])
 def test_batch_diff_orig(order: int) -> None:
     x = torch.rand(B, N, M, requires_grad=True)
     func_x = batched_func(x)  # shape (B, M, M).

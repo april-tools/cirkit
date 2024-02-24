@@ -52,7 +52,7 @@ class DiffEFLayer(InputLayer):
                 scope but not global variable id.
             ch_idx (int): The channel of variable to diffrentiate.
         """
-        assert (  # TODO: however order==0 actually also works here.
+        assert (
             order > 0
         ), "The order must be positive for DiffEFLayer (use ExpFamilyLayer for order=0)."
         assert (
@@ -131,7 +131,9 @@ class DiffEFLayer(InputLayer):
         """
         raise NotImplementedError("The integral of DiffEFLayer is not yet defined.")
 
+    # TODO: return?
     @classmethod
+    # pylint: disable-next=redundant-returns-doc
     def get_partial(
         cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
     ) -> SymbCfgFactory[InputLayer]:
@@ -152,10 +154,7 @@ class DiffEFLayer(InputLayer):
             SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
                 the given channel of the given variable.
         """
-        # TODO: duplicate code?
-        assert order >= 0, "The order of differential must be non-negative."
-        if not order:
-            return symb_cfg
+        assert order > 0, "The order of differentiation must be positive."
 
         # TODO: for same var_idx and ch_idx, can reuse the same symb_cfg with only order increased.
 

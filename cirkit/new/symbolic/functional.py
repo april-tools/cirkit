@@ -99,8 +99,7 @@ def differentiate(
     if not self.is_smooth:
         raise NotImplementedError("Differentiation of non-smooth circuit is not yet implemented.")
 
-    assert order >= 0, "The order of differential must be non-negative."
-    # TODO: does the following work when order=0? tests?
+    assert order > 0, "The order of differentiation must be non-negative."
 
     # Map between two SymbC. The layer order is preserved by dict. All the diff layers of one layer
     # are adjacent and in the order as the list.
