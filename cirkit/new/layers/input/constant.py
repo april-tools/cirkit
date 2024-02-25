@@ -131,8 +131,6 @@ class ConstantLayer(InputLayer):
         be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
         will not be captured by static checkers but only during runtime.
 
-        The product with the ConstantLayer is still ConstantLayer, with product of const_value.
-
         Args:
             left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
@@ -141,6 +139,11 @@ class ConstantLayer(InputLayer):
             SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
+        assert issubclass(left_symb_cfg.layer_cls, cls) or issubclass(
+            right_symb_cfg.layer_cls, cls
+        ), "At least one of the inputs to InputLayer.get_product must be of self class."
+
+        # The product with ConstantLayer is still ConstantLayer.
         if issubclass(left_symb_cfg.layer_cls, ConstantLayer) and issubclass(
             right_symb_cfg.layer_cls, ConstantLayer
         ):

@@ -219,8 +219,6 @@ class ExpFamilyLayer(InputLayer):
         be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
         will not be captured by static checkers but only during runtime.
 
-        The product with the ExpFamilyLayer is ProdEFLayer, a specifically designed subclass.
-
         Args:
             left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
@@ -229,10 +227,16 @@ class ExpFamilyLayer(InputLayer):
             SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
+        # TODO: duplicated check?
+        assert issubclass(left_symb_cfg.layer_cls, cls) or issubclass(
+            right_symb_cfg.layer_cls, cls
+        ), "At least one of the inputs to InputLayer.get_product must be of self class."
+
         # DISABLE: We must import here to avoid cyclic import.
         # pylint: disable-next=import-outside-toplevel,cyclic-import
         from cirkit.new.layers.input.exp_family.prod_ef import ProdEFLayer
 
+        # The product with ExpFamilyLayer is ProdEFLayer.
         if issubclass(left_symb_cfg.layer_cls, ExpFamilyLayer) and issubclass(
             right_symb_cfg.layer_cls, ExpFamilyLayer
         ):

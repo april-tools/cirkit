@@ -87,6 +87,6 @@ class HadamardLayer(ProductLayer):
         assert (
             issubclass(left_symb_cfg.layer_cls, cls)
             and left_symb_cfg.layer_cls == right_symb_cfg.layer_cls
-        ), "Both inputs of HadamardLayer.get_product must be of self class."
+        ), "Both inputs to HadamardLayer.get_product must be the same and of self class."
 
         return left_symb_cfg  # Just reuse the same config.
