@@ -167,7 +167,7 @@ class LinearReparam(UnaryReparam):
             func = lambda x: a * x
             inv_func = lambda x: (1 / a) * x
         else:  # a != 1 and b != 0
-            func = lambda x: a * x + b  # TODO: possible FMA?
+            func = lambda x: a * x + b  # TODO: possible FMA? addcmul?
             inv_func = lambda x: (1 / a) * (x - b)
         # pylint: enable=use-implicit-booleaness-not-comparison-to-zero
         # pylint: enable=unnecessary-lambda-assignment

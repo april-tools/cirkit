@@ -72,6 +72,7 @@ class Layer(nn.Module, ABC):
             self_params := getattr(self, "params", None), Reparameterization  # type: ignore[misc]
         ):
             return
+
         self_params.materialize(shape, dim=dim, initializer_=self._default_initializer_)
 
     @torch.no_grad()
