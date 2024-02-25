@@ -16,7 +16,7 @@ if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to 
 
 
 def integrate(
-    self: "SymbolicTensorizedCircuit", *, scope: Optional[Iterable[int]] = None
+    self: "SymbolicTensorizedCircuit", /, *, scope: Optional[Iterable[int]] = None
 ) -> "SymbolicTensorizedCircuit":
     """Integrate the circuit over the variables specified by the given scope.
 
@@ -73,7 +73,7 @@ class _ScopeVarAndSymbLayer(NamedTuple):
 
 
 def differentiate(
-    self: "SymbolicTensorizedCircuit", *, order: int = 1
+    self: "SymbolicTensorizedCircuit", /, *, order: int = 1
 ) -> "SymbolicTensorizedCircuit":
     """Differentiate the circuit w.r.t. each variable (i.e. total differentiate) to the given order.
 
@@ -274,7 +274,7 @@ def _multiply_layer(
 
 
 def multiply(
-    self: "SymbolicTensorizedCircuit", other: "SymbolicTensorizedCircuit"
+    self: "SymbolicTensorizedCircuit", other: "SymbolicTensorizedCircuit", /
 ) -> "SymbolicTensorizedCircuit":
     """Multiply two symbolic circuits over the intersection of their scopes.
 

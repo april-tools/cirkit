@@ -5,7 +5,7 @@ if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to 
 
 
 def integrate(
-    self: "TensorizedCircuit", *, scope: Optional[Iterable[int]] = None
+    self: "TensorizedCircuit", /, *, scope: Optional[Iterable[int]] = None
 ) -> "TensorizedCircuit":
     """Integrate the circuit over the variables specified by the given scope.
 
@@ -20,7 +20,7 @@ def integrate(
     return type(self)(self.symb_circuit.integrate(scope=scope))
 
 
-def differentiate(self: "TensorizedCircuit", *, order: int = 1) -> "TensorizedCircuit":
+def differentiate(self: "TensorizedCircuit", /, *, order: int = 1) -> "TensorizedCircuit":
     """Differentiate the circuit w.r.t. each variable (i.e. total differentiate) to the given order.
 
     NOTE: Each output layer will be expanded to (layer.num_vars * num_channels + 1) output layers \
@@ -40,7 +40,7 @@ def differentiate(self: "TensorizedCircuit", *, order: int = 1) -> "TensorizedCi
     return type(self)(self.symb_circuit.differentiate(order=order))
 
 
-def multiply(self: "TensorizedCircuit", other: "TensorizedCircuit") -> "TensorizedCircuit":
+def multiply(self: "TensorizedCircuit", other: "TensorizedCircuit", /) -> "TensorizedCircuit":
     """Multiply two circuits over the intersection of their scopes.
 
     Args:
