@@ -58,7 +58,7 @@ class ParameterizedConstantLayer(InputLayer):
             Tensor: The output of this layer, shape (*B, Ko).
         """
         # TODO: comp_space?
-        return self.params().expand(*x.shape[1:-1], self.num_output_units)
+        return self.params().expand(*x.shape[1:-1], -1)
 
     @classmethod
     def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> Never:

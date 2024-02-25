@@ -107,14 +107,14 @@ class ExpFamilyLayer(InputLayer):
         )
 
         log_h = self.log_base_measure(x).unsqueeze(dim=-1)  # shape (H, *B) -> (H, *B, 1).
-        # shape (H, Ko) -> (H, *1, Ko).
-        log_part = torch.unflatten(
-            self.log_partition(eta, eta_normed=isinstance(self.params, NormalizedReparam)),
-            dim=0,
-            sizes=(x.shape[0],) + (1,) * (x.ndim - 2),
+        # shape (H, Ko) -> (*B, H, Ko) -> (H, *B, Ko).
+        log_part = (
+            self.log_partition(eta, eta_normed=isinstance(self.params, NormalizedReparam))
+            .expand(*x.shape[1:-1], -1, -1)
+            .movedim(-2, 0)
         )
 
-        # shape (H, *B, Ko) + (H, *B, 1) + (H, *1, Ko) -> (H, *B, Ko) -> (*B, Ko).
+        # shape (H, *B, Ko) + (H, *B, 1) + (H, *B, Ko) -> (H, *B, Ko) -> (*B, Ko).
         return torch.sum(eta_suff + log_h - log_part, dim=0)
 
     @abstractmethod
