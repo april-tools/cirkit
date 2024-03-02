@@ -42,9 +42,7 @@ class MixingLayer(SumLayer):
         )
 
         self.params = reparam
-        self.params.materialize(
-            (num_output_units, arity), dim=1, initializer_=self._default_initializer_
-        )
+        self.materialize_params((num_output_units, arity), dim=1)
 
     @classmethod
     def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> Literal[0]:
@@ -68,10 +66,10 @@ class MixingLayer(SumLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
         # shape (H, *B, K) -> (*B, K).
         return self.comp_space.sum(self._forward_linear, x, dim=0, keepdim=False)

@@ -68,12 +68,12 @@ class CPLayer(SumProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
-        # shape (H, *B, K) -> (*B, K) -> (H, *B, K) -> (*B, K).
+        # shape (H, *B, Ki) -> (*B, Ki) -> (H, *B, Ki) -> (*B, Ko).
         return self.sum_layer(self.prod_layer(x).unsqueeze(dim=0))
 
     # NOTE: get_product is inherited from SumLayer. The product between CPLayer leads to the

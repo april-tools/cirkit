@@ -84,13 +84,13 @@ def batch_high_order_at(
         func (Callable[[Tensor], Tensor]): The batched Tensor function.
         x (Tensor): The input to func.
         indices (List[Union[int, slice, ellipsis]]): The indices to select the element in x.
-        order (int): The order of differential.
+        order (int): The order of differentiation.
 
     Returns:
         Tuple[Tensor, ...]: The differentials from 0-order (original output) to the given order, \
             length order+1, each one's shape same as func output.
     """
-    assert order >= 0, "The order of differential must be non-negative."
+    assert order > 0, "The order of differentiation must be positive."
 
     # ANNOTATE: The return value is allowed to be tuple of any length.
     diff_func: Callable[[Tensor], Tuple[Tensor, ...]] = lambda x: (func(x),)

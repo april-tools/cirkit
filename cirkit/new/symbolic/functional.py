@@ -16,7 +16,7 @@ if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to 
 
 
 def integrate(
-    self: "SymbolicTensorizedCircuit", *, scope: Optional[Iterable[int]] = None
+    self: "SymbolicTensorizedCircuit", /, *, scope: Optional[Iterable[int]] = None
 ) -> "SymbolicTensorizedCircuit":
     """Integrate the circuit over the variables specified by the given scope.
 
@@ -73,7 +73,7 @@ class _ScopeVarAndSymbLayer(NamedTuple):
 
 
 def differentiate(
-    self: "SymbolicTensorizedCircuit", *, order: int = 1
+    self: "SymbolicTensorizedCircuit", /, *, order: int = 1
 ) -> "SymbolicTensorizedCircuit":
     """Differentiate the circuit w.r.t. each variable (i.e. total differentiate) to the given order.
 
@@ -99,8 +99,7 @@ def differentiate(
     if not self.is_smooth:
         raise NotImplementedError("Differentiation of non-smooth circuit is not yet implemented.")
 
-    assert order >= 0, "The order of differential must be non-negative."
-    # TODO: does the following work when order=0? tests?
+    assert order > 0, "The order of differentiation must be non-negative."
 
     # Map between two SymbC. The layer order is preserved by dict. All the diff layers of one layer
     # are adjacent and in the order as the list.
@@ -274,7 +273,7 @@ def _multiply_layer(
 
 
 def multiply(
-    self: "SymbolicTensorizedCircuit", other: "SymbolicTensorizedCircuit"
+    self: "SymbolicTensorizedCircuit", other: "SymbolicTensorizedCircuit", /
 ) -> "SymbolicTensorizedCircuit":
     """Multiply two symbolic circuits over the intersection of their scopes.
 

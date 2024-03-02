@@ -65,8 +65,7 @@ class ExpFamilyLayer(InputLayer):
         )
 
         self.params = reparam
-        if self.params.materialize((arity, num_output_units, *self.suff_stats_shape), dim=-1):
-            self.reset_parameters()  # Only reset if newly materialized.
+        self.materialize_params((arity, num_output_units, *self.suff_stats_shape), dim=-1)
 
     @property
     def _default_initializer_(self) -> Callable[[Tensor], Tensor]:
@@ -80,10 +79,10 @@ class ExpFamilyLayer(InputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
         return self.comp_space.from_log(self.log_prob(x))
 
@@ -91,16 +90,16 @@ class ExpFamilyLayer(InputLayer):
         """Calculate log-probability log(p(x)) from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The log-prob log_p, shape (*B, K).
+            Tensor: The log-prob log_p, shape (*B, Ko).
         """
-        eta = self.params()  # shape (H, K, *S).
+        eta = self.params()  # shape (H, Ko, *S).
         suff_stats = self.sufficient_stats(x)  # shape (H, *B, *S).
 
         # We need to flatten because we cannot have two ... in einsum for suff_stats as (H, *B, *S).
-        # shape (H, K, S), (H, *B, S) -> (H, *B, K).
+        # shape (H, Ko, S), (H, *B, S) -> (H, *B, Ko).
         eta_suff = torch.einsum(
             "hks,h...s->h...k",
             eta.flatten(start_dim=-(eta.ndim - 2)),
@@ -108,14 +107,14 @@ class ExpFamilyLayer(InputLayer):
         )
 
         log_h = self.log_base_measure(x).unsqueeze(dim=-1)  # shape (H, *B) -> (H, *B, 1).
-        # shape (H, K) -> (H, *1, K).
-        log_part = torch.unflatten(
-            self.log_partition(eta, eta_normed=isinstance(self.params, NormalizedReparam)),
-            dim=0,
-            sizes=(x.shape[0],) + (1,) * (x.ndim - 2),
+        # shape (H, Ko) -> (*B, H, Ko) -> (H, *B, Ko).
+        log_part = (
+            self.log_partition(eta, eta_normed=isinstance(self.params, NormalizedReparam))
+            .expand(*x.shape[1:-1], -1, -1)
+            .movedim(-2, 0)
         )
 
-        # shape (H, *B, K) + (H, *B, 1) + (H, *1, K) -> (H, *B, K) -> (*B, K).
+        # shape (H, *B, Ko) + (H, *B, 1) + (H, *B, Ko) -> (H, *B, Ko) -> (*B, Ko).
         return torch.sum(eta_suff + log_h - log_part, dim=0)
 
     @abstractmethod
@@ -123,7 +122,7 @@ class ExpFamilyLayer(InputLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The sufficient statistics T, shape (H, *B, *S).
@@ -134,7 +133,7 @@ class ExpFamilyLayer(InputLayer):
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The natural parameters eta, shape (H, *B).
@@ -145,12 +144,12 @@ class ExpFamilyLayer(InputLayer):
         """Calculate log partition function A from natural parameters eta.
 
         Args:
-            eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta (Tensor): The natural parameters eta, shape (H, Ko, *S).
             eta_normed (bool, optional): Whether eta is produced by a NormalizedReparam. If True, \
                 implementations may save some computation. Defaults to False.
 
         Returns:
-            Tensor: The log partition function A, shape (H, K).
+            Tensor: The log partition function A, shape (H, Ko).
         """
 
     @classmethod
@@ -190,9 +189,7 @@ class ExpFamilyLayer(InputLayer):
             SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
                 the given channel of the given variable.
         """
-        assert order >= 0, "The order of differential must be non-negative."
-        if not order:
-            return symb_cfg
+        assert order > 0, "The order of differentiation must be positive."
 
         # TODO: pylint bug? should not raise cyclic-import?
         # DISABLE: We must import here to avoid cyclic import.
@@ -220,8 +217,6 @@ class ExpFamilyLayer(InputLayer):
         be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
         will not be captured by static checkers but only during runtime.
 
-        The product with the ExpFamilyLayer is ProdEFLayer, a specifically designed subclass.
-
         Args:
             left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
@@ -230,10 +225,16 @@ class ExpFamilyLayer(InputLayer):
             SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
+        # TODO: duplicated check?
+        assert issubclass(left_symb_cfg.layer_cls, cls) or issubclass(
+            right_symb_cfg.layer_cls, cls
+        ), "At least one of the inputs to InputLayer.get_product must be of self class."
+
         # DISABLE: We must import here to avoid cyclic import.
         # pylint: disable-next=import-outside-toplevel,cyclic-import
         from cirkit.new.layers.input.exp_family.prod_ef import ProdEFLayer
 
+        # The product with ExpFamilyLayer is ProdEFLayer.
         if issubclass(left_symb_cfg.layer_cls, ExpFamilyLayer) and issubclass(
             right_symb_cfg.layer_cls, ExpFamilyLayer
         ):

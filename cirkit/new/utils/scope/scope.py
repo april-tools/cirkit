@@ -275,7 +275,7 @@ class Scope(Collection[int], Hashable):
         Returns:
             bool: Whether self == other.
         """
-        return tuple(self) == tuple(other) if isinstance(other, Scope) else False
+        return isinstance(other, Scope) and tuple(self) == tuple(other)
 
     # __ne__ automatically delegates to __eq__.
 

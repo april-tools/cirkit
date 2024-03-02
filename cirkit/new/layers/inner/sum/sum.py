@@ -48,7 +48,7 @@ class SumLayer(InnerLayer):
         assert (
             issubclass(left_symb_cfg.layer_cls, cls)
             and left_symb_cfg.layer_cls == right_symb_cfg.layer_cls
-        ), "Both inputs of SumLayer.get_product must be of self class."
+        ), "Both inputs to SumLayer.get_product must be the same and of self class."
 
         # SumLayer may also be SumProdLayer, and we use the existence of reparam to determine.
         reparam = (

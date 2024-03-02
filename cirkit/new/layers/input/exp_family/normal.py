@@ -51,40 +51,40 @@ class NormalLayer(ExpFamilyLayer):
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
         # TODO: torch __pow__ issue
-        return torch.stack((x, cast(Tensor, x**2)), dim=-2)  # shape (H, *B, 2, K).
+        return torch.stack((x, cast(Tensor, x**2)), dim=-2)  # shape (H, *B, 2, Ki).
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (H, *B, K).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
             Tensor: The natural parameters eta, shape (H, *B).
         """
-        return torch.tensor(self._log_h).to(x).expand(x.shape[:-1])
+        return x.new_full((), self._log_h).expand(x.shape[:-1])
 
     def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
-            eta (Tensor): The natural parameters eta, shape (H, K, *S).
+            eta (Tensor): The natural parameters eta, shape (H, Ko, *S).
             eta_normed (bool, optional): Ignored. This layer uses a special reparam for eta. \
                 Defaults to False.
 
         Returns:
-            Tensor: The log partition function A, shape (H, K).
+            Tensor: The log partition function A, shape (H, Ko).
         """
-        eta1 = eta[..., 0, :]  # shape (H, K, Ki).
-        eta2 = eta[..., 1, :]  # shape (H, K, Ki).
+        eta1 = eta[..., 0, :]  # shape (H, Ko, Ki).
+        eta2 = eta[..., 1, :]  # shape (H, Ko, Ki).
         # TODO: torch __pow__ issue
-        # shape (H, K, Ki) -> (H, K).
+        # shape (H, Ko, Ki) -> (H, Ko).
         return torch.sum(
             -0.25 * cast(Tensor, eta1**2) / eta2 - 0.5 * torch.log(-2 * eta2), dim=-1
         )

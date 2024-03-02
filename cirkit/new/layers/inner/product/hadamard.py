@@ -55,10 +55,10 @@ class HadamardLayer(ProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
         return self.comp_space.prod(x, dim=0, keepdim=False)  # shape (H, *B, K) -> (*B, K).
 
@@ -87,6 +87,6 @@ class HadamardLayer(ProductLayer):
         assert (
             issubclass(left_symb_cfg.layer_cls, cls)
             and left_symb_cfg.layer_cls == right_symb_cfg.layer_cls
-        ), "Both inputs of HadamardLayer.get_product must be of self class."
+        ), "Both inputs to HadamardLayer.get_product must be the same and of self class."
 
         return left_symb_cfg  # Just reuse the same config.

@@ -38,7 +38,7 @@ class ParameterizedConstantLayer(InputLayer):
         )
 
         self.params = reparam
-        self.params.materialize((num_output_units,), dim=())
+        self.materialize_params((num_output_units,), dim=())
 
     @property
     def _default_initializer_(self) -> None:
@@ -52,13 +52,13 @@ class ParameterizedConstantLayer(InputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
         # TODO: comp_space?
-        return self.params().expand(*x.shape[1:-1], self.num_output_units)
+        return self.params().expand(*x.shape[1:-1], -1)
 
     @classmethod
     def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> Never:
@@ -95,9 +95,7 @@ class ParameterizedConstantLayer(InputLayer):
             SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
                 the given channel of the given variable.
         """
-        assert order >= 0, "The order of differential must be non-negative."
-        if not order:
-            return symb_cfg
+        assert order > 0, "The order of differentiation must be positive."
 
         # IGNORE: Unavoidable for kwargs.
         return SymbCfgFactory(

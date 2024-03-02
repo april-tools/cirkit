@@ -45,7 +45,7 @@ class EFNormalReparam(UnaryReparam):
         # shape (..., :).
         var = torch.sigmoid(x[..., 1, :]) * (self.max_var - self.min_var) + self.min_var
         # shape (..., 2, :).
-        param = torch.stack((mu, torch.tensor(-0.5).to(mu).expand_as(mu)), dim=-2)
+        param = torch.stack((mu, mu.new_full((), -0.5).expand_as(mu)), dim=-2)
         return param / var.unsqueeze(dim=-2)  # shape (..., 2, :).
 
     def materialize(

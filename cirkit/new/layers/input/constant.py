@@ -1,7 +1,6 @@
 from typing import Optional
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
-import torch
 from torch import Tensor
 
 from cirkit.new.layers.input.input import InputLayer
@@ -57,15 +56,13 @@ class ConstantLayer(InputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
-        return (
-            self.comp_space.from_linear(torch.tensor(self.const_value))
-            .to(x)
-            .expand(*x.shape[1:-1], self.num_output_units)
+        return self.comp_space.from_linear(x.new_full((), self.const_value)).expand(
+            *x.shape[1:-1], self.num_output_units
         )
 
     @classmethod
@@ -115,9 +112,7 @@ class ConstantLayer(InputLayer):
             SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
                 the given channel of the given variable.
         """
-        assert order >= 0, "The order of differential must be non-negative."
-        if not order:
-            return symb_cfg
+        assert order > 0, "The order of differentiation must be positive."
 
         # IGNORE: Unavoidable for kwargs.
         return SymbCfgFactory(
@@ -134,8 +129,6 @@ class ConstantLayer(InputLayer):
         be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
         will not be captured by static checkers but only during runtime.
 
-        The product with the ConstantLayer is still ConstantLayer, with product of const_value.
-
         Args:
             left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
             right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
@@ -144,6 +137,11 @@ class ConstantLayer(InputLayer):
             SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
                 NotImplemented may also be returned, which indicates the reflection should be tried.
         """
+        assert issubclass(left_symb_cfg.layer_cls, cls) or issubclass(
+            right_symb_cfg.layer_cls, cls
+        ), "At least one of the inputs to InputLayer.get_product must be of self class."
+
+        # The product with ConstantLayer is still ConstantLayer.
         if issubclass(left_symb_cfg.layer_cls, ConstantLayer) and issubclass(
             right_symb_cfg.layer_cls, ConstantLayer
         ):

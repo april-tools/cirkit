@@ -29,7 +29,7 @@ def _bw_1st(func: Callable[[Tensor], Tensor], x: Tensor) -> Tensor:
     out_shape = output.shape
     output = output.view(-1)
 
-    diff = torch.zeros(output.nelement(), *x.shape).to(x)
+    diff = x.new_zeros(output.nelement(), *x.shape)
 
     for i in range(output.nelement()):
         diff[i] = torch.autograd.grad(output[i], x, create_graph=True)[0]
@@ -51,7 +51,7 @@ def _bw_2nd(func: Callable[[Tensor], Tensor], x: Tensor) -> Tensor:
     out_shape = output.shape
     output = output.view(-1)
 
-    diff = torch.zeros(output.nelement(), x.nelement()).to(x)
+    diff = x.new_zeros(output.nelement(), x.nelement())
 
     for i in range(output.nelement()):
         diff_1st = torch.autograd.grad(output[i], x, create_graph=True)[0]
@@ -67,7 +67,7 @@ def _bw_2nd(func: Callable[[Tensor], Tensor], x: Tensor) -> Tensor:
 # NOTE: We only test batch_high_order_at() here and it should be enough to guarantee batch_diff_at.
 
 
-@pytest.mark.parametrize("order", [0, 1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 3])
 def test_batch_diff_orig(order: int) -> None:
     x = torch.rand(B, N, M, requires_grad=True)
     func_x = batched_func(x)  # shape (B, M, M).

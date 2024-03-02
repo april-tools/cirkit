@@ -59,14 +59,15 @@ class KroneckerLayer(ProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
-        x0 = x[0].unsqueeze(dim=-1)  # shape (*B, K, 1).
-        x1 = x[1].unsqueeze(dim=-2)  # shape (*B, 1, K).
-        return self.comp_space.mul(x0, x1).flatten(start_dim=-2)  # shape (*B, K, K) -> (*B, K**2).
+        x0 = x[0].unsqueeze(dim=-1)  # shape (*B, Ki, 1).
+        x1 = x[1].unsqueeze(dim=-2)  # shape (*B, 1, Ki).
+        # shape (*B, Ki, Ki) -> (*B, Ko=Ki**2).
+        return self.comp_space.mul(x0, x1).flatten(start_dim=-2)
 
     @classmethod
     def get_product(

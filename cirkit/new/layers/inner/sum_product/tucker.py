@@ -39,11 +39,7 @@ class TuckerLayer(SumProductLayer):
         )
 
         self.params = reparam
-        self.params.materialize(
-            (num_output_units, num_input_units, num_input_units),
-            dim=(1, 2),
-            initializer_=self._default_initializer_,
-        )
+        self.materialize_params((num_output_units, num_input_units, num_input_units), dim=(1, 2))
 
     @classmethod
     def _infer_num_prod_units(cls, num_input_units: int, arity: int = 2) -> int:
@@ -67,10 +63,10 @@ class TuckerLayer(SumProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, K).
+            x (Tensor): The input to this layer, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, K).
+            Tensor: The output of this layer, shape (*B, Ko).
         """
         return self.comp_space.sum(self._forward_linear, x[0], x[1], dim=-1, keepdim=True)
 
