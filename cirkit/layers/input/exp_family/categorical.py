@@ -1,111 +1,115 @@
-import functools
-from typing import Literal
+from typing_extensions import Never, Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from cirkit.reparams.exp_family import ReparamEFCategorical
-from cirkit.utils.type_aliases import ReparamFactory
-
-from .exp_family import ExpFamilyLayer
+from cirkit.layers.input.exp_family.exp_family import ExpFamilyLayer
+from cirkit.reparams import Reparameterization
+from cirkit.utils.type_aliases import SymbLayerCfg
 
 
 class CategoricalLayer(ExpFamilyLayer):
-    """The categorical distribution layer."""
+    """The Categorical distribution layer.
 
-    def __init__(  # pylint: disable=too-many-arguments
+    This is fully factorized down to univariate Categorical distributions.
+    """
+
+    # DISABLE: It's designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
+    def __init__(
         self,
         *,
-        num_vars: int,
-        num_channels: int = 1,
-        num_replicas: int = 1,
-        num_input_units: Literal[1] = 1,
+        num_input_units: int,
         num_output_units: int,
-        arity: Literal[1] = 1,
-        num_folds: Literal[0] = 0,
-        fold_mask: None = None,
-        reparam: ReparamFactory = ReparamEFCategorical,
+        arity: int = 1,
+        reparam: Reparameterization,
         num_categories: int,
     ) -> None:
         """Init class.
 
         Args:
-            num_vars (int): The number of variables of the circuit.
-            num_channels (int, optional): The number of channels of each variable. Defaults to 1.
-            num_replicas (int, optional): The number of replicas for each variable. Defaults to 1.
-            num_input_units (Literal[1], optional): The number of input units, must be 1. \
-                Defaults to 1.
+            num_input_units (int): The number of input units, i.e. number of channels for variables.
             num_output_units (int): The number of output units.
-            arity (Literal[1], optional): The arity of the layer, must be 1. Defaults to 1.
-            num_folds (Literal[0], optional): The number of folds. Should not be provided and will \
-                be calculated as num_vars*num_replicas. Defaults to 0.
-            fold_mask (None, optional): The mask of valid folds, must be None. Defaults to None.
-            reparam (ReparamFactory, optional): The reparameterization. \
-                Defaults to ReparamEFCategorical.
-            num_categories (int): The number of categories for categorical distribution.
+            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
+                Defaults to 1.
+            reparam (Reparameterization): The reparameterization for layer parameters.
+            num_categories (int): The number of categories for Categorical distribution.
         """
         assert (
             num_categories > 0
-        ), "The number of categories for categorical distribution must be positive."
+        ), "The number of categories for Categorical distribution must be positive."
+        self.num_categories = num_categories
+        self.suff_stats_shape = (num_input_units, num_categories)
+        # Set self.suff_stats_shape before ExpFamilyLayer.__init__. The reparam will be set in
+        # ExpFamilyLayer.__init__ to normalize dim=-1 (cat).
         super().__init__(
-            num_vars=num_vars,
-            num_channels=num_channels,
-            num_replicas=num_replicas,
             num_input_units=num_input_units,
             num_output_units=num_output_units,
             arity=arity,
-            num_folds=num_folds,
-            fold_mask=fold_mask,
-            reparam=functools.partial(reparam, num_categories=num_categories),
-            num_suff_stats=num_channels * num_categories,
+            reparam=reparam,
         )
-        self.num_categories = num_categories
 
     def sufficient_stats(self, x: Tensor) -> Tensor:
         """Calculate sufficient statistics T from input x.
 
         Args:
-            x (Tensor): The input x, shape (*B, D, C).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The sufficient statistics T, shape (*B, D, S).
+            Tensor: The sufficient statistics T, shape (H, *B, *S).
         """
         if x.is_floating_point():
-            x = x.long()
-        # TODO: pylint issue?
+            x = x.long()  # The input to Categorical should be discrete.
+        # TODO: pylint issue? one_hot is only in pyi
         # pylint: disable-next=not-callable
-        suff_stats = F.one_hot(x, self.num_categories)  # shape (*B, D, C, cat)
-        suff_stats = suff_stats.to(torch.get_default_dtype())
-        return suff_stats.flatten(start_dim=-2)  # shape (*B, D, S=C*cat)
+        suff_stats = F.one_hot(x, self.num_categories)  # shape (H, *B, Ki) -> (H, *B, Ki, cat).
+        return suff_stats.to(torch.get_default_dtype())  # The suff stats must be float.
 
     def log_base_measure(self, x: Tensor) -> Tensor:
         """Calculate log base measure log_h from input x.
 
         Args:
-            x (Tensor): The input x, shape (*B, D, C).
+            x (Tensor): The input x, shape (H, *B, Ki).
 
         Returns:
-            Tensor: The natural parameters eta, shape (*B, D).
+            Tensor: The natural parameters eta, shape (H, *B).
         """
-        return torch.zeros(()).to(x).expand_as(x[..., 0])
+        return x.new_zeros(()).expand(x.shape[:-1])
 
-    def log_partition(self, eta: Tensor) -> Tensor:
+    def log_partition(self, eta: Tensor, *, eta_normed: bool = False) -> Tensor:
         """Calculate log partition function A from natural parameters eta.
 
         Args:
-            eta (Tensor): The natural parameters eta, shape (D, K, P, S).
+            eta (Tensor): The natural parameters eta, shape (H, Ko, *S).
+            eta_normed (bool, optional): Whether eta is produced by a NormalizedReparam. If True, \
+                implementations may save some computation. Defaults to False.
 
         Returns:
-            Tensor: The log partition function A, shape (D, K, P).
+            Tensor: The log partition function A, shape (H, Ko).
         """
-        return torch.zeros(()).to(eta).expand_as(eta[..., 0])
+        if eta_normed:
+            return eta.new_zeros(()).expand(eta.shape[:2])
 
-    @property
-    def probs(self) -> Tensor:
-        """The parameter probs of each category for categorical distribution, \
-        shape (D, K, P, C, cat)."""
-        # TODO: x.unflatten is not typed
-        return torch.unflatten(
-            torch.exp(self.params()), dim=-1, sizes=(self.num_channels, self.num_categories)
-        )
+        # If eta is not normalized, we need this to make sure the output of EF is normalized.
+        # shape (H, Ko, Ki, cat) -> (H, Ko, Ki) -> (H, Ko).
+        return eta.logsumexp(dim=-1).sum(dim=-1)
+
+    @classmethod
+    def get_partial(
+        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
+    ) -> Never:
+        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
+        of the given variable in the scope of this layer.
+
+        Args:
+            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
+            order (int, optional): The order of differentiation. Defaults to 1.
+            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
+                layer's scope but not global variable id. Defaults to 0.
+            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
+
+        Raises:
+            TypeError: When this method is called on CategoricalLayer.
+        """
+        raise TypeError("Cannot differentiate over discrete variables.")

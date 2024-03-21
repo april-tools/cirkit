@@ -1,1 +1,2 @@
-from .tensorized_circuit import TensorizedPC as TensorizedPC
+from . import functional as functional
+from .tensorized_circuit import TensorizedCircuit as TensorizedCircuit

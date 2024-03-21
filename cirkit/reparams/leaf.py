@@ -1,216 +1,93 @@
-from typing import Any, Optional, Sequence, Union
+from typing import Callable, Optional, Sequence, Union, final
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.utils.type_aliases import ClampBounds
-
-from .reparam import Reparameterization
+from cirkit.reparams.reparam import Reparameterization
 
 
-class ReparamLeaf(Reparameterization):
-    """A leaf in reparameterizaion that holds the parameter instance and does simple transforms.
+# The LeafReparam only holds the tensor. Everything else should be a (unary) composed reparam.
+# The @final is to prevent inheritance from LeafReparam.
+@final
+class LeafReparam(Reparameterization):
+    """The leaf in reparameterizations that holds the parameter Tensor."""
 
-    There's no param initialization here. That's the responsibility of Layers.
-    """
-
-    def __init__(
-        self,
-        size: Sequence[int],
-        /,
-        *,
-        dim: Union[int, Sequence[int]],
-        mask: Optional[Tensor] = None,
-        log_mask: Optional[Tensor] = None,
-    ) -> None:
-        """Init class.
-
-        The three kwargs, dim, mask/log_mask, are used to hint the normalization of sum weights. \
-        The dim kwarg must be supplied to hint the sum-to-1 dimension, but mask/log_mask can be \
-        optional. Subclasses choose whether and how to use them (e.g. unnormalized reparams don't).
-
-        Args:
-            size (Sequence[int]): The size/shape of the output parameter.
-            dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
-                be applied. However a subclass impl may choose not to use this.
-            mask (Optional[Tensor], optional): The 0/1 mask for normalization positions. None for \
-                no masks. Must not be used together with log_mask. The shape must be broadcastable \
-                to size, if not None. Defaults to None.
-            log_mask (Optional[Tensor], optional): The -inf/0 mask for normalization positions. \
-                None for no masks. Must not be used together with mask. The shape must be \
-                broadcastable to size, if not None. Defaults to None. Defaults to None.
-        """
-        super().__init__(size, dim=dim, mask=mask, log_mask=log_mask)
-        self.param = nn.Parameter(torch.empty(size))
+    def __init__(self) -> None:
+        """Init class."""
+        super().__init__()
+        self.param = nn.UninitializedParameter()
 
     @property
     def dtype(self) -> torch.dtype:
-        """The dtype of the output param."""
+        """The dtype of the output parameter."""
         return self.param.dtype
 
+    @property
+    def device(self) -> torch.device:
+        """The device of the output parameter."""
+        return self.param.device
 
-class ReparamIdentity(ReparamLeaf):
-    """Identity reparametrization.
+    def materialize(
+        self,
+        shape: Sequence[int],
+        /,
+        *,
+        dim: Union[int, Sequence[int]],
+        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
+    ) -> bool:
+        """Materialize the internal parameter tensor with given shape and initialize if required.
 
-    Range: (-inf, +inf).
-    """
+        Materialization (and optionally initialization) is only executed if it's not materialized \
+        yet. Otherwise this function will become a silent no-op, providing safe reuse of the same \
+        reparam. However, the arguments must be the same among re-materialization attempts, to \
+        make sure the reuse is consistent.
 
-    def forward(self) -> Tensor:
-        """Get the reparameterized params.
+        The normalization dim is ignored for LeafReparam and normalization should be done in \
+        another reparam what contains transformation.
+
+        If an initializer_ is provided, it will be used to fill the initial value. If no \
+        initializer is given, the internal storage will contain random memory.
+
+        Args:
+            shape (Sequence[int]): The shape of the output parameter.
+            dim (Union[int, Sequence[int]]): Ignored. This reparam is not normalized.
+            initializer_ (Optional[Callable[[Tensor], Tensor]], optional): The function that \
+                initialize a Tensor inplace while also returning the value. Leave default for no \
+                initialization. Defaults to None.
 
         Returns:
-            Tensor: The params after reparameterizaion.
+            bool: Whether the materialization is actually performed.
         """
-        # TODO: is there any way to inherit the docstring?
+        if not super().materialize(shape, dim=()):  # super() does not use initializer_.
+            return False
+
+        # Not materialized before, i.e., self.param is still nn.UninitializedParameter.
+        self.param.materialize(self.shape)
+        if initializer_ is not None:
+            self.initialize(initializer_)
+        return True
+
+    @torch.no_grad()
+    def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
+        """Initialize the internal parameter tensor with the given initializer.
+
+        This can only be called after materialization and will always overwrite whatever is \
+        already in the internal param. To safely provide an initial value to a possibly reused \
+        reparam, initialize through materialize() instead.
+
+        The provided initializer_ is expected to provide an initial value which will be filled \
+        into the underlying tensor.
+
+        Args:
+            initializer_ (Callable[[Tensor], Tensor]): The function that initialize a Tensor \
+                inplace while also returning the value.
+        """
+        initializer_(self.param)
+
+    def forward(self) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
         return self.param
-
-
-class ReparamExp(ReparamLeaf):
-    """Exp reparametrization.
-
-    Range: (0, +inf).
-    """
-
-    def forward(self) -> Tensor:
-        """Get the reparameterized params.
-
-        Returns:
-            Tensor: The params after reparameterizaion.
-        """
-        return torch.exp(self.param)
-
-
-class ReparamSquare(ReparamLeaf):
-    """Square reparametrization.
-
-    Range: [0, +inf).
-    """
-
-    def forward(self) -> Tensor:
-        """Get the reparameterized params.
-
-        Returns:
-            Tensor: The params after reparameterizaion.
-        """
-        return torch.square(self.param)
-
-
-class ReparamClamp(ReparamLeaf):
-    """Clamp reparametrization.
-
-    Range: [min, max], as provided.
-
-    Note that clamped values stop gradient.
-    """
-
-    def __init__(  # type: ignore[misc]
-        self,
-        size: Sequence[int],
-        /,
-        *,
-        min: Optional[float] = None,  # pylint: disable=redefined-builtin
-        max: Optional[float] = None,  # pylint: disable=redefined-builtin
-        **kwargs: Any,  # hold dim/mask/log_mask, but irrelevant here.
-    ) -> None:
-        """Init class.
-
-        Args:
-            size (Sequence[int]): The size of the parameter.
-            min (Optional[float], optional): The lower-bound for clamping, None to disable this \
-                direction. Defaults to None.
-            max (Optional[float], optional): The upper-bound for clamping, None to disable this \
-                direction. Defaults to None.
-        """
-        super().__init__(size, **kwargs)  # type: ignore[misc]
-        self.clamp_bounds: ClampBounds = {"min": min, "max": max}
-
-    def forward(self) -> Tensor:
-        """Get the reparameterized params.
-
-        Returns:
-            Tensor: The params after reparameterizaion.
-        """
-        return torch.clamp(self.param, **self.clamp_bounds)
-
-
-class ReparamSigmoid(ReparamLeaf):
-    """Sigmoid (with temperature) reparametrization.
-
-    Range: (offset, offset+scale), as provided.
-
-    Calculates scale*sigmoid(x/temp)+offset.
-    """
-
-    def __init__(  # type: ignore[misc]
-        self,
-        size: Sequence[int],
-        /,
-        *,
-        temperature: float = 1,
-        scale: float = 1,
-        offset: float = 0,
-        **kwargs: Any,  # hold dim/mask/log_mask, but irrelevant here.
-    ) -> None:
-        """Init class.
-
-        Args:
-            size (Sequence[int]): The size of the parameter.
-            temperature (float, optional): The temperature for sigmoid. Defaults to 1.
-            scale (float, optional): The scale for sigmoid. Defaults to 1.
-            offset (float, optional): The offset for sigmoid. Defaults to 0.
-        """
-        super().__init__(size, **kwargs)  # type: ignore[misc]
-        self.temperature = temperature
-        self.scale = scale
-        self.offset = offset
-
-    def forward(self) -> Tensor:
-        """Get the reparameterized params.
-
-        Returns:
-            Tensor: The params after reparameterizaion.
-        """
-        # TODO: split out a linear reparam?
-        return self.scale * torch.sigmoid(self.param / self.temperature) + self.offset
-
-
-class ReparamSoftmax(ReparamLeaf):
-    """Softmax reparametrization.
-
-    Range: (0, 1), 0 available through mask, 1 available when only one element.
-    Constraints: sum to 1.
-    """
-
-    def forward(self) -> Tensor:
-        """Get the reparameterized params.
-
-        Returns:
-            Tensor: The params after reparameterizaion.
-        """
-        param = self.param if self.log_mask is None else self.param + self.log_mask
-        # torch.softmax can only accept one dim
-        param = self._unflatten_dims(torch.softmax(self._flatten_dims(param), dim=self.dims[0]))
-        # nan will appear when the only 1 element is masked. fill nan as 1 (0 in log-sapce)
-        # +inf and -inf will not appear
-        return torch.nan_to_num(param, nan=1)
-
-
-class ReparamLogSoftmax(ReparamLeaf):
-    """LogSoftmax reparametrization that is more nemarically-stable than log(ReparamSoftmax).
-
-    Range: (-inf, 0), and -inf available through mask, 0 available when only one element.
-    Constraints: logsumexp to 0.
-    """
-
-    def forward(self) -> Tensor:
-        """Get the reparameterized params.
-
-        Returns:
-            Tensor: The params after reparameterizaion.
-        """
-        param = self.param if self.log_mask is None else self.param + self.log_mask
-        # torch.softmax can only accept one dim
-        param = self._unflatten_dims(torch.log_softmax(self._flatten_dims(param), dim=self.dims[0]))
-        # redundant projection of -inf to stop gradients
-        # although by default +inf is projected to max_finite, we don't have positive values here
-        return torch.nan_to_num(param, neginf=float("-inf"))

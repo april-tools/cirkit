@@ -10,11 +10,11 @@ from torch import Tensor, optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from benchmark.utils import benchmarker
-from cirkit.layers.input.exp_family import CategoricalLayer
-from cirkit.layers.sum_product.cp import UncollapsedCPLayer
-from cirkit.models import TensorizedPC
-from cirkit.region_graph import RegionGraph
-from cirkit.utils import RandomCtx, set_determinism
+from cirkit.old.layers.input.exp_family import CategoricalLayer
+from cirkit.old.layers.sum_product.cp import UncollapsedCPLayer
+from cirkit.old.models import TensorizedPC
+from cirkit.old.region_graph import RegionGraph
+from cirkit.old.utils import RandomCtx, set_determinism
 
 device = torch.device("cuda")
 
