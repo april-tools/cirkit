@@ -7,10 +7,14 @@ import torch
 from torch import Tensor
 
 from cirkit.reparams.binary import BinaryReparam
+from cirkit.reparams.normalized import LogSoftmaxReparam 
 from cirkit.reparams.reparam import Reparameterization
 from cirkit.reparams.unary import UnaryReparam
 
 # This file is for specialized reparams designed specifically for ExpFamilyLayer.
+
+
+EFCategoricalReparam = LogSoftmaxReparam
 
 
 class EFNormalReparam(UnaryReparam):

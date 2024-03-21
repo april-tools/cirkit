@@ -1,6 +1,7 @@
 from .binary import BinaryReparam as BinaryReparam
 from .binary import KroneckerReparam as KroneckerReparam
 from .composed import ComposedReparam as ComposedReparam
+from .ef import EFCategoricalReparam as EFCategoricalReparam
 from .ef import EFNormalReparam as EFNormalReparam
 from .ef import EFProductReparam as EFProductReparam
 from .leaf import LeafReparam as LeafReparam
