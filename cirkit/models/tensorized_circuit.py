@@ -5,7 +5,7 @@ from typing import Dict, Optional, final
 import torch
 from torch import Tensor, nn
 
-import cirkit.model.functional as TCF  # TensorizedCircuit functional.
+import cirkit.models.functional as TCF  # TensorizedCircuit functional.
 from cirkit.layers import InputLayer, Layer, SumProductLayer
 from cirkit.symbolic import (
     SymbolicLayer,

@@ -1,7 +1,7 @@
 from typing import Type, Union, cast
 
 from . import layers as layers
-from . import model as model
+from . import models as models
 from . import region_graph as region_graph
 from . import reparams as reparams
 from . import symbolic as symbolic
