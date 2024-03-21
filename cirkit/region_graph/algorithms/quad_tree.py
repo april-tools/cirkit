@@ -127,7 +127,7 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
                     prev_layer[i * 2 + 1][j * 2],
                     prev_layer[i * 2 + 1][j * 2 + 1],
                 )
-                if node.scope != PADDING
+                if node != PADDING
             )
             if len(regions) == 1:
                 node = regions[0]
