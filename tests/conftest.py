@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from cirkit.utils import set_determinism
+from cirkit.old.utils import set_determinism
 
 
 @pytest.fixture(autouse=True)
