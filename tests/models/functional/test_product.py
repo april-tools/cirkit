@@ -6,7 +6,7 @@ import torch
 from cirkit.layers import InputLayer, ParameterizedConstantLayer
 from cirkit.reparams import UnaryReparam
 from tests import floats
-from tests.model.functional.test_prod_utils import get_two_circuits, pf_of_product_of_normal
+from tests.models.functional.test_prod_utils import get_two_circuits, pf_of_product_of_normal
 
 
 def test_circuit_product_norm() -> None:

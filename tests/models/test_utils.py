@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 from cirkit.layers import CategoricalLayer, CPLayer, InputLayer, NormalLayer, ProductLayer, SumLayer
-from cirkit.model import TensorizedCircuit
+from cirkit.models import TensorizedCircuit
 from cirkit.region_graph import QuadTree
 from cirkit.reparams import EFNormalReparam, LeafReparam, LogSoftmaxReparam
 from cirkit.symbolic import SymbolicTensorizedCircuit

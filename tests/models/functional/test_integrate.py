@@ -3,7 +3,7 @@ import itertools
 import torch
 
 from tests import floats
-from tests.model.test_utils import get_circuit_2x2, set_circuit_2x2_params
+from tests.models.test_utils import get_circuit_2x2, set_circuit_2x2_params
 
 
 def test_circuit_part_func() -> None:

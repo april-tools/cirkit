@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Iterable, Optional
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
-    from cirkit.model.tensorized_circuit import TensorizedCircuit
+    from cirkit.models.tensorized_circuit import TensorizedCircuit
 
 
 def integrate(
