@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Mapping, Tuple
+from typing import TYPE_CHECKING, Mapping, Tuple, Union
 from typing_extensions import TypeAlias  # FUTURE: in typing from 3.10, deprecated in 3.12
+
+from cirkit.utils import Scope
 
 if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to avoid cyclic import.
     from cirkit.newer.symbolic.layers.symb_layer import SymbLayer
@@ -16,8 +18,9 @@ class SymbOperator(Enum):
     MULTIPLICATION = auto()
 
 
-# TODO: do we need anything more than int?
-SymbOpMetadata: TypeAlias = Mapping[str, int]
+# TODO: do we need anything more than int and scope?
+# TODO: perhaps use Any as the user might want to specify its own metadata for custom operators?
+SymbOpMetadata: TypeAlias = Mapping[str, Union[int, Scope]]
 """The metadata for symbolic operations."""
 
 
