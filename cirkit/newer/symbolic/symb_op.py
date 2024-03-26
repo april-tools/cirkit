@@ -11,7 +11,6 @@ if TYPE_CHECKING:  # Only imported for static type checking but not runtime, to 
 class SymbOperator(Enum):
     """Types of symbolic operations on circuits/layers."""
 
-    NONE = auto()
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
     MULTIPLICATION = auto()
@@ -28,8 +27,8 @@ SymbOpMetadata: TypeAlias = Mapping[str, int]
 class SymbLayerOperation:
     """The symbolic operation applied on a SymbLayer."""
 
-    operator: SymbOperator = SymbOperator.NONE
-    operands: Tuple["SymbLayer", ...] = ()
+    operator: SymbOperator
+    operands: Tuple["SymbLayer", ...]
     metadata: SymbOpMetadata = field(default_factory=dict)
 
 
@@ -39,6 +38,6 @@ class SymbLayerOperation:
 class SymbCircuitOperation:
     """The symbolic operation applied on a SymbCircuit."""
 
-    operator: SymbOperator = SymbOperator.NONE
-    operands: Tuple["SymbCircuit", ...] = ()
+    operator: SymbOperator
+    operands: Tuple["SymbCircuit", ...]
     metadata: SymbOpMetadata = field(default_factory=dict)
