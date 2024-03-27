@@ -1,3 +1,4 @@
+from collections import defaultdict, deque
 from typing import Dict, Iterable, Iterator, List, Optional, Type
 
 from cirkit.newer.region_graph import RegionGraph
@@ -163,3 +164,40 @@ class SymbCircuit:
     def inner_layers(self) -> Iterator[SymbLayer]:
         """Inner (non-input) layers in the circuit."""
         return (layer for layer in self.layers if layer.inputs)
+
+
+def pipeline_topological_ordering(pipeline: SymbCircuit) -> List[SymbCircuit]:
+    # Initialize the number of incomings edges for each node
+    in_symb_circuits: List[SymbCircuit] = []
+    num_incomings: Dict[SymbCircuit, int] = defaultdict(int)
+    outgoings: Dict[SymbCircuit, List[SymbCircuit]] = defaultdict(list)
+    seen, queue = {pipeline}, deque([pipeline])
+    while not queue:
+        sc = queue.popleft()
+        if sc.operation is None:
+            in_symb_circuits.append(sc)
+            continue
+        symb_operands = sc.operation.operands
+        for op in symb_operands:
+            num_incomings[sc] += 1
+            outgoings[op].append(sc)
+            if op not in seen:
+                seen.add(pipeline)
+                queue.append(op)
+
+    # Kahn's algorithm
+    ordering: List[SymbCircuit] = []
+    to_visit = deque(in_symb_circuits)
+    while to_visit:
+        sc = to_visit.popleft()
+        ordering.append(sc)
+        for out_sc in outgoings[sc]:
+            num_incomings[out_sc] -= 1
+            if num_incomings[out_sc] == 0:
+                to_visit.append(out_sc)
+
+    # Check for possible cycles in the pipeline
+    for sc, n in num_incomings.keys():
+        if n != 0:
+            raise ValueError("The given pipeline of symbolic circuit has at least one cycle")
+    return ordering
