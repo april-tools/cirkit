@@ -10,7 +10,7 @@ class SymbLayer(ABC):
 
     scope: Scope
     num_units: int
-    operator: Optional[SymbLayerOperation]
+    operation: Optional[SymbLayerOperation]
     inputs: List["SymbLayer"]
     outputs: List["SymbLayer"]  # reverse reference of inputs
 
@@ -18,12 +18,12 @@ class SymbLayer(ABC):
         self,
         scope: Scope,
         num_units: int,
-        operator: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymbLayerOperation] = None,
         inputs: Optional[List["SymbLayer"]] = None,
     ):
         self.scope = scope
         self.num_units = num_units
-        self.operator = operator
+        self.operation = operation
         self.inputs = inputs if inputs is not None else []
         for sl in inputs:
             sl.outputs.append(self)

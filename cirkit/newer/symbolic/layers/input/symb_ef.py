@@ -11,6 +11,6 @@ class SymbExpFamilyLayer(SymbInputLayer):
         scope: Scope,
         num_units: int,
         num_channels: int,
-        operator: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymbLayerOperation] = None,
     ):
-        super().__init__(scope, num_units, num_channels, operator=operator)
+        super().__init__(scope, num_units, num_channels, operation=operation)

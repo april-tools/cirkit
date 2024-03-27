@@ -13,7 +13,7 @@ class SymbInputLayer(SymbLayer):
         scope: Scope,
         num_units: int,
         num_channels: int,
-        operator: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymbLayerOperation] = None,
     ):
-        super().__init__(scope, num_units, operator=operator, inputs=[])
+        super().__init__(scope, num_units, operation=operation, inputs=[])
         self.num_channels = num_channels

@@ -8,6 +8,7 @@ from cirkit.newer.symbolic.layers import (
     SymbProdLayer,
     SymbSumLayer,
 )
+from cirkit.newer.symbolic.symb_op import SymbCircuitOperation
 from cirkit.newer.utils import Scope
 from cirkit.region_graph import PartitionNode, RegionNode, RGNode
 
@@ -15,8 +16,16 @@ from cirkit.region_graph import PartitionNode, RegionNode, RGNode
 class SymbCircuit:
     """The symbolic representation of a (tensorized) circuit."""
 
-    def __init__(self, region_graph: RegionGraph, layers: Iterable[SymbLayer]) -> None:
+    def __init__(
+        self,
+        region_graph: RegionGraph,
+        layers: Iterable[SymbLayer],
+        /,
+        *,
+        operation: Optional[SymbCircuitOperation] = None,
+    ) -> None:
         self.region_graph = region_graph
+        self.operation = operation
         self.scope = region_graph.scope
         self.num_vars = region_graph.num_vars
         self.is_smooth = region_graph.is_smooth
@@ -55,6 +64,7 @@ class SymbCircuit:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
                 input_sl = input_cls(rgn.scope, num_input_units, num_channels)
                 sum_sl = sum_cls(rgn.scope, num_units, inputs=[input_sl])
+                layers.append(input_sl)
                 layers.append(sum_sl)
                 rgn_to_layers[rgn] = sum_sl
             elif isinstance(rgn, PartitionNode):  # Partition node

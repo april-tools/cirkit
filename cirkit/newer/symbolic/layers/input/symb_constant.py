@@ -11,10 +11,11 @@ class SymbConstantLayer(SymbInputLayer):
         scope: Scope,
         num_units: int,
         num_channels: int,
-        operator: Optional[SymbLayerOperation] = None,
-        value: Optional[float] = None
+        operation: Optional[SymbLayerOperation] = None,
+        value: Optional[float] = None,
     ):
-        assert operator is not None or value is not None, \
-            "Eiether 'operator' or 'value' must be specified to construct a constant layer"
-        super().__init__(scope, num_units, num_channels, operator=operator)
+        assert (
+            operation is not None or value is not None
+        ), "Eiether 'operation' or 'value' must be specified to construct a constant layer"
+        super().__init__(scope, num_units, num_channels, operation=operation)
         self.value = value
