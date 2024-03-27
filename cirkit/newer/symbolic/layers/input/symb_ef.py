@@ -14,3 +14,7 @@ class SymbExpFamilyLayer(SymbInputLayer):
         operation: Optional[SymbLayerOperation] = None,
     ):
         super().__init__(scope, num_units, num_channels, operation=operation)
+
+
+class SymbCategoricalLayer(SymbExpFamilyLayer):
+    ...

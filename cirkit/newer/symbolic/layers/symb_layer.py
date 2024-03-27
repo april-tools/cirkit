@@ -34,3 +34,7 @@ class SymbLayer(ABC):
     @property
     def arity(self) -> int:
         return len(self.inputs)
+
+    @property
+    def kwargs(self) -> dict:
+        return {}

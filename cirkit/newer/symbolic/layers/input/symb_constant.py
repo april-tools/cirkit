@@ -19,3 +19,7 @@ class SymbConstantLayer(SymbInputLayer):
         ), "Eiether 'operation' or 'value' must be specified to construct a constant layer"
         super().__init__(scope, num_units, num_channels, operation=operation)
         self.value = value
+
+    @property
+    def kwargs(self) -> dict:
+        return dict(value=self.value)
