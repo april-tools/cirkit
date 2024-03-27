@@ -57,10 +57,9 @@ def integrate(
         SymbInputLayer: integrate_input_layer,
     }
 
-    # Integrate the registry specified by the user (if any) with the default registry
-    if registry is None:
-        registry = dict()
-    registry.update(integrate_registry)
+    # Update with the registry specified by the user (if any)
+    if registry is not None:
+        integrate_registry.update(registry)
 
     symbc_to_integral: Dict[SymbLayer, SymbLayer] = {}
     for sl in symb_circuit.layers:
