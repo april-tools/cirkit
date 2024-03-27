@@ -6,11 +6,9 @@ from typing_extensions import Self  # FUTURE: in typing from 3.11
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers.input.constant import ConstantLayer
-from cirkit.layers.input.input import InputLayer
-from cirkit.layers.layer import Layer
+from cirkit.layers import Layer
+from cirkit.layers.input import InputLayer, ConstantLayer
 from cirkit.reparams import EFProductReparam, NormalizedReparam, Reparameterization
-from cirkit.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class ExpFamilyLayer(InputLayer):
@@ -151,108 +149,3 @@ class ExpFamilyLayer(InputLayer):
         Returns:
             Tensor: The log partition function A, shape (H, Ko).
         """
-
-    @classmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbCfgFactory[InputLayer]:
-        """Get the symbolic config to construct the definite integral of this layer.
-
-        Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
-
-        Returns:
-            SymbCfgFactory[InputLayer]: The symbolic config for the integral.
-        """
-        # We have already normalized with log_partition in forward(), so integral is always 1.
-        # IGNORE: Unavoidable for kwargs.
-        return SymbCfgFactory(
-            layer_cls=ConstantLayer, layer_kwargs={"const_value": 1.0}  # type: ignore[misc]
-        )
-
-    # NOTE: Here we define the differential of all EF layers, but some subclasses, e.g. Categorical,
-    #       should not have differentials due to discrete variable. Those subclasses should override
-    #       this method and raise an error.
-    @classmethod
-    def get_partial(
-        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> SymbCfgFactory[InputLayer]:
-        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
-        of the given variable in the scope of this layer.
-
-        Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            order (int, optional): The order of differentiation. Defaults to 1.
-            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
-                layer's scope but not global variable id. Defaults to 0.
-            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
-
-        Returns:
-            SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
-                the given channel of the given variable.
-        """
-        assert order > 0, "The order of differentiation must be positive."
-
-        # TODO: pylint bug? should not raise cyclic-import?
-        # DISABLE: We must import here to avoid cyclic import.
-        # pylint: disable-next=import-outside-toplevel,cyclic-import
-        from cirkit.layers.input.exp_family.diff_ef import DiffEFLayer
-
-        # IGNORE: Unavoidable for kwargs.
-        return SymbCfgFactory(
-            layer_cls=DiffEFLayer,
-            layer_kwargs={  # type: ignore[misc]
-                "ef_cfg": symb_cfg,
-                "order": order,
-                "var_idx": var_idx,
-                "ch_idx": ch_idx,
-            },
-        )
-
-    @classmethod
-    def get_product(
-        cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
-    ) -> SymbCfgFactory[Layer]:
-        """Get the symbolic config to construct the product of this layer and the other layer.
-
-        InputLayer generally can be multiplied with any InputLayer, yet specific combinations may \
-        be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
-        will not be captured by static checkers but only during runtime.
-
-        Args:
-            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
-            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
-
-        Returns:
-            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
-                NotImplemented may also be returned, which indicates the reflection should be tried.
-        """
-        # TODO: duplicated check?
-        assert issubclass(left_symb_cfg.layer_cls, cls) or issubclass(
-            right_symb_cfg.layer_cls, cls
-        ), "At least one of the inputs to InputLayer.get_product must be of self class."
-
-        # DISABLE: We must import here to avoid cyclic import.
-        # pylint: disable-next=import-outside-toplevel,cyclic-import
-        from cirkit.layers.input.exp_family.prod_ef import ProdEFLayer
-
-        # The product with ExpFamilyLayer is ProdEFLayer.
-        if issubclass(left_symb_cfg.layer_cls, ExpFamilyLayer) and issubclass(
-            right_symb_cfg.layer_cls, ExpFamilyLayer
-        ):
-            assert (
-                left_symb_cfg.reparam is not None and right_symb_cfg.reparam is not None
-            ), "Reparams for ExpFamilyLayer should not be None."
-
-            # IGNORE: Unavoidable for kwargs.
-            return SymbCfgFactory(
-                layer_cls=ProdEFLayer,
-                layer_kwargs={  # type: ignore[misc]
-                    "ef1_cfg": left_symb_cfg,
-                    "ef2_cfg": right_symb_cfg,
-                },
-                reparam=EFProductReparam(left_symb_cfg.reparam, right_symb_cfg.reparam),
-            )
-
-        # TODO: Cases:
-        #       - Product with ConstantLayer: p(x)*c.
-        #       - Product with DiffEFLayer: p_1(x)*p_2'(x).
-        return NotImplemented

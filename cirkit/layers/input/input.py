@@ -1,10 +1,7 @@
-from abc import abstractmethod
 from typing import Optional
-from typing_extensions import Self  # FUTURE: in typing from 3.11
 
-from cirkit.layers.layer import Layer
+from cirkit.layers import Layer
 from cirkit.reparams import Reparameterization
-from cirkit.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class InputLayer(Layer):
@@ -23,6 +20,7 @@ class InputLayer(Layer):
         num_output_units: int,
         arity: int = 1,
         reparam: Optional[Reparameterization] = None,
+        **kwargs
     ) -> None:
         """Init class.
 
@@ -40,36 +38,3 @@ class InputLayer(Layer):
             arity=arity,
             reparam=reparam,
         )
-
-    # TODO: enable integ on part of H dim? if yes, also lift assert subset in functional
-    @classmethod
-    @abstractmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbCfgFactory["InputLayer"]:
-        """Get the symbolic config to construct the definite integral of this layer.
-
-        Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-
-        Returns:
-            SymbCfgFactory[InputLayer]: The symbolic config for the integral.
-        """
-
-    @classmethod
-    @abstractmethod
-    def get_partial(
-        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> SymbCfgFactory["InputLayer"]:
-        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
-        of the given variable in the scope of this layer.
-
-        Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            order (int, optional): The order of differentiation. Defaults to 1.
-            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
-                layer's scope but not global variable id. Defaults to 0.
-            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
-
-        Returns:
-            SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
-                the given channel of the given variable.
-        """

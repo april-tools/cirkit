@@ -1,12 +1,9 @@
-from typing_extensions import Never, Self  # FUTURE: in typing from 3.11
-
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-from cirkit.layers.input.exp_family.exp_family import ExpFamilyLayer
+from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.reparams import Reparameterization
-from cirkit.utils.type_aliases import SymbLayerCfg
 
 
 class CategoricalLayer(ExpFamilyLayer):
@@ -94,22 +91,3 @@ class CategoricalLayer(ExpFamilyLayer):
         # If eta is not normalized, we need this to make sure the output of EF is normalized.
         # shape (H, Ko, Ki, cat) -> (H, Ko, Ki) -> (H, Ko).
         return eta.logsumexp(dim=-1).sum(dim=-1)
-
-    @classmethod
-    def get_partial(
-        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> Never:
-        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
-        of the given variable in the scope of this layer.
-
-        Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            order (int, optional): The order of differentiation. Defaults to 1.
-            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
-                layer's scope but not global variable id. Defaults to 0.
-            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
-
-        Raises:
-            TypeError: When this method is called on CategoricalLayer.
-        """
-        raise TypeError("Cannot differentiate over discrete variables.")

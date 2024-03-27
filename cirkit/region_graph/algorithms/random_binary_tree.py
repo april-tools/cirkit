@@ -4,8 +4,8 @@ from typing import List, Optional, Sequence, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from cirkit.region_graph.region_graph import RegionGraph
-from cirkit.region_graph.rg_node import RegionNode
+from cirkit.newer.region_graph.region_graph import RegionGraph
+from cirkit.newer.region_graph.rg_node import RegionNode
 
 
 def _partition_node_randomly(

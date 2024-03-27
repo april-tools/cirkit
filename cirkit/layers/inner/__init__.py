@@ -6,5 +6,4 @@ from .sum import DenseLayer as DenseLayer
 from .sum import MixingLayer as MixingLayer
 from .sum import SumLayer as SumLayer
 from .sum_product import CPLayer as CPLayer
-from .sum_product import SumProductLayer as SumProductLayer
 from .sum_product import TuckerLayer as TuckerLayer

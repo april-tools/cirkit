@@ -1,5 +1,5 @@
-from cirkit.region_graph.region_graph import RegionGraph
-from cirkit.region_graph.rg_node import RegionNode
+from cirkit.newer.region_graph.region_graph import RegionGraph
+from cirkit.newer.region_graph.rg_node import RegionNode
 
 
 # DISABLE: We use function name with upper case to mimic a class constructor.

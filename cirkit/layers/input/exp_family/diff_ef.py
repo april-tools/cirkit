@@ -1,14 +1,12 @@
 from typing import Optional
-from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 from torch import Tensor
 
-from cirkit.layers.input.exp_family.exp_family import ExpFamilyLayer
-from cirkit.layers.input.input import InputLayer
 from cirkit.layers.layer import Layer
+from cirkit.layers.input.exp_family import ExpFamilyLayer
+from cirkit.layers.input import InputLayer
 from cirkit.reparams import Reparameterization
 from cirkit.utils import batch_high_order_at
-from cirkit.utils.type_aliases import SymbCfgFactory, SymbLayerCfg
 
 
 class DiffEFLayer(InputLayer):
@@ -115,71 +113,3 @@ class DiffEFLayer(InputLayer):
         return self.comp_space.mul(
             self.comp_space.from_log(log_p), self.comp_space.from_linear(factor)
         )
-
-    @classmethod
-    def get_integral(cls, symb_cfg: SymbLayerCfg[Self]) -> SymbCfgFactory[InputLayer]:
-        """Get the symbolic config to construct the definite integral of this layer.
-
-        Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer. Unused here.
-
-        Raises:
-            NotImplementedError: When "not-yet-implemented feature" is invoked.
-
-        Returns:
-            SymbCfgFactory[InputLayer]: The symbolic config for the integral.
-        """
-        raise NotImplementedError("The integral of DiffEFLayer is not yet defined.")
-
-    # TODO: return?
-    @classmethod
-    # pylint: disable-next=redundant-returns-doc
-    def get_partial(
-        cls, symb_cfg: SymbLayerCfg[Self], *, order: int = 1, var_idx: int = 0, ch_idx: int = 0
-    ) -> SymbCfgFactory[InputLayer]:
-        """Get the symbolic config to construct the partial differential w.r.t. the given channel \
-        of the given variable in the scope of this layer.
-
-        Args:
-            symb_cfg (SymbLayerCfg[Self]): The symbolic config for this layer.
-            order (int, optional): The order of differentiation. Defaults to 1.
-            var_idx (int, optional): The variable to diffrentiate. The idx is counted within this \
-                layer's scope but not global variable id. Defaults to 0.
-            ch_idx (int, optional): The channel of variable to diffrentiate. Defaults to 0.
-
-        Raises:
-            NotImplementedError: When "not-yet-implemented feature" is invoked.
-
-        Returns:
-            SymbCfgFactory[InputLayer]: The symbolic config for the partial differential w.r.t. \
-                the given channel of the given variable.
-        """
-        assert order > 0, "The order of differentiation must be positive."
-
-        # TODO: for same var_idx and ch_idx, can reuse the same symb_cfg with only order increased.
-
-        raise NotImplementedError("The partial differential of DiffEFLayer is not yet defined.")
-
-    @classmethod
-    def get_product(
-        cls, left_symb_cfg: SymbLayerCfg[Layer], right_symb_cfg: SymbLayerCfg[Layer]
-    ) -> SymbCfgFactory[Layer]:
-        """Get the symbolic config to construct the product of this layer and the other layer.
-
-        InputLayer generally can be multiplied with any InputLayer, yet specific combinations may \
-        be unimplemented. However, the signature typing is not narrowed down, and wrong arg type \
-        will not be captured by static checkers but only during runtime.
-
-        Args:
-            left_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the left operand.
-            right_symb_cfg (SymbLayerCfg[Layer]): The symbolic config for the right operand.
-
-        Returns:
-            SymbCfgFactory[Layer]: The symbolic config for the product. NOTE: Implicit to typing, \
-                NotImplemented may also be returned, which indicates the reflection should be tried.
-        """
-        # TODO: Cases:
-        #       - Product with DiffEFLayer: p_1'(x)*p_2'(x).
-        #       - Product with class in ExpFamilyLayer: p_1'(x)*p_2(x).
-        #       - Product with ConstantLayer: p'(x)*c.
-        return NotImplemented

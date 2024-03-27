@@ -4,7 +4,7 @@ from typing import Dict, Sequence, Tuple
 import numpy as np
 from numpy.typing import NDArray
 
-from cirkit.utils import Scope
+from cirkit.newer.utils import Scope
 
 HyperCube = Tuple[Tuple[int, ...], Tuple[int, ...]]  # Just to shorten the annotation.
 """A hypercube represented by "top-left" and "bottom-right" coordinates (cut points)."""

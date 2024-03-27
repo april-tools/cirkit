@@ -6,8 +6,8 @@ from typing_extensions import TypeVarTuple, Unpack  # FUTURE: in typing from 3.1
 import torch
 from torch import Tensor
 
-from cirkit.utils.comp_space.comp_space import ComputationSapce
-from cirkit.utils.flatten import flatten_dims, unflatten_dims
+from cirkit.newer.utils.comp_space.comp_space import ComputationSapce
+from cirkit.newer.utils.flatten import flatten_dims, unflatten_dims
 
 Ts = TypeVarTuple("Ts")
 

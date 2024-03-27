@@ -4,7 +4,7 @@ from typing import cast
 import torch
 from torch import Tensor
 
-from cirkit.layers.input.exp_family.exp_family import ExpFamilyLayer
+from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.reparams import EFNormalReparam
 
 

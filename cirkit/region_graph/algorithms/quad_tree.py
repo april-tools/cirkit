@@ -1,9 +1,9 @@
 import itertools
 from typing import Tuple
 
-from cirkit.region_graph.algorithms.utils import HypercubeToScope
-from cirkit.region_graph.region_graph import RegionGraph
-from cirkit.region_graph.rg_node import RegionNode
+from cirkit.newer.region_graph.algorithms.utils import HypercubeToScope
+from cirkit.newer.region_graph.region_graph import RegionGraph
+from cirkit.newer.region_graph.rg_node import RegionNode
 
 # TODO: now should work with H!=W but need tests
 
