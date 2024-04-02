@@ -1,8 +1,8 @@
 from abc import ABC
 from typing import List, Optional
 
-from cirkit.newer.symbolic.symb_op import SymbLayerOperation
-from cirkit.newer.utils import Scope
+from cirkit.symbolic.symb_op import SymbLayerOperation
+from cirkit.utils import Scope
 
 
 class SymbLayer(ABC):

@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List, Tuple, Type, Set, Union
+from typing import Dict, Optional, List, Tuple, Type, Set, Union, cast
 
 import torch
 from torch import Tensor
@@ -6,7 +6,7 @@ from torch import Tensor
 from cirkit.layers.input import ConstantLayer
 from cirkit.models.tensorized_circuit import TensorizedCircuit
 from cirkit.layers import InputLayer, Layer, DenseLayer, HadamardLayer, KroneckerLayer, CategoricalLayer, MixingLayer, \
-    InnerLayer
+    InnerLayer, SumLayer
 from cirkit.reparams import Reparameterization
 from cirkit.symbolic.layers.symb_input import SymbConstantLayer, SymbCategoricalLayer
 from cirkit.symbolic.symb_circuit import SymbCircuit, pipeline_topological_ordering
@@ -14,6 +14,7 @@ from cirkit.symbolic.layers import (
     SymbLayer,
     SymbSumLayer, SymbInputLayer, SymbHadamardLayer, SymbKroneckerLayer, SymbMixingLayer, SymbProdLayer
 )
+from cirkit.symbolic.symb_op import SymbOperator
 
 
 class PipelineContext:
@@ -90,12 +91,12 @@ def compile_circuit(
     # Construct the bookkeeping data structure while compiling layers
     for sl in symb_circuit.layers:  # Assuming the layers are already sorted in a topological ordering
         if isinstance(sl, SymbInputLayer):
-            layer = compile_input_layer(sl)
+            layer = compile_input_layer(symb_circuit, sl, ctx)
             bookkeeping_entry = ([], torch.tensor([list(sl.scope)]))
             bookkeeping.append(bookkeeping_entry)
         else:
             assert isinstance(sl, (SymbSumLayer, SymbProdLayer))
-            layer = compile_inner_layer(sl, reparam=reparam)
+            layer = compile_inner_layer(symb_circuit, sl, ctx, reparam=reparam)
             bookkeeping_entry = ([symb_layers_map[isl] for isl in sl.inputs], None)
             bookkeeping.append(bookkeeping_entry)
         layer_id = len(layers)
@@ -113,7 +114,11 @@ def compile_circuit(
     return ctx
 
 
-def compile_input_layer(symb_layer: SymbInputLayer) -> InputLayer:
+def compile_input_layer(
+        symb_circuit: SymbCircuit,
+        symb_layer: SymbInputLayer,
+        ctx: PipelineContext
+) -> InputLayer:
     # Registry mapping symbolic input layers to executable layers classes
     materialize_input_registry: Dict[Type[SymbInputLayer], Type[InputLayer]] = {
         SymbConstantLayer: ConstantLayer,
@@ -121,16 +126,37 @@ def compile_input_layer(symb_layer: SymbInputLayer) -> InputLayer:
     }
 
     layer_cls = materialize_input_registry[type(symb_layer)]
-    layer = layer_cls(
-        num_input_units=symb_layer.num_channels,
-        num_output_units=symb_layer.num_units,
-        arity=len(symb_layer.scope),
-        reparam=layer_cls.default_reparam(),
-        **symb_layer.kwargs)
-    return layer
+
+    symb_layer_operation = symb_layer.operation
+    if symb_layer_operation is None:
+        return layer_cls(
+            num_input_units=symb_layer.num_channels,
+            num_output_units=symb_layer.num_units,
+            arity=len(symb_layer.scope),
+            reparam=layer_cls.default_reparam(),
+            **symb_layer.kwargs)
+
+    if symb_layer_operation.operator == SymbOperator.INTEGRATION:
+        symb_circuit_op = symb_circuit.operation.operands[0]
+        symb_layer_op = symb_layer_operation.operands[0]
+        layer_op: InputLayer = cast(InputLayer, ctx.get_materialized_layer(symb_circuit_op, symb_layer_op))
+        return layer_cls(
+            num_input_units=symb_layer.num_channels,
+            num_output_units=symb_layer.num_units,
+            arity=len(symb_layer.scope),
+            reparam=layer_op.reparam,
+            **symb_layer.kwargs
+        )
+
+    assert False
 
 
-def compile_inner_layer(symb_layer: Union[SymbSumLayer, SymbProdLayer], reparam: Reparameterization) -> InnerLayer:
+def compile_inner_layer(
+        symb_circuit: SymbCircuit,
+        symb_layer: Union[SymbSumLayer, SymbProdLayer],
+        ctx: PipelineContext,
+        reparam: Reparameterization
+) -> InnerLayer:
     # Registry mapping symbolic inner layers to executable layer classes
     materialize_inner_registry: Dict[Type[SymbLayer], Type[InnerLayer]] = {
         SymbSumLayer: DenseLayer,
@@ -140,13 +166,25 @@ def compile_inner_layer(symb_layer: Union[SymbSumLayer, SymbProdLayer], reparam:
     }
 
     layer_cls = materialize_inner_registry[type(symb_layer)]
-    kwargs = symb_layer.kwargs
-    if isinstance(symb_layer, SymbSumLayer):
-        kwargs.update(reparam=reparam)
-    layer = layer_cls(
-        num_input_units=symb_layer.inputs[0].num_units,
-        num_output_units=symb_layer.num_units,
-        arity=len(symb_layer.inputs),
-        **kwargs
-    )
-    return layer
+
+    symb_layer_operation = symb_layer.operation
+    if symb_layer_operation is None or not isinstance(symb_layer, SymbSumLayer):
+        return layer_cls(
+            num_input_units=symb_layer.inputs[0].num_units,
+            num_output_units=symb_layer.num_units,
+            arity=len(symb_layer.inputs),
+            **symb_layer.kwargs
+        )
+
+    if symb_layer_operation.operator == SymbOperator.INTEGRATION:
+        symb_circuit_op = symb_circuit.operation.operands[0]
+        symb_layer_op = symb_layer_operation.operands[0]
+        layer_op: SumLayer = cast(SumLayer, ctx.get_materialized_layer(symb_circuit_op, symb_layer_op))
+        return layer_cls(
+            num_input_units=symb_layer.inputs[0].num_units,
+            num_output_units=symb_layer.num_units,
+            arity=len(symb_layer.inputs),
+            reparam=layer_op.reparam
+        )
+
+    assert False
