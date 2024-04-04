@@ -28,42 +28,9 @@ from cirkit.symbolic.symb_layers import (
     SymbSumLayer,
 )
 from cirkit.symbolic.symb_op import SymbOperator
+from cirkit.tensorized.compilers import PipelineContext
 from cirkit.tensorized.models import TensorizedCircuit
 from cirkit.tensorized.reparams import Reparameterization
-
-
-class PipelineContext:
-    def __init__(self):
-        self._symb_tensorized_map: Dict[SymbCircuit, TensorizedCircuit] = {}
-        self._symb_layers_map: Dict[SymbCircuit, Dict[SymbLayer, int]] = {}
-
-    def __getitem__(self, symb_circuit: SymbCircuit) -> TensorizedCircuit:
-        return self._symb_tensorized_map[symb_circuit]
-
-    def __contains__(self, symb_circuit: SymbCircuit) -> bool:
-        return symb_circuit in self._symb_tensorized_map
-
-    def get_materialized_circuit(self, symb_circuit: SymbCircuit) -> TensorizedCircuit:
-        return self[symb_circuit]
-
-    def get_materialized_layer(self, symb_circuit: SymbCircuit, symb_layer: SymbLayer) -> Layer:
-        symb_layer_ids = self._symb_layers_map[symb_circuit]
-        circuit = self[symb_circuit]
-        return circuit.layers[symb_layer_ids[symb_layer]]
-
-    def register_materialized_circuit(
-        self,
-        symb_circuit: SymbCircuit,
-        circuit: TensorizedCircuit,
-        symb_layers_map: Dict[SymbLayer, int],
-    ):
-        self._symb_tensorized_map[symb_circuit] = circuit
-        self._symb_layers_map[symb_circuit] = symb_layers_map
-
-    def update(self, ctx: "PipelineContext") -> "PipelineContext":
-        self._symb_tensorized_map.update(ctx._symb_tensorized_map)
-        self._symb_layers_map.update(ctx._symb_layers_map)
-        return self
 
 
 def compile_pipeline(

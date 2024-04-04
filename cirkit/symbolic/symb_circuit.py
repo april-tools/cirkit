@@ -9,6 +9,7 @@ from cirkit.symbolic.symb_layers import (
     SymbSumLayer,
 )
 from cirkit.symbolic.symb_op import SymbCircuitOperation
+from cirkit.symbolic.symb_params import AbstractSymbParameter
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils import Scope
 
@@ -41,6 +42,8 @@ class SymbCircuit:
         input_cls: Optional[Type[SymbInputLayer]] = None,
         sum_cls: Optional[Type[SymbSumLayer]] = None,
         prod_cls: Optional[Type[SymbProdLayer]] = None,
+        input_param_cls: Optional[Type[AbstractSymbParameter]] = None,
+        sum_param_cls: Optional[Type[AbstractSymbParameter]] = None
     ) -> "SymbCircuit":
         layers: List[SymbLayer] = []
         rgn_to_layers: Dict[RGNode, SymbLayer] = {}
