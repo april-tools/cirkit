@@ -44,13 +44,11 @@ class SymbParameterNormalize(ABC, SymbParameterUnary):
 class SymbHadamard(SymbParameterBinary):
     def __init__(self, lhs: AbstractSymbParameter, rhs: AbstractSymbParameter):
         super().__init__(lhs, rhs)
-        self._shape = lhs.shape
 
 
 class SymbKronecker(SymbParameterBinary):
     def __init__(self, lhs: AbstractSymbParameter, rhs: AbstractSymbParameter):
         super().__init__(lhs, rhs)
-        self._shape = tuple(*lhs.shape, *rhs.shape)
 
 
 class SymbSoftmax(SymbParameterNormalize):
