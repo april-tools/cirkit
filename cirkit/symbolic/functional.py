@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Iterable, Optional, Type, Union
+from typing import Callable, Dict, Iterable, Optional, Tuple, Type, Union
 
 from cirkit.symbolic.symb_circuit import SymbCircuit
 from cirkit.symbolic.symb_layers import (
@@ -96,3 +96,15 @@ def integrate(
             operator=SymbOperator.INTEGRATION, operands=(symb_circuit,), metadata=dict(scope=scope)
         ),
     )
+
+
+def differentiate(symb_circuit: SymbCircuit) -> SymbCircuit:
+    pass
+
+
+def multiply(
+    lhs_symb_circuit: SymbCircuit,
+    rhs_symb_circuit: SymbCircuit,
+    registry: Optional[Dict[Tuple[Type, Type], Type]] = None,
+) -> SymbCircuit:
+    pass

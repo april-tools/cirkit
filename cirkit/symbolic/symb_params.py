@@ -42,13 +42,11 @@ class SymbParameterNormalize(ABC, SymbParameterUnary):
 
 
 class SymbHadamard(SymbParameterBinary):
-    def __init__(self, lhs: AbstractSymbParameter, rhs: AbstractSymbParameter):
-        super().__init__(lhs, rhs)
+    ...
 
 
 class SymbKronecker(SymbParameterBinary):
-    def __init__(self, lhs: AbstractSymbParameter, rhs: AbstractSymbParameter):
-        super().__init__(lhs, rhs)
+    ...
 
 
 class SymbSoftmax(SymbParameterNormalize):
@@ -68,6 +66,10 @@ class SymbScaleSigmoid(SymbParameterUnary):
         super().__init__(opd)
         self.vmin = vmin
         self.vmax = vmax
+
+
+class SymbSoftplus(SymbParameterUnary):
+    ...
 
 
 class SymbConcat(SymbParameterReduce):

@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, cast
+from typing import List, Optional, cast
 
-from cirkit.utils import Scope
 from cirkit.symbolic.symb_op import SymbLayerOperation
+from cirkit.utils import Scope
 
 
 class SymbLayer(ABC):
@@ -111,7 +111,7 @@ class SymbKroneckerLayer(SymbProdLayer):
 
     @staticmethod
     def num_prod_units(num_input_units: int, arity: int) -> int:
-        return cast(int, num_input_units ** arity)
+        return cast(int, num_input_units**arity)
 
 
 class SymbSumLayer(ABC, SymbLayer):

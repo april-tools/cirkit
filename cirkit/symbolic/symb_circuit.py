@@ -43,7 +43,7 @@ class SymbCircuit:
         sum_cls: Optional[Type[SymbSumLayer]] = None,
         prod_cls: Optional[Type[SymbProdLayer]] = None,
         input_param_cls: Optional[Type[AbstractSymbParameter]] = None,
-        sum_param_cls: Optional[Type[AbstractSymbParameter]] = None
+        sum_param_cls: Optional[Type[AbstractSymbParameter]] = None,
     ) -> "SymbCircuit":
         layers: List[SymbLayer] = []
         rgn_to_layers: Dict[RGNode, SymbLayer] = {}
