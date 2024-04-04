@@ -1,7 +1,7 @@
 from typing import Optional
 
 from cirkit.layers import Layer
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class InputLayer(Layer):
@@ -20,7 +20,7 @@ class InputLayer(Layer):
         num_output_units: int,
         arity: int = 1,
         reparam: Optional[Reparameterization] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """Init class.
 

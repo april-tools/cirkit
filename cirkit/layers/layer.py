@@ -5,7 +5,7 @@ from typing import Callable, ClassVar, Optional, Sequence, Type, Union
 import torch
 from torch import Tensor, nn
 
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 from cirkit.utils import ComputationSapce
 
 

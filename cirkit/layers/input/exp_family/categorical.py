@@ -3,7 +3,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from cirkit.layers.input.exp_family import ExpFamilyLayer
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class CategoricalLayer(ExpFamilyLayer):

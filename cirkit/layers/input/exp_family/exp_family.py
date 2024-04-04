@@ -1,14 +1,12 @@
 import functools
 from abc import abstractmethod
 from typing import Callable, Tuple
-from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.layers import Layer
-from cirkit.layers.input import InputLayer, ConstantLayer
-from cirkit.reparams import EFProductReparam, NormalizedReparam, Reparameterization
+from cirkit.layers.input import InputLayer
+from cirkit.tensorized.reparams import NormalizedReparam, Reparameterization
 
 
 class ExpFamilyLayer(InputLayer):

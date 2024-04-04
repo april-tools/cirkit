@@ -1,10 +1,10 @@
-from typing import cast, Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
-from cirkit.layers.inner import InnerLayer, HadamardLayer, DenseLayer
-from cirkit.reparams import Reparameterization
+from cirkit.layers.inner import DenseLayer, HadamardLayer, InnerLayer
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class CPLayer(InnerLayer):

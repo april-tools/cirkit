@@ -1,10 +1,14 @@
 from typing import Callable, Dict, Iterable, Optional, Type, Union
 
-from cirkit.symbolic.layers import SymbLayer
-from cirkit.symbolic.layers.symb_prod import SymbProdLayer
-from cirkit.symbolic.layers.symb_sum import SymbSumLayer
-from cirkit.symbolic.layers.symb_input import SymbInputLayer, SymbConstantLayer, SymbExpFamilyLayer
 from cirkit.symbolic.symb_circuit import SymbCircuit
+from cirkit.symbolic.symb_layers import (
+    SymbConstantLayer,
+    SymbExpFamilyLayer,
+    SymbInputLayer,
+    SymbLayer,
+    SymbProdLayer,
+    SymbSumLayer,
+)
 from cirkit.symbolic.symb_op import SymbCircuitOperation, SymbLayerOperation, SymbOperator
 from cirkit.utils import Scope
 

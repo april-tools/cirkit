@@ -1,7 +1,7 @@
 from torch import Tensor
 
 from cirkit.layers.input import InputLayer
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class ParameterizedConstantLayer(InputLayer):

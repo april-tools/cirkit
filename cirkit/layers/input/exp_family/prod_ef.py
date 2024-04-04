@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 from cirkit.layers.input.exp_family import ExpFamilyLayer
-from cirkit.reparams import EFProductReparam
+from cirkit.tensorized.reparams import EFProductReparam
 
 
 class ProdEFLayer(ExpFamilyLayer):
@@ -32,7 +32,7 @@ class ProdEFLayer(ExpFamilyLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: EFProductReparam
+        reparam: EFProductReparam,
     ) -> None:
         """Init class.
 

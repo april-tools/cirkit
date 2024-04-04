@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from cirkit.layers.input.exp_family import ExpFamilyLayer
-from cirkit.reparams import EFNormalReparam
+from cirkit.tensorized.reparams import EFNormalReparam
 
 
 class NormalLayer(ExpFamilyLayer):

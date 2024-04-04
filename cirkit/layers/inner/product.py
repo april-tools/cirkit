@@ -1,9 +1,9 @@
-from typing import Callable, Optional, Literal
+from typing import Callable, Literal, Optional
 
 from torch import Tensor
 
 from cirkit.layers.inner import InnerLayer
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class ProductLayer(InnerLayer):

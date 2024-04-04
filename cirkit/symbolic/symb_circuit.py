@@ -1,35 +1,31 @@
 from collections import defaultdict, deque
-from typing import Dict, Iterable, Iterator, List, Optional, Type, Set
+from typing import Dict, Iterable, Iterator, List, Optional, Set, Type
 
-from cirkit.region_graph import RegionGraph
-from cirkit.symbolic.layers import SymbLayer
-from cirkit.symbolic.layers.symb_prod import SymbProdLayer
-from cirkit.symbolic.layers.symb_sum import SymbSumLayer, SymbMixingLayer
-from cirkit.symbolic.layers.symb_input import SymbInputLayer
+from cirkit.symbolic.symb_layers import (
+    SymbInputLayer,
+    SymbLayer,
+    SymbMixingLayer,
+    SymbProdLayer,
+    SymbSumLayer,
+)
 from cirkit.symbolic.symb_op import SymbCircuitOperation
+from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils import Scope
-from cirkit.region_graph import PartitionNode, RegionNode, RGNode
 
 
 class SymbCircuit:
-    """The symbolic representation of a (tensorized) circuit."""
+    """The symbolic representation of a symbolic circuit."""
 
     def __init__(
         self,
-        region_graph: RegionGraph,
+        scope: Scope,
         layers: Iterable[SymbLayer],
         /,
         *,
         operation: Optional[SymbCircuitOperation] = None,
     ) -> None:
-        self.region_graph = region_graph
         self.operation = operation
-        self.scope = region_graph.scope
-        self.num_vars = region_graph.num_vars
-        self.is_smooth = region_graph.is_smooth
-        self.is_decomposable = region_graph.is_decomposable
-        self.is_structured_decomposable = region_graph.is_structured_decomposable
-        self.is_omni_compatible = region_graph.is_omni_compatible
+        self.num_vars = len(scope)
         self._layers = list(layers)
 
     @classmethod
@@ -42,7 +38,7 @@ class SymbCircuit:
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
-        input_cls: Optional[Type[SymbInputLayer]] = None,  # TODO: how to specify?
+        input_cls: Optional[Type[SymbInputLayer]] = None,
         sum_cls: Optional[Type[SymbSumLayer]] = None,
         prod_cls: Optional[Type[SymbProdLayer]] = None,
     ) -> "SymbCircuit":
@@ -86,45 +82,7 @@ class SymbCircuit:
                 #       instead of going into a wrong branch.
                 assert False, "Region graph nodes must be either region or partition nodes"
 
-        return cls(region_graph, layers)
-
-    #######################################    Properties    #######################################
-    # Here are the basic properties and some structural properties of the SymbC. Some of them are
-    # simply defined in __init__. Some requires additional treatment and is define below. We list
-    # everything here to add "docstrings" to them.
-
-    scope: Scope
-    """The scope of the SymbC, i.e., the union of scopes of all output layers."""
-
-    num_vars: int
-    """The number of variables referenced in the SymbC, i.e., the size of scope."""
-
-    is_smooth: bool
-    """Whether the SymbC is smooth, i.e., all inputs to a sum have the same scope."""
-
-    is_decomposable: bool
-    """Whether the SymbC is decomposable, i.e., inputs to a product have disjoint scopes."""
-
-    is_structured_decomposable: bool
-    """Whether the SymbC is structured-decomposable, i.e., compatible to itself."""
-
-    is_omni_compatible: bool
-    """Whether the SymbC is omni-compatible, i.e., compatible to all circuits of the same scope."""
-
-    def is_compatible(
-        self, other: "SymbCircuit", /, *, scope: Optional[Iterable[int]] = None
-    ) -> bool:
-        """Test compatibility with another symbolic circuit over the given scope.
-
-        Args:
-            other (SymbCircuit): The other symbolic circuit to compare with.
-            scope (Optional[Iterable[int]], optional): The scope over which to check. If None, \
-                will use the intersection of the scopes of two SymbC. Defaults to None.
-
-        Returns:
-            bool: Whether self is compatible to other.
-        """
-        return self.region_graph.is_compatible(other.region_graph, scope=scope)
+        return cls(region_graph.scope, layers)
 
     #######################################    Layer views    ######################################
     # These are iterable views of the nodes in the SymbC, and the topological order is guaranteed

@@ -2,10 +2,9 @@ from typing import Optional
 
 from torch import Tensor
 
-from cirkit.layers.layer import Layer
-from cirkit.layers.input.exp_family import ExpFamilyLayer
 from cirkit.layers.input import InputLayer
-from cirkit.reparams import Reparameterization
+from cirkit.layers.input.exp_family import ExpFamilyLayer
+from cirkit.tensorized.reparams import Reparameterization
 from cirkit.utils import batch_high_order_at
 
 

@@ -1,7 +1,7 @@
 from typing import Literal, Optional
 
 from cirkit.layers.input import InputLayer
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class UnivariateInputLayer(InputLayer):

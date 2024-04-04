@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.layers import InnerLayer
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class SumLayer(InnerLayer):

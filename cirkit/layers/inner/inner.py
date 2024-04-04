@@ -1,7 +1,7 @@
 from typing import Optional
 
 from cirkit.layers import Layer
-from cirkit.reparams import Reparameterization
+from cirkit.tensorized.reparams import Reparameterization
 
 
 class InnerLayer(Layer):
