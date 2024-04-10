@@ -46,8 +46,8 @@ def example_simple_pc() -> None:
     # For instance, the backend 'torch' might support the following optimizations:
     # - fold=True  enables folding;
     # - einsum=True  suggests compiling to layers using einsums when possible.
-    ctx = PipelineContext()
-    ctx.compile(int_sc, backend="torch", fold=True, einsum=True)
+    ctx = PipelineContext(backend="torch")
+    ctx.compile(int_sc, fold=True, einsum=True)
 
     # Retrieve the compiled tensorized circuits from the pipeline context
     # These circuits are torch modules and share parameters accordingly
@@ -211,6 +211,11 @@ def example_lib_extension() -> None:
 
         # The following two methods specify the protocol for this symbolic token, i.e.,
         # the hyperparameters and the parameters (all in symbolic/non-executable form).
+
+        def forward(self):
+            pass
+            # Symbolic forward with symbolic primitives?
+            # Can we process the symbolic code in forward with metaprogramming?
 
         @staticmethod
         def hyper_params(self) -> Dict[str, Any]:
