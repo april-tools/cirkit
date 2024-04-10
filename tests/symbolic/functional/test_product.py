@@ -1,4 +1,4 @@
-from cirkit.region_graph import QuadTree
+from cirkit.templates.region_graph import QuadTree
 from tests.symbolic.test_utils import get_symbolic_circuit_on_rg
 
 

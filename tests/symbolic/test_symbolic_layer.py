@@ -1,8 +1,8 @@
 from typing import Dict
 
 from cirkit.layers import CategoricalLayer, DenseLayer, HadamardLayer, TuckerLayer
-from cirkit.reparams import ExpReparam
 from cirkit.symbolic import SymbolicInputLayer, SymbolicProductLayer, SymbolicSumLayer
+from cirkit.tensorized.reparams import ExpReparam
 from cirkit.utils.type_aliases import SymbCfgFactory
 from tests.symbolic.test_utils import get_simple_rg
 

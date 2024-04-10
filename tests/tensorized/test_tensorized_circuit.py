@@ -4,7 +4,7 @@ import torch
 
 from cirkit import set_layer_comp_space
 from tests import floats
-from tests.models.test_utils import (
+from tests.tensorized.test_utils import (
     get_circuit_2x2,
     get_circuit_2x2_output,
     get_circuit_2x2_param_shapes,

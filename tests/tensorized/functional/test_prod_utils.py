@@ -7,10 +7,15 @@ import torch
 from torch import Tensor
 
 from cirkit.layers import CategoricalLayer, CPLayer, InputLayer, NormalLayer
-from cirkit.tensorized import TensorizedCircuit
-from cirkit.templates.region_graph import RegionGraph, RegionNode
-from cirkit.reparams import EFNormalReparam, ExpReparam, LogSoftmaxReparam, Reparameterization
 from cirkit.symbolic import SymbolicTensorizedCircuit
+from cirkit.templates.region_graph import RegionGraph, RegionNode
+from cirkit.tensorized import TensorizedCircuit
+from cirkit.tensorized.reparams import (
+    EFNormalReparam,
+    ExpReparam,
+    LogSoftmaxReparam,
+    Reparameterization,
+)
 from cirkit.utils.type_aliases import SymbCfgFactory
 
 

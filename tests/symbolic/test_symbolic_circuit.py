@@ -1,5 +1,5 @@
-from cirkit.region_graph import QuadTree
 from cirkit.symbolic import SymbolicInputLayer, SymbolicSumLayer
+from cirkit.templates.region_graph import QuadTree
 from cirkit.utils import Scope
 from tests.symbolic.test_utils import get_simple_rg, get_symbolic_circuit_on_rg
 
