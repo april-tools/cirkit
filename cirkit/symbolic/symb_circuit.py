@@ -12,6 +12,7 @@ from cirkit.symbolic.symb_layers import (
 )
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils import Scope
+from cirkit.utils.algorithms import topological_ordering
 
 
 class SymbCircuitOperator(Enum):
@@ -39,14 +40,14 @@ class SymbCircuit:
         scope: Scope,
         layers: List[SymbLayer],
         in_layers: Dict[SymbLayer, List[SymbLayer]],
-        /,
-        *,
+        out_layers: Dict[SymbLayer, List[SymbLayer]],
         operation: Optional[SymbCircuitOperation] = None,
     ) -> None:
         self.operation = operation
         self.num_vars = len(scope)
         self._layers = layers
         self._in_layers = in_layers
+        self._out_layers = out_layers
 
     @classmethod
     def from_region_graph(
@@ -62,6 +63,7 @@ class SymbCircuit:
     ) -> "SymbCircuit":
         layers: List[SymbLayer] = []
         in_layers: Dict[SymbLayer, List[SymbLayer]] = {}
+        out_layers: Dict[SymbLayer, List[SymbLayer]] = defaultdict(list)
         rgn_to_layers: Dict[RGNode, SymbLayer] = {}
 
         # Loop through the region graph nodes, which are already sorted in a topological ordering
@@ -73,11 +75,15 @@ class SymbCircuit:
                 layers.append(input_sl)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = [input_sl]
+                out_layers[input_sl].append(sum_sl)
                 rgn_to_layers[rgn] = sum_sl
             elif isinstance(rgn, PartitionNode):  # Partition node
+                prod_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
                 prod_sl = prod_factory(rgn.scope, num_sum_units)
                 layers.append(prod_sl)
-                in_layers[prod_sl] = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
+                in_layers[prod_sl] = prod_inputs
+                for in_sl in prod_inputs:
+                    out_layers[in_sl] = prod_sl
                 rgn_to_layers[rgn] = prod_sl
             elif isinstance(rgn, RegionNode):  # Inner region node
                 sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
@@ -88,6 +94,8 @@ class SymbCircuit:
                     sum_sl = SymbMixingLayer(rgn.scope, num_sum_units)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = sum_inputs
+                for in_sl in sum_inputs:
+                    out_layers[in_sl] = sum_sl
                 rgn_to_layers[rgn] = sum_sl
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
@@ -96,7 +104,16 @@ class SymbCircuit:
                 #       Also, should anything really go wrong, we will hit this guard statement
                 #       instead of going into a wrong branch.
                 assert False, "Region graph nodes must be either region or partition nodes"
-        return cls(region_graph.scope, layers, in_layers)
+        return cls(region_graph.scope, layers, in_layers, out_layers)
+
+    def layers_topological_ordering(self) -> List[SymbLayer]:
+        ordering: Optional[List[SymbLayer]] = topological_ordering(
+            set(self.output_layers),
+            incomings_fn=lambda sl: self._in_layers[sl]
+        )
+        if ordering is None:
+            raise ValueError("The given symbolic circuit has at least one layers cycle")
+        return ordering
 
     #######################################    Layer views    ######################################
     # These are iterable views of the nodes in the SymbC, and the topological order is guaranteed
@@ -125,45 +142,20 @@ class SymbCircuit:
         return (layer for layer in self.layers if isinstance(layer, SymbProdLayer))
 
     @property
+    def output_layers(self) -> Iterator[SymbLayer]:
+        """Output layers in the circuit."""
+        return (layer for layer in self.layers if not self._out_layers[layer])
+
+    @property
     def inner_layers(self) -> Iterator[SymbLayer]:
         """Inner (non-input) layers in the circuit."""
         return (layer for layer in self.layers if self._in_layers[layer])
 
 
 def pipeline_topological_ordering(roots: Set[SymbCircuit]) -> List[SymbCircuit]:
-    # Initialize the number of incomings edges for each node
-    in_symb_circuits: List[SymbCircuit] = []
-    num_incomings: Dict[SymbCircuit, int] = defaultdict(int)
-    outgoings: Dict[SymbCircuit, List[SymbCircuit]] = defaultdict(list)
-
-    # BFS
-    seen, queue = set(roots), deque(roots)
-    while not queue:
-        sc = queue.popleft()
-        if sc.operation is None:
-            in_symb_circuits.append(sc)
-            continue
-        symb_operands = sc.operation.operands
-        for op in symb_operands:
-            num_incomings[sc] += 1
-            outgoings[op].append(sc)
-            if op not in seen:
-                seen.add(op)
-                queue.append(op)
-
-    # Kahn's algorithm
-    ordering: List[SymbCircuit] = []
-    to_visit = deque(in_symb_circuits)
-    while to_visit:
-        sc = to_visit.popleft()
-        ordering.append(sc)
-        for out_sc in outgoings[sc]:
-            num_incomings[out_sc] -= 1
-            if num_incomings[out_sc] == 0:
-                to_visit.append(out_sc)
-
-    # Check for possible cycles in the pipeline
-    for sc, n in num_incomings.keys():
-        if n != 0:
-            raise ValueError("The given pipeline of symbolic circuit has at least one cycle")
+    ordering: Optional[List[SymbCircuit]] = topological_ordering(
+        roots,
+        incomings_fn=lambda sc: () if sc.operation is None else sc.operation.operands)
+    if ordering is None:
+        raise ValueError("The given symbolic circuits pipeline has at least one cycle")
     return ordering
