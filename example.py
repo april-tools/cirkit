@@ -9,6 +9,7 @@ from cirkit.symbolic.symb_circuit import SymbCircuit
 
 # Symbolic stuff imports
 from cirkit.symbolic.symb_layers import *
+from cirkit.symbolic.symb_op import SymbOperator
 from cirkit.symbolic.symb_params import *
 from cirkit.symbolic.utils import symbolic_input_layer_cls, symbolic_parameter_cls
 from cirkit.templates.region_graph.algorithms import FullyFactorized, QuadTree
@@ -213,6 +214,7 @@ def example_lib_extension() -> None:
         # the hyperparameters and the parameters (all in symbolic/non-executable form).
 
         def forward(self):
+            # Dense(Hadamard(x))
             pass
             # Symbolic forward with symbolic primitives?
             # Can we process the symbolic code in forward with metaprogramming?
@@ -256,11 +258,11 @@ def example_lib_extension() -> None:
         def forward(self, x: Tensor) -> Tensor:
             params_exp, params_poly = self.weight()
             # The exponent is always in log-space.
-            gaussian = self.comp_space.from_log(self.polyval(self.params_exp, x))
+            gaussian = self.polyval(self.params_exp, x)
             if params_poly is None:
                 return gaussian
             factor = self.polyval(self.params_poly, x)
-            return self.comp_space.mul(gaussian, factor)
+            return torch.mul(gaussian, factor)
 
     class PolyGaussianParam(UnaryReparam):
         def __init__(
@@ -316,7 +318,7 @@ def example_lib_extension() -> None:
     # - SymbPolyGaussianLayer must be compiled into PolyGaussianLayer
     # - SymbPolyGaussianParam must be PolyGaussianParam
     # To do so, we extend the pipeline context by registering new compilation rules.
-    ctx = PipelineContext(backend="torch")
+    ctx = CompilationContext(backend="torch")
     ctx.register_layer_compilation_rule(SymbPolyGaussianLayer, PolyGaussianLayer)
     ctx.register_param_compilation_rule(SymbPolyGaussianParam, PolyGaussianParam)
     ctx.compile(p)
@@ -343,11 +345,11 @@ def example_lib_extension() -> None:
     # Then, we have to implement the symbolic product function
     def poly_gaussian_product(
         lhs: SymbPolyGaussianLayer, rhs: SymbPolyGaussianLayer
-    ) -> SymbPolyGaussianProductLayer:
+    ) -> SymbPolyGaussianLayer:
         # Assume something toy-ish for the product
         assert lhs.scope == rhs.scope
         assert lhs.num_channels == rhs.num_units
-        return SymbPolyGaussianProductLayer(
+        return SymbPolyGaussianLayer(
             lhs.scope,
             lhs.num_units * rhs.num_channels,
             num_channels=lhs.num_channels,
@@ -363,14 +365,21 @@ def example_lib_extension() -> None:
     # Compute the product, by passing the above function to the registry
     # Perhaps a better way could be a symbolic context that keeps tracks of these registries,
     # akin to the pipeline context but simpler as it does not depend on the backend nor needs to do optimizations
-    r = multiply(
-        p,
-        q,
-        registry={(SymbPolyGaussianLayer, SymbPolyGaussianLayer): SymbPolyGaussianProductLayer},
-    )
+    with PipelineContext() as ctx:
+        ctx.add_operation_rule(SymbLayerOperator.MULTIPLICATION, poly_gaussian_product)
+        r = ctx.multiply(p, q)
+        tensorized_r = ctx.compile(r, fold=True)
+
+        def folded_product(ctx: PipelineContext, p: SymbCircuit, q: SymbCircuit) -> SymbCircuit:
+            assert p.is_compatible(q)
+            f_p = ctx.fold(p)
+            f_q = ctx.fold(q)
+            f_r = folded_multiply(f_p, f_q)
+            return f_r
+        ctx.add_pipeline_rule(SymbCircuitOperator.MULTIPLICATION, folded_product)
 
     # Next, we want to materialize such a product.
     # To do so, we register the following compilation rule into the context, and then compile
-    ctx.register_layer_compilation_rule(SymbPolyGaussianProductLayer, PolyGaussianProductLayer)
+    #ctx.register_layer_compilation_rule(SymbPolyGaussianProductLayer, PolyGaussianProductLayer)
     ctx.compile(r)
     tens_r = ctx[r]
