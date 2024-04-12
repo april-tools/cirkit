@@ -1,48 +1,44 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, cast
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from typing import Optional, cast, Tuple, Any, Dict
 
-from cirkit.symbolic.symb_op import SymbLayerOperation
 from cirkit.utils import Scope
 
 
+class SymbLayerOperator(Enum):
+    """Types of symbolic operations on layers."""
+    INTEGRATION = auto()
+    DIFFERENTIATION = auto()
+    MULTIPLICATION = auto()
+
+
+@dataclass(frozen=True)
+class SymbLayerOperation:
+    """The symbolic operation applied on a SymbLayer."""
+
+    operator: SymbLayerOperator
+    operands: Tuple['SymbLayer', ...] = ()
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
 class SymbLayer(ABC):
-    """The abstract base class for symbolic layers in symbolic circuits."""
-
-    scope: Scope
-    num_units: int
-    operation: Optional[SymbLayerOperation]
-    inputs: List["SymbLayer"]
-    outputs: List["SymbLayer"]  # reverse reference of inputs
-
     def __init__(
         self,
         scope: Scope,
         num_units: int,
-        operation: Optional[SymbLayerOperation] = None,
-        inputs: Optional[List["SymbLayer"]] = None,
+        operation: Optional[SymbLayerOperation] = None
     ):
         self.scope = scope
         self.num_units = num_units
         self.operation = operation
-        self.inputs = inputs if inputs is not None else []
-        for sl in inputs:
-            sl.outputs.append(self)
-
-    def __repr__(self) -> str:
-        ...
 
     @property
-    def arity(self) -> int:
-        return len(self.inputs)
-
-    @property
-    def kwargs(self) -> dict:
+    def hparams(self) -> dict:
         return {}
 
 
 class SymbInputLayer(SymbLayer):
-    """The (abstract???) base class for symbolic input layers."""
-
     def __init__(
         self,
         scope: Scope,
@@ -50,8 +46,12 @@ class SymbInputLayer(SymbLayer):
         num_channels: int,
         operation: Optional[SymbLayerOperation] = None,
     ):
-        super().__init__(scope, num_units, operation=operation, inputs=[])
+        super().__init__(scope, num_units, operation=operation)
         self.num_channels = num_channels
+
+    @property
+    def hparams(self) -> dict:
+        return dict(num_units=self.num_units, num_channels=self.num_channels)
 
 
 class SymbExpFamilyLayer(SymbInputLayer):
@@ -66,7 +66,22 @@ class SymbExpFamilyLayer(SymbInputLayer):
 
 
 class SymbCategoricalLayer(SymbExpFamilyLayer):
-    ...
+    def __init__(
+        self,
+        scope: Scope,
+        num_units: int,
+        num_channels: int,
+        operation: Optional[SymbLayerOperation] = None,
+        num_categories: int = 2
+    ):
+        super().__init__(scope, num_units, num_channels, operation=operation)
+        self.num_categories = num_categories
+
+    @property
+    def hparams(self) -> dict:
+        hparams = super().hparams
+        hparams.update(num_categories=self.num_categories)
+        return hparams
 
 
 class SymbConstantLayer(SymbInputLayer):
@@ -85,12 +100,23 @@ class SymbConstantLayer(SymbInputLayer):
         self.value = value
 
     @property
-    def kwargs(self) -> dict:
-        return dict(value=self.value)
+    def hparams(self) -> dict:
+        hparams = super().hparams
+        hparams.update(value=self.value)
+        return hparams
 
 
 class SymbProdLayer(ABC, SymbLayer):
     """The abstract base class for symbolic product layers."""
+    def __init__(
+        self,
+        scope: Scope,
+        in_num_units: int,
+        arity: int,
+        operation: Optional[SymbLayerOperation] = None
+    ):
+        num_units = SymbProdLayer.num_prod_units(in_num_units, arity)
+        super().__init__(scope, num_units, operation=operation)
 
     @staticmethod
     @abstractmethod
@@ -100,18 +126,16 @@ class SymbProdLayer(ABC, SymbLayer):
 
 class SymbHadamardLayer(SymbProdLayer):
     """The symbolic Hadamard product layer."""
-
     @staticmethod
-    def num_prod_units(num_input_units: int, arity: int) -> int:
-        return num_input_units
+    def num_prod_units(in_num_units: int, arity: int) -> int:
+        return in_num_units
 
 
 class SymbKroneckerLayer(SymbProdLayer):
     """The symbolic Kronecker product layer."""
-
     @staticmethod
-    def num_prod_units(num_input_units: int, arity: int) -> int:
-        return cast(int, num_input_units**arity)
+    def num_prod_units(in_num_units: int, arity: int) -> int:
+        return cast(int, in_num_units**arity)
 
 
 class SymbSumLayer(ABC, SymbLayer):
