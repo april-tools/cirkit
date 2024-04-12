@@ -1,10 +1,9 @@
-from collections import deque, defaultdict
-from typing import Set, Any, Callable, List, Iterator, Dict, Optional, Union, Tuple
+from collections import defaultdict, deque
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 
 def bfs(
-        roots: Set[Any],
-        incomings_fn: Callable[[Any], Union[List[Any], Tuple[Any]]]
+    roots: Set[Any], incomings_fn: Callable[[Any], Union[List[Any], Tuple[Any]]]
 ) -> Iterator[Any]:
     seen, to_visit = set(roots), deque(roots)
     while to_visit:
@@ -17,8 +16,7 @@ def bfs(
 
 
 def topological_ordering(
-        roots: Set[Any],
-        incomings_fn: Callable[[Any], Union[List[Any], Tuple[Any]]]
+    roots: Set[Any], incomings_fn: Callable[[Any], Union[List[Any], Tuple[Any]]]
 ) -> Optional[List[Any]]:
     num_incomings: Dict[Any, int] = defaultdict(int)
     outgoings: Dict[Any, List[Any]] = defaultdict(list)

@@ -1,9 +1,9 @@
 import itertools
-from collections import defaultdict, deque
-from dataclasses import field, dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from functools import cached_property
-from typing import Dict, Iterator, List, Optional, Set, Callable, Tuple, Any, Iterable
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from cirkit.symbolic.symb_layers import (
     SymbInputLayer,
@@ -30,7 +30,7 @@ class SymbCircuitOperation:
     """The symbolic operation applied on a SymbCircuit."""
 
     operator: SymbCircuitOperator
-    operands: Tuple['SymbCircuit', ...]
+    operands: Tuple["SymbCircuit", ...]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -61,7 +61,7 @@ class SymbCircuit:
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
-        num_classes: int = 1
+        num_classes: int = 1,
     ) -> "SymbCircuit":
         layers: List[SymbLayer] = []
         in_layers: Dict[SymbLayer, List[SymbLayer]] = {}
@@ -110,8 +110,7 @@ class SymbCircuit:
 
     def layers_topological_ordering(self) -> List[SymbLayer]:
         ordering: Optional[List[SymbLayer]] = topological_ordering(
-            set(self.output_layers),
-            incomings_fn=lambda sl: self._in_layers[sl]
+            set(self.output_layers), incomings_fn=lambda sl: self._in_layers[sl]
         )
         if ordering is None:
             raise ValueError("The given symbolic circuit has at least one layers cycle")
@@ -149,7 +148,7 @@ class SymbCircuit:
         # TODO
         return False
 
-    def is_compatible(self, oth: 'SymbCircuit', scope: Optional[Iterable[int]] = None) -> bool:
+    def is_compatible(self, oth: "SymbCircuit", scope: Optional[Iterable[int]] = None) -> bool:
         if not self.is_smooth:
             return False
         if not self.is_decomposable:
@@ -196,8 +195,8 @@ class SymbCircuit:
 
 def pipeline_topological_ordering(roots: Set[SymbCircuit]) -> List[SymbCircuit]:
     ordering: Optional[List[SymbCircuit]] = topological_ordering(
-        roots,
-        incomings_fn=lambda sc: () if sc.operation is None else sc.operation.operands)
+        roots, incomings_fn=lambda sc: () if sc.operation is None else sc.operation.operands
+    )
     if ordering is None:
         raise ValueError("The given symbolic circuits pipeline has at least one cycle")
     return ordering
