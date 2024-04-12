@@ -1,7 +1,9 @@
+import itertools
 from collections import defaultdict, deque
 from dataclasses import field, dataclass
 from enum import Enum, auto
-from typing import Dict, Iterator, List, Optional, Set, Callable, Tuple, Any
+from functools import cached_property
+from typing import Dict, Iterator, List, Optional, Set, Callable, Tuple, Any, Iterable
 
 from cirkit.symbolic.symb_layers import (
     SymbInputLayer,
@@ -114,6 +116,46 @@ class SymbCircuit:
         if ordering is None:
             raise ValueError("The given symbolic circuit has at least one layers cycle")
         return ordering
+
+    ##################################### Structural properties ####################################
+
+    @cached_property
+    def is_smooth(self) -> bool:
+        return all(
+            sum_sl.scope == in_sl.scope
+            for sum_sl in self.sum_layers
+            for in_sl in self._in_layers[sum_sl]
+        )
+
+    @cached_property
+    def is_decomposable(self) -> bool:
+        return not any(
+            lhs_in_sl.scope & lhs_in_sl.scope
+            for prod_sl in self.product_layers
+            for lhs_in_sl, rhs_in_sl in itertools.combinations(self._in_layers[prod_sl], 2)
+        )
+
+    @cached_property
+    def is_structured_decomposable(self) -> bool:
+        # Structured-decomposability is self-compatiblity
+        return self.is_compatible(self)
+
+    @cached_property
+    def is_omni_compatible(self) -> bool:
+        if not self.is_smooth:
+            return False
+        if not self.is_decomposable:
+            return False
+        # TODO
+        return False
+
+    def is_compatible(self, oth: 'SymbCircuit', scope: Optional[Iterable[int]] = None) -> bool:
+        if not self.is_smooth:
+            return False
+        if not self.is_decomposable:
+            return False
+        # TODO
+        return False
 
     #######################################    Layer views    ######################################
     # These are iterable views of the nodes in the SymbC, and the topological order is guaranteed
