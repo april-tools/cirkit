@@ -1,15 +1,16 @@
-from typing import Callable, Dict, Iterable, Optional, Tuple, Type, Union
+from typing import Callable, Dict, Iterable, Optional, Type, Union
 
-from cirkit.symbolic.symb_circuit import SymbCircuit
+from cirkit.symbolic.symb_circuit import SymbCircuit, SymbCircuitOperation, SymbCircuitOperator
 from cirkit.symbolic.symb_layers import (
     SymbConstantLayer,
     SymbExpFamilyLayer,
     SymbInputLayer,
     SymbLayer,
+    SymbLayerOperation,
+    SymbLayerOperator,
     SymbProdLayer,
     SymbSumLayer,
 )
-from cirkit.symbolic.symb_op import SymbCircuitOperation, SymbLayerOperation, SymbOperator
 from cirkit.utils import Scope
 
 
@@ -32,7 +33,7 @@ def integrate_input_layer(
         sl.num_units,
         sl.num_channels,
         operation=SymbLayerOperation(
-            SymbOperator.INTEGRATION, operands=(sl,), metadata=dict(scope=scope)
+            SymbLayerOperator.INTEGRATION, operands=(sl,), metadata=dict(scope=scope)
         ),
     )
 
@@ -83,7 +84,9 @@ def integrate(
             integral_sl: Union[SymbSumLayer, SymbProdLayer] = type(sl)(
                 sl.scope,
                 sl.num_units,
-                operation=SymbLayerOperation(operator=SymbOperator.INTEGRATION, operands=(sl,)),
+                operation=SymbLayerOperation(
+                    operator=SymbLayerOperator.INTEGRATION, operands=(sl,)
+                ),
                 inputs=integral_sl_inputs,
             )
             symbc_to_integral[sl] = integral_sl
@@ -93,18 +96,19 @@ def integrate(
         symb_circuit.region_graph,
         symbc_to_integral.values(),
         operation=SymbCircuitOperation(
-            operator=SymbOperator.INTEGRATION, operands=(symb_circuit,), metadata=dict(scope=scope)
+            operator=SymbCircuitOperator.INTEGRATION,
+            operands=(symb_circuit,),
+            metadata=dict(scope=scope),
         ),
     )
-
-
-def differentiate(symb_circuit: SymbCircuit) -> SymbCircuit:
-    pass
 
 
 def multiply(
     lhs_symb_circuit: SymbCircuit,
     rhs_symb_circuit: SymbCircuit,
-    registry: Optional[Dict[Tuple[Type, Type], Type]] = None,
 ) -> SymbCircuit:
+    pass
+
+
+def differentiate(symb_circuit: SymbCircuit) -> SymbCircuit:
     pass

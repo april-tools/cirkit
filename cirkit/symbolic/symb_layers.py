@@ -11,7 +11,7 @@ class SymbLayerOperator(Enum):
 
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
-    MULTIPLICATION = auto()
+    KRONECKER = auto()
 
 
 @dataclass(frozen=True)
