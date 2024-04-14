@@ -1,7 +1,7 @@
 import itertools
 from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
@@ -17,8 +17,13 @@ from cirkit.utils import Scope
 from cirkit.utils.algorithms import topological_ordering
 
 
-class SymbCircuitOperator(Enum):
+AbstractSymbCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
+
+
+class SymbCircuitOperator(AbstractSymbCircuitOperator):
     """Types of symbolic operations on circuits."""
+    def _generate_next_value_(name, start, count, last_values):
+        return -(count + 1)  # Enumerate negative integers as the user can extend them with non-negative ones
 
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
@@ -45,11 +50,15 @@ class SymbCircuit:
         out_layers: Dict[SymbLayer, List[SymbLayer]],
         operation: Optional[SymbCircuitOperation] = None,
     ) -> None:
+        self.scope = scope
         self.operation = operation
-        self.num_vars = len(scope)
         self._layers = layers
         self._in_layers = in_layers
         self._out_layers = out_layers
+
+    @property
+    def num_variables(self) -> int:
+        return len(self.scope)
 
     @classmethod
     def from_region_graph(
@@ -64,7 +73,7 @@ class SymbCircuit:
         num_classes: int = 1,
     ) -> "SymbCircuit":
         layers: List[SymbLayer] = []
-        in_layers: Dict[SymbLayer, List[SymbLayer]] = {}
+        in_layers: Dict[SymbLayer, List[SymbLayer]] = defaultdict(list)
         out_layers: Dict[SymbLayer, List[SymbLayer]] = defaultdict(list)
         rgn_to_layers: Dict[RGNode, SymbLayer] = {}
 
@@ -107,6 +116,12 @@ class SymbCircuit:
                 #       instead of going into a wrong branch.
                 assert False, "Region graph nodes must be either region or partition nodes"
         return cls(region_graph.scope, layers, in_layers, out_layers)
+
+    def layer_inputs(self, sl: SymbLayer) -> List[SymbLayer]:
+        return self._in_layers[sl]
+
+    def layer_outputs(self, sl: SymbLayer) -> List[SymbLayer]:
+        return self._out_layers[sl]
 
     def layers_topological_ordering(self) -> List[SymbLayer]:
         ordering: Optional[List[SymbLayer]] = topological_ordering(

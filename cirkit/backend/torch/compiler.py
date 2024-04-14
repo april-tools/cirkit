@@ -1,7 +1,7 @@
 from typing import Dict, Type, Union, List, Tuple, Optional, cast
 
 from cirkit.symbolic.symb_circuit import SymbCircuit
-from cirkit.symbolic.symb_layers import SymbLayer, SymbLayerOperator
+from cirkit.symbolic.symb_layers import SymbLayer, AbstractSymbLayerOperator
 from cirkit.symbolic.symb_params import AbstractSymbParameter
 
 from cirkit.backend.base import AbstractCompiler, CompilationRegistry
@@ -115,7 +115,7 @@ class Compiler(AbstractCompiler):
                 reparam=layer_cls.default_reparam()
             )
 
-        if symb_layer_operation.operator == SymbLayerOperator.INTEGRATION:
+        if symb_layer_operation.operator == AbstractSymbLayerOperator.INTEGRATION:
             symb_circuit_op = symb_circuit.operation.operands[0]
             symb_layer_op = symb_layer_operation.operands[0]
             layer_op: InputLayer = cast(
@@ -154,7 +154,7 @@ class Compiler(AbstractCompiler):
                 **symb_layer.kwargs,
             )
 
-        if symb_layer_operation.operator == SymbLayerOperator.INTEGRATION:
+        if symb_layer_operation.operator == AbstractSymbLayerOperator.INTEGRATION:
             symb_circuit_op = symb_circuit.operation.operands[0]
             symb_layer_op = symb_layer_operation.operands[0]
             layer_op: SumLayer = cast(

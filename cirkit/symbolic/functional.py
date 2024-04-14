@@ -1,114 +1,94 @@
-from typing import Callable, Dict, Iterable, Optional, Type, Union
+from collections import defaultdict
+from typing import Dict, Iterable, Optional, Union, List
 
+from cirkit.symbolic.registry import SymbOperatorRegistry
 from cirkit.symbolic.symb_circuit import SymbCircuit, SymbCircuitOperation, SymbCircuitOperator
 from cirkit.symbolic.symb_layers import (
-    SymbConstantLayer,
-    SymbExpFamilyLayer,
     SymbInputLayer,
     SymbLayer,
     SymbLayerOperation,
-    SymbLayerOperator,
     SymbProdLayer,
-    SymbSumLayer,
+    SymbSumLayer, SymbLayerOperator,
 )
 from cirkit.utils import Scope
-
-
-def integrate_ef_layer(
-    sl: SymbExpFamilyLayer, scope: Optional[Iterable[int]] = None
-) -> SymbConstantLayer:
-    # Symbolically integrate an exponential family layer
-    return SymbConstantLayer(sl.scope, sl.num_units, sl.num_channels, value=1.0)
-
-
-def integrate_input_layer(
-    sl: SymbInputLayer, scope: Optional[Iterable[int]] = None
-) -> SymbConstantLayer:
-    # Fallback functional as to implement symbolic integration over any other symbolic input layer
-    # Note that the operator data structure will store the relevant information,
-    # i.e., the layer itself as an operand and the variables to integrate as metadata
-    scope = Scope(scope) if scope is not None else sl.scope
-    return SymbConstantLayer(
-        sl.scope,
-        sl.num_units,
-        sl.num_channels,
-        operation=SymbLayerOperation(
-            SymbLayerOperator.INTEGRATION, operands=(sl,), metadata=dict(scope=scope)
-        ),
-    )
+from cirkit.utils.exceptions import StructuralPropertyError
 
 
 def integrate(
-    symb_circuit: SymbCircuit,
-    /,
-    *,
-    scope: Optional[Iterable[int]] = None,
-    registry: Optional[
-        Dict[Type[SymbInputLayer], Callable[[SymbInputLayer], SymbConstantLayer]]
-    ] = None,
+    sc: SymbCircuit,
+    registry: SymbOperatorRegistry,
+    scope: Optional[Iterable[int]] = None
 ) -> SymbCircuit:
-    assert (
-        symb_circuit.is_smooth and symb_circuit.is_decomposable
-    ), "Only smooth and decomposable circuits can be efficiently integrated."
-    scope = Scope(scope) if scope is not None else symb_circuit.scope
-    assert (
-        scope | symb_circuit.scope
-    ) == symb_circuit.scope, (
-        "The variables scope to integrate must be a subset of the scope of the circuit"
-    )
+    if not sc.is_smooth or not sc.is_decomposable:
+        raise StructuralPropertyError(
+            "Only smooth and decomposable circuits can be efficiently integrated.")
+    scope = Scope(scope) if scope is not None else sc.scope
+    if (scope | sc.scope) != sc.scope:
+        raise ValueError("The variables scope to integrate must be a subset of the scope of the circuit")
 
-    # The default registry the compiler will use to integrate input layers
-    integrate_registry = {
-        SymbExpFamilyLayer: integrate_ef_layer,
-        SymbInputLayer: integrate_input_layer,
-    }
+    # Mapping the symbolic circuit layers with the layers of the new circuit to build
+    map_layers: Dict[SymbLayer, SymbLayer] = {}
 
-    # Update with the registry specified by the user (if any)
-    if registry is not None:
-        integrate_registry.update(registry)
+    # For each new layer, keep track of (i) its inputs and (ii) the layers it feeds
+    in_layers: Dict[SymbLayer, List[SymbLayer]] = defaultdict(list)
+    out_layers: Dict[SymbLayer, List[SymbLayer]] = defaultdict(list)
 
-    symbc_to_integral: Dict[SymbLayer, SymbLayer] = {}
-    for sl in symb_circuit.layers:
-        if isinstance(sl, SymbInputLayer) and sl.scope & scope:  # input layers -> integrate
+    for sl in sc.layers:
+        # Input layers get integrated over
+        if isinstance(sl, SymbInputLayer) and sl.scope & scope:
             if not (sl.scope <= scope):
                 raise NotImplementedError(
                     "Multivariate integration of proper subsets of variables is not implemented"
                 )
-            # Retrieve the transformation function from the registry
-            # If none is found, then use the fallback one that works for all input layers
-            transform_func = integrate_registry.get(type(sl), integrate_registry[SymbInputLayer])
-            symbc_to_integral[sl] = transform_func(sl)
-        else:  # sum or product layer -> just make a copy and set the operation attribute
+            # Retrieve the integration rule from the registry and apply it
+            if registry.has_rule(SymbLayerOperator.INTEGRATION, type(sl)):
+                func = registry.retrieve_rule(SymbLayerOperator.INTEGRATION, type(sl))
+            else:  # Use a fallback rule that is not a specialized one
+                func = registry.retrieve_rule(SymbLayerOperator.INTEGRATION, SymbInputLayer)
+            map_layers[sl] = func(sl)
+        else:  # Sum/product layers are simply copied
             assert isinstance(sl, (SymbSumLayer, SymbProdLayer))
-            integral_sl_inputs = [symbc_to_integral[isl] for isl in sl.inputs]
-            integral_sl: Union[SymbSumLayer, SymbProdLayer] = type(sl)(
+            new_sl_inputs = [map_layers[isl] for isl in sc.layer_inputs(sl)]
+            new_sl: Union[SymbSumLayer, SymbProdLayer] = type(sl)(
                 sl.scope,
                 sl.num_units,
+                arity=sl.arity,
                 operation=SymbLayerOperation(
-                    operator=SymbLayerOperator.INTEGRATION, operands=(sl,)
-                ),
-                inputs=integral_sl_inputs,
+                    operator=SymbLayerOperator.NOP, operands=(sl,)
+                )
             )
-            symbc_to_integral[sl] = integral_sl
+            map_layers[sl] = new_sl
+            in_layers[new_sl] = new_sl_inputs
+            for isl in new_sl_inputs:
+                out_layers[isl] = new_sl_inputs
 
     # Construct the integral symbolic circuit and set the integration operation metadata
-    return type(symb_circuit)(
-        symb_circuit.region_graph,
-        symbc_to_integral.values(),
+    return SymbCircuit(
+        sc.scope,
+        list(map_layers.values()),
+        in_layers,
+        out_layers,
         operation=SymbCircuitOperation(
             operator=SymbCircuitOperator.INTEGRATION,
-            operands=(symb_circuit,),
+            operands=(sc,),
             metadata=dict(scope=scope),
         ),
     )
 
 
 def multiply(
-    lhs_symb_circuit: SymbCircuit,
-    rhs_symb_circuit: SymbCircuit,
+    lhs_sc: SymbCircuit,
+    rhs_sc: SymbCircuit,
+    registry: SymbOperatorRegistry
 ) -> SymbCircuit:
-    pass
+    if not lhs_sc.is_compatible(rhs_sc):
+        raise StructuralPropertyError(
+            "Only compatible circuits can be multiplied into decomposable circuits.")
+    ...
 
 
-def differentiate(symb_circuit: SymbCircuit) -> SymbCircuit:
-    pass
+def differentiate(sc: SymbCircuit, registry: SymbOperatorRegistry) -> SymbCircuit:
+    if not sc.is_smooth or not sc.is_decomposable:
+        raise StructuralPropertyError(
+            "Only smooth and decomposable circuits can be efficiently differentiated.")
+    ...
