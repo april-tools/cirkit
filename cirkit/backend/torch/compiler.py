@@ -42,12 +42,14 @@ _DEFAULT_COMPILATION_REGISTRY = CompilationRegistry(
 
 
 class Compiler(AbstractCompiler):
-    def __init__(self):
-        super().__init__(_DEFAULT_COMPILATION_REGISTRY)
+    def __init__(self, **flags):
+        super().__init__(
+            _DEFAULT_COMPILATION_REGISTRY, **flags
+        )
         self._symb_tensorized_map: Dict[SymbCircuit, TensorizedCircuit] = {}
         self._symb_layers_map: Dict[SymbCircuit, Dict[SymbLayer, int]] = {}
 
-    def compile(self, symb_circuit: SymbCircuit, **opt_kwargs):
+    def compile(self, symb_circuit: SymbCircuit):
         # Retrieve the topological ordering of the pipeline
         ordering = pipeline_topological_ordering({symb_circuit})
 

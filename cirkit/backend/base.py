@@ -31,12 +31,13 @@ class CompilationRegistry:
 
 
 class AbstractCompiler(ABC):
-    def __init__(self, registry: CompilationRegistry):
+    def __init__(self, registry: CompilationRegistry, **flags):
         self._registry = registry
+        self._flags = flags
 
     def register_rule(self, func: LayerCompilationFunction):
         self._registry.register_rule(func)
 
     @abstractmethod
-    def compile(self, symb_circuit: SymbCircuit, **opt_kwargs):
+    def compile(self, symb_circuit: SymbCircuit):
         ...

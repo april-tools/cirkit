@@ -7,9 +7,9 @@ class AbstractSymbParameter(ABC):
 
 
 class SymbParameter(AbstractSymbParameter):
-    def __init__(self, shape: Tuple[int, ...]) -> None:
+    def __init__(self, *shape: int) -> None:
         super().__init__()
-        self._shape = shape
+        self._shape = tuple(shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -36,7 +36,7 @@ class SymbParameterReduce(ABC, AbstractSymbParameter):
 
 
 class SymbParameterNormalize(ABC, SymbParameterUnary):
-    def __init__(self, opd: AbstractSymbParameter, axis: int = 0):
+    def __init__(self, opd: AbstractSymbParameter, axis: int = -1):
         super().__init__(opd)
         self.axis = axis
 
@@ -50,13 +50,13 @@ class SymbKronecker(SymbParameterBinary):
 
 
 class SymbSoftmax(SymbParameterNormalize):
-    def __init__(self, opd: AbstractSymbParameter, axis: int = 0):
+    def __init__(self, opd: AbstractSymbParameter, axis: int = -1):
         super().__init__(opd, axis)
         self.axis = axis
 
 
 class SymbLogSoftmax(SymbParameterNormalize):
-    def __init__(self, opd: AbstractSymbParameter, axis: int = 0):
+    def __init__(self, opd: AbstractSymbParameter, axis: int = -1):
         super().__init__(opd, axis)
         self.axis = axis
 
@@ -73,12 +73,12 @@ class SymbSoftplus(SymbParameterUnary):
 
 
 class SymbConcat(SymbParameterReduce):
-    def __init__(self, *opds: AbstractSymbParameter, axis: int = 0):
+    def __init__(self, *opds: AbstractSymbParameter, axis: int = -1):
         super().__init__(*opds)
         self.axis = axis
 
 
 class SymbStack(SymbParameterReduce):
-    def __init__(self, *opds: AbstractSymbParameter, axis: int = 0):
+    def __init__(self, *opds: AbstractSymbParameter, axis: int = -1):
         super().__init__(*opds)
         self.axis = axis

@@ -22,7 +22,7 @@ AbstractSymbCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or b
 
 class SymbCircuitOperator(AbstractSymbCircuitOperator):
     """Types of symbolic operations on circuits."""
-    def _generate_next_value_(name, start, count, last_values):
+    def _generate_next_value_(name: str, start: int, count: int, last_values: list) -> int:
         return -(count + 1)  # Enumerate negative integers as the user can extend them with non-negative ones
 
     INTEGRATION = auto()
@@ -34,7 +34,7 @@ class SymbCircuitOperator(AbstractSymbCircuitOperator):
 class SymbCircuitOperation:
     """The symbolic operation applied on a SymbCircuit."""
 
-    operator: SymbCircuitOperator
+    operator: AbstractSymbCircuitOperator
     operands: Tuple["SymbCircuit", ...]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -64,9 +64,10 @@ class SymbCircuit:
     def from_region_graph(
         cls,
         region_graph: RegionGraph,
-        input_factory: Callable[[Scope, int, int], SymbInputLayer],
-        sum_factory: Callable[[Scope, int], SymbSumLayer],
-        prod_factory: Callable[[Scope, int], SymbProdLayer],
+        input_factory: Callable[[Scope, int, int, int], SymbInputLayer],
+        sum_factory: Callable[[Scope, int, int], SymbSumLayer],
+        prod_factory: Callable[[Scope, int, int], SymbProdLayer],
+        mixing_factory: Callable[[Scope, int, int], SymbMixingLayer],
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
@@ -80,9 +81,9 @@ class SymbCircuit:
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
-                input_sl = input_factory(rgn.scope, num_input_units, num_channels)
+                input_sl = input_factory(rgn.scope, region_graph.num_variables, num_input_units, num_channels)
                 num_sum_units = num_classes if rgn in region_graph.output_nodes else num_sum_units
-                sum_sl = sum_factory(rgn.scope, num_sum_units)
+                sum_sl = sum_factory(rgn.scope, num_input_units, num_sum_units)
                 layers.append(input_sl)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = [input_sl]
@@ -90,7 +91,7 @@ class SymbCircuit:
                 rgn_to_layers[rgn] = sum_sl
             elif isinstance(rgn, PartitionNode):  # Partition node
                 prod_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
-                prod_sl = prod_factory(rgn.scope, num_sum_units)
+                prod_sl = prod_factory(rgn.scope, num_sum_units, len(prod_inputs))
                 layers.append(prod_sl)
                 in_layers[prod_sl] = prod_inputs
                 for in_sl in prod_inputs:
@@ -98,11 +99,12 @@ class SymbCircuit:
                 rgn_to_layers[rgn] = prod_sl
             elif isinstance(rgn, RegionNode):  # Inner region node
                 sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
+                num_input_units = sum_inputs[0].num_output_units
                 num_sum_units = num_classes if rgn in region_graph.output_nodes else num_sum_units
                 if len(sum_inputs) == 1:  # Region node being partitioned in one way
-                    sum_sl = sum_factory(rgn.scope, num_sum_units)
+                    sum_sl = sum_factory(rgn.scope, num_input_units, num_sum_units)
                 else:  # Region node being partitioned in multiple way -> add "mixing" layer
-                    sum_sl = SymbMixingLayer(rgn.scope, num_sum_units)
+                    sum_sl = mixing_factory(rgn.scope, num_input_units, len(sum_inputs))
                 layers.append(sum_sl)
                 in_layers[sum_sl] = sum_inputs
                 for in_sl in sum_inputs:

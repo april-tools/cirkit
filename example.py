@@ -1,22 +1,45 @@
-# Templates imports
-from typing import Any, Callable, Dict
-
 from torch import Tensor
 
-from cirkit.layers import InputLayer
-from cirkit.symbolic.functional import differentiate, integrate, multiply
+from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.symb_circuit import SymbCircuit
-
-# Symbolic stuff imports
-from cirkit.symbolic.symb_layers import *
-from cirkit.symbolic.symb_op import SymbOperator
-from cirkit.symbolic.symb_params import *
-from cirkit.symbolic.utils import symbolic_input_layer_cls, symbolic_parameter_cls
+from cirkit.symbolic.symb_layers import SymbCategoricalLayer, SymbDenseLayer, SymbKroneckerLayer, SymbMixingLayer
+from cirkit.symbolic.symb_params import SymbSoftplus, SymbParameter, SymbSoftmax
 from cirkit.templates.region_graph.algorithms import FullyFactorized, QuadTree
+from cirkit.utils import Scope
 
-# Tensorized stuff imports
-from cirkit.tensorized.compilers import PipelineContext
-from cirkit.tensorized.reparams import Reparameterization, UnaryReparam
+
+def categorical_layer_factory(
+        scope: Scope,
+        num_variables: int,
+        num_units: int,
+        num_channels: int
+) -> SymbCategoricalLayer:
+    return SymbCategoricalLayer(
+        scope, num_variables, num_units, num_channels, num_categories=256,
+        param_factory=lambda shape: SymbSoftmax(SymbParameter(*shape), axis=-1)
+    )
+
+
+def dense_layer_factory(
+        scope: Scope,
+        num_input_units: int,
+        num_output_units: int,
+) -> SymbDenseLayer:
+    return SymbDenseLayer(
+        scope, num_input_units, num_output_units,
+        param_factory=lambda shape: SymbSoftplus(SymbParameter(*shape))
+    )
+
+
+def hadamard_layer_factory(scope: Scope, num_input_units: int, arity: int):
+    return SymbKroneckerLayer(scope, num_input_units, arity)
+
+
+def mixing_layer_factory(scope: Scope, num_units: int, arity: int):
+    return SymbMixingLayer(
+        scope, num_units, arity,
+        param_factory=lambda shape: SymbSoftplus(SymbParameter(*shape))
+    )
 
 
 def example_simple_pc() -> None:
@@ -24,35 +47,24 @@ def example_simple_pc() -> None:
     qt = QuadTree(shape=(28, 28), struct_decomp=True)
 
     # Instantiate a symbolic circuit from the region graph,
-    # by specifying symbolic layers and symbolic parameterizations
+    # by specifying factories that construct symbolic layers
     sc = SymbCircuit.from_region_graph(
-        qt,
-        num_input_units=16,
-        num_sum_units=16,
-        num_classes=10,
-        input_cls=SymbCategoricalLayer,
-        sum_cls=SymbSumLayer,
-        prod_cls=SymbKroneckerLayer,
-        input_param_cls=SymbSoftmax,
-        sum_param_cls=SymbSoftplus,
+        qt, num_input_units=8, num_sum_units=16,
+        input_factory=categorical_layer_factory,
+        sum_factory=dense_layer_factory,
+        prod_factory=hadamard_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
 
-    # Integrate the circuit symbolically (sum over all variables if not otherwise specified)
-    int_sc = integrate(sc)
-
-    # Create a pipeline context for compilation
     # Given the output of a computational graph over circuits (i.e., the root of the DAG),
     # ctx.compile compiles all the circuits in topological ordering (at least by default)
     # The backend can be specified with a flag, and available optimizations using kwargs.
     # For instance, the backend 'torch' might support the following optimizations:
     # - fold=True  enables folding;
     # - einsum=True  suggests compiling to layers using einsums when possible.
-    ctx = PipelineContext(backend="torch")
-    ctx.compile(int_sc, fold=True, einsum=True)
-
-    # Retrieve the compiled tensorized circuits from the pipeline context
-    # These circuits are torch modules and share parameters accordingly
-    tc, int_tc = ctx[sc], ctx[int_sc]
+    ctx = PipelineContext(backend='torch', fold=True, einsum=True)
+    tc = ctx.compile(sc)
+    int_tc = ctx.integrate(tc)   # This is equivalent to 'ctx.compile(integrate(sc))'
 
     # Do inference or learning with the compiled circuits
     ...
@@ -168,7 +180,7 @@ def example_serialization() -> None:
     # Now, let's load again the context
     ctx = PipelineContext.load("symbolic-pipeline.ckit", "tensorized-circuits.pt")
 
-    # Since we have saved the context, we can incrementally operate on circuits and compile them,
+    # Since we have saved SymbCircuitthe context, we can incrementally operate on circuits and compile them,
     # without losing any useful data structure from previous compilations (e.g., references between layers)
     # That is, we can extend the symbolic pipeline using other operators
     s = ctx[
@@ -366,7 +378,7 @@ def example_lib_extension() -> None:
     # Perhaps a better way could be a symbolic context that keeps tracks of these registries,
     # akin to the pipeline context but simpler as it does not depend on the backend nor needs to do optimizations
     with PipelineContext() as ctx:
-        ctx.add_operation_rule(SymbLayerOperator.MULTIPLICATION, poly_gaussian_product)
+        ctx.add_operation_rule(AbstractSymbLayerOperator.MULTIPLICATION, poly_gaussian_product)
         r = ctx.multiply(p, q)
         tensorized_r = ctx.compile(r, fold=True)
 
@@ -376,10 +388,11 @@ def example_lib_extension() -> None:
             f_q = ctx.fold(q)
             f_r = folded_multiply(f_p, f_q)
             return f_r
+
         ctx.add_pipeline_rule(SymbCircuitOperator.MULTIPLICATION, folded_product)
 
     # Next, we want to materialize such a product.
     # To do so, we register the following compilation rule into the context, and then compile
-    #ctx.register_layer_compilation_rule(SymbPolyGaussianProductLayer, PolyGaussianProductLayer)
+    # ctx.register_layer_compilation_rule(SymbPolyGaussianProductLayer, PolyGaussianProductLayer)
     ctx.compile(r)
     tens_r = ctx[r]

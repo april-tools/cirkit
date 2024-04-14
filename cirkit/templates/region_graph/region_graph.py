@@ -221,7 +221,7 @@ class RegionGraph:
 
         # Guaranteed to be non-empty by _validate().
         self.scope = Scope.union(*(node.scope for node in self.output_nodes))
-        self.num_vars = len(self.scope)
+        self.num_variables = len(self.scope)
 
         self.is_smooth = all(
             partition.scope == region.scope
@@ -269,7 +269,7 @@ class RegionGraph:
     scope: Scope
     """The scope of the RG, i.e., the union of scopes of all output units."""
 
-    num_vars: int
+    num_variables: int
     """The number of variables referenced in the RG, i.e., the size of scope."""
 
     is_smooth: bool
