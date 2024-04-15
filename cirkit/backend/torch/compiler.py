@@ -1,13 +1,11 @@
 from typing import Dict, Type, Union, List, Tuple, Optional, cast
 
-from cirkit.symbolic.symb_circuit import SymbCircuit
-from cirkit.symbolic.symb_layers import SymbLayer, AbstractSymbLayerOperator
-from cirkit.symbolic.symb_params import AbstractSymbParameter
+from cirkit.symbolic.sym_circuit import SymCircuit
+from cirkit.symbolic.sym_layers import SymLayer, AbstractSymLayerOperator
 
 from cirkit.backend.base import AbstractCompiler, CompilationRegistry
 from cirkit.backend.torch.layers import Layer
 from cirkit.backend.torch.models import TensorizedCircuit
-from cirkit.backend.torch.reparams import Reparameterization
 
 import torch
 from torch import Tensor
@@ -23,16 +21,16 @@ from cirkit.backend.torch.layers import (
     MixingLayer,
     SumLayer,
 )
-from cirkit.symbolic.symb_circuit import pipeline_topological_ordering
-from cirkit.symbolic.symb_layers import (
-    SymbCategoricalLayer,
-    SymbConstantLayer,
-    SymbHadamardLayer,
-    SymbInputLayer,
-    SymbKroneckerLayer,
-    SymbMixingLayer,
-    SymbProdLayer,
-    SymbSumLayer,
+from cirkit.symbolic.sym_circuit import pipeline_topological_ordering
+from cirkit.symbolic.sym_layers import (
+    SymCategoricalLayer,
+    SymConstantLayer,
+    SymHadamardLayer,
+    SymInputLayer,
+    SymKroneckerLayer,
+    SymMixingLayer,
+    SymProdLayer,
+    SymSumLayer,
 )
 
 
@@ -46,10 +44,10 @@ class Compiler(AbstractCompiler):
         super().__init__(
             _DEFAULT_COMPILATION_REGISTRY, **flags
         )
-        self._symb_tensorized_map: Dict[SymbCircuit, TensorizedCircuit] = {}
-        self._symb_layers_map: Dict[SymbCircuit, Dict[SymbLayer, int]] = {}
+        self._symb_tensorized_map: Dict[SymCircuit, TensorizedCircuit] = {}
+        self._symb_layers_map: Dict[SymCircuit, Dict[SymLayer, int]] = {}
 
-    def compile(self, symb_circuit: SymbCircuit):
+    def compile(self, symb_circuit: SymCircuit):
         # Retrieve the topological ordering of the pipeline
         ordering = pipeline_topological_ordering({symb_circuit})
 
@@ -63,7 +61,7 @@ class Compiler(AbstractCompiler):
             # Materialize the circuit
             self._compile_circuit(symb_circuit)
 
-    def _compile_circuit(self, symb_circuit: SymbCircuit):
+    def _compile_circuit(self, symb_circuit: SymCircuit):
         # The list of layers
         layers: List[Layer] = []
 
@@ -71,16 +69,16 @@ class Compiler(AbstractCompiler):
         bookkeeping: List[Tuple[List[int], Optional[Tensor]]] = []
 
         # A useful map from symbolic layers to layer id (indices for the list of layers)
-        symb_layers_map: Dict[SymbLayer, int] = {}
+        symb_layers_map: Dict[SymLayer, int] = {}
 
         # Construct the bookkeeping data structure while compiling layers
         for sl in symb_circuit.layers_topological_ordering():
-            if isinstance(sl, SymbInputLayer):
+            if isinstance(sl, SymInputLayer):
                 layer = self._compile_input_layer(symb_circuit, sl)
                 bookkeeping_entry = ([], torch.tensor([list(sl.scope)]))
                 bookkeeping.append(bookkeeping_entry)
             else:
-                assert isinstance(sl, (SymbSumLayer, SymbProdLayer))
+                assert isinstance(sl, (SymSumLayer, SymProdLayer))
                 layer = self._compile_inner_layer(symb_circuit, sl)
                 bookkeeping_entry = ([symb_layers_map[isl] for isl in sl.inputs], None)
                 bookkeeping.append(bookkeeping_entry)
@@ -98,12 +96,12 @@ class Compiler(AbstractCompiler):
         self._register_materialized_circuit(symb_circuit, circuit, symb_layers_map)
 
     def _compile_input_layer(
-            self, symb_circuit: SymbCircuit, symb_layer: SymbInputLayer
+            self, symb_circuit: SymCircuit, symb_layer: SymInputLayer
     ) -> InputLayer:
         # Registry mapping symbolic input layers to executable layers classes
-        materialize_input_registry: Dict[Type[SymbInputLayer], Type[InputLayer]] = {
-            SymbConstantLayer: ConstantLayer,
-            SymbCategoricalLayer: CategoricalLayer,
+        materialize_input_registry: Dict[Type[SymInputLayer], Type[InputLayer]] = {
+            SymConstantLayer: ConstantLayer,
+            SymCategoricalLayer: CategoricalLayer,
         }
 
         layer_cls = materialize_input_registry[type(symb_layer)]
@@ -117,7 +115,7 @@ class Compiler(AbstractCompiler):
                 reparam=layer_cls.default_reparam()
             )
 
-        if symb_layer_operation.operator == AbstractSymbLayerOperator.INTEGRATION:
+        if symb_layer_operation.operator == AbstractSymLayerOperator.INTEGRATION:
             symb_circuit_op = symb_circuit.operation.operands[0]
             symb_layer_op = symb_layer_operation.operands[0]
             layer_op: InputLayer = cast(
@@ -134,21 +132,21 @@ class Compiler(AbstractCompiler):
 
     def _compile_inner_layer(
             self,
-            symb_circuit: SymbCircuit,
-            symb_layer: Union[SymbSumLayer, SymbProdLayer]
+            symb_circuit: SymCircuit,
+            symb_layer: Union[SymSumLayer, SymProdLayer]
     ) -> InnerLayer:
         # Registry mapping symbolic inner layers to executable layer classes
-        materialize_inner_registry: Dict[Type[SymbLayer], Type[InnerLayer]] = {
-            SymbSumLayer: DenseLayer,
-            SymbMixingLayer: MixingLayer,
-            SymbHadamardLayer: HadamardLayer,
-            SymbKroneckerLayer: KroneckerLayer,
+        materialize_inner_registry: Dict[Type[SymLayer], Type[InnerLayer]] = {
+            SymSumLayer: DenseLayer,
+            SymMixingLayer: MixingLayer,
+            SymHadamardLayer: HadamardLayer,
+            SymKroneckerLayer: KroneckerLayer,
         }
 
         layer_cls = materialize_inner_registry[type(symb_layer)]
 
         symb_layer_operation = symb_layer.operation
-        if symb_layer_operation is None or not isinstance(symb_layer, SymbSumLayer):
+        if symb_layer_operation is None or not isinstance(symb_layer, SymSumLayer):
             return layer_cls(
                 num_input_units=symb_layer.inputs[0].num_units,
                 num_output_units=symb_layer.num_units,
@@ -156,7 +154,7 @@ class Compiler(AbstractCompiler):
                 **symb_layer.kwargs,
             )
 
-        if symb_layer_operation.operator == AbstractSymbLayerOperator.INTEGRATION:
+        if symb_layer_operation.operator == AbstractSymLayerOperator.INTEGRATION:
             symb_circuit_op = symb_circuit.operation.operands[0]
             symb_layer_op = symb_layer_operation.operands[0]
             layer_op: SumLayer = cast(
@@ -172,11 +170,11 @@ class Compiler(AbstractCompiler):
         assert False
 
     def __getitem__(
-        self, symb_circuit: SymbCircuit
+        self, symb_circuit: SymCircuit
     ) -> TensorizedCircuit:
         return self._symb_tensorized_map[symb_circuit]
 
-    def __contains__(self, symb_circuit: SymbCircuit) -> bool:
+    def __contains__(self, symb_circuit: SymCircuit) -> bool:
         return symb_circuit in self._symb_tensorized_map
 
     def save(self, symb_filepath: str, tens_filepath: str):
@@ -186,19 +184,19 @@ class Compiler(AbstractCompiler):
     def load(symb_filepath: str, tens_filepath: str) -> 'Compiler':
         pass
 
-    def _get_materialized_circuit(self, symb_circuit: SymbCircuit) -> TensorizedCircuit:
+    def _get_materialized_circuit(self, symb_circuit: SymCircuit) -> TensorizedCircuit:
         return self[symb_circuit]
 
-    def _get_materialized_layer(self, symb_circuit: SymbCircuit, symb_layer: SymbLayer) -> Layer:
+    def _get_materialized_layer(self, symb_circuit: SymCircuit, symb_layer: SymLayer) -> Layer:
         symb_layer_ids = self._symb_layers_map[symb_circuit]
         circuit = self[symb_circuit]
         return circuit.layers[symb_layer_ids[symb_layer]]
 
     def _register_materialized_circuit(
         self,
-        symb_circuit: SymbCircuit,
+        symb_circuit: SymCircuit,
         circuit: TensorizedCircuit,
-        symb_layers_map: Dict[SymbLayer, int],
+        symb_layers_map: Dict[SymLayer, int],
     ):
         self._symb_tensorized_map[symb_circuit] = circuit
         self._symb_layers_map[symb_circuit] = symb_layers_map

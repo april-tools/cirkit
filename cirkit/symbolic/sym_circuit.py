@@ -5,23 +5,22 @@ from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
-from cirkit.symbolic.symb_layers import (
-    SymbInputLayer,
-    SymbLayer,
-    SymbMixingLayer,
-    SymbProdLayer,
-    SymbSumLayer,
+from cirkit.symbolic.sym_layers import (
+    SymInputLayer,
+    SymLayer,
+    SymProdLayer,
+    SymSumLayer,
 )
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils import Scope
 from cirkit.utils.algorithms import topological_ordering
 
 
-AbstractSymbCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
+AbstractSymCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
 
-class SymbCircuitOperator(AbstractSymbCircuitOperator):
-    """Types of symbolic operations on circuits."""
+class SymCircuitOperator(AbstractSymCircuitOperator):
+    """Types of Symolic operations on circuits."""
     def _generate_next_value_(name: str, start: int, count: int, last_values: list) -> int:
         return -(count + 1)  # Enumerate negative integers as the user can extend them with non-negative ones
 
@@ -31,24 +30,24 @@ class SymbCircuitOperator(AbstractSymbCircuitOperator):
 
 
 @dataclass(frozen=True)
-class SymbCircuitOperation:
-    """The symbolic operation applied on a SymbCircuit."""
+class SymCircuitOperation:
+    """The Symolic operation applied on a SymCircuit."""
 
-    operator: AbstractSymbCircuitOperator
-    operands: Tuple["SymbCircuit", ...]
+    operator: AbstractSymCircuitOperator
+    operands: Tuple["SymCircuit", ...]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-class SymbCircuit:
-    """The symbolic representation of a symbolic circuit."""
+class SymCircuit:
+    """The Symolic representation of a Symolic circuit."""
 
     def __init__(
         self,
         scope: Scope,
-        layers: List[SymbLayer],
-        in_layers: Dict[SymbLayer, List[SymbLayer]],
-        out_layers: Dict[SymbLayer, List[SymbLayer]],
-        operation: Optional[SymbCircuitOperation] = None,
+        layers: List[SymLayer],
+        in_layers: Dict[SymLayer, List[SymLayer]],
+        out_layers: Dict[SymLayer, List[SymLayer]],
+        operation: Optional[SymCircuitOperation] = None,
     ) -> None:
         self.scope = scope
         self.operation = operation
@@ -64,19 +63,19 @@ class SymbCircuit:
     def from_region_graph(
         cls,
         region_graph: RegionGraph,
-        input_factory: Callable[[Scope, int, int, int], SymbInputLayer],
-        sum_factory: Callable[[Scope, int, int], SymbSumLayer],
-        prod_factory: Callable[[Scope, int, int], SymbProdLayer],
-        mixing_factory: Callable[[Scope, int, int], SymbMixingLayer],
+        input_factory: Callable[[Scope, int, int, int], SymInputLayer],
+        sum_factory: Callable[[Scope, int, int], SymSumLayer],
+        prod_factory: Callable[[Scope, int, int], SymProdLayer],
+        mixing_factory: Callable[[Scope, int, int], SymLayer],
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
-    ) -> "SymbCircuit":
-        layers: List[SymbLayer] = []
-        in_layers: Dict[SymbLayer, List[SymbLayer]] = defaultdict(list)
-        out_layers: Dict[SymbLayer, List[SymbLayer]] = defaultdict(list)
-        rgn_to_layers: Dict[RGNode, SymbLayer] = {}
+    ) -> "SymCircuit":
+        layers: List[SymLayer] = []
+        in_layers: Dict[SymLayer, List[SymLayer]] = defaultdict(list)
+        out_layers: Dict[SymLayer, List[SymLayer]] = defaultdict(list)
+        rgn_to_layers: Dict[RGNode, SymLayer] = {}
 
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
@@ -119,18 +118,18 @@ class SymbCircuit:
                 assert False, "Region graph nodes must be either region or partition nodes"
         return cls(region_graph.scope, layers, in_layers, out_layers)
 
-    def layer_inputs(self, sl: SymbLayer) -> List[SymbLayer]:
+    def layer_inputs(self, sl: SymLayer) -> List[SymLayer]:
         return self._in_layers[sl]
 
-    def layer_outputs(self, sl: SymbLayer) -> List[SymbLayer]:
+    def layer_outputs(self, sl: SymLayer) -> List[SymLayer]:
         return self._out_layers[sl]
 
-    def layers_topological_ordering(self) -> List[SymbLayer]:
-        ordering: Optional[List[SymbLayer]] = topological_ordering(
+    def layers_topological_ordering(self) -> List[SymLayer]:
+        ordering: Optional[List[SymLayer]] = topological_ordering(
             set(self.output_layers), incomings_fn=lambda sl: self._in_layers[sl]
         )
         if ordering is None:
-            raise ValueError("The given symbolic circuit has at least one layers cycle")
+            raise ValueError("The given Symolic circuit has at least one layers cycle")
         return ordering
 
     ##################################### Structural properties ####################################
@@ -165,7 +164,7 @@ class SymbCircuit:
         # TODO
         return False
 
-    def is_compatible(self, oth: "SymbCircuit", scope: Optional[Iterable[int]] = None) -> bool:
+    def is_compatible(self, oth: "SymCircuit", scope: Optional[Iterable[int]] = None) -> bool:
         if not self.is_smooth:
             return False
         if not self.is_decomposable:
@@ -174,46 +173,46 @@ class SymbCircuit:
         return False
 
     #######################################    Layer views    ######################################
-    # These are iterable views of the nodes in the SymbC, and the topological order is guaranteed
+    # These are iterable views of the nodes in the SymC, and the topological order is guaranteed
     # (by a stronger ordering). For efficiency, all these views are iterators (implemented as a
     # container iter or a generator), so that they can be chained for iteration without
     # instantiating intermediate containers.
 
     @property
-    def layers(self) -> Iterator[SymbLayer]:
+    def layers(self) -> Iterator[SymLayer]:
         """All layers in the circuit."""
         return iter(self._layers)
 
     @property
-    def input_layers(self) -> Iterator[SymbInputLayer]:
+    def input_layers(self) -> Iterator[SymInputLayer]:
         """Input layers of the circuit."""
-        return (layer for layer in self.layers if isinstance(layer, SymbInputLayer))
+        return (layer for layer in self.layers if isinstance(layer, SymInputLayer))
 
     @property
-    def sum_layers(self) -> Iterator[SymbSumLayer]:
+    def sum_layers(self) -> Iterator[SymSumLayer]:
         """Sum layers in the circuit, which are always inner layers."""
-        return (layer for layer in self.layers if isinstance(layer, SymbSumLayer))
+        return (layer for layer in self.layers if isinstance(layer, SymSumLayer))
 
     @property
-    def product_layers(self) -> Iterator[SymbProdLayer]:
+    def product_layers(self) -> Iterator[SymProdLayer]:
         """Product layers in the circuit, which are always inner layers."""
-        return (layer for layer in self.layers if isinstance(layer, SymbProdLayer))
+        return (layer for layer in self.layers if isinstance(layer, SymProdLayer))
 
     @property
-    def output_layers(self) -> Iterator[SymbLayer]:
+    def output_layers(self) -> Iterator[SymLayer]:
         """Output layers in the circuit."""
         return (layer for layer in self.layers if not self._out_layers[layer])
 
     @property
-    def inner_layers(self) -> Iterator[SymbLayer]:
+    def inner_layers(self) -> Iterator[SymLayer]:
         """Inner (non-input) layers in the circuit."""
         return (layer for layer in self.layers if self._in_layers[layer])
 
 
-def pipeline_topological_ordering(roots: Set[SymbCircuit]) -> List[SymbCircuit]:
-    ordering: Optional[List[SymbCircuit]] = topological_ordering(
+def pipeline_topological_ordering(roots: Set[SymCircuit]) -> List[SymCircuit]:
+    ordering: Optional[List[SymCircuit]] = topological_ordering(
         roots, incomings_fn=lambda sc: () if sc.operation is None else sc.operation.operands
     )
     if ordering is None:
-        raise ValueError("The given symbolic circuits pipeline has at least one cycle")
+        raise ValueError("The given Symolic circuits pipeline has at least one cycle")
     return ordering

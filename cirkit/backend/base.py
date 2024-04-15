@@ -1,15 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Union, Callable, Any, Optional, Dict, Type
 
-from cirkit.symbolic.symb_circuit import SymbCircuit
-from cirkit.symbolic.symb_layers import SymbLayer
-from cirkit.symbolic.symb_params import SymbParameter
+from cirkit.symbolic.sym_circuit import SymCircuit
+from cirkit.symbolic.sym_layers import SymLayer
+from cirkit.symbolic.sym_params import SymParameter
 
-LayerCompilationSignature = Union[Type[SymbLayer], Type[SymbParameter]]
-LayerCompilationFunction = Callable[[Union[SymbLayer, SymbParameter]], Any]
+LayerCompilationSignature = Union[Type[SymLayer], Type[SymParameter]]
+LayerCompilationFunction = Callable[[Union[SymLayer, SymParameter]], Any]
 
 
-SUPPORTED_BACKENDS = ['torch']
+_SUPPORTED_BACKENDS = ['torch']
 
 
 class CompilationRegistry:
@@ -25,7 +25,7 @@ class CompilationRegistry:
             raise ValueError("The function is not a symbolic layer compilation rule")
         arg_names = list(filter(lambda a: a != 'return', args.keys()))
         symb_cls = args[arg_names[0]]
-        if not issubclass(symb_cls, (SymbLayer, SymbParameter)):
+        if not issubclass(symb_cls, (SymLayer, SymParameter)):
             raise ValueError("The function is not a symbolic layer compilation rule")
         self._rules[symb_cls] = func
 
@@ -39,5 +39,5 @@ class AbstractCompiler(ABC):
         self._registry.register_rule(func)
 
     @abstractmethod
-    def compile(self, symb_circuit: SymbCircuit):
+    def compile(self, symb_circuit: SymCircuit):
         ...

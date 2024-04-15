@@ -1,17 +1,17 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import IntEnum, auto
-from typing import Any, Dict, Optional, Tuple, cast, Type, Callable
+from typing import Any, Dict, Optional, Tuple, cast, Callable
 
-from cirkit.symbolic.symb_params import SymbParameter, AbstractSymbParameter
+from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter, SymStack
 from cirkit.utils import Scope
 
 
-AbstractSymbLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
+AbstractSymLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
 
-class SymbLayerOperator(AbstractSymbLayerOperator):
-    """Types of symbolic operations on layers."""
+class SymLayerOperator(AbstractSymLayerOperator):
+    """Types of Symolic operations on layers."""
     def _generate_next_value_(name: str, start: int, count: int, last_values: list) -> int:
         return -(count + 1)  # Enumerate negative integers as the user can extend them with non-negative ones
 
@@ -22,25 +22,25 @@ class SymbLayerOperator(AbstractSymbLayerOperator):
 
 
 @dataclass(frozen=True)
-class SymbLayerOperation:
-    """The symbolic operation applied on a SymbLayer."""
+class SymLayerOperation:
+    """The Symolic operation applied on a SymLayer."""
 
-    operator: AbstractSymbLayerOperator
-    operands: Tuple["SymbLayer", ...] = ()
+    operator: AbstractSymLayerOperator
+    operands: Tuple["SymLayer", ...] = ()
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-ParamFactoryFunction = Callable[[Tuple[int, ...]], SymbParameter]
+ParamFactoryFunction = Callable[[Tuple[int, ...]], SymParameter]
 
 
-class SymbLayer(ABC):
+class SymLayer(ABC):
     def __init__(
         self,
         scope: Scope,
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        operation: Optional[SymbLayerOperation] = None
+        operation: Optional[SymLayerOperation] = None
     ):
         self.scope = scope
         self.num_input_units = num_input_units
@@ -58,18 +58,18 @@ class SymbLayer(ABC):
         }
 
     @property
-    def params(self) -> Dict[str, AbstractSymbParameter]:
+    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
         return {}
 
 
-class SymbInputLayer(SymbLayer):
+class SymInputLayer(SymLayer):
     def __init__(
         self,
         scope: Scope,
         num_variables: int,
         num_output_units: int,
         num_channels: int = 1,
-        operation: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymLayerOperation] = None,
     ):
         super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
 
@@ -91,19 +91,23 @@ class SymbInputLayer(SymbLayer):
         }
 
 
-class SymbExpFamilyLayer(SymbInputLayer):
+class SymExpFamilyLayer(ABC, SymInputLayer):
     def __init__(
         self,
         scope: Scope,
         num_variables: int,
         num_output_units: int,
         num_channels: int,
-        operation: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymLayerOperation] = None
     ):
         super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
 
+    @abstractmethod
+    def sufficient_statistics_shape(self) -> Tuple[int, ...]:
+        ...
 
-class SymbCategoricalLayer(SymbExpFamilyLayer):
+
+class SymCategoricalLayer(SymExpFamilyLayer):
     def __init__(
         self,
         scope: Scope,
@@ -111,11 +115,19 @@ class SymbCategoricalLayer(SymbExpFamilyLayer):
         num_output_units: int,
         num_channels: int,
         num_categories: int = 2,
-        param_factory: ParamFactoryFunction = SymbParameter,
-        operation: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymLayerOperation] = None,
+        weight: Optional[SymParameter] = None
     ):
         super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
         self.num_categories = num_categories
+        if weight is None:
+            self.weight = SymParameter(num_variables, num_output_units, num_channels, num_categories)
+        else:
+            self.weight = weight
+
+    @property
+    def sufficient_statistics_shape(self) -> Tuple[int, ...]:
+        return self.num_channels, self.num_categories
 
     @property
     def hparams(self) -> dict:
@@ -123,15 +135,49 @@ class SymbCategoricalLayer(SymbExpFamilyLayer):
         hparams.update(num_categories=self.num_categories)
         return hparams
 
+    @property
+    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
+        return dict(weight=self.weight)
 
-class SymbConstantLayer(SymbInputLayer):
+
+class SymNormalLayer(SymExpFamilyLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_variables: int,
+        num_output_units: int,
+        num_channels: int,
+        operation: Optional[SymLayerOperation] = None,
+        mean: Optional[SymParameter] = None,
+        variance: Optional[SymParameter] = None
+    ):
+        super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
+        assert (mean is None and variance is None) or (mean is not None and variance is not None), \
+            "Either both 'mean' and 'variance' has to be specified or none of them"
+        if mean is None and variance is None:
+            self.mean = SymParameter(num_variables, num_output_units, num_channels)
+            self.variance = SymParameter(num_variables, num_output_units, num_channels)
+        else:
+            self.mean = mean
+            self.variance = variance
+
+    @property
+    def sufficient_statistics_shape(self) -> Tuple[int, ...]:
+        return self.num_channels, 2
+
+    @property
+    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
+        return dict(mean=self.mean, variance=self.variance)
+
+
+class SymConstantLayer(SymInputLayer):
     def __init__(
         self,
         scope: Scope,
         num_variables: int,
         num_output_units: int,
         num_channels: int = 1,
-        operation: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymLayerOperation] = None,
         value: Optional[float] = None,
     ):
         assert (
@@ -147,17 +193,17 @@ class SymbConstantLayer(SymbInputLayer):
         return hparams
 
 
-class SymbProdLayer(ABC, SymbLayer):
-    """The abstract base class for symbolic product layers."""
+class SymProdLayer(ABC, SymLayer):
+    """The abstract base class for Symolic product layers."""
 
     def __init__(
         self,
         scope: Scope,
         num_input_units: int,
         arity: int = 2,
-        operation: Optional[SymbLayerOperation] = None,
+        operation: Optional[SymLayerOperation] = None,
     ):
-        num_output_units = SymbProdLayer.num_prod_units(num_input_units, arity)
+        num_output_units = SymProdLayer.num_prod_units(num_input_units, arity)
         super().__init__(scope, num_input_units, num_output_units, arity, operation=operation)
 
     @staticmethod
@@ -166,57 +212,57 @@ class SymbProdLayer(ABC, SymbLayer):
         ...
 
 
-class SymbHadamardLayer(SymbProdLayer):
-    """The symbolic Hadamard product layer."""
+class SymHadamardLayer(SymProdLayer):
+    """The Symolic Hadamard product layer."""
 
     @staticmethod
     def num_prod_units(in_num_units: int, arity: int) -> int:
         return in_num_units
 
 
-class SymbKroneckerLayer(SymbProdLayer):
-    """The symbolic Kronecker product layer."""
+class SymKroneckerLayer(SymProdLayer):
+    """The Symolic Kronecker product layer."""
 
     @staticmethod
     def num_prod_units(in_num_units: int, arity: int) -> int:
         return cast(int, in_num_units**arity)
 
 
-class SymbSumLayer(ABC, SymbLayer):
-    """The abstract base class for symbolic sum layers."""
+class SymSumLayer(ABC, SymLayer):
+    """The abstract base class for Symolic sum layers."""
 
 
-class SymbDenseLayer(SymbSumLayer):
-    """The symbolic dense sum layer."""
+class SymDenseLayer(SymSumLayer):
+    """The Symolic dense sum layer."""
     def __init__(
             self,
             scope: Scope,
             num_input_units: int,
             num_output_units: int,
-            param_factory: ParamFactoryFunction = SymbParameter,
-            operation: Optional[SymbLayerOperation] = None
+            operation: Optional[SymLayerOperation] = None,
+            weight: Optional[SymParameter] = None
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1, operation=operation)
-        self.weight = param_factory((num_output_units, num_input_units))
+        self.weight = weight if weight is not None else SymParameter(num_output_units, num_input_units)
 
     @property
-    def params(self) -> Dict[str, AbstractSymbParameter]:
+    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
         return dict(weight=self.weight)
 
 
-class SymbMixingLayer(SymbSumLayer):
-    """The symbolic mixing sum layer."""
+class SymMixingLayer(SymSumLayer):
+    """The Symolic mixing sum layer."""
     def __init__(
             self,
             scope: Scope,
             num_units: int,
             arity: int,
-            param_factory: ParamFactoryFunction = SymbParameter,
-            operation: Optional[SymbLayerOperation] = None
+            operation: Optional[SymLayerOperation] = None,
+            weight: Optional[SymParameter] = None
     ):
         super().__init__(scope, num_units, num_units, arity, operation=operation)
-        self.weight = param_factory((num_units, arity))
+        self.weight = weight if weight is not None else SymParameter(num_units, arity)
 
     @property
-    def params(self) -> Dict[str, AbstractSymbParameter]:
+    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
         return dict(weight=self.weight)
