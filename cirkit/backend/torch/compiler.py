@@ -34,7 +34,7 @@ from cirkit.symbolic.sym_layers import (
 _DEFAULT_COMPILATION_REGISTRY = CompilationRegistry(default_rules={})
 
 
-class Compiler(AbstractCompiler):
+class TorchCompiler(AbstractCompiler):
     def __init__(self, **flags):
         super().__init__(_DEFAULT_COMPILATION_REGISTRY, **flags)
         self._symb_tensorized_map: Dict[SymCircuit, TensorizedCircuit] = {}
@@ -170,7 +170,7 @@ class Compiler(AbstractCompiler):
         pass
 
     @staticmethod
-    def load(symb_filepath: str, tens_filepath: str) -> "Compiler":
+    def load(symb_filepath: str, tens_filepath: str) -> "TorchCompiler":
         pass
 
     def _get_materialized_circuit(self, symb_circuit: SymCircuit) -> TensorizedCircuit:

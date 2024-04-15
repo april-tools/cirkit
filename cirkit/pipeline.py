@@ -107,7 +107,6 @@ def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:
     if backend not in _SUPPORTED_BACKENDS:
         raise NotImplementedError(f"Backend '{backend}' is not implemented")
     if backend == "torch":
-        from cirkit.backend.torch.compiler import Compiler
-
-        return Compiler(**backend_kwargs)
+        from cirkit.backend.torch.compiler import TorchCompiler
+        return TorchCompiler(**backend_kwargs)
     assert False

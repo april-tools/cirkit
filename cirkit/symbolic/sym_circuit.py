@@ -66,7 +66,7 @@ class SymCircuit:
     def from_region_graph(
         cls,
         region_graph: RegionGraph,
-        input_factory: Callable[[Scope, int, int, int], SymInputLayer],
+        input_factory: Callable[[Scope, int, int], SymInputLayer],
         sum_factory: Callable[[Scope, int, int], SymSumLayer],
         prod_factory: Callable[[Scope, int, int], SymProdLayer],
         mixing_factory: Optional[Callable[[Scope, int, int], SymLayer]] = None,
@@ -86,9 +86,7 @@ class SymCircuit:
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
-                input_sl = input_factory(
-                    rgn.scope, region_graph.num_variables, num_input_units, num_channels
-                )
+                input_sl = input_factory(rgn.scope, num_input_units, num_channels)
                 num_sum_units = num_classes if rgn in region_graph.output_nodes else num_sum_units
                 sum_sl = sum_factory(rgn.scope, num_input_units, num_sum_units)
                 layers.append(input_sl)

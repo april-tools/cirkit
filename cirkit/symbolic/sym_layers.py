@@ -68,12 +68,11 @@ class SymInputLayer(SymLayer):
     def __init__(
         self,
         scope: Scope,
-        num_variables: int,
         num_output_units: int,
         num_channels: int = 1,
         operation: Optional[SymLayerOperation] = None,
     ):
-        super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
+        super().__init__(scope, len(scope), num_output_units, num_channels, operation=operation)
 
     @property
     def num_variables(self) -> int:
@@ -87,7 +86,6 @@ class SymInputLayer(SymLayer):
     def hparams(self) -> Dict[str, Any]:
         return {
             "scope": self.scope,
-            "num_variables": self.num_variables,
             "num_output_units": self.num_output_units,
             "num_channels": self.num_channels,
         }
@@ -97,12 +95,11 @@ class SymExpFamilyLayer(ABC, SymInputLayer):
     def __init__(
         self,
         scope: Scope,
-        num_variables: int,
         num_output_units: int,
         num_channels: int,
         operation: Optional[SymLayerOperation] = None,
     ):
-        super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
+        super().__init__(scope, len(scope), num_output_units, num_channels, operation=operation)
 
     @abstractmethod
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -113,21 +110,17 @@ class SymCategoricalLayer(SymExpFamilyLayer):
     def __init__(
         self,
         scope: Scope,
-        num_variables: int,
         num_output_units: int,
         num_channels: int,
         num_categories: int = 2,
         operation: Optional[SymLayerOperation] = None,
         weight: Optional[SymParameter] = None,
     ):
-        super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
+        super().__init__(scope, num_output_units, num_channels, operation=operation)
         self.num_categories = num_categories
         if weight is None:
-            self.weight = SymParameter(
-                num_variables, num_output_units, num_channels, num_categories
-            )
-        else:
-            self.weight = weight
+            weight = SymParameter(self.num_variables, num_output_units, num_channels, num_categories)
+        self.weight = weight
 
     @property
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -148,23 +141,21 @@ class SymNormalLayer(SymExpFamilyLayer):
     def __init__(
         self,
         scope: Scope,
-        num_variables: int,
         num_output_units: int,
         num_channels: int,
         operation: Optional[SymLayerOperation] = None,
         mean: Optional[SymParameter] = None,
         variance: Optional[SymParameter] = None,
     ):
-        super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
+        super().__init__(scope, num_output_units, num_channels, operation=operation)
         assert (mean is None and variance is None) or (
             mean is not None and variance is not None
         ), "Either both 'mean' and 'variance' has to be specified or none of them"
         if mean is None and variance is None:
-            self.mean = SymParameter(num_variables, num_output_units, num_channels)
-            self.variance = SymParameter(num_variables, num_output_units, num_channels)
-        else:
-            self.mean = mean
-            self.variance = variance
+            mean = SymParameter(self.num_variables, num_output_units, num_channels)
+            variance = SymParameter(self.num_variables, num_output_units, num_channels)
+        self.mean = mean
+        self.variance = variance
 
     @property
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -179,7 +170,6 @@ class SymConstantLayer(SymInputLayer):
     def __init__(
         self,
         scope: Scope,
-        num_variables: int,
         num_output_units: int,
         num_channels: int = 1,
         operation: Optional[SymLayerOperation] = None,
@@ -188,7 +178,7 @@ class SymConstantLayer(SymInputLayer):
         assert (
             operation is not None or value is not None
         ), "Eiether 'operation' or 'value' must be specified to construct a constant layer"
-        super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
+        super().__init__(scope, len(scope), num_output_units, num_channels, operation=operation)
         self.value = value
 
     @property
@@ -249,9 +239,9 @@ class SymDenseLayer(SymSumLayer):
         weight: Optional[SymParameter] = None,
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1, operation=operation)
-        self.weight = (
-            weight if weight is not None else SymParameter(num_output_units, num_input_units)
-        )
+        if weight is None:
+            weight = SymParameter(num_output_units, num_input_units)
+        self.weight = weight
 
     @property
     def learnable_params(self) -> Dict[str, AbstractSymParameter]:
@@ -270,7 +260,9 @@ class SymMixingLayer(SymSumLayer):
         weight: Optional[SymParameter] = None,
     ):
         super().__init__(scope, num_units, num_units, arity, operation=operation)
-        self.weight = weight if weight is not None else SymParameter(num_units, arity)
+        if weight is None:
+            weight = SymParameter(num_units, arity)
+        self.weight = weight
 
     @property
     def learnable_params(self) -> Dict[str, AbstractSymParameter]:
