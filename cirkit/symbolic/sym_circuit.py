@@ -10,6 +10,7 @@ from cirkit.symbolic.sym_layers import (
     SymLayer,
     SymProdLayer,
     SymSumLayer,
+    SymMixingLayer,
 )
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils import Scope
@@ -66,12 +67,15 @@ class SymCircuit:
         input_factory: Callable[[Scope, int, int, int], SymInputLayer],
         sum_factory: Callable[[Scope, int, int], SymSumLayer],
         prod_factory: Callable[[Scope, int, int], SymProdLayer],
-        mixing_factory: Callable[[Scope, int, int], SymLayer],
+        mixing_factory: Optional[Callable[[Scope, int, int], SymLayer]] = None,
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
     ) -> "SymCircuit":
+        if mixing_factory is None:
+            mixing_factory = lambda s, nu, ar: SymMixingLayer(s, nu, ar)
+
         layers: List[SymLayer] = []
         in_layers: Dict[SymLayer, List[SymLayer]] = defaultdict(list)
         out_layers: Dict[SymLayer, List[SymLayer]] = defaultdict(list)

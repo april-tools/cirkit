@@ -30,10 +30,6 @@ def kronecker_layer_factory(scope: Scope, num_input_units: int, arity: int) -> S
     return SymKroneckerLayer(scope, num_input_units, arity)
 
 
-def mixing_layer_factory(scope: Scope, num_units: int, arity: int) -> SymMixingLayer:
-    return SymMixingLayer(scope, num_units, arity)
-
-
 def simplest_unnormalized_pc() -> None:
     # Create a region graph
     qt = QuadTree(shape=(28, 28), struct_decomp=True)
@@ -44,8 +40,7 @@ def simplest_unnormalized_pc() -> None:
         qt, num_input_units=8, num_sum_units=16,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory,
-        mixing_factory=mixing_layer_factory
+        prod_factory=kronecker_layer_factory
     )
 
     # Given the output of a computational graph over circuits (i.e., the root of the DAG),
@@ -89,15 +84,13 @@ def complex_pipeline() -> None:
         qt, num_input_units=8, num_sum_units=16,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory,
-        mixing_factory=mixing_layer_factory
+        prod_factory=kronecker_layer_factory
     )
     q = SymCircuit.from_region_graph(
         ff, num_input_units=12, num_sum_units=1,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory,
-        mixing_factory=mixing_layer_factory
+        prod_factory=kronecker_layer_factory
     )
 
     # Create a pipeline context
