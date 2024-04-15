@@ -8,22 +8,24 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set,
 from cirkit.symbolic.sym_layers import (
     SymInputLayer,
     SymLayer,
+    SymMixingLayer,
     SymProdLayer,
     SymSumLayer,
-    SymMixingLayer,
 )
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils import Scope
 from cirkit.utils.algorithms import topological_ordering
-
 
 AbstractSymCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
 
 class SymCircuitOperator(AbstractSymCircuitOperator):
     """Types of Symolic operations on circuits."""
+
     def _generate_next_value_(name: str, start: int, count: int, last_values: list) -> int:
-        return -(count + 1)  # Enumerate negative integers as the user can extend them with non-negative ones
+        return -(
+            count + 1
+        )  # Enumerate negative integers as the user can extend them with non-negative ones
 
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
@@ -84,7 +86,9 @@ class SymCircuit:
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
-                input_sl = input_factory(rgn.scope, region_graph.num_variables, num_input_units, num_channels)
+                input_sl = input_factory(
+                    rgn.scope, region_graph.num_variables, num_input_units, num_channels
+                )
                 num_sum_units = num_classes if rgn in region_graph.output_nodes else num_sum_units
                 sum_sl = sum_factory(rgn.scope, num_input_units, num_sum_units)
                 layers.append(input_sl)

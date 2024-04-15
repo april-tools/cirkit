@@ -1,6 +1,6 @@
-from contextvars import ContextVar
 from collections import defaultdict
-from typing import Dict, Iterable, Optional, Union, List
+from contextvars import ContextVar
+from typing import Dict, Iterable, List, Optional, Union
 
 from cirkit.symbolic.registry import SymOperatorRegistry
 from cirkit.symbolic.sym_circuit import SymCircuit, SymCircuitOperation, SymCircuitOperator
@@ -8,17 +8,18 @@ from cirkit.symbolic.sym_layers import (
     SymInputLayer,
     SymLayer,
     SymLayerOperation,
+    SymLayerOperator,
     SymProdLayer,
-    SymSumLayer, SymLayerOperator,
+    SymSumLayer,
 )
 from cirkit.utils import Scope
 from cirkit.utils.exceptions import StructuralPropertyError
 
-
 # Context variable containing the symbolic operator registry.
 # This is updated when entering a pipeline context.
-_SYM_OPERATOR_REGISTRY: ContextVar[SymOperatorRegistry] = \
-    ContextVar('_SYM_OPERATOR_REGISTRY', default=SymOperatorRegistry())
+_SYM_OPERATOR_REGISTRY: ContextVar[SymOperatorRegistry] = ContextVar(
+    "_SYM_OPERATOR_REGISTRY", default=SymOperatorRegistry()
+)
 
 
 def integrate(
@@ -29,12 +30,15 @@ def integrate(
     # Check for structural properties
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
-            "Only smooth and decomposable circuits can be efficiently integrated.")
+            "Only smooth and decomposable circuits can be efficiently integrated."
+        )
 
     # Check the variable
     scope = Scope(scope) if scope is not None else sc.scope
     if (scope | sc.scope) != sc.scope:
-        raise ValueError("The variables scope to integrate must be a subset of the scope of the circuit")
+        raise ValueError(
+            "The variables scope to integrate must be a subset of the scope of the circuit"
+        )
 
     # Load the registry from the context, if not specified
     if registry is None:
@@ -67,9 +71,7 @@ def integrate(
                 sl.scope,
                 sl.num_units,
                 arity=sl.arity,
-                operation=SymLayerOperation(
-                    operator=SymLayerOperator.NOP, operands=(sl,)
-                )
+                operation=SymLayerOperation(operator=SymLayerOperator.NOP, operands=(sl,)),
             )
             map_layers[sl] = new_sl
             in_layers[new_sl] = new_sl_inputs
@@ -91,18 +93,18 @@ def integrate(
 
 
 def multiply(
-    lhs_sc: SymCircuit,
-    rhs_sc: SymCircuit,
-    registry: Optional[SymOperatorRegistry] = None
+    lhs_sc: SymCircuit, rhs_sc: SymCircuit, registry: Optional[SymOperatorRegistry] = None
 ) -> SymCircuit:
     if not lhs_sc.is_compatible(rhs_sc):
         raise StructuralPropertyError(
-            "Only compatible circuits can be multiplied into decomposable circuits.")
+            "Only compatible circuits can be multiplied into decomposable circuits."
+        )
     ...
 
 
 def differentiate(sc: SymCircuit, registry: Optional[SymOperatorRegistry] = None) -> SymCircuit:
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
-            "Only smooth and decomposable circuits can be efficiently differentiated.")
+            "Only smooth and decomposable circuits can be efficiently differentiated."
+        )
     ...

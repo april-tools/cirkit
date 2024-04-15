@@ -1,7 +1,12 @@
-from typing import Optional, Iterable
+from typing import Iterable, Optional
 
-from cirkit.symbolic.sym_layers import SymbExpFamilyLayer, SymbConstantLayer, SymbInputLayer, SymbLayerOperation, \
-    SymbLayerOperator
+from cirkit.symbolic.sym_layers import (
+    SymbConstantLayer,
+    SymbExpFamilyLayer,
+    SymbInputLayer,
+    SymbLayerOperation,
+    SymbLayerOperator,
+)
 from cirkit.utils import Scope
 
 

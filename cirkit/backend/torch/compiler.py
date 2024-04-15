@@ -1,49 +1,42 @@
-from typing import Dict, Type, Union, List, Tuple, Optional, cast
-
-from cirkit.symbolic.sym_circuit import SymCircuit
-from cirkit.symbolic.sym_layers import SymLayer, AbstractSymLayerOperator
-
-from cirkit.backend.base import AbstractCompiler, CompilationRegistry
-from cirkit.backend.torch.layers import Layer
-from cirkit.backend.torch.models import TensorizedCircuit
+from typing import Dict, List, Optional, Tuple, Type, Union, cast
 
 import torch
 from torch import Tensor
 
+from cirkit.backend.base import AbstractCompiler, CompilationRegistry
 from cirkit.backend.torch.layers import (
     CategoricalLayer,
+    ConstantLayer,
     DenseLayer,
     HadamardLayer,
     InnerLayer,
     InputLayer,
     KroneckerLayer,
-    ConstantLayer,
+    Layer,
     MixingLayer,
     SumLayer,
 )
-from cirkit.symbolic.sym_circuit import pipeline_topological_ordering
+from cirkit.backend.torch.models import TensorizedCircuit
+from cirkit.symbolic.sym_circuit import SymCircuit, pipeline_topological_ordering
 from cirkit.symbolic.sym_layers import (
+    AbstractSymLayerOperator,
     SymCategoricalLayer,
     SymConstantLayer,
     SymHadamardLayer,
     SymInputLayer,
     SymKroneckerLayer,
+    SymLayer,
     SymMixingLayer,
     SymProdLayer,
     SymSumLayer,
 )
 
-
-_DEFAULT_COMPILATION_REGISTRY = CompilationRegistry(
-    default_rules={}
-)
+_DEFAULT_COMPILATION_REGISTRY = CompilationRegistry(default_rules={})
 
 
 class Compiler(AbstractCompiler):
     def __init__(self, **flags):
-        super().__init__(
-            _DEFAULT_COMPILATION_REGISTRY, **flags
-        )
+        super().__init__(_DEFAULT_COMPILATION_REGISTRY, **flags)
         self._symb_tensorized_map: Dict[SymCircuit, TensorizedCircuit] = {}
         self._symb_layers_map: Dict[SymCircuit, Dict[SymLayer, int]] = {}
 
@@ -96,7 +89,7 @@ class Compiler(AbstractCompiler):
         self._register_materialized_circuit(symb_circuit, circuit, symb_layers_map)
 
     def _compile_input_layer(
-            self, symb_circuit: SymCircuit, symb_layer: SymInputLayer
+        self, symb_circuit: SymCircuit, symb_layer: SymInputLayer
     ) -> InputLayer:
         # Registry mapping symbolic input layers to executable layers classes
         materialize_input_registry: Dict[Type[SymInputLayer], Type[InputLayer]] = {
@@ -112,7 +105,7 @@ class Compiler(AbstractCompiler):
                 num_input_units=symb_layer.num_channels,
                 num_output_units=symb_layer.num_units,
                 arity=len(symb_layer.scope),
-                reparam=layer_cls.default_reparam()
+                reparam=layer_cls.default_reparam(),
             )
 
         if symb_layer_operation.operator == AbstractSymLayerOperator.INTEGRATION:
@@ -125,15 +118,13 @@ class Compiler(AbstractCompiler):
                 num_input_units=symb_layer.num_channels,
                 num_output_units=symb_layer.num_units,
                 arity=len(symb_layer.scope),
-                reparam=layer_op.reparam
+                reparam=layer_op.reparam,
             )
 
         assert False
 
     def _compile_inner_layer(
-            self,
-            symb_circuit: SymCircuit,
-            symb_layer: Union[SymSumLayer, SymProdLayer]
+        self, symb_circuit: SymCircuit, symb_layer: Union[SymSumLayer, SymProdLayer]
     ) -> InnerLayer:
         # Registry mapping symbolic inner layers to executable layer classes
         materialize_inner_registry: Dict[Type[SymLayer], Type[InnerLayer]] = {
@@ -169,9 +160,7 @@ class Compiler(AbstractCompiler):
 
         assert False
 
-    def __getitem__(
-        self, symb_circuit: SymCircuit
-    ) -> TensorizedCircuit:
+    def __getitem__(self, symb_circuit: SymCircuit) -> TensorizedCircuit:
         return self._symb_tensorized_map[symb_circuit]
 
     def __contains__(self, symb_circuit: SymCircuit) -> bool:
@@ -181,7 +170,7 @@ class Compiler(AbstractCompiler):
         pass
 
     @staticmethod
-    def load(symb_filepath: str, tens_filepath: str) -> 'Compiler':
+    def load(symb_filepath: str, tens_filepath: str) -> "Compiler":
         pass
 
     def _get_materialized_circuit(self, symb_circuit: SymCircuit) -> TensorizedCircuit:
@@ -200,4 +189,3 @@ class Compiler(AbstractCompiler):
     ):
         self._symb_tensorized_map[symb_circuit] = circuit
         self._symb_layers_map[symb_circuit] = symb_layers_map
-

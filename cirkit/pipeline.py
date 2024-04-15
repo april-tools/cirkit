@@ -1,10 +1,10 @@
 from contextlib import AbstractContextManager
 from contextvars import Token
 from types import TracebackType
-from typing import Any, Dict, Optional, Iterable, Type
+from typing import Any, Dict, Iterable, Optional, Type
 
-from cirkit.backend.base import _SUPPORTED_BACKENDS, LayerCompilationFunction, AbstractCompiler
-from cirkit.symbolic.functional import _SYM_OPERATOR_REGISTRY, integrate, multiply, differentiate
+from cirkit.backend.base import _SUPPORTED_BACKENDS, AbstractCompiler, LayerCompilationFunction
+from cirkit.symbolic.functional import _SYM_OPERATOR_REGISTRY, differentiate, integrate, multiply
 from cirkit.symbolic.registry import SymLayerOperatorFunction, SymOperatorRegistry
 from cirkit.symbolic.sym_circuit import SymCircuit
 from cirkit.symbolic.sym_layers import AbstractSymLayerOperator
@@ -33,7 +33,7 @@ class CompiledCircuitMap:
 
 
 class PipelineContext(AbstractContextManager):
-    def __init__(self, backend: str = 'torch', **backend_kwargs):
+    def __init__(self, backend: str = "torch", **backend_kwargs):
         if backend not in _SUPPORTED_BACKENDS:
             raise NotImplementedError(f"Backend '{backend}' is not implemented")
         # Backend specs
@@ -51,7 +51,7 @@ class PipelineContext(AbstractContextManager):
     def __getitem__(self, sc: SymCircuit) -> Any:
         return self._compiled_map.get_compiled_circuit(sc)
 
-    def __enter__(self) -> 'PipelineContext':
+    def __enter__(self) -> "PipelineContext":
         self._symb_registry_token = _SYM_OPERATOR_REGISTRY.set(self._symb_registry)
         return self
 
@@ -59,7 +59,7 @@ class PipelineContext(AbstractContextManager):
         self,
         __exc_type: Optional[Type[BaseException]],
         __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType]
+        __traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         _SYM_OPERATOR_REGISTRY.reset(self._symb_registry_token)
         self._symb_registry_token = None
@@ -106,7 +106,8 @@ class PipelineContext(AbstractContextManager):
 def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:
     if backend not in _SUPPORTED_BACKENDS:
         raise NotImplementedError(f"Backend '{backend}' is not implemented")
-    if backend == 'torch':
+    if backend == "torch":
         from cirkit.backend.torch.compiler import Compiler
+
         return Compiler(**backend_kwargs)
     assert False

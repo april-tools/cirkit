@@ -1,19 +1,21 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import IntEnum, auto
-from typing import Any, Dict, Optional, Tuple, cast, Callable
+from typing import Any, Callable, Dict, Optional, Tuple, cast
 
-from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter, SymStack
+from cirkit.symbolic.sym_params import AbstractSymParameter, SymParameter, SymStack
 from cirkit.utils import Scope
-
 
 AbstractSymLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
 
 class SymLayerOperator(AbstractSymLayerOperator):
     """Types of Symolic operations on layers."""
+
     def _generate_next_value_(name: str, start: int, count: int, last_values: list) -> int:
-        return -(count + 1)  # Enumerate negative integers as the user can extend them with non-negative ones
+        return -(
+            count + 1
+        )  # Enumerate negative integers as the user can extend them with non-negative ones
 
     NOP = auto()
     INTEGRATION = auto()
@@ -40,7 +42,7 @@ class SymLayer(ABC):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        operation: Optional[SymLayerOperation] = None
+        operation: Optional[SymLayerOperation] = None,
     ):
         self.scope = scope
         self.num_input_units = num_input_units
@@ -51,10 +53,10 @@ class SymLayer(ABC):
     @property
     def hparams(self) -> Dict[str, Any]:
         return {
-            'scope': self.scope,
-            'num_input_units': self.num_input_units,
-            'num_output_units': self.num_output_units,
-            'arity': self.arity
+            "scope": self.scope,
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
         }
 
     @property
@@ -84,10 +86,10 @@ class SymInputLayer(SymLayer):
     @property
     def hparams(self) -> Dict[str, Any]:
         return {
-            'scope': self.scope,
-            'num_variables': self.num_variables,
-            'num_output_units': self.num_output_units,
-            'num_channels': self.num_channels
+            "scope": self.scope,
+            "num_variables": self.num_variables,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
         }
 
 
@@ -98,7 +100,7 @@ class SymExpFamilyLayer(ABC, SymInputLayer):
         num_variables: int,
         num_output_units: int,
         num_channels: int,
-        operation: Optional[SymLayerOperation] = None
+        operation: Optional[SymLayerOperation] = None,
     ):
         super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
 
@@ -116,12 +118,14 @@ class SymCategoricalLayer(SymExpFamilyLayer):
         num_channels: int,
         num_categories: int = 2,
         operation: Optional[SymLayerOperation] = None,
-        weight: Optional[SymParameter] = None
+        weight: Optional[SymParameter] = None,
     ):
         super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
         self.num_categories = num_categories
         if weight is None:
-            self.weight = SymParameter(num_variables, num_output_units, num_channels, num_categories)
+            self.weight = SymParameter(
+                num_variables, num_output_units, num_channels, num_categories
+            )
         else:
             self.weight = weight
 
@@ -149,11 +153,12 @@ class SymNormalLayer(SymExpFamilyLayer):
         num_channels: int,
         operation: Optional[SymLayerOperation] = None,
         mean: Optional[SymParameter] = None,
-        variance: Optional[SymParameter] = None
+        variance: Optional[SymParameter] = None,
     ):
         super().__init__(scope, num_variables, num_output_units, num_channels, operation=operation)
-        assert (mean is None and variance is None) or (mean is not None and variance is not None), \
-            "Either both 'mean' and 'variance' has to be specified or none of them"
+        assert (mean is None and variance is None) or (
+            mean is not None and variance is not None
+        ), "Either both 'mean' and 'variance' has to be specified or none of them"
         if mean is None and variance is None:
             self.mean = SymParameter(num_variables, num_output_units, num_channels)
             self.variance = SymParameter(num_variables, num_output_units, num_channels)
@@ -234,16 +239,19 @@ class SymSumLayer(ABC, SymLayer):
 
 class SymDenseLayer(SymSumLayer):
     """The Symolic dense sum layer."""
+
     def __init__(
-            self,
-            scope: Scope,
-            num_input_units: int,
-            num_output_units: int,
-            operation: Optional[SymLayerOperation] = None,
-            weight: Optional[SymParameter] = None
+        self,
+        scope: Scope,
+        num_input_units: int,
+        num_output_units: int,
+        operation: Optional[SymLayerOperation] = None,
+        weight: Optional[SymParameter] = None,
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1, operation=operation)
-        self.weight = weight if weight is not None else SymParameter(num_output_units, num_input_units)
+        self.weight = (
+            weight if weight is not None else SymParameter(num_output_units, num_input_units)
+        )
 
     @property
     def learnable_params(self) -> Dict[str, AbstractSymParameter]:
@@ -252,13 +260,14 @@ class SymDenseLayer(SymSumLayer):
 
 class SymMixingLayer(SymSumLayer):
     """The Symolic mixing sum layer."""
+
     def __init__(
-            self,
-            scope: Scope,
-            num_units: int,
-            arity: int,
-            operation: Optional[SymLayerOperation] = None,
-            weight: Optional[SymParameter] = None
+        self,
+        scope: Scope,
+        num_units: int,
+        arity: int,
+        operation: Optional[SymLayerOperation] = None,
+        weight: Optional[SymParameter] = None,
     ):
         super().__init__(scope, num_units, num_units, arity, operation=operation)
         self.weight = weight if weight is not None else SymParameter(num_units, arity)
