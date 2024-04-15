@@ -6,7 +6,7 @@ from cirkit.symbolic.sym_layers import SymLayer
 from cirkit.symbolic.sym_params import SymParameter
 
 LayerCompilationSignature = Union[Type[SymLayer]]
-LayerCompilationFunction = Callable[[SymLayer, 'AbstractCompiler'], Any]
+LayerCompilationFunction = Callable[[SymLayer, "AbstractCompiler"], Any]
 
 
 _SUPPORTED_BACKENDS = ["torch"]
@@ -21,11 +21,11 @@ class CompilationRegistry:
 
     def register_rule(self, func: LayerCompilationFunction):
         args = func.__annotations__
-        if 'return' not in args or 'compiler' not in args or len(args) != 3:
+        if "return" not in args or "compiler" not in args or len(args) != 3:
             raise ValueError("The function is not a symbolic layer compilation rule")
-        if not issubclass(args['compiler'], AbstractCompiler):
+        if not issubclass(args["compiler"], AbstractCompiler):
             raise ValueError("The function is not a symbolic layer compilation rule")
-        arg_names = list(filter(lambda a: a not in ('return', 'compiler'), args.keys()))
+        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
         symb_cls = args[arg_names[0]]
         if not issubclass(symb_cls, (SymLayer, SymParameter)):
             raise ValueError("The function is not a symbolic layer compilation rule")

@@ -119,7 +119,9 @@ class SymCategoricalLayer(SymExpFamilyLayer):
         super().__init__(scope, num_output_units, num_channels, operation=operation)
         self.num_categories = num_categories
         if weight is None:
-            weight = SymParameter(self.num_variables, num_output_units, num_channels, num_categories)
+            weight = SymParameter(
+                self.num_variables, num_output_units, num_channels, num_categories
+            )
         self.weight = weight
 
     @property
