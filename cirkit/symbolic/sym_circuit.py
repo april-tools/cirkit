@@ -22,7 +22,7 @@ AbstractSymCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or be
 class SymCircuitOperator(AbstractSymCircuitOperator):
     """Types of Symolic operations on circuits."""
 
-    def _generate_next_value_(name: str, start: int, count: int, last_values: list) -> int:
+    def _generate_next_value_(self, start: int, count: int, last_values: list) -> int:
         return -(
             count + 1
         )  # Enumerate negative integers as the user can extend them with non-negative ones
@@ -37,7 +37,7 @@ class SymCircuitOperation:
     """The Symolic operation applied on a SymCircuit."""
 
     operator: AbstractSymCircuitOperator
-    operands: Tuple["SymCircuit", ...]
+    operands: Tuple['SymCircuit', ...]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 

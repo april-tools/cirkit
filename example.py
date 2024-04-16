@@ -5,13 +5,13 @@ from torch import Tensor
 
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.layers import InputLayer
-from cirkit.backend.torch.reparams import Reparameterization, ExpReparam, LeafReparam
+from cirkit.backend.torch.reparams import Reparameterization
 from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.functional import integrate, multiply, differentiate
-from cirkit.symbolic.sym_circuit import SymCircuit, SymCircuitOperator
-from cirkit.symbolic.sym_layers import SymCategoricalLayer, SymDenseLayer, SymKroneckerLayer, SymMixingLayer, \
-    SymInputLayer, SymLayerOperation, SymLayerOperator
-from cirkit.symbolic.sym_params import SymSoftplus, SymParameter, SymSoftmax, AbstractSymParameter, SymKronecker, \
+from cirkit.symbolic.sym_circuit import SymCircuit
+from cirkit.symbolic.sym_layers import SymCategoricalLayer, SymDenseLayer, SymKroneckerLayer, SymInputLayer, \
+    SymLayerOperator
+from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter, SymKronecker, \
     SymParameterPlaceholder
 from cirkit.templates.region_graph.algorithms import FullyFactorized, QuadTree
 from cirkit.utils import Scope
@@ -141,11 +141,10 @@ def lib_extension() -> None:
             scope: Scope,
             num_output_units: int,
             num_channels: int = 1,
-            operation: Optional[SymLayerOperation] = None,
             degree: int = 2,
             coeffs: Optional[SymParameter] = None
         ):
-            super().__init__(scope, num_output_units, num_channels=num_channels, operation=operation)
+            super().__init__(scope, num_output_units, num_channels)
             self.degree = degree
             if coeffs is None:
                 coeffs = SymParameter(self.num_variables, num_channels, num_output_units)
@@ -221,17 +220,13 @@ def lib_extension() -> None:
     # - SymPolyGaussianLayer must be compiled into PolyGaussianLayer
     # In order to do so, we write a compilation rule
     def compile_poly_gaussian(sl: SymPolyGaussianLayer, compiler: TorchCompiler) -> PolyGaussianLayer:
-        # Q: When using operators (e.g., product of poly gaussian) should the compilation rule
-        #    detect the kind of operator and construct the 'coeffs' parameterization accordingly?
-        #    In short, should the compilation rule be responsible for parameter sharing?
-        #    If yes, how to write the APIs such that this is as painless as possible?
-        # I think it is fair to make the compilation rule deal with parameter sharing.
-        # That is, if this poly-gaussian is the result of a product, then it should provide the information on
-        # how to compile the correct parameterization as to encode the kronecker product of the two input 'coeffs'.
-        # Important: the symbolic layer data structure already contains the information to make this work.
         return PolyGaussianLayer(
             sl.num_variables, sl.num_channels, sl.num_output_units,
-            degree=sl.degree, coeffs=ExpReparam(LeafReparam())
+            degree=sl.degree,
+            # The Torch compiler comes with a utility method for compiling symbolic parameters
+            # In other words, the compiler is responsible for parameter sharing
+            # E.g., 'coeffs' is the kronecker product of other 'coeffs' (see below)
+            coeffs=compiler.compile_learnable_parameter(sl.coeffs)
         )
 
     # We extend the pipeline context by registering new compilation rules
@@ -240,11 +235,9 @@ def lib_extension() -> None:
     tp = ctx.compile(p)  # These compilations will call our custom compilation rule
     tq = ctx.compile(q)
 
-    ################################ PART 2 ################################
-
-    # Let's suppose the user want to implement the product between their new layer.
+    # Let's suppose the user wants to implement the product operation of circuits with their new layer.
     # As usual, it must implement first the symbolic protocol for that.
-    # Such symbolic protocol is the symbolic product operator for such layer.
+    # Such symbolic protocol is the symbolic product operator for such a layer.
     def multiply_poly_gaussian(
         lhs: SymPolyGaussianLayer, rhs: SymPolyGaussianLayer
     ) -> SymPolyGaussianLayer:
@@ -252,29 +245,26 @@ def lib_extension() -> None:
         assert lhs.num_channels == rhs.num_channels
         return SymPolyGaussianLayer(
             lhs.scope,
-            lhs.num_output_units * rhs.num_output_units,
+            num_output_units=lhs.num_output_units * rhs.num_output_units,
             num_channels=lhs.num_channels,
-            operation=SymLayerOperation(  # Record the product operation and operands
-                SymLayerOperator.KRONECKER,
-                operands=(lhs, rhs)
-            ),
             degree=lhs.degree * rhs.degree + 1,  # Record the change in hyperparameters or other static attributes ...
             coeffs=SymKronecker(  # ... as well as the change over the learnable parameters
-                # Important: use place-holders to keep track of parameter sharing
-                SymParameterPlaceholder(opd_id=0, name='coeffs'),
-                SymParameterPlaceholder(opd_id=1, name='coeffs')
-            )  # Each placeholder will tell the compiler to re-use the parameters named 'coeffs'
-               # that are kept in the operands 0 and 1 (see SymLayerOperation specification above)
+                # Each placeholder will "tell the compiler" to re-use the parameters named 'coeffs',
+                # which are stored (or referenced elsewhere) in the operand layers 'lhs' and 'rhs'
+                SymParameterPlaceholder(lhs, name='coeffs'),
+                SymParameterPlaceholder(rhs, name='coeffs')
+            )
         )
 
     # # # # # # # # # # # # # # # # # # # # # #
     # High-level APIs
     # To use the above symbolic product protocol, we have to register it as a symbolic operator
-    ctx.register_operator_rule(SymCircuitOperator.MULTIPLICATION, multiply_poly_gaussian)
+    ctx.register_operator_rule(SymLayerOperator.KRONECKER, multiply_poly_gaussian)
     tr = ctx.multiply(tp, tq)  # This will call ctx.compile(product(p, q)) internally
 
     # # # # # # # # # # # # # # # # # # # # # #
     # Lower-level APIs (i.e., explicit manipulation of symbolic circuits and uses the symbolic functional APIs)
+    ctx.register_operator_rule(SymLayerOperator.KRONECKER, multiply_poly_gaussian)
     with ctx:
         r = multiply(p, q)  # No need to specify anything here, the with statement will take care of the new protocols
     tr = ctx.compile(r)  # We do not need to be inside the context for compilation, as the protocol above is symbolic

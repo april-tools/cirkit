@@ -1,5 +1,4 @@
 from collections import defaultdict
-from contextvars import ContextVar
 from typing import Dict, Iterable, List, Optional, Union
 
 from cirkit.symbolic.registry import SymOperatorRegistry
@@ -7,19 +6,13 @@ from cirkit.symbolic.sym_circuit import SymCircuit, SymCircuitOperation, SymCirc
 from cirkit.symbolic.sym_layers import (
     SymInputLayer,
     SymLayer,
-    SymLayerOperation,
     SymLayerOperator,
     SymProdLayer,
     SymSumLayer,
 )
+from cirkit.symbolic.sym_params import SymParameterPlaceholder
 from cirkit.utils import Scope
 from cirkit.utils.exceptions import StructuralPropertyError
-
-# Context variable containing the symbolic operator registry.
-# This is updated when entering a pipeline context.
-_SYM_OPERATOR_REGISTRY: ContextVar[SymOperatorRegistry] = ContextVar(
-    "_SYM_OPERATOR_REGISTRY", default=SymOperatorRegistry()
-)
 
 
 def integrate(
@@ -40,9 +33,9 @@ def integrate(
             "The variables scope to integrate must be a subset of the scope of the circuit"
         )
 
-    # Load the registry from the context, if not specified
+    # Use the default registry, if not specified otherwise
     if registry is None:
-        registry = _SYM_OPERATOR_REGISTRY.get()
+        registry = SymOperatorRegistry()
 
     # Mapping the symbolic circuit layers with the layers of the new circuit to build
     map_layers: Dict[SymLayer, SymLayer] = {}
@@ -64,19 +57,21 @@ def integrate(
             else:  # Use a fallback rule that is not a specialized one
                 func = registry.retrieve_rule(SymLayerOperator.INTEGRATION, SymInputLayer)
             map_layers[sl] = func(sl)
-        else:  # Sum/product layers are simply copied
-            assert isinstance(sl, (SymSumLayer, SymProdLayer))
-            new_sl_inputs = [map_layers[isl] for isl in sc.layer_inputs(sl)]
-            new_sl: Union[SymSumLayer, SymProdLayer] = type(sl)(
-                sl.scope,
-                sl.num_units,
-                arity=sl.arity,
-                operation=SymLayerOperation(operator=SymLayerOperator.NOP, operands=(sl,)),
-            )
-            map_layers[sl] = new_sl
-            in_layers[new_sl] = new_sl_inputs
-            for isl in new_sl_inputs:
-                out_layers[isl] = new_sl_inputs
+            continue
+        assert isinstance(sl, (SymSumLayer, SymProdLayer)), \
+            "Symbolic inner layers must be either sum or product layers"
+        # Sum/product layers are simply copied
+        # Placeholders are used to keep track of referenced parameters
+        new_learnable_parameters = {
+            pname: SymParameterPlaceholder(sl, pname)
+            for pname in sl.learnable_params.keys()
+        }
+        new_sl: Union[SymSumLayer, SymProdLayer] = type(sl)(**sl.hparams, **new_learnable_parameters)
+        map_layers[sl] = new_sl
+        new_sl_inputs = [map_layers[isl] for isl in sc.layer_inputs(sl)]
+        in_layers[new_sl] = new_sl_inputs
+        for isl in new_sl_inputs:
+            out_layers[isl] = new_sl
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return SymCircuit(

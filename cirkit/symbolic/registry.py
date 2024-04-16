@@ -1,11 +1,10 @@
 from collections import defaultdict
 from typing import Callable, Dict, Iterable, Optional, Tuple, Type
 
-from cirkit.symbolic.operators import integrate_ef_layer, integrate_input_layer
+from cirkit.symbolic.operators import integrate_ef_layer
 from cirkit.symbolic.sym_layers import (
     AbstractSymLayerOperator,
     SymExpFamilyLayer,
-    SymInputLayer,
     SymLayer,
     SymLayerOperator,
 )
@@ -17,8 +16,7 @@ SymLayerOperatorSpecs = Dict[SymLayerOperatorSignature, SymLayerOperatorFunction
 
 _DEFAULT_SYM_OPERATOR_RULES: Dict[AbstractSymLayerOperator, SymLayerOperatorSpecs] = {
     SymLayerOperator.INTEGRATION: {
-        (SymInputLayer,): integrate_input_layer,
-        (SymExpFamilyLayer,): integrate_ef_layer,
+        (SymExpFamilyLayer,): integrate_ef_layer
     },  # TODO: fill
     SymLayerOperator.DIFFERENTIATION: {},  # TODO: fill
     SymLayerOperator.KRONECKER: {},  # TODO: fill

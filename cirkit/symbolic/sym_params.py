@@ -1,9 +1,17 @@
 from abc import ABC
 from typing import Tuple
 
+from cirkit.symbolic.sym_layers import SymLayer
+
 
 class AbstractSymParameter(ABC):
     ...
+
+
+class SymParameterPlaceholder(AbstractSymParameter):
+    def __init__(self, layer: SymLayer, name: str):
+        self.layer = layer
+        self.name = name
 
 
 class SymParameter(AbstractSymParameter):
@@ -33,12 +41,6 @@ class SymParameterReduce(ABC, AbstractSymParameter):
     def __init__(self, *opds: AbstractSymParameter):
         super().__init__()
         self.opds = list(opds)
-
-
-class SymParameterPlaceholder(AbstractSymParameter):
-    def __init__(self, opd_id: int, name: str):
-        self.opd_id = opd_id
-        self.name = name
 
 
 class SymHadamard(SymParameterBinary):
