@@ -15,9 +15,7 @@ SymLayerOperatorSpecs = Dict[SymLayerOperatorSignature, SymLayerOperatorFunction
 
 
 _DEFAULT_SYM_OPERATOR_RULES: Dict[AbstractSymLayerOperator, SymLayerOperatorSpecs] = {
-    SymLayerOperator.INTEGRATION: {
-        (SymExpFamilyLayer,): integrate_ef_layer
-    },  # TODO: fill
+    SymLayerOperator.INTEGRATION: {(SymExpFamilyLayer,): integrate_ef_layer},  # TODO: fill
     SymLayerOperator.DIFFERENTIATION: {},  # TODO: fill
     SymLayerOperator.KRONECKER: {},  # TODO: fill
 }

@@ -3,13 +3,13 @@ from typing import (
     ClassVar,
     Collection,
     Dict,
+    FrozenSet,
     Hashable,
     Iterable,
     Iterator,
     Type,
     TypeVar,
     cast,
-    FrozenSet,
 )
 from typing_extensions import Never, final  # FUTURE: in typing from 3.11
 

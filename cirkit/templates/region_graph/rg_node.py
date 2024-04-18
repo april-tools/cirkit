@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Iterable, cast
 
-from cirkit.utils.scope import Scope
 from cirkit.utils.orderedset import OrderedSet
+from cirkit.utils.scope import Scope
 from cirkit.utils.type_aliases import RGNodeMetadata
 
 

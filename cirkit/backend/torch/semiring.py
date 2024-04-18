@@ -1,10 +1,22 @@
 import functools
 from abc import ABC, abstractmethod
-from typing import TypeVar, Type, ClassVar, Dict, Callable, cast, Iterable, Union, Sequence, Optional, Tuple
+from typing import (
+    Callable,
+    ClassVar,
+    Dict,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
+from typing_extensions import Self, TypeVarTuple, Unpack, final
 
 import torch
 from torch import Tensor
-from typing_extensions import TypeVarTuple, Self, Unpack, final
 
 from cirkit.backend.torch.utils import flatten_dims, unflatten_dims
 

@@ -10,11 +10,10 @@ from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.functional import integrate, multiply, differentiate
 from cirkit.symbolic.sym_circuit import SymCircuit
 from cirkit.symbolic.sym_layers import SymCategoricalLayer, SymDenseLayer, SymKroneckerLayer, SymInputLayer, \
-    SymLayerOperator
-from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter, SymKronecker, \
-    SymParameterPlaceholder
+    SymLayerOperator, SymParameterPlaceholder
+from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter, SymKronecker
 from cirkit.templates.region_graph.algorithms import FullyFactorized, QuadTree
-from cirkit.utils import Scope
+from cirkit.utils.scope import Scope
 
 
 def categorical_layer_factory(

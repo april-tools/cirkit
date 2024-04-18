@@ -37,10 +37,10 @@ class SymLayer(ABC):
     @property
     def hparams(self) -> Dict[str, Any]:
         return {
-            'scope': self.scope,
-            'num_input_units': self.num_input_units,
-            'num_output_units': self.num_output_units,
-            'arity': self.arity,
+            "scope": self.scope,
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
         }
 
     @property
@@ -55,12 +55,7 @@ class SymParameterPlaceholder(AbstractSymParameter):
 
 
 class SymInputLayer(SymLayer):
-    def __init__(
-        self,
-        scope: Scope,
-        num_output_units: int,
-        num_channels: int = 1
-    ):
+    def __init__(self, scope: Scope, num_output_units: int, num_channels: int = 1):
         super().__init__(scope, len(scope), num_output_units, num_channels)
 
     @property
@@ -74,19 +69,14 @@ class SymInputLayer(SymLayer):
     @property
     def hparams(self) -> Dict[str, Any]:
         return {
-            'scope': self.scope,
-            'num_output_units': self.num_output_units,
-            'num_channels': self.num_channels,
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
         }
 
 
 class SymExpFamilyLayer(ABC, SymInputLayer):
-    def __init__(
-        self,
-        scope: Scope,
-        num_output_units: int,
-        num_channels: int
-    ):
+    def __init__(self, scope: Scope, num_output_units: int, num_channels: int):
         super().__init__(scope, len(scope), num_output_units, num_channels)
 
     @abstractmethod
@@ -101,7 +91,7 @@ class SymCategoricalLayer(SymExpFamilyLayer):
         num_output_units: int,
         num_channels: int,
         num_categories: int = 2,
-        weight: Optional[SymParameter] = None
+        weight: Optional[SymParameter] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
@@ -175,21 +165,16 @@ class SymConstantLayer(SymInputLayer):
 class SymProdLayer(ABC, SymLayer):
     """The abstract base class for Symolic product layers."""
 
-    def __init__(
-        self,
-        scope: Scope,
-        num_input_units: int,
-        arity: int = 2
-    ):
+    def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
         num_output_units = SymProdLayer.num_prod_units(num_input_units, arity)
         super().__init__(scope, num_input_units, num_output_units, arity)
 
     @property
     def hparams(self) -> Dict[str, Any]:
         return {
-            'scope': self.scope,
-            'num_input_units': self.num_input_units,
-            'arity': self.arity,
+            "scope": self.scope,
+            "num_input_units": self.num_input_units,
+            "arity": self.arity,
         }
 
     @staticmethod
@@ -236,9 +221,9 @@ class SymDenseLayer(SymSumLayer):
     @property
     def hparams(self) -> Dict[str, Any]:
         return {
-            'scope': self.scope,
-            'num_input_units': self.num_input_units,
-            'num_output_units': self.num_output_units
+            "scope": self.scope,
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
         }
 
     @property
@@ -263,11 +248,7 @@ class SymMixingLayer(SymSumLayer):
 
     @property
     def hparams(self) -> Dict[str, Any]:
-        return {
-            'scope': self.scope,
-            'num_units': self.num_input_units,
-            'arity': self.arity
-        }
+        return {"scope": self.scope, "num_units": self.num_input_units, "arity": self.arity}
 
     @property
     def learnable_params(self) -> Dict[str, AbstractSymParameter]:

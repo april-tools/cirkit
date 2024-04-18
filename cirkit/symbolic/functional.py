@@ -7,8 +7,9 @@ from cirkit.symbolic.sym_layers import (
     SymInputLayer,
     SymLayer,
     SymLayerOperator,
+    SymParameterPlaceholder,
     SymProdLayer,
-    SymSumLayer, SymParameterPlaceholder,
+    SymSumLayer,
 )
 from cirkit.utils import Scope
 from cirkit.utils.exceptions import StructuralPropertyError
@@ -57,15 +58,17 @@ def integrate(
                 func = registry.retrieve_rule(SymLayerOperator.INTEGRATION, SymInputLayer)
             map_layers[sl] = func(sl)
             continue
-        assert isinstance(sl, (SymSumLayer, SymProdLayer)), \
-            "Symbolic inner layers must be either sum or product layers"
+        assert isinstance(
+            sl, (SymSumLayer, SymProdLayer)
+        ), "Symbolic inner layers must be either sum or product layers"
         # Sum/product layers are simply copied
         # Placeholders are used to keep track of referenced parameters
         new_learnable_parameters = {
-            pname: SymParameterPlaceholder(sl, pname)
-            for pname in sl.learnable_params.keys()
+            pname: SymParameterPlaceholder(sl, pname) for pname in sl.learnable_params.keys()
         }
-        new_sl: Union[SymSumLayer, SymProdLayer] = type(sl)(**sl.hparams, **new_learnable_parameters)
+        new_sl: Union[SymSumLayer, SymProdLayer] = type(sl)(
+            **sl.hparams, **new_learnable_parameters
+        )
         map_layers[sl] = new_sl
         new_sl_inputs = [map_layers[isl] for isl in sc.layer_inputs(sl)]
         in_layers[new_sl] = new_sl_inputs

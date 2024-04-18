@@ -13,8 +13,8 @@ from cirkit.symbolic.sym_layers import (
     SymSumLayer,
 )
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
-from cirkit.utils.scope import Scope
 from cirkit.utils.algorithms import topological_ordering
+from cirkit.utils.scope import Scope
 
 AbstractSymCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
@@ -37,7 +37,7 @@ class SymCircuitOperation:
     """The Symolic operation applied on a SymCircuit."""
 
     operator: AbstractSymCircuitOperator
-    operands: Tuple['SymCircuit', ...]
+    operands: Tuple["SymCircuit", ...]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 

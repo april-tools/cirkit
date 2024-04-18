@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional, Tuple, Type, Union, cast, Any, IO
+from typing import IO, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 import torch
 from torch import Tensor
@@ -24,21 +24,19 @@ from cirkit.symbolic.sym_layers import (
     AbstractSymLayerOperator,
     SymCategoricalLayer,
     SymConstantLayer,
+    SymDenseLayer,
     SymHadamardLayer,
     SymInputLayer,
     SymKroneckerLayer,
     SymLayer,
     SymMixingLayer,
     SymProdLayer,
-    SymSumLayer, SymDenseLayer
+    SymSumLayer,
 )
 from cirkit.symbolic.sym_params import AbstractSymParameter
 
 _DEFAULT_COMPILATION_REGISTRY = CompilerRegistry(
-    default_rules={
-        SymDenseLayer: compile_dense_layer,
-        SymKroneckerLayer: compile_kronecker_layer
-    }
+    default_rules={SymDenseLayer: compile_dense_layer, SymKroneckerLayer: compile_kronecker_layer}
 )
 
 
@@ -66,10 +64,7 @@ class TorchCompiler(AbstractCompiler):
         pass
 
     def _register_compiled_circuit(
-            self,
-            sc: SymCircuit,
-            tc: TensorizedCircuit,
-            sym_layers_map: Dict[SymLayer, int]
+        self, sc: SymCircuit, tc: TensorizedCircuit, sym_layers_map: Dict[SymLayer, int]
     ):
         super().register_compiled_circuit(sc, tc)
         self._sym_layers_map[sc] = sym_layers_map
@@ -109,9 +104,7 @@ class TorchCompiler(AbstractCompiler):
         self._register_compiled_circuit(sym_circuit, circuit, sym_layers_map)
         return circuit
 
-    def _compile_input_layer(
-        self, sym_circuit: SymCircuit, sym_layer: SymInputLayer
-    ) -> InputLayer:
+    def _compile_input_layer(self, sym_circuit: SymCircuit, sym_layer: SymInputLayer) -> InputLayer:
         # Registry mapping symbolic input layers to executable layers classes
         materialize_input_registry: Dict[Type[SymInputLayer], Type[InputLayer]] = {
             SymConstantLayer: ConstantLayer,

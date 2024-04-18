@@ -1,7 +1,19 @@
 from collections import defaultdict, deque
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union, TypeVar, Sequence
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
-NodeType = TypeVar('NodeType')
+NodeType = TypeVar("NodeType")
 
 
 def bfs(

@@ -1,16 +1,16 @@
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Optional, Type, Union, IO
+from typing import IO, Any, Callable, Dict, Optional, Type, Union
 
 from cirkit.symbolic.sym_circuit import SymCircuit
 from cirkit.symbolic.sym_layers import SymLayer
-from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter
+from cirkit.symbolic.sym_params import AbstractSymParameter, SymParameter
 
 LayerCompilationSignature = Union[Type[SymLayer]]
-LayerCompilationFunction = Callable[[SymLayer, 'AbstractCompiler'], Any]
+LayerCompilationFunction = Callable[[SymLayer, "AbstractCompiler"], Any]
 
 
-SUPPORTED_BACKENDS = ['torch']
+SUPPORTED_BACKENDS = ["torch"]
 
 
 class CompilationContext:
@@ -95,10 +95,16 @@ class AbstractCompiler(ABC):
         ...
 
     @abstractmethod
-    def save(self, sym_filepath: Union[IO, os.PathLike, str], compiled_filepath: Union[IO, os.PathLike, str]):
+    def save(
+        self,
+        sym_filepath: Union[IO, os.PathLike, str],
+        compiled_filepath: Union[IO, os.PathLike, str],
+    ):
         ...
 
     @staticmethod
     @abstractmethod
-    def load(sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]) -> 'AbstractCompiler':
+    def load(
+        sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]
+    ) -> "AbstractCompiler":
         ...
