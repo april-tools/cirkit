@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple, Type, Union, cast, Any, IO
 import torch
 from torch import Tensor
 
-from cirkit.backend.base import AbstractCompiler, CompilationRegistry
+from cirkit.backend.base import AbstractCompiler, CompilerRegistry
 from cirkit.backend.torch.layers import (
     CategoricalLayer,
     ConstantLayer,
@@ -18,6 +18,7 @@ from cirkit.backend.torch.layers import (
     SumLayer,
 )
 from cirkit.backend.torch.models import TensorizedCircuit
+from cirkit.backend.torch.rules import compile_dense_layer, compile_kronecker_layer
 from cirkit.symbolic.sym_circuit import SymCircuit, pipeline_topological_ordering
 from cirkit.symbolic.sym_layers import (
     AbstractSymLayerOperator,
@@ -29,11 +30,16 @@ from cirkit.symbolic.sym_layers import (
     SymLayer,
     SymMixingLayer,
     SymProdLayer,
-    SymSumLayer
+    SymSumLayer, SymDenseLayer
 )
 from cirkit.symbolic.sym_params import AbstractSymParameter
 
-_DEFAULT_COMPILATION_REGISTRY = CompilationRegistry(default_rules={})
+_DEFAULT_COMPILATION_REGISTRY = CompilerRegistry(
+    default_rules={
+        SymDenseLayer: compile_dense_layer,
+        SymKroneckerLayer: compile_kronecker_layer
+    }
+)
 
 
 class TorchCompiler(AbstractCompiler):

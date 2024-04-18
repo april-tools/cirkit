@@ -7,7 +7,7 @@ from cirkit.symbolic.sym_layers import SymLayer
 from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter
 
 LayerCompilationSignature = Union[Type[SymLayer]]
-LayerCompilationFunction = Callable[[SymLayer, "AbstractCompiler"], Any]
+LayerCompilationFunction = Callable[[SymLayer, 'AbstractCompiler'], Any]
 
 
 SUPPORTED_BACKENDS = ['torch']
@@ -35,7 +35,7 @@ class CompilationContext:
         self._inv_map[tc] = sc
 
 
-class CompilationRegistry:
+class CompilerRegistry:
     def __init__(
         self,
         default_rules: Optional[Dict[LayerCompilationSignature, LayerCompilationFunction]] = None,
@@ -56,7 +56,7 @@ class CompilationRegistry:
 
 
 class AbstractCompiler(ABC):
-    def __init__(self, registry: CompilationRegistry, **flags):
+    def __init__(self, registry: CompilerRegistry, **flags):
         self._registry = registry
         self._flags = flags
         self._context = CompilationContext()
