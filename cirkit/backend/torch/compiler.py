@@ -68,13 +68,6 @@ class TorchCompiler(AbstractCompiler):
         super().register_compiled_circuit(sc, tc)
         self._sym_layers_map[sc] = sym_layers_map
 
-    def save(self, sym_filepath: Union[IO, os.PathLike, str], compiled_filepath: Union[IO, os.PathLike, str]):
-        pass
-
-    @staticmethod
-    def load(sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]) -> 'TorchCompiler':
-        pass
-
     def _compile_circuit(self, sym_circuit: SymCircuit) -> TensorizedCircuit:
         # The list of layers
         layers: List[Layer] = []

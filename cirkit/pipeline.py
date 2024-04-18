@@ -1,7 +1,8 @@
+import os
 from contextlib import AbstractContextManager
 from contextvars import Token, ContextVar
 from types import TracebackType
-from typing import Any, Iterable, Optional, Type
+from typing import Any, Iterable, Optional, Type, Union, IO
 
 from cirkit.backend.base import SUPPORTED_BACKENDS, AbstractCompiler, LayerCompilationFunction
 from cirkit.symbolic.functional import differentiate, integrate, multiply
@@ -48,6 +49,20 @@ class PipelineContext(AbstractContextManager):
         _SYM_OPERATOR_REGISTRY.reset(self._sym_registry_token)
         self._sym_registry_token = None
         return None
+
+    def save(
+        self,
+        sym_fp: Union[IO, os.PathLike, str],
+        state_fp: Optional[Union[IO, os.PathLike, str]] = None
+    ):
+        ...
+
+    @staticmethod
+    def load(
+        sym_fp: Union[IO, os.PathLike, str],
+        state_fp: Optional[Union[IO, os.PathLike, str]] = None
+    ) -> 'PipelineContext':
+        ...
 
     def register_operator_rule(self, op: AbstractSymLayerOperator, func: SymLayerOperatorFunction):
         self._sym_registry.register_rule(op, func)

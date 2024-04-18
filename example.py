@@ -271,79 +271,57 @@ def lib_extension() -> None:
     # Important: note that outside the with statement, multiply will raise a SymbolicOperatorNotFound exception
 
 
-# def example_serialization() -> None:
-#     ################################ PART 1 ################################
-#
-#     # Create two region graphs
-#     qt = QuadTree(shape=(28, 28), struct_decomp=True)
-#     ff = FullyFactorized(num_vars=28 * 28)
-#
-#     # Instantiate two symbolic circuits from the region graphs,
-#     # by specifying symbolic layers and symbolic parameterizations
-#     p = SymCircuit.from_region_graph(
-#         qt,
-#         num_input_units=16,
-#         num_sum_units=16,
-#         input_cls=SymCategoricalLayer,
-#         sum_cls=SymSumLayer,
-#         prod_cls=SymHadamardLayer,
-#         input_param_cls=SymSoftmax,
-#         sum_param_cls=SymSoftplus,
-#     )
-#     q = SymCircuit.from_region_graph(
-#         ff,
-#         num_input_units=16,
-#         input_cls=SymCategoricalLayer,
-#         prod_cls=SymHadamardLayer,
-#         input_param_cls=SymSoftmax,
-#     )
-#
-#     # Construct the pipeline
-#     r = differentiate(q)
-#     s = multiply(p, r)
-#
-#     # Create a pipeline context for compilation
-#     # Given the output of a computational graph over circuits (i.e., the root of the DAG),
-#     # ctx.compile compiles all the circuits in topological ordering (at least by default)
-#     # The backend can be specified with a flag, and available optimizations using kwargs.
-#     # For instance, the backend 'torch' might support the following optimizations:
-#     # - fold=True  enables folding;
-#     # - einsum=True  suggests compiling to layers using einsums when possible.
-#     ctx = PipelineContext(backend="torch")
-#     ctx.compile(s, fold=True, einsum=True)
-#
-#     # Retrieve the compiled tensorized circuits from the pipeline context
-#     # These circuits are torch modules and share parameters accordingly
-#     tensorized_r, tensorized_s = ctx[r], ctx[s]
-#
-#     # Do inference or learning with the compiled circuits
-#     ...
-#
-#     ################################ PART 2 ################################
-#
-#     # Let's suppose we now want to save this pipeline and load it later
-#     # Saving a single symbolic/tensorized circuit would not allow us to do other operations later,
-#     # unless they are the input circuits of the pipeline. This is because we have parameter sharing
-#     # between circuits, and connections between symbolic representations.
-#     # For this reason, we can save the pipeline context, which already knows the backed and therefore
-#     # will use the relevant save routines for that backend.
-#     # Note that we can save symbolic and tensorized circuits in different files.
-#     ctx.save("symbolic-pipeline.ckit", "tensorized-circuits.pt")
-#
-#     # Now, let's load again the context
-#     ctx = PipelineContext.load("symbolic-pipeline.ckit", "tensorized-circuits.pt")
-#
-#     # Since we have saved SymCircuitthe context, we can incrementally operate on circuits and compile them,
-#     # without losing any useful data structure from previous compilations (e.g., references between layers)
-#     # That is, we can extend the symbolic pipeline using other operators
-#     s = ctx[
-#         "product.0"
-#     ]  # Let's assume symbolic circuits will have labels or names that the user can set
-#     t = integrate(s)
-#     ctx.compile(t)
-#
-#     # Retrieve the compiled tensorized circuit from the pipeline context
-#     tensorized_t = ctx[t]
-#
-#     # Do inference or learning with the compiled circuits
-#     ...
+def serialization() -> None:
+    # Create two region graphs
+    qt = QuadTree(shape=(28, 28), struct_decomp=True)
+    ff = FullyFactorized(num_vars=28 * 28)
+
+    # Instantiate two symbolic circuits from the region graphs,
+    # by specifying symbolic layers and symbolic parameterizations
+    p = SymCircuit.from_region_graph(
+        qt,
+        num_input_units=16,
+        num_sum_units=16,
+        input_factory=categorical_layer_factory,
+        sum_factory=dense_layer_factory,
+        prod_factory=kronecker_layer_factory
+    )
+    q = SymCircuit.from_region_graph(
+        ff,
+        num_input_units=16,
+        input_factory=categorical_layer_factory,
+        sum_factory=dense_layer_factory,
+        prod_factory=kronecker_layer_factory
+    )
+
+    # Construct the pipeline
+    ctx = PipelineContext(backend='torch', fold=True, einsum=True)
+    tp = ctx.compile(p)
+    tq = ctx.compile(q)
+    tr = ctx.differentiate(tq)
+    ts = ctx.multiply(tp, tr)
+
+    # Let's suppose we now want to save this pipeline and load it later
+    # Saving a single symbolic/tensorized circuit would not allow us to do other operations later,
+    # unless they are the input circuits of the pipeline. This is because we have parameter sharing
+    # between circuits, and also connections between symbolic representations.
+    # For this reason, we save the pipeline context, which already knows the backed and therefore
+    # will use the relevant save/load routines available for that backend.
+    ctx.save('symbolic-pipeline.ckit', 'tensorized-circuits.pt')
+
+    # Now, let's load again the context
+    # The following will:
+    # (i)   load the symbolic representations of all the circuits in the pipeline
+    # (ii)  compile them using the backend specified above
+    # (iii) load the state (i.e., the parameters and buffers) of the compiled circuits
+    ctx = PipelineContext.load('symbolic-pipeline.ckit', 'tensorized-circuits.pt')
+
+    # Since we saved the entire pipeline, we can incrementally operate on circuits and compile them,
+    # without losing any useful data structure from previous compilations (e.g., references between layers)
+    # That is, we can extend the pipeline using other operations
+    # Let's assume symbolic circuits will have labels (either set by the user or automatically set by the operations)
+    s = ctx['product.0']
+    tt = ctx.integrate(ts)
+
+    # Do inference or learning with the compiled circuits
+    ...
