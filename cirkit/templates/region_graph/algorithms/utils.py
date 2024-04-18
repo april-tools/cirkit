@@ -4,7 +4,7 @@ from typing import Dict, Sequence, Tuple
 import numpy as np
 from numpy.typing import NDArray
 
-from cirkit.utils import Scope
+from cirkit.utils.scope import Scope
 
 HyperCube = Tuple[Tuple[int, ...], Tuple[int, ...]]  # Just to shorten the annotation.
 """A hypercube represented by "top-left" and "bottom-right" coordinates (cut points)."""
@@ -27,6 +27,7 @@ class HypercubeToScope(Dict[HyperCube, Scope]):
         Args:
             shape (Sequence[int]): The shape of the whole hypercube.
         """
+        super().__init__()
         self.ndims = len(shape)
         self.shape = tuple(shape)
         # We assume it's feasible to save the whole hypercube, since it should be the whole region.

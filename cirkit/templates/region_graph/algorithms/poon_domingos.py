@@ -4,7 +4,7 @@ from typing import Deque, Dict, List, Optional, Sequence, Union
 from cirkit.templates.region_graph import RegionGraph
 from cirkit.templates.region_graph.algorithms.utils import HyperCube, HypercubeToScope
 from cirkit.templates.region_graph.rg_node import RegionNode
-from cirkit.utils import Scope
+from cirkit.utils.scope import Scope
 
 # TODO: test what is constructed here
 

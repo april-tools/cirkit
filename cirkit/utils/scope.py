@@ -9,9 +9,9 @@ from typing import (
     Type,
     TypeVar,
     cast,
-    final,
+    FrozenSet,
 )
-from typing_extensions import Never  # FUTURE: in typing from 3.11
+from typing_extensions import Never, final  # FUTURE: in typing from 3.11
 
 # NOTE: Explaination on the magic in class customization for Scope.
 #       - It's an abstract class, because it does not include a complete implementation and is not
@@ -387,3 +387,18 @@ class Scope(Collection[int], Hashable):
             Scope: The union.
         """
         return Scope(frozenset().union(*scopes))
+
+
+@Scope.register("frozenset")  # type: ignore[misc]
+@final  # type: ignore[misc]
+class FrozenSetScope(Scope, FrozenSet[int]):  # type: ignore[misc]
+    """The Scope implemented by frozenset."""
+
+    __new__ = frozenset.__new__
+    __contains__ = frozenset.__contains__
+    __iter__ = frozenset.__iter__
+    __len__ = frozenset.__len__
+    __le__ = frozenset.__le__
+    __ge__ = frozenset.__ge__
+    __and__ = frozenset.__and__
+    __or__ = frozenset.__or__

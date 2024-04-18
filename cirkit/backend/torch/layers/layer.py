@@ -6,7 +6,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.reparams import Reparameterization
-from cirkit.utils import ComputationSapce
+from cirkit.backend.torch.semiring import ComputationSapce
 
 
 class Layer(nn.Module, ABC):

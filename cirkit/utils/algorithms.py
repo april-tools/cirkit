@@ -1,10 +1,12 @@
 from collections import defaultdict, deque
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union, TypeVar, Sequence
+
+NodeType = TypeVar('NodeType')
 
 
 def bfs(
-    roots: Set[Any], incomings_fn: Callable[[Any], Union[List[Any], Tuple[Any]]]
-) -> Iterator[Any]:
+    roots: Set[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
+) -> Iterator[NodeType]:
     seen, to_visit = set(roots), deque(roots)
     while to_visit:
         node = to_visit.popleft()
@@ -16,10 +18,10 @@ def bfs(
 
 
 def topological_ordering(
-    roots: Set[Any], incomings_fn: Callable[[Any], Union[List[Any], Tuple[Any]]]
-) -> Optional[List[Any]]:
-    num_incomings: Dict[Any, int] = defaultdict(int)
-    outgoings: Dict[Any, List[Any]] = defaultdict(list)
+    roots: Set[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
+) -> Optional[List[NodeType]]:
+    num_incomings: Dict[NodeType, int] = defaultdict(int)
+    outgoings: Dict[NodeType, List[NodeType]] = defaultdict(list)
     for n in bfs(roots, incomings_fn):
         incomings = incomings_fn(n)
         num_incomings[n] = len(incomings)

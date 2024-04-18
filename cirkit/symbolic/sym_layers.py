@@ -3,7 +3,7 @@ from enum import IntEnum, auto
 from typing import Any, Dict, Optional, Tuple, cast
 
 from cirkit.symbolic.sym_params import AbstractSymParameter, SymParameter
-from cirkit.utils import Scope
+from cirkit.utils.scope import Scope
 
 AbstractSymLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
@@ -46,6 +46,12 @@ class SymLayer(ABC):
     @property
     def learnable_params(self) -> Dict[str, AbstractSymParameter]:
         return {}
+
+
+class SymParameterPlaceholder(AbstractSymParameter):
+    def __init__(self, layer: SymLayer, name: str):
+        self.layer = layer
+        self.name = name
 
 
 class SymInputLayer(SymLayer):

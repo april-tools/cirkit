@@ -7,7 +7,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cirkit.templates.region_graph.rg_node import PartitionNode, RegionNode, RGNode
-from cirkit.utils import OrderedSet, Scope
+from cirkit.utils.orderedset import OrderedSet
+from cirkit.utils.scope import Scope
 from cirkit.utils.type_aliases import RegionGraphJson, RGNodeMetadata
 
 

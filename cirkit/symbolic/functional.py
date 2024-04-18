@@ -8,9 +8,8 @@ from cirkit.symbolic.sym_layers import (
     SymLayer,
     SymLayerOperator,
     SymProdLayer,
-    SymSumLayer,
+    SymSumLayer, SymParameterPlaceholder,
 )
-from cirkit.symbolic.sym_params import SymParameterPlaceholder
 from cirkit.utils import Scope
 from cirkit.utils.exceptions import StructuralPropertyError
 

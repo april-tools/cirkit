@@ -13,7 +13,7 @@ from cirkit.symbolic.sym_layers import (
     SymSumLayer,
 )
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
-from cirkit.utils import Scope
+from cirkit.utils.scope import Scope
 from cirkit.utils.algorithms import topological_ordering
 
 AbstractSymCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
@@ -131,7 +131,7 @@ class SymCircuit:
         return self._out_layers[sl]
 
     def layers_topological_ordering(self) -> List[SymLayer]:
-        ordering: Optional[List[SymLayer]] = topological_ordering(
+        ordering = topological_ordering(
             set(self.output_layers), incomings_fn=lambda sl: self._in_layers[sl]
         )
         if ordering is None:
@@ -216,7 +216,7 @@ class SymCircuit:
 
 
 def pipeline_topological_ordering(roots: Set[SymCircuit]) -> List[SymCircuit]:
-    ordering: Optional[List[SymCircuit]] = topological_ordering(
+    ordering = topological_ordering(
         roots, incomings_fn=lambda sc: () if sc.operation is None else sc.operation.operands
     )
     if ordering is None:

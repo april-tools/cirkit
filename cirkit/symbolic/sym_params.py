@@ -1,17 +1,9 @@
 from abc import ABC
 from typing import Tuple
 
-from cirkit.symbolic.sym_layers import SymLayer
-
 
 class AbstractSymParameter(ABC):
     ...
-
-
-class SymParameterPlaceholder(AbstractSymParameter):
-    def __init__(self, layer: SymLayer, name: str):
-        self.layer = layer
-        self.name = name
 
 
 class SymParameter(AbstractSymParameter):

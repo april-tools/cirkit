@@ -4,7 +4,7 @@ from cirkit.symbolic.sym_layers import (
     SymConstantLayer,
     SymExpFamilyLayer
 )
-from cirkit.utils import Scope
+from cirkit.utils.scope import Scope
 
 
 def integrate_ef_layer(
