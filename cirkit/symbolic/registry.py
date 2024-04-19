@@ -1,36 +1,31 @@
 from collections import defaultdict
 from typing import Callable, Dict, Iterable, Optional, Tuple, Type
 
+from cirkit.symbolic.layers import AbstractLayerOperator, ExpFamilyLayer, Layer, LayerOperation
 from cirkit.symbolic.operators import integrate_ef_layer
-from cirkit.symbolic.sym_layers import (
-    AbstractSymLayerOperator,
-    SymExpFamilyLayer,
-    SymLayer,
-    SymLayerOperator,
-)
 
-SymLayerOperatorSignature = Tuple[Type[SymLayer], ...]
-SymLayerOperatorFunction = Callable[..., SymLayer]  # TODO: add typed ellipsis (>=py3.10)
-SymLayerOperatorSpecs = Dict[SymLayerOperatorSignature, SymLayerOperatorFunction]
+LayerOperatorSignature = Tuple[Type[Layer], ...]
+LayerOperatorFunction = Callable[..., Layer]  # TODO: add typed ellipsis (>=py3.10)
+LayerOperatorSpecs = Dict[LayerOperatorSignature, LayerOperatorFunction]
 
 
-_DEFAULT_SYM_OPERATOR_RULES: Dict[AbstractSymLayerOperator, SymLayerOperatorSpecs] = {
-    SymLayerOperator.INTEGRATION: {(SymExpFamilyLayer,): integrate_ef_layer},  # TODO: fill
-    SymLayerOperator.DIFFERENTIATION: {},  # TODO: fill
-    SymLayerOperator.KRONECKER: {},  # TODO: fill
+_DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, LayerOperatorSpecs] = {
+    LayerOperation.INTEGRATION: {(ExpFamilyLayer,): integrate_ef_layer},  # TODO: fill
+    LayerOperation.DIFFERENTIATION: {},  # TODO: fill
+    LayerOperation.MULTIPLICATION: {},  # TODO: fill
 }
 
 
-class SymOperatorRegistry:
+class OperatorRegistry:
     def __init__(self):
-        self._rules: Dict[AbstractSymLayerOperator, SymLayerOperatorSpecs] = defaultdict(dict)
-        self._rules.update(_DEFAULT_SYM_OPERATOR_RULES)
+        self._rules: Dict[AbstractLayerOperator, LayerOperatorSpecs] = defaultdict(dict)
+        self._rules.update(_DEFAULT_OPERATOR_RULES)
 
     @property
-    def operators(self) -> Iterable[AbstractSymLayerOperator]:
+    def operators(self) -> Iterable[AbstractLayerOperator]:
         return self._rules.keys()
 
-    def has_rule(self, op: AbstractSymLayerOperator, *symb_cls: Type[SymLayer]) -> bool:
+    def has_rule(self, op: AbstractLayerOperator, *symb_cls: Type[Layer]) -> bool:
         if op not in self._rules:
             return False
         op_rules = self._rules[op]
@@ -40,8 +35,8 @@ class SymOperatorRegistry:
         return True
 
     def retrieve_rule(
-        self, op: AbstractSymLayerOperator, *symb_cls: Type[SymLayer]
-    ) -> SymLayerOperatorFunction:
+        self, op: AbstractLayerOperator, *symb_cls: Type[Layer]
+    ) -> LayerOperatorFunction:
         if op not in self._rules:
             raise IndexError(f"The operator '{op}' is unknown")
         op_rules = self._rules[op]
@@ -52,22 +47,22 @@ class SymOperatorRegistry:
 
     def register_rule(
         self,
-        op: AbstractSymLayerOperator,
-        func: SymLayerOperatorFunction,
+        op: AbstractLayerOperator,
+        func: LayerOperatorFunction,
         commutative: Optional[bool] = None,
     ):
         args = func.__annotations__
         arg_names = list(filter(lambda a: a != "return", args.keys()))
-        if len(arg_names) == 0 or not all(issubclass(args[a], SymLayer) for a in arg_names):
+        if len(arg_names) == 0 or not all(issubclass(args[a], Layer) for a in arg_names):
             raise ValueError("The function is not an operator over symbolic layers")
         if (
             len(arg_names) == 2
         ):  # binary operator (special case as to deal with commutative operators)
-            lhs_symb_cls = args[arg_names[0]]
-            rhs_symb_cls = args[arg_names[1]]
-            self._rules[op][(lhs_symb_cls, rhs_symb_cls)] = func
-            if commutative and lhs_symb_cls != rhs_symb_cls:
-                self._rules[op][(rhs_symb_cls, lhs_symb_cls)] = lambda rhs, lhs: func(lhs, rhs)
+            lhs_cls = args[arg_names[0]]
+            rhs_cls = args[arg_names[1]]
+            self._rules[op][(lhs_cls, rhs_cls)] = func
+            if commutative and lhs_cls != rhs_cls:
+                self._rules[op][(rhs_cls, lhs_cls)] = lambda rhs, lhs: func(lhs, rhs)
         else:  # n-ary operator
-            symb_signature = tuple(args[a] for a in arg_names)
-            self._rules[op][symb_signature] = func
+            signature = tuple(args[a] for a in arg_names)
+            self._rules[op][signature] = func

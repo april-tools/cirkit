@@ -11,9 +11,9 @@ from .input import CategoricalLayer as CategoricalLayer
 from .input import ConstantLayer as ConstantLayer
 from .input import DiffEFLayer as DiffEFLayer
 from .input import ExpFamilyLayer as ExpFamilyLayer
-from .input import InputLayer as InputLayer
 from .input import NormalLayer as NormalLayer
 from .input import ParameterizedConstantLayer as ParameterizedConstantLayer
 from .input import ProdEFLayer as ProdEFLayer
+from .input import TorchInputLayer as TorchInputLayer
 from .input import UnivariateInputLayer as UnivariateInputLayer
-from .layer import Layer as Layer
+from .layer import TorchLayer as TorchLayer

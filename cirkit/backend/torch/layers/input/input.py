@@ -1,10 +1,11 @@
+from abc import ABC
 from typing import Optional
 
+from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.reparams import Reparameterization
-from cirkit.layers import Layer
 
 
-class InputLayer(Layer):
+class TorchInputLayer(ABC, TorchLayer):
     """The abstract base class for input layers."""
 
     # NOTE: We use exactly the same interface (H, *B, K) -> (*B, K) for __call__ of input layers:

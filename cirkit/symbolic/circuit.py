@@ -5,21 +5,15 @@ from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
-from cirkit.symbolic.sym_layers import (
-    SymInputLayer,
-    SymLayer,
-    SymMixingLayer,
-    SymProdLayer,
-    SymSumLayer,
-)
+from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils.algorithms import topological_ordering
 from cirkit.utils.scope import Scope
 
-AbstractSymCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
+AbstractCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
 
-class SymCircuitOperator(AbstractSymCircuitOperator):
+class CircuitOperator(AbstractCircuitOperator):
     """Types of Symolic operations on circuits."""
 
     def _generate_next_value_(self, start: int, count: int, last_values: list) -> int:
@@ -33,24 +27,24 @@ class SymCircuitOperator(AbstractSymCircuitOperator):
 
 
 @dataclass(frozen=True)
-class SymCircuitOperation:
+class CircuitOperation:
     """The Symolic operation applied on a SymCircuit."""
 
-    operator: AbstractSymCircuitOperator
-    operands: Tuple["SymCircuit", ...]
+    operator: AbstractCircuitOperator
+    operands: Tuple["Circuit", ...]
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-class SymCircuit:
-    """The Symolic representation of a Symolic circuit."""
+class Circuit:
+    """The symolic representation of a circuit."""
 
     def __init__(
         self,
         scope: Scope,
-        layers: List[SymLayer],
-        in_layers: Dict[SymLayer, List[SymLayer]],
-        out_layers: Dict[SymLayer, List[SymLayer]],
-        operation: Optional[SymCircuitOperation] = None,
+        layers: List[Layer],
+        in_layers: Dict[Layer, List[Layer]],
+        out_layers: Dict[Layer, List[Layer]],
+        operation: Optional[CircuitOperation] = None,
     ) -> None:
         self.scope = scope
         self.operation = operation
@@ -66,22 +60,19 @@ class SymCircuit:
     def from_region_graph(
         cls,
         region_graph: RegionGraph,
-        input_factory: Callable[[Scope, int, int], SymInputLayer],
-        sum_factory: Callable[[Scope, int, int], SymSumLayer],
-        prod_factory: Callable[[Scope, int, int], SymProdLayer],
-        mixing_factory: Optional[Callable[[Scope, int, int], SymLayer]] = None,
+        input_factory: Callable[[Scope, int, int], InputLayer],
+        sum_factory: Callable[[Scope, int, int], SumLayer],
+        prod_factory: Callable[[Scope, int, int], ProductLayer],
+        mixing_factory: Optional[Callable[[Scope, int, int], SumLayer]],
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
-    ) -> "SymCircuit":
-        if mixing_factory is None:
-            mixing_factory = lambda s, nu, ar: SymMixingLayer(s, nu, ar)
-
-        layers: List[SymLayer] = []
-        in_layers: Dict[SymLayer, List[SymLayer]] = defaultdict(list)
-        out_layers: Dict[SymLayer, List[SymLayer]] = defaultdict(list)
-        rgn_to_layers: Dict[RGNode, SymLayer] = {}
+    ) -> "Circuit":
+        layers: List[Layer] = []
+        in_layers: Dict[Layer, List[Layer]] = defaultdict(list)
+        out_layers: Dict[Layer, List[Layer]] = defaultdict(list)
+        rgn_to_layers: Dict[RGNode, Layer] = {}
 
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
@@ -124,13 +115,13 @@ class SymCircuit:
                 assert False, "Region graph nodes must be either region or partition nodes"
         return cls(region_graph.scope, layers, in_layers, out_layers)
 
-    def layer_inputs(self, sl: SymLayer) -> List[SymLayer]:
+    def layer_inputs(self, sl: Layer) -> List[Layer]:
         return self._in_layers[sl]
 
-    def layer_outputs(self, sl: SymLayer) -> List[SymLayer]:
+    def layer_outputs(self, sl: Layer) -> List[Layer]:
         return self._out_layers[sl]
 
-    def layers_topological_ordering(self) -> List[SymLayer]:
+    def layers_topological_ordering(self) -> List[Layer]:
         ordering = topological_ordering(
             set(self.output_layers), incomings_fn=lambda sl: self._in_layers[sl]
         )
@@ -170,7 +161,7 @@ class SymCircuit:
         # TODO
         return False
 
-    def is_compatible(self, oth: "SymCircuit", scope: Optional[Iterable[int]] = None) -> bool:
+    def is_compatible(self, oth: "Circuit", scope: Optional[Iterable[int]] = None) -> bool:
         if not self.is_smooth:
             return False
         if not self.is_decomposable:
@@ -185,37 +176,37 @@ class SymCircuit:
     # instantiating intermediate containers.
 
     @property
-    def layers(self) -> Iterator[SymLayer]:
+    def layers(self) -> Iterator[Layer]:
         """All layers in the circuit."""
         return iter(self._layers)
 
     @property
-    def input_layers(self) -> Iterator[SymInputLayer]:
+    def input_layers(self) -> Iterator[InputLayer]:
         """Input layers of the circuit."""
-        return (layer for layer in self.layers if isinstance(layer, SymInputLayer))
+        return (layer for layer in self.layers if isinstance(layer, InputLayer))
 
     @property
-    def sum_layers(self) -> Iterator[SymSumLayer]:
+    def sum_layers(self) -> Iterator[SumLayer]:
         """Sum layers in the circuit, which are always inner layers."""
-        return (layer for layer in self.layers if isinstance(layer, SymSumLayer))
+        return (layer for layer in self.layers if isinstance(layer, SumLayer))
 
     @property
-    def product_layers(self) -> Iterator[SymProdLayer]:
+    def product_layers(self) -> Iterator[ProductLayer]:
         """Product layers in the circuit, which are always inner layers."""
-        return (layer for layer in self.layers if isinstance(layer, SymProdLayer))
+        return (layer for layer in self.layers if isinstance(layer, ProductLayer))
 
     @property
-    def output_layers(self) -> Iterator[SymLayer]:
+    def output_layers(self) -> Iterator[Layer]:
         """Output layers in the circuit."""
         return (layer for layer in self.layers if not self._out_layers[layer])
 
     @property
-    def inner_layers(self) -> Iterator[SymLayer]:
+    def inner_layers(self) -> Iterator[Layer]:
         """Inner (non-input) layers in the circuit."""
         return (layer for layer in self.layers if self._in_layers[layer])
 
 
-def pipeline_topological_ordering(roots: Set[SymCircuit]) -> List[SymCircuit]:
+def pipeline_topological_ordering(roots: Set[Circuit]) -> List[Circuit]:
     ordering = topological_ordering(
         roots, incomings_fn=lambda sc: () if sc.operation is None else sc.operation.operands
     )

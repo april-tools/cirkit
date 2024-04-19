@@ -1,5 +1,4 @@
-import os
-from typing import IO, Any, Dict, List, Optional, Tuple, Type, Union, cast
+from typing import Dict, List, Optional, Tuple, Type, Union, cast
 
 import torch
 from torch import Tensor
@@ -11,41 +10,41 @@ from cirkit.backend.torch.layers import (
     DenseLayer,
     HadamardLayer,
     InnerLayer,
+    KroneckerLayer,
+    MixingLayer,
+    SumLayer,
+    TorchInputLayer,
+    TorchLayer,
+)
+from cirkit.backend.torch.models import TensorizedCircuit
+from cirkit.backend.torch.rules import compile_dense_layer, compile_kronecker_layer
+from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
+from cirkit.symbolic.layers import (
+    AbstractLayerOperator,
+    CategoricalLayer,
+    ConstantLayer,
+    DenseLayer,
+    HadamardLayer,
     InputLayer,
     KroneckerLayer,
     Layer,
     MixingLayer,
+    ProductLayer,
     SumLayer,
 )
-from cirkit.backend.torch.models import TensorizedCircuit
-from cirkit.backend.torch.rules import compile_dense_layer, compile_kronecker_layer
-from cirkit.symbolic.sym_circuit import SymCircuit, pipeline_topological_ordering
-from cirkit.symbolic.sym_layers import (
-    AbstractSymLayerOperator,
-    SymCategoricalLayer,
-    SymConstantLayer,
-    SymDenseLayer,
-    SymHadamardLayer,
-    SymInputLayer,
-    SymKroneckerLayer,
-    SymLayer,
-    SymMixingLayer,
-    SymProdLayer,
-    SymSumLayer,
-)
-from cirkit.symbolic.sym_params import AbstractSymParameter
+from cirkit.symbolic.params import AbstractParameter
 
 _DEFAULT_COMPILATION_REGISTRY = CompilerRegistry(
-    default_rules={SymDenseLayer: compile_dense_layer, SymKroneckerLayer: compile_kronecker_layer}
+    default_rules={DenseLayer: compile_dense_layer, KroneckerLayer: compile_kronecker_layer}
 )
 
 
 class TorchCompiler(AbstractCompiler):
     def __init__(self, **flags):
         super().__init__(_DEFAULT_COMPILATION_REGISTRY, **flags)
-        self._sym_layers_map: Dict[SymCircuit, Dict[SymLayer, int]] = {}
+        self._sym_layers_map: Dict[Circuit, Dict[TorchLayer, int]] = {}
 
-    def compile_pipeline(self, sc: SymCircuit) -> TensorizedCircuit:
+    def compile_pipeline(self, sc: Circuit) -> TensorizedCircuit:
         # Retrieve the topological ordering of the pipeline
         ordering = pipeline_topological_ordering({sc})
 
@@ -60,33 +59,33 @@ class TorchCompiler(AbstractCompiler):
             self._compile_circuit(sci)
         return self.get_compiled_circuit(sc)
 
-    def compile_learnable_parameter(self, sym_param: AbstractSymParameter):
+    def compile_learnable_parameter(self, parameter: AbstractParameter):
         pass
 
     def _register_compiled_circuit(
-        self, sc: SymCircuit, tc: TensorizedCircuit, sym_layers_map: Dict[SymLayer, int]
+        self, sc: Circuit, tc: TensorizedCircuit, sym_layers_map: Dict[Layer, int]
     ):
         super().register_compiled_circuit(sc, tc)
         self._sym_layers_map[sc] = sym_layers_map
 
-    def _compile_circuit(self, sym_circuit: SymCircuit) -> TensorizedCircuit:
+    def _compile_circuit(self, sym_circuit: Circuit) -> TensorizedCircuit:
         # The list of layers
-        layers: List[Layer] = []
+        layers: List[TorchLayer] = []
 
         # The bookkeeping data structure
         bookkeeping: List[Tuple[List[int], Optional[Tensor]]] = []
 
         # A useful map from symbolic layers to layer id (indices for the list of layers)
-        sym_layers_map: Dict[SymLayer, int] = {}
+        sym_layers_map: Dict[TorchLayer, int] = {}
 
         # Construct the bookkeeping data structure while compiling layers
         for sl in sym_circuit.layers_topological_ordering():
-            if isinstance(sl, SymInputLayer):
+            if isinstance(sl, TorchInputLayer):
                 layer = self._compile_input_layer(sym_circuit, sl)
                 bookkeeping_entry = ([], torch.tensor([list(sl.scope)]))
                 bookkeeping.append(bookkeeping_entry)
             else:
-                assert isinstance(sl, (SymSumLayer, SymProdLayer))
+                assert isinstance(sl, (SumLayer, ProductLayer))
                 layer = self._compile_inner_layer(sym_circuit, sl)
                 bookkeeping_entry = ([sym_layers_map[isl] for isl in sl.inputs], None)
                 bookkeeping.append(bookkeeping_entry)
@@ -104,11 +103,11 @@ class TorchCompiler(AbstractCompiler):
         self._register_compiled_circuit(sym_circuit, circuit, sym_layers_map)
         return circuit
 
-    def _compile_input_layer(self, sym_circuit: SymCircuit, sym_layer: SymInputLayer) -> InputLayer:
+    def _compile_input_layer(self, sym_circuit: Circuit, sym_layer: InputLayer) -> InputLayer:
         # Registry mapping symbolic input layers to executable layers classes
-        materialize_input_registry: Dict[Type[SymInputLayer], Type[InputLayer]] = {
-            SymConstantLayer: ConstantLayer,
-            SymCategoricalLayer: CategoricalLayer,
+        materialize_input_registry: Dict[Type[TorchInputLayer], Type[TorchInputLayer]] = {
+            ConstantLayer: ConstantLayer,
+            CategoricalLayer: CategoricalLayer,
         }
 
         layer_cls = materialize_input_registry[type(sym_layer)]
@@ -122,11 +121,11 @@ class TorchCompiler(AbstractCompiler):
                 reparam=layer_cls.default_reparam(),
             )
 
-        if sym_layer_operation.operator == AbstractSymLayerOperator.INTEGRATION:
+        if sym_layer_operation.operator == AbstractLayerOperator.INTEGRATION:
             sym_circuit_op = sym_circuit.operation.operands[0]
             sym_layer_op = sym_layer_operation.operands[0]
-            layer_op: InputLayer = cast(
-                InputLayer, self._get_materialized_layer(sym_circuit_op, sym_layer_op)
+            layer_op: TorchInputLayer = cast(
+                TorchInputLayer, self._get_materialized_layer(sym_circuit_op, sym_layer_op)
             )
             return layer_cls(
                 num_input_units=sym_layer.num_channels,
@@ -138,20 +137,20 @@ class TorchCompiler(AbstractCompiler):
         assert False
 
     def _compile_inner_layer(
-        self, sym_circuit: SymCircuit, sym_layer: Union[SymSumLayer, SymProdLayer]
+        self, sym_circuit: Circuit, sym_layer: Union[SumLayer, ProductLayer]
     ) -> InnerLayer:
         # Registry mapping symbolic inner layers to executable layer classes
-        materialize_inner_registry: Dict[Type[SymLayer], Type[InnerLayer]] = {
-            SymSumLayer: DenseLayer,
-            SymMixingLayer: MixingLayer,
-            SymHadamardLayer: HadamardLayer,
-            SymKroneckerLayer: KroneckerLayer,
+        materialize_inner_registry: Dict[Type[TorchLayer], Type[InnerLayer]] = {
+            SumLayer: DenseLayer,
+            MixingLayer: MixingLayer,
+            HadamardLayer: HadamardLayer,
+            KroneckerLayer: KroneckerLayer,
         }
 
         layer_cls = materialize_inner_registry[type(sym_layer)]
 
         sym_layer_operation = sym_layer.operation
-        if sym_layer_operation is None or not isinstance(sym_layer, SymSumLayer):
+        if sym_layer_operation is None or not isinstance(sym_layer, SumLayer):
             return layer_cls(
                 num_input_units=sym_layer.inputs[0].num_units,
                 num_output_units=sym_layer.num_units,
@@ -159,7 +158,7 @@ class TorchCompiler(AbstractCompiler):
                 **sym_layer.kwargs,
             )
 
-        if sym_layer_operation.operator == AbstractSymLayerOperator.INTEGRATION:
+        if sym_layer_operation.operator == AbstractLayerOperator.INTEGRATION:
             sym_circuit_op = sym_circuit.operation.operands[0]
             sym_layer_op = sym_layer_operation.operands[0]
             layer_op: SumLayer = cast(

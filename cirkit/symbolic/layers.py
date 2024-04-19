@@ -1,14 +1,21 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum, auto
+from functools import cached_property
 from typing import Any, Dict, Optional, Tuple, cast
 
-from cirkit.symbolic.sym_params import AbstractSymParameter, SymParameter
+from cirkit.symbolic.params import (
+    AbstractParameter,
+    Parameter,
+    Parameterization,
+    ScaledSigmoidParameter,
+    SoftmaxParameter,
+)
 from cirkit.utils.scope import Scope
 
-AbstractSymLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
+AbstractLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
 
-class SymLayerOperator(AbstractSymLayerOperator):
+class LayerOperation(AbstractLayerOperator):
     """Types of Symolic operations on layers."""
 
     def _generate_next_value_(self, start: int, count: int, last_values: list) -> int:
@@ -18,10 +25,10 @@ class SymLayerOperator(AbstractSymLayerOperator):
 
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
-    KRONECKER = auto()
+    MULTIPLICATION = auto()
 
 
-class SymLayer(ABC):
+class Layer(ABC):
     def __init__(
         self,
         scope: Scope,
@@ -44,17 +51,22 @@ class SymLayer(ABC):
         }
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
+    def learnable_params(self) -> Dict[str, AbstractParameter]:
         return {}
 
 
-class SymParameterPlaceholder(AbstractSymParameter):
-    def __init__(self, layer: SymLayer, name: str):
+class PlaceholderParameter(AbstractParameter):
+    def __init__(self, layer: Layer, name: str):
+        assert name in layer.learnable_params
         self.layer = layer
         self.name = name
 
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return self.layer.learnable_params[self.name].shape
 
-class SymInputLayer(SymLayer):
+
+class InputLayer(Layer):
     def __init__(self, scope: Scope, num_output_units: int, num_channels: int = 1):
         super().__init__(scope, len(scope), num_output_units, num_channels)
 
@@ -75,7 +87,7 @@ class SymInputLayer(SymLayer):
         }
 
 
-class SymExpFamilyLayer(ABC, SymInputLayer):
+class ExpFamilyLayer(ABC, InputLayer):
     def __init__(self, scope: Scope, num_output_units: int, num_channels: int):
         super().__init__(scope, len(scope), num_output_units, num_channels)
 
@@ -84,22 +96,23 @@ class SymExpFamilyLayer(ABC, SymInputLayer):
         ...
 
 
-class SymCategoricalLayer(SymExpFamilyLayer):
+class CategoricalLayer(ExpFamilyLayer):
     def __init__(
         self,
         scope: Scope,
         num_output_units: int,
         num_channels: int,
         num_categories: int = 2,
-        weight: Optional[SymParameter] = None,
+        probs: Optional[AbstractParameter] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
-        if weight is None:
-            weight = SymParameter(
-                self.num_variables, num_output_units, num_channels, num_categories
+        if probs is None:
+            probs = SoftmaxParameter(
+                Parameter(self.num_variables, num_output_units, num_channels, num_categories),
+                axis=-1,
             )
-        self.weight = weight
+        self.probs = probs
 
     @property
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -112,26 +125,28 @@ class SymCategoricalLayer(SymExpFamilyLayer):
         return hparams
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
-        return dict(weight=self.weight)
+    def learnable_params(self) -> Dict[str, AbstractParameter]:
+        return dict(probs=self.probs)
 
 
-class SymNormalLayer(SymExpFamilyLayer):
+class NormalLayer(ExpFamilyLayer):
     def __init__(
         self,
         scope: Scope,
         num_output_units: int,
         num_channels: int,
-        mean: Optional[SymParameter] = None,
-        variance: Optional[SymParameter] = None,
+        mean: Optional[AbstractParameter] = None,
+        variance: Optional[AbstractParameter] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
         assert (mean is None and variance is None) or (
             mean is not None and variance is not None
         ), "Either both 'mean' and 'variance' has to be specified or none of them"
         if mean is None and variance is None:
-            mean = SymParameter(self.num_variables, num_output_units, num_channels)
-            variance = SymParameter(self.num_variables, num_output_units, num_channels)
+            mean = Parameter(self.num_variables, num_output_units, num_channels)
+            variance = ScaledSigmoidParameter(
+                Parameter(self.num_variables, num_output_units, num_channels), vmin=1e-5, vmax=1.0
+            )
         self.mean = mean
         self.variance = variance
 
@@ -140,11 +155,11 @@ class SymNormalLayer(SymExpFamilyLayer):
         return self.num_channels, 2
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
+    def learnable_params(self) -> Dict[str, AbstractParameter]:
         return dict(mean=self.mean, variance=self.variance)
 
 
-class SymConstantLayer(SymInputLayer):
+class ConstantLayer(InputLayer):
     def __init__(
         self,
         scope: Scope,
@@ -162,11 +177,11 @@ class SymConstantLayer(SymInputLayer):
         return hparams
 
 
-class SymProdLayer(ABC, SymLayer):
+class ProductLayer(ABC, Layer):
     """The abstract base class for Symolic product layers."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
-        num_output_units = SymProdLayer.num_prod_units(num_input_units, arity)
+        num_output_units = ProductLayer.num_prod_units(num_input_units, arity)
         super().__init__(scope, num_input_units, num_output_units, arity)
 
     @property
@@ -183,7 +198,7 @@ class SymProdLayer(ABC, SymLayer):
         ...
 
 
-class SymHadamardLayer(SymProdLayer):
+class HadamardLayer(ProductLayer):
     """The Symolic Hadamard product layer."""
 
     @staticmethod
@@ -191,7 +206,7 @@ class SymHadamardLayer(SymProdLayer):
         return in_num_units
 
 
-class SymKroneckerLayer(SymProdLayer):
+class KroneckerLayer(ProductLayer):
     """The Symolic Kronecker product layer."""
 
     @staticmethod
@@ -199,11 +214,11 @@ class SymKroneckerLayer(SymProdLayer):
         return cast(int, in_num_units**arity)
 
 
-class SymSumLayer(ABC, SymLayer):
+class SumLayer(ABC, Layer):
     """The abstract base class for Symolic sum layers."""
 
 
-class SymDenseLayer(SymSumLayer):
+class DenseLayer(SumLayer):
     """The Symolic dense sum layer."""
 
     def __init__(
@@ -211,11 +226,14 @@ class SymDenseLayer(SymSumLayer):
         scope: Scope,
         num_input_units: int,
         num_output_units: int,
-        weight: Optional[SymParameter] = None,
+        weight: Optional[AbstractParameter] = None,
+        weight_param: Optional[Parameterization] = None,
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1)
         if weight is None:
-            weight = SymParameter(num_output_units, num_input_units)
+            weight = Parameter(num_output_units, num_input_units)
+        if weight_param is not None:
+            weight = weight_param(weight)
         self.weight = weight
 
     @property
@@ -227,11 +245,11 @@ class SymDenseLayer(SymSumLayer):
         }
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
+    def learnable_params(self) -> Dict[str, AbstractParameter]:
         return dict(weight=self.weight)
 
 
-class SymMixingLayer(SymSumLayer):
+class MixingLayer(SumLayer):
     """The Symolic mixing sum layer."""
 
     def __init__(
@@ -239,11 +257,14 @@ class SymMixingLayer(SymSumLayer):
         scope: Scope,
         num_units: int,
         arity: int,
-        weight: Optional[SymParameter] = None,
+        weight: Optional[AbstractParameter] = None,
+        weight_param: Optional[Parameterization] = None,
     ):
         super().__init__(scope, num_units, num_units, arity)
         if weight is None:
-            weight = SymParameter(num_units, arity)
+            weight = Parameter(num_units, arity)
+        if weight_param is not None:
+            weight = weight_param(weight)
         self.weight = weight
 
     @property
@@ -251,5 +272,5 @@ class SymMixingLayer(SymSumLayer):
         return {"scope": self.scope, "num_units": self.num_input_units, "arity": self.arity}
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractSymParameter]:
+    def learnable_params(self) -> Dict[str, AbstractParameter]:
         return dict(weight=self.weight)

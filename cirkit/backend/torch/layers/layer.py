@@ -9,7 +9,7 @@ from cirkit.backend.torch.reparams import Reparameterization
 from cirkit.backend.torch.semiring import ComputationSapce
 
 
-class Layer(nn.Module, ABC):
+class TorchLayer(nn.Module, ABC):
     """The abstract base class for all layers."""
 
     # NOTE: This is uninitialized for the class, but to be set later.
@@ -81,7 +81,7 @@ class Layer(nn.Module, ABC):
         for child in self.children():  # Only immediate children, not all modules().
             if isinstance(child, Reparameterization) and initializer_ is not None:
                 child.initialize(initializer_)
-            if isinstance(child, Layer):  # Recursively reset with their own initializer_.
+            if isinstance(child, TorchLayer):  # Recursively reset with their own initializer_.
                 child.reset_parameters()
 
     # Expected to be fixed, so use cached property to avoid recalculation.

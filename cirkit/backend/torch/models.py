@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple
 import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.layers import Layer
+from cirkit.backend.torch.layers import TorchLayer
 
 
 class TensorizedCircuit(nn.Module):
@@ -14,7 +14,7 @@ class TensorizedCircuit(nn.Module):
 
     def __init__(
         self,
-        layers: List[Layer],
+        layers: List[TorchLayer],
         bookkeeping: List[Tuple[List[int], Optional[Tensor]]],
     ) -> None:
         super().__init__()

@@ -1,9 +1,9 @@
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.layers import DenseLayer, KroneckerLayer
-from cirkit.symbolic.sym_layers import SymDenseLayer, SymKroneckerLayer
+from cirkit.symbolic.layers import DenseLayer, KroneckerLayer
 
 
-def compile_dense_layer(sl: SymDenseLayer, compiler: TorchCompiler) -> DenseLayer:
+def compile_dense_layer(sl: DenseLayer, compiler: TorchCompiler) -> DenseLayer:
     return DenseLayer(
         num_input_units=sl.num_input_units,
         num_output_units=sl.num_output_units,
@@ -11,7 +11,7 @@ def compile_dense_layer(sl: SymDenseLayer, compiler: TorchCompiler) -> DenseLaye
     )
 
 
-def compile_kronecker_layer(sl: SymKroneckerLayer, compiler: TorchCompiler) -> DenseLayer:
+def compile_kronecker_layer(sl: KroneckerLayer, compiler: TorchCompiler) -> DenseLayer:
     return KroneckerLayer(
         num_input_units=sl.num_input_units, num_output_units=sl.num_output_units, arity=sl.arity
     )

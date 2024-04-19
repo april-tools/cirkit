@@ -4,14 +4,14 @@ import torch
 from torch import Tensor
 
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.layers import InputLayer
+from cirkit.backend.torch.layers import TorchInputLayer
 from cirkit.backend.torch.reparams import Reparameterization
 from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.functional import integrate, multiply, differentiate
-from cirkit.symbolic.sym_circuit import SymCircuit
-from cirkit.symbolic.sym_layers import SymCategoricalLayer, SymDenseLayer, SymKroneckerLayer, SymInputLayer, \
-    SymLayerOperator, SymParameterPlaceholder
-from cirkit.symbolic.sym_params import SymParameter, AbstractSymParameter, SymKronecker
+from cirkit.symbolic.circuit import Circuit
+from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, KroneckerLayer, InputLayer, \
+    LayerOperation, MixingLayer, PlaceholderParameter
+from cirkit.symbolic.params import SoftmaxParameter, AbstractParameter, Parameter, Parameterization, KroneckerParameter
 from cirkit.templates.region_graph.algorithms import FullyFactorized, QuadTree
 from cirkit.utils.scope import Scope
 
@@ -20,20 +20,20 @@ def categorical_layer_factory(
         scope: Scope,
         num_units: int,
         num_channels: int
-) -> SymCategoricalLayer:
-    # Q: Where do we specify a particular parameterizations?
-    # Parameterizations are not needed in the symbolic data structure, but
-    # where should they be specified such that they are also extensible?
-    # (same question for all kind of layers)
-    return SymCategoricalLayer(scope, num_units, num_channels, num_categories=256)
+) -> CategoricalLayer:
+    return CategoricalLayer(scope, num_units, num_channels, num_categories=256)
 
 
-def dense_layer_factory(scope: Scope, num_input_units: int, num_output_units: int) -> SymDenseLayer:
-    return SymDenseLayer(scope, num_input_units, num_output_units)
+def dense_layer_factory(scope: Scope, num_input_units: int, num_output_units: int) -> DenseLayer:
+    return DenseLayer(scope, num_input_units, num_output_units, weight_param=lambda w: SoftmaxParameter(w))
 
 
-def kronecker_layer_factory(scope: Scope, num_input_units: int, arity: int) -> SymKroneckerLayer:
-    return SymKroneckerLayer(scope, num_input_units, arity)
+def mixing_layer_factory(scope: Scope, num_units: int, arity: int) -> MixingLayer:
+    return MixingLayer(scope, num_units, arity, weight_param=lambda w: SoftmaxParameter(w))
+
+
+def kronecker_layer_factory(scope: Scope, num_input_units: int, arity: int) -> KroneckerLayer:
+    return KroneckerLayer(scope, num_input_units, arity)
 
 
 def simplest_unnormalized_pc() -> None:
@@ -42,11 +42,12 @@ def simplest_unnormalized_pc() -> None:
 
     # Instantiate a symbolic circuit from the region graph,
     # by specifying factories that construct symbolic layers
-    sc = SymCircuit.from_region_graph(
+    sc = Circuit.from_region_graph(
         qt, num_input_units=8, num_sum_units=16,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory
+        prod_factory=kronecker_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
 
     # Given the output of a computational graph over circuits (i.e., the root of the DAG),
@@ -57,6 +58,8 @@ def simplest_unnormalized_pc() -> None:
     # - einsum=True  suggests compiling to layers using einsums when possible.
     # Also, the context stores the symbolic operator definitions, which might be extended (see examples below)
     ctx = PipelineContext(backend='torch', fold=True, einsum=True)
+    # TODO: global default contexts
+    #ctx: PipelineContext = circuit.get_context()
 
     # # # # # # # # # # # # # # # # # # # # # #
     # High-level APIs (e.g., for practitioners)
@@ -65,6 +68,7 @@ def simplest_unnormalized_pc() -> None:
     #   they will only use what already present in the library in terms of layers and backends
     tc = ctx.compile(sc)        # Apart from the inputs to the pipeline, the user does not touch symbolic circuits
     int_tc = ctx.integrate(tc)  # This is equivalent to 'ctx.compile(integrate(sc))' (i.e., greedy compilation)
+    # TODO: remove ctx?
 
     # # # # # # # # # # # # # # # # # # # # # #
     # Low-level APIs
@@ -86,17 +90,19 @@ def complex_pipeline() -> None:
 
     # Instantiate two symbolic circuits from the region graphs,
     # by specifying symbolic layers and symbolic parameterizations
-    p = SymCircuit.from_region_graph(
+    p = Circuit.from_region_graph(
         qt, num_input_units=8, num_sum_units=16,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory
+        prod_factory=kronecker_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
-    q = SymCircuit.from_region_graph(
+    q = Circuit.from_region_graph(
         ff, num_input_units=12, num_sum_units=1,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory
+        prod_factory=kronecker_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
 
     # Create a pipeline context
@@ -134,19 +140,22 @@ def lib_extension() -> None:
     # Let's suppose the user wants to introduce a new input layer called 'PolyGaussian'.
     # Ideally, they have to first create a symbolic token for it,
     # with the hyperparameters and parameters they care about.
-    class SymPolyGaussianLayer(SymInputLayer):
+    class PolyGaussianLayer(InputLayer):
         def __init__(
             self,
             scope: Scope,
             num_output_units: int,
             num_channels: int = 1,
             degree: int = 2,
-            coeffs: Optional[SymParameter] = None
+            coeffs: Optional[AbstractParameter] = None,
+            coeffs_param: Optional[Parameterization] = None
         ):
             super().__init__(scope, num_output_units, num_channels)
             self.degree = degree
             if coeffs is None:
-                coeffs = SymParameter(self.num_variables, num_channels, num_output_units)
+                coeffs = Parameter(self.num_variables, num_channels, num_output_units)
+            if coeffs_param is not None:
+                coeffs = coeffs_param(coeffs)
             self.coeffs = coeffs
 
         @property
@@ -156,12 +165,12 @@ def lib_extension() -> None:
             return hparams
 
         @property
-        def learnable_params(self) -> Dict[str, AbstractSymParameter]:
+        def learnable_params(self) -> Dict[str, AbstractParameter]:
             return dict(coeffs=self.coeffs)
 
     # Then, the user must write the actual layer for some backend of choice, e.g., torch
     # Important: note that the learnable parameters 'coeffs' are passed as arguments to the initializer
-    class PolyGaussianLayer(InputLayer):
+    class TorchPolyGaussianLayer(TorchInputLayer):
         def __init__(
             self,
             num_vars: int,
@@ -196,21 +205,23 @@ def lib_extension() -> None:
         scope: Scope,
         num_units: int,
         num_channels: int
-    ) -> SymPolyGaussianLayer:
-        return SymPolyGaussianLayer(scope, num_units, num_channels, degree=3)
+    ) -> PolyGaussianLayer:
+        return PolyGaussianLayer(scope, num_units, num_channels, degree=3)
 
     # With these symbolic classes, we are ready to instantiate a couple of symbolic circuits
-    p = SymCircuit.from_region_graph(
+    p = Circuit.from_region_graph(
         qt, num_input_units=16, num_sum_units=16,
         input_factory=poly_gaussian_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory
+        prod_factory=kronecker_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
-    q = SymCircuit.from_region_graph(
+    q = Circuit.from_region_graph(
         qt, num_input_units=16, num_sum_units=16,
         input_factory=poly_gaussian_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory
+        prod_factory=kronecker_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
 
     ################################ PART 2 ################################
@@ -218,8 +229,8 @@ def lib_extension() -> None:
     # Now, we need to extend the compiler such that it knows that:
     # - SymPolyGaussianLayer must be compiled into PolyGaussianLayer
     # In order to do so, we write a compilation rule
-    def compile_poly_gaussian(sl: SymPolyGaussianLayer, compiler: TorchCompiler) -> PolyGaussianLayer:
-        return PolyGaussianLayer(
+    def compile_poly_gaussian(sl: PolyGaussianLayer, compiler: TorchCompiler) -> TorchPolyGaussianLayer:
+        return TorchPolyGaussianLayer(
             sl.num_variables, sl.num_channels, sl.num_output_units,
             degree=sl.degree,
             # The Torch compiler comes with a utility method for compiling symbolic parameters
@@ -238,32 +249,32 @@ def lib_extension() -> None:
     # As usual, it must implement first the symbolic protocol for that.
     # Such symbolic protocol is the symbolic product operator for such a layer.
     def multiply_poly_gaussian(
-        lhs: SymPolyGaussianLayer, rhs: SymPolyGaussianLayer
-    ) -> SymPolyGaussianLayer:
+        lhs: PolyGaussianLayer, rhs: PolyGaussianLayer
+    ) -> PolyGaussianLayer:
         assert lhs.scope == rhs.scope
         assert lhs.num_channels == rhs.num_channels
-        return SymPolyGaussianLayer(
+        return PolyGaussianLayer(
             lhs.scope,
             num_output_units=lhs.num_output_units * rhs.num_output_units,
             num_channels=lhs.num_channels,
             degree=lhs.degree * rhs.degree + 1,  # Record the change in hyperparameters or other static attributes ...
-            coeffs=SymKronecker(  # ... as well as the change over the learnable parameters
+            coeffs=KroneckerParameter(  # ... as well as the change over the learnable parameters
                 # Each placeholder will "tell the compiler" to re-use the parameters named 'coeffs',
                 # which are stored (or referenced elsewhere) in the operand layers 'lhs' and 'rhs'
-                SymParameterPlaceholder(lhs, name='coeffs'),
-                SymParameterPlaceholder(rhs, name='coeffs')
+                PlaceholderParameter(lhs, name='coeffs'),
+                PlaceholderParameter(rhs, name='coeffs')
             )
         )
 
     # # # # # # # # # # # # # # # # # # # # # #
     # High-level APIs
     # To use the above symbolic product protocol, we have to register it as a symbolic operator
-    ctx.register_operator_rule(SymLayerOperator.KRONECKER, multiply_poly_gaussian)
+    ctx.register_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
     tr = ctx.multiply(tp, tq)  # This will call ctx.compile(product(p, q)) internally
 
     # # # # # # # # # # # # # # # # # # # # # #
     # Lower-level APIs (i.e., explicit manipulation of symbolic circuits and uses the symbolic functional APIs)
-    ctx.register_operator_rule(SymLayerOperator.KRONECKER, multiply_poly_gaussian)
+    ctx.register_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
     with ctx:
         r = multiply(p, q)  # No need to specify anything here, the with statement will take care of the new protocols
     tr = ctx.compile(r)  # We do not need to be inside the context for compilation, as the protocol above is symbolic
@@ -277,20 +288,22 @@ def serialization() -> None:
 
     # Instantiate two symbolic circuits from the region graphs,
     # by specifying symbolic layers and symbolic parameterizations
-    p = SymCircuit.from_region_graph(
+    p = Circuit.from_region_graph(
         qt,
         num_input_units=16,
         num_sum_units=16,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory
+        prod_factory=kronecker_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
-    q = SymCircuit.from_region_graph(
+    q = Circuit.from_region_graph(
         ff,
         num_input_units=16,
         input_factory=categorical_layer_factory,
         sum_factory=dense_layer_factory,
-        prod_factory=kronecker_layer_factory
+        prod_factory=kronecker_layer_factory,
+        mixing_factory=mixing_layer_factory
     )
 
     # Construct the pipeline
