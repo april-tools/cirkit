@@ -402,3 +402,6 @@ class FrozenSetScope(Scope, FrozenSet[int]):  # type: ignore[misc]
     __ge__ = frozenset.__ge__
     __and__ = frozenset.__and__
     __or__ = frozenset.__or__
+
+
+Scope.impl = FrozenSetScope

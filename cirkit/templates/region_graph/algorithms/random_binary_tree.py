@@ -67,7 +67,7 @@ def _partition_node_randomly(
 
 # DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name
-def RandomBinaryTree(*, num_vars: int, depth: int, num_repetitions: int) -> RegionGraph:
+def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionGraph:
     """Construct a RG with random binary trees.
 
     See:

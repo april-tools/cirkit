@@ -91,7 +91,7 @@ class Circuit:
                 layers.append(prod_sl)
                 in_layers[prod_sl] = prod_inputs
                 for in_sl in prod_inputs:
-                    out_layers[in_sl] = prod_sl
+                    out_layers[in_sl].append(prod_sl)
                 rgn_to_layers[rgn] = prod_sl
             elif isinstance(rgn, RegionNode):  # Inner region node
                 sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
@@ -104,7 +104,7 @@ class Circuit:
                 layers.append(sum_sl)
                 in_layers[sum_sl] = sum_inputs
                 for in_sl in sum_inputs:
-                    out_layers[in_sl] = sum_sl
+                    out_layers[in_sl].append(sum_sl)
                 rgn_to_layers[rgn] = sum_sl
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
@@ -142,7 +142,7 @@ class Circuit:
     @cached_property
     def is_decomposable(self) -> bool:
         return not any(
-            lhs_in_sl.scope & lhs_in_sl.scope
+            lhs_in_sl.scope & rhs_in_sl.scope
             for prod_sl in self.product_layers
             for lhs_in_sl, rhs_in_sl in itertools.combinations(self._in_layers[prod_sl], 2)
         )

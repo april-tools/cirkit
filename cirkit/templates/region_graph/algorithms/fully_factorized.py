@@ -1,4 +1,4 @@
-from cirkit.templates.region_graph import RegionGraph
+from cirkit.templates.region_graph.region_graph import RegionGraph
 from cirkit.templates.region_graph.rg_node import RegionNode
 
 

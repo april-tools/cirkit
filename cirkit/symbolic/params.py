@@ -23,19 +23,19 @@ class Parameter(AbstractParameter):
         return self._shape
 
 
-class OpParameter(ABC, AbstractParameter):
+class OpParameter(AbstractParameter, ABC):
     ...
 
 
 Parameterization = Callable[[AbstractParameter], OpParameter]
 
 
-class UnaryOpParameter(ABC, OpParameter):
+class UnaryOpParameter(OpParameter, ABC):
     def __init__(self, opd: AbstractParameter) -> None:
         self.opd = opd
 
 
-class BinaryOpParameter(ABC, OpParameter):
+class BinaryOpParameter(OpParameter, ABC):
     def __init__(self, lhs: AbstractParameter, rhs: AbstractParameter) -> None:
         self.lhs = lhs
         self.rhs = rhs
@@ -64,7 +64,7 @@ class KroneckerParameter(AbstractParameter):
         return *self.lhs.shape[:-1], self.lhs.shape[-1] * self.rhs.shape[-1]
 
 
-class EntrywiseOpParameter(ABC, AbstractParameter):
+class EntrywiseOpParameter(UnaryOpParameter, ABC):
     def __init__(self, opd: AbstractParameter):
         super().__init__(opd)
 
@@ -73,7 +73,7 @@ class EntrywiseOpParameter(ABC, AbstractParameter):
         return self.opd.shape
 
 
-class ReduceOpParameter(ABC, UnaryOpParameter):
+class ReduceOpParameter(UnaryOpParameter, ABC):
     def __init__(self, opd: AbstractParameter, axis: int = -1):
         super().__init__(opd)
         axis = axis if axis >= 0 else axis + len(opd.shape)

@@ -94,7 +94,9 @@ def multiply(
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
-    ...
+    # Get reversed topological ordering (i.e., from the output layers towards the inputs)
+    #lhs_layers = reversed(lhs_sc.layers_topological_ordering())
+    #rhs_layers = reversed(rhs_sc.layers_topological_ordering())
 
 
 def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> Circuit:

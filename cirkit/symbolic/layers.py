@@ -87,9 +87,9 @@ class InputLayer(Layer):
         }
 
 
-class ExpFamilyLayer(ABC, InputLayer):
+class ExpFamilyLayer(InputLayer, ABC):
     def __init__(self, scope: Scope, num_output_units: int, num_channels: int):
-        super().__init__(scope, len(scope), num_output_units, num_channels)
+        super().__init__(scope, num_output_units, num_channels)
 
     @abstractmethod
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -177,7 +177,7 @@ class ConstantLayer(InputLayer):
         return hparams
 
 
-class ProductLayer(ABC, Layer):
+class ProductLayer(Layer, ABC):
     """The abstract base class for Symolic product layers."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
@@ -214,7 +214,7 @@ class KroneckerLayer(ProductLayer):
         return cast(int, in_num_units**arity)
 
 
-class SumLayer(ABC, Layer):
+class SumLayer(Layer, ABC):
     """The abstract base class for Symolic sum layers."""
 
 
