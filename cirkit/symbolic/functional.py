@@ -1,5 +1,6 @@
-from collections import defaultdict
-from typing import Dict, Iterable, List, Optional, Union
+import itertools
+from collections import defaultdict, deque
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from cirkit.symbolic.circuit import Circuit, CircuitOperation, CircuitOperator
 from cirkit.symbolic.layers import (
@@ -10,7 +11,7 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.registry import OperatorRegistry
+from cirkit.symbolic.registry import OperatorRegistry, OperatorSignatureNotFound
 from cirkit.utils.exceptions import StructuralPropertyError
 from cirkit.utils.scope import Scope
 
@@ -94,9 +95,77 @@ def multiply(
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
-    # Get reversed topological ordering (i.e., from the output layers towards the inputs)
-    #lhs_layers = reversed(lhs_sc.layers_topological_ordering())
-    #rhs_layers = reversed(rhs_sc.layers_topological_ordering())
+
+    # Map from pairs of layers to their product layer
+    map_prod_layers: Dict[Tuple[Layer, Layer], Layer] = {}
+
+    # For each new layer, keep track of (i) its inputs and (ii) the layers it feeds
+    in_layers: Dict[Layer, List[Layer]] = {}
+    out_layers: Dict[Layer, List[Layer]] = defaultdict(list)
+
+    # Get the first layers to multiply, from the outputs
+    to_multiply = []
+    for lhs_out, rhs_out in itertools.product(lhs_sc.output_layers, rhs_sc.output_layers):
+        to_multiply.append((lhs_out, rhs_out))
+
+    # Using a stack in place of recursion for better memory efficiency and debugging
+    while to_multiply:
+        pair = to_multiply[-1]
+        if pair in map_prod_layers:
+            to_multiply.pop()
+            continue
+        lhs_layer, rhs_layer = pair
+        if type(lhs_layer) != type(rhs_layer):  # pylint: disable=unidiomatic-typecheck
+            raise NotImplementedError(
+                "The multiplication of circuits with different layers and different region graphs has not been implemented yet"
+            )
+
+        lhs_inputs = lhs_sc.layer_inputs(lhs_layer)
+        rhs_inputs = rhs_sc.layer_inputs(rhs_layer)
+        if isinstance(lhs_layer, InputLayer):
+            # TODO: generalize product between input and inner layers
+            next_to_multiply = iter([])
+        elif isinstance(lhs_layer, SumLayer):
+            # TODO: generalize product between input and inner layers
+            next_to_multiply = itertools.product(lhs_inputs, rhs_inputs)
+        elif isinstance(lhs_layer, ProductLayer):
+            # TODO: generalize product such that it can multiply layers of different arity
+            #       this is related to the much more relaxed definition of compatibility between circuits
+            assert len(lhs_inputs) == len(rhs_inputs)
+            # Sort layers based on the scope, such that we can multiply layers with matching scopes
+            lhs_inputs = sorted(lhs_inputs, key=lambda sl: sl.scope)
+            rhs_inputs = sorted(lhs_inputs, key=lambda sl: sl.scope)
+            next_to_multiply = zip(lhs_inputs, rhs_inputs)
+        else:
+            assert False
+
+        # Check if at least one pair of layers needs to be multiplied before going up in the recursion
+        not_yet_multiplied = list(filter(lambda p: p not in map_prod_layers, next_to_multiply))
+        if len(not_yet_multiplied) > 0:
+            to_multiply.extend(not_yet_multiplied)
+            continue
+
+        # In case all the input have been multiplied, then construct the product layer
+        prod_signature = type(lhs_layer), type(rhs_layer)
+        func = registry.retrieve_rule(LayerOperation.MULTIPLICATION, *prod_signature)
+        prod_layer = func(lhs_layer, rhs_layer)
+        # Make the connections
+        prod_layer_inputs = [map_prod_layers[p] for p in next_to_multiply]
+        in_layers[prod_layer] = prod_layer_inputs
+        for sl in prod_layer_inputs:
+            out_layers[sl].append(prod_layer)
+        map_prod_layers[pair] = prod_layer
+        to_multiply.pop()  # Go up in the recursion
+
+    return Circuit(
+        lhs_sc.scope | rhs_sc.scope,
+        list(map_prod_layers.values()),
+        in_layers,
+        out_layers,
+        operation=CircuitOperation(
+            operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
+        ),
+    )
 
 
 def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> Circuit:
