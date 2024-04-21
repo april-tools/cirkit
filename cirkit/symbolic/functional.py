@@ -72,7 +72,7 @@ def integrate(
         new_sl_inputs = [map_layers[isl] for isl in sc.layer_inputs(sl)]
         in_layers[new_sl] = new_sl_inputs
         for isl in new_sl_inputs:
-            out_layers[isl] = new_sl
+            out_layers[isl].append(new_sl)
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit(
