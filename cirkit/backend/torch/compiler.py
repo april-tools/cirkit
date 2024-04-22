@@ -35,7 +35,8 @@ from cirkit.symbolic.layers import (
 from cirkit.symbolic.params import AbstractParameter
 
 _DEFAULT_COMPILATION_REGISTRY = CompilerRegistry(
-    default_rules={DenseLayer: compile_dense_layer, KroneckerLayer: compile_kronecker_layer}
+    layer_rules={DenseLayer: compile_dense_layer, KroneckerLayer: compile_kronecker_layer},
+    parameter_rules={},
 )
 
 

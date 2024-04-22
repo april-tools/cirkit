@@ -1,12 +1,13 @@
 from collections import defaultdict
 from typing import Callable, Dict, Iterable, Optional, Tuple, Type
 
+from cirkit.symbolic.block import CircuitBlock
 from cirkit.symbolic.layers import AbstractLayerOperator, ExpFamilyLayer, Layer, LayerOperation
 from cirkit.symbolic.operators import integrate_ef_layer
 
-LayerOperatorSignature = Tuple[Type[Layer], ...]
-LayerOperatorFunction = Callable[..., Layer]  # TODO: add typed ellipsis (>=py3.10)
-LayerOperatorSpecs = Dict[LayerOperatorSignature, LayerOperatorFunction]
+LayerOperatorSign = Tuple[Type[Layer], ...]
+LayerOperatorFunc = Callable[..., CircuitBlock]
+LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
 
 
 _DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, LayerOperatorSpecs] = {
@@ -14,6 +15,25 @@ _DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, LayerOperatorSpecs] = {
     LayerOperation.DIFFERENTIATION: {},  # TODO: fill
     LayerOperation.MULTIPLICATION: {},  # TODO: fill
 }
+
+
+class OperatorNotFound(Exception):
+    def __init__(self, op: AbstractLayerOperator):
+        super().__init__()
+        self._operator = op
+
+    def __repr__(self) -> str:
+        return f"Symbolic operator named '{self._operator.name}' not found"
+
+
+class OperatorSignatureNotFound(Exception):
+    def __init__(self, *signature: Type[Layer]):
+        super().__init__()
+        self._signature = tuple(signature)
+
+    def __repr__(self) -> str:
+        signature_repr = ", ".join(map(lambda cls: cls.__name__, self._signature))
+        return f"Symbolic operator for signature ({signature_repr}) not found"
 
 
 class OperatorRegistry:
@@ -25,44 +45,51 @@ class OperatorRegistry:
     def operators(self) -> Iterable[AbstractLayerOperator]:
         return self._rules.keys()
 
-    def has_rule(self, op: AbstractLayerOperator, *symb_cls: Type[Layer]) -> bool:
+    def has_rule(self, op: AbstractLayerOperator, *signature: Type[Layer]) -> bool:
         if op not in self._rules:
             return False
         op_rules = self._rules[op]
-        signature = tuple(symb_cls)
+        signature = tuple(signature)
         if signature not in op_rules:
             return False
         return True
 
     def retrieve_rule(
-        self, op: AbstractLayerOperator, *symb_cls: Type[Layer]
-    ) -> LayerOperatorFunction:
+        self, op: AbstractLayerOperator, *signature: Type[Layer]
+    ) -> LayerOperatorFunc:
         if op not in self._rules:
-            raise IndexError(f"The operator '{op}' is unknown")
+            raise OperatorNotFound(op)
         op_rules = self._rules[op]
-        signature = tuple(symb_cls)
+        signature = tuple(signature)
         if signature not in op_rules:
-            raise IndexError(f"An operator for the signature '{signature}' has not been found")
+            raise OperatorSignatureNotFound(*signature)
         return op_rules[signature]
 
     def register_rule(
         self,
         op: AbstractLayerOperator,
-        func: LayerOperatorFunction,
+        func: LayerOperatorFunc,
         commutative: Optional[bool] = None,
     ):
         args = func.__annotations__
-        arg_names = list(filter(lambda a: a != "return", args.keys()))
-        if len(arg_names) == 0 or not all(issubclass(args[a], Layer) for a in arg_names):
+        arg_names = list(args.keys())
+        if (
+            len(arg_names) == 0
+            or "return" not in arg_names
+            or not issubclass(args["return"], CircuitBlock)
+        ):
             raise ValueError("The function is not an operator over symbolic layers")
         if (
-            len(arg_names) == 2
-        ):  # binary operator (special case as to deal with commutative operators)
+            len(arg_names) == 3
+            and issubclass(args[arg_names[0]], Layer)
+            and issubclass(args[arg_names[1]], Layer)
+        ):
+            # Binary operator found (special case as to deal with commutative operators)
             lhs_cls = args[arg_names[0]]
             rhs_cls = args[arg_names[1]]
             self._rules[op][(lhs_cls, rhs_cls)] = func
             if commutative and lhs_cls != rhs_cls:
                 self._rules[op][(rhs_cls, lhs_cls)] = lambda rhs, lhs: func(lhs, rhs)
         else:  # n-ary operator
-            signature = tuple(args[a] for a in arg_names)
+            signature = tuple(args[a] for a in arg_names if issubclass(args[a], Layer))
             self._rules[op][signature] = func

@@ -4,10 +4,12 @@ from typing import IO, Any, Callable, Dict, Optional, Type, Union
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import Layer
-from cirkit.symbolic.params import AbstractParameter, Parameter
+from cirkit.symbolic.params import AbstractParameter
 
-LayerCompilationSignature = Union[Type[Layer]]
-LayerCompilationFunction = Callable[[Layer, "AbstractCompiler"], Any]
+LayerCompilationSign = Type[Layer]
+LayerCompilationFunc = Callable[[Layer, "AbstractCompiler"], Any]
+ParameterCompilationSign = Type[AbstractParameter]
+ParameterCompilationFunc = Callable[[AbstractParameter, "AbstractCompiler"], Any]
 
 
 SUPPORTED_BACKENDS = ["torch"]
@@ -38,21 +40,40 @@ class CompilationContext:
 class CompilerRegistry:
     def __init__(
         self,
-        default_rules: Optional[Dict[LayerCompilationSignature, LayerCompilationFunction]] = None,
+        layer_rules: Optional[Dict[LayerCompilationSign, LayerCompilationFunc]] = None,
+        parameter_rules: Optional[Dict[ParameterCompilationSign, ParameterCompilationFunc]] = None,
     ):
-        self._rules = {} if default_rules is None else default_rules
+        self._layer_rules = {} if layer_rules is None else layer_rules
+        self._parameter_rules = {} if parameter_rules is None else parameter_rules
 
-    def register_rule(self, func: LayerCompilationFunction):
+    @staticmethod
+    def _is_signature_valid(func: Callable) -> bool:
         args = func.__annotations__
         if "return" not in args or "compiler" not in args or len(args) != 3:
-            raise ValueError("The function is not a symbolic layer compilation rule")
+            return False
         if not issubclass(args["compiler"], AbstractCompiler):
+            return False
+        return True
+
+    def add_layer_rule(self, func: LayerCompilationFunc):
+        if not self._is_signature_valid(func):
             raise ValueError("The function is not a symbolic layer compilation rule")
+        args = func.__annotations__
         arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
-        sym_cls = args[arg_names[0]]
-        if not issubclass(sym_cls, (Layer, SymParameter)):
+        layer_cls = args[arg_names[0]]
+        if not issubclass(layer_cls, Layer):
             raise ValueError("The function is not a symbolic layer compilation rule")
-        self._rules[sym_cls] = func
+        self._layer_rules[layer_cls] = func
+
+    def add_parameter_rule(self, func: ParameterCompilationFunc):
+        if not self._is_signature_valid(func):
+            raise ValueError("The function is not a symbolic parameter compilation rule")
+        args = func.__annotations__
+        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
+        param_cls = args[arg_names[0]]
+        if not issubclass(param_cls, AbstractParameter):
+            raise ValueError("The function is not a symbolic parameter compilation rule")
+        self._parameter_rules[param_cls] = func
 
 
 class AbstractCompiler(ABC):
@@ -76,8 +97,11 @@ class AbstractCompiler(ABC):
     def register_compiled_circuit(self, sc: Circuit, tc: Any):
         self._context.register_compiled_circuit(sc, tc)
 
-    def register_rule(self, func: LayerCompilationFunction):
-        self._registry.register_rule(func)
+    def add_layer_rule(self, func: LayerCompilationFunc):
+        self._registry.add_layer_rule(func)
+
+    def add_parameter_rule(self, func: ParameterCompilationFunc):
+        self._registry.add_parameter_rule(func)
 
     def compile(self, sc: Circuit) -> Any:
         if self.is_compiled(sc):
@@ -91,7 +115,7 @@ class AbstractCompiler(ABC):
         ...
 
     @abstractmethod
-    def compile_learnable_parameter(self, parameter: AbstractSymParameter) -> Any:
+    def compile_learnable_parameter(self, param: AbstractParameter) -> Any:
         ...
 
     @abstractmethod

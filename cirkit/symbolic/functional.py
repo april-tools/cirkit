@@ -1,7 +1,8 @@
 import itertools
-from collections import defaultdict, deque
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections import defaultdict
+from typing import Dict, Iterable, List, Optional, Tuple
 
+from cirkit.symbolic.block import CircuitBlock
 from cirkit.symbolic.circuit import Circuit, CircuitOperation, CircuitOperator
 from cirkit.symbolic.layers import (
     InputLayer,
@@ -11,7 +12,7 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.registry import OperatorRegistry, OperatorSignatureNotFound
+from cirkit.symbolic.registry import OperatorRegistry
 from cirkit.utils.exceptions import StructuralPropertyError
 from cirkit.utils.scope import Scope
 
@@ -38,14 +39,15 @@ def integrate(
     if registry is None:
         registry = OperatorRegistry()
 
-    # Mapping the symbolic circuit layers with the layers of the new circuit to build
-    map_layers: Dict[Layer, Layer] = {}
+    # Mapping the symbolic circuit layers with blocks of circuit layers
+    map_layers: Dict[Layer, CircuitBlock] = {}
 
-    # For each new layer, keep track of (i) its inputs and (ii) the layers it feeds
-    in_layers: Dict[Layer, List[Layer]] = defaultdict(list)
-    out_layers: Dict[Layer, List[Layer]] = defaultdict(list)
+    # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
+    out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
 
-    for sl in sc.layers:
+    ordering = sc.layers_topological_ordering()
+    for sl in ordering:
         # Input layers get integrated over
         if isinstance(sl, InputLayer) and sl.scope & scope:
             if not (sl.scope <= scope):
@@ -57,29 +59,30 @@ def integrate(
                 func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
             else:  # Use a fallback rule that is not a specialized one
                 func = registry.retrieve_rule(LayerOperation.INTEGRATION, InputLayer)
-            map_layers[sl] = func(sl)
+            int_block = func(sl)
+            map_layers[sl] = int_block
             continue
         assert isinstance(
             sl, (SumLayer, ProductLayer)
         ), "Symbolic inner layers must be either sum or product layers"
         # Sum/product layers are simply copied
         # Placeholders are used to keep track of referenced parameters
-        new_learnable_parameters = {
+        learnable_parameters = {
             pname: PlaceholderParameter(sl, pname) for pname in sl.learnable_params.keys()
         }
-        new_sl: Union[SumLayer, ProductLayer] = type(sl)(**sl.hparams, **new_learnable_parameters)
-        map_layers[sl] = new_sl
-        new_sl_inputs = [map_layers[isl] for isl in sc.layer_inputs(sl)]
-        in_layers[new_sl] = new_sl_inputs
-        for isl in new_sl_inputs:
-            out_layers[isl].append(new_sl)
+        int_block = type(sl)(**sl.hparams, **learnable_parameters)
+        map_layers[sl] = int_block
+        int_block_ins = [map_layers[isl] for isl in sc.layer_inputs(sl)]
+        in_blocks[int_block] = int_block_ins
+        for bi in int_block_ins:
+            out_blocks[bi].append(int_block)
 
     # Construct the integral symbolic circuit and set the integration operation metadata
-    return Circuit(
+    return Circuit.from_operation(
         sc.scope,
         list(map_layers.values()),
-        in_layers,
-        out_layers,
+        in_blocks,
+        out_blocks,
         operation=CircuitOperation(
             operator=CircuitOperator.INTEGRATION,
             operands=(sc,),
@@ -96,12 +99,12 @@ def multiply(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
 
-    # Map from pairs of layers to their product layer
-    map_prod_layers: Dict[Tuple[Layer, Layer], Layer] = {}
+    # Map from pairs of layers to their product circuit block
+    map_layers: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
 
-    # For each new layer, keep track of (i) its inputs and (ii) the layers it feeds
-    in_layers: Dict[Layer, List[Layer]] = {}
-    out_layers: Dict[Layer, List[Layer]] = defaultdict(list)
+    # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
+    out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
@@ -111,13 +114,13 @@ def multiply(
     # Using a stack in place of recursion for better memory efficiency and debugging
     while to_multiply:
         pair = to_multiply[-1]
-        if pair in map_prod_layers:
+        if pair in map_layers:
             to_multiply.pop()
             continue
         lhs_layer, rhs_layer = pair
         if type(lhs_layer) != type(rhs_layer):  # pylint: disable=unidiomatic-typecheck
             raise NotImplementedError(
-                "The multiplication of circuits with different layers and different region graphs has not been implemented yet"
+                "The multiplication of circuits with different layers or region graphs has not been implemented yet"
             )
 
         lhs_inputs = lhs_sc.layer_inputs(lhs_layer)
@@ -140,7 +143,7 @@ def multiply(
             assert False
 
         # Check if at least one pair of layers needs to be multiplied before going up in the recursion
-        not_yet_multiplied = list(filter(lambda p: p not in map_prod_layers, next_to_multiply))
+        not_yet_multiplied = list(filter(lambda p: p not in map_layers, next_to_multiply))
         if len(not_yet_multiplied) > 0:
             to_multiply.extend(not_yet_multiplied)
             continue
@@ -148,20 +151,21 @@ def multiply(
         # In case all the input have been multiplied, then construct the product layer
         prod_signature = type(lhs_layer), type(rhs_layer)
         func = registry.retrieve_rule(LayerOperation.MULTIPLICATION, *prod_signature)
-        prod_layer = func(lhs_layer, rhs_layer)
+        prod_block = func(lhs_layer, rhs_layer)
         # Make the connections
-        prod_layer_inputs = [map_prod_layers[p] for p in next_to_multiply]
-        in_layers[prod_layer] = prod_layer_inputs
-        for sl in prod_layer_inputs:
-            out_layers[sl].append(prod_layer)
-        map_prod_layers[pair] = prod_layer
+        prod_block_ins = [map_layers[p] for p in next_to_multiply]
+        in_blocks[prod_block] = prod_block_ins
+        for bi in prod_block_ins:
+            out_blocks[bi].append(prod_block)
+        map_layers[pair] = prod_block
         to_multiply.pop()  # Go up in the recursion
 
-    return Circuit(
+    # Construct the product symbolic circuit
+    return Circuit.from_operation(
         lhs_sc.scope | rhs_sc.scope,
-        list(map_prod_layers.values()),
-        in_layers,
-        out_layers,
+        list(map_layers.values()),
+        in_blocks,
+        out_blocks,
         operation=CircuitOperation(
             operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
         ),

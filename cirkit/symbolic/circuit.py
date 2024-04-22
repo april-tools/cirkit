@@ -5,6 +5,7 @@ from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
+from cirkit.symbolic.block import CircuitBlock
 from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
 from cirkit.utils.algorithms import topological_ordering
@@ -55,6 +56,25 @@ class Circuit:
     @property
     def num_variables(self) -> int:
         return len(self.scope)
+
+    @classmethod
+    def from_operation(
+        cls,
+        scope: Scope,
+        blocks: List[CircuitBlock],
+        in_blocks: Dict[CircuitBlock, List[CircuitBlock]],
+        out_blocks: Dict[CircuitBlock, List[CircuitBlock]],
+        operation: CircuitOperation,
+    ):
+        # Unwrap blocks into layers (as well as their connections)
+        layers = [l for b in blocks for l in b.layers]
+        in_layers = {b.input: [bi.output for bi in b_ins] for b, b_ins in in_blocks.items()}
+        out_layers = {b.output: [bo.input for bo in b_outs] for b, b_outs in out_blocks.items()}
+        for b in blocks:
+            in_layers.update(b.layer_inputs)
+            out_layers.update(b.layer_outputs)
+        # Build the circuit and set the operation
+        return cls(scope, layers, in_layers, out_layers, operation=operation)
 
     @classmethod
     def from_region_graph(

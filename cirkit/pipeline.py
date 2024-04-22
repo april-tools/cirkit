@@ -4,9 +4,10 @@ from contextvars import ContextVar, Token
 from types import TracebackType
 from typing import IO, Any, Iterable, Optional, Type, Union
 
-from cirkit.backend.base import SUPPORTED_BACKENDS, AbstractCompiler, LayerCompilationFunction
+from cirkit.backend.base import SUPPORTED_BACKENDS, AbstractCompiler, LayerCompilationFunc, \
+    ParameterCompilationFunc
 from cirkit.symbolic.functional import differentiate, integrate, multiply
-from cirkit.symbolic.registry import LayerOperatorFunction, OperatorRegistry
+from cirkit.symbolic.registry import LayerOperatorFunc, OperatorRegistry
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import AbstractLayerOperator
 
@@ -62,11 +63,14 @@ class PipelineContext(AbstractContextManager):
     ) -> "PipelineContext":
         ...
 
-    def register_operator_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunction):
+    def register_operator_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
         self._op_registry.register_rule(op, func)
 
-    def register_compilation_rule(self, func: LayerCompilationFunction):
-        self._compiler.register_rule(func)
+    def add_layer_compilation_rule(self, func: LayerCompilationFunc):
+        self._compiler.add_layer_rule(func)
+
+    def add_parameter_compilation_rule(self, func: ParameterCompilationFunc):
+        self._compiler.add_parameter_rule(func)
 
     def compile(self, sc: Circuit) -> Any:
         return self._compiler.compile(sc)

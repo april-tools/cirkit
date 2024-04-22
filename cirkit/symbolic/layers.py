@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum, auto
 from functools import cached_property
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from cirkit.symbolic.params import (
     AbstractParameter,
@@ -232,8 +232,8 @@ class DenseLayer(SumLayer):
         super().__init__(scope, num_input_units, num_output_units, arity=1)
         if weight is None:
             weight = Parameter(num_output_units, num_input_units)
-        if weight_param is not None:
-            weight = weight_param(weight)
+            if weight_param is not None:
+                weight = weight_param(weight)
         self.weight = weight
 
     @property
@@ -263,8 +263,8 @@ class MixingLayer(SumLayer):
         super().__init__(scope, num_units, num_units, arity)
         if weight is None:
             weight = Parameter(num_units, arity)
-        if weight_param is not None:
-            weight = weight_param(weight)
+            if weight_param is not None:
+                weight = weight_param(weight)
         self.weight = weight
 
     @property
@@ -274,3 +274,26 @@ class MixingLayer(SumLayer):
     @property
     def learnable_params(self) -> Dict[str, AbstractParameter]:
         return dict(weight=self.weight)
+
+
+class IndexLayer(SumLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_input_units: int,
+        num_output_units: int,
+        indices: List[int],
+    ):
+        assert num_output_units == len(indices)
+        assert 0 <= min(indices) and max(indices) < num_input_units
+        super().__init__(scope, num_input_units, num_output_units, arity=1)
+        self.indices = indices
+
+    @property
+    def hparams(self) -> Dict[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "indices": self.indices,
+        }
