@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Callable, Dict, Iterable, Optional, Tuple, Type
 
-from cirkit.symbolic.block import CircuitBlock
+from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import AbstractLayerOperator, ExpFamilyLayer, Layer, LayerOperation
 from cirkit.symbolic.operators import integrate_ef_layer
 

@@ -2,8 +2,7 @@ import itertools
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from cirkit.symbolic.block import CircuitBlock
-from cirkit.symbolic.circuit import Circuit, CircuitOperation, CircuitOperator
+from cirkit.symbolic.circuit import Circuit, CircuitBlock, CircuitOperation, CircuitOperator
 from cirkit.symbolic.layers import (
     InputLayer,
     Layer,

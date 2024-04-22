@@ -1,6 +1,6 @@
 from typing import Iterable, List, Optional
 
-from cirkit.symbolic.block import CircuitBlock
+from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     ConstantLayer,
     ExpFamilyLayer,
