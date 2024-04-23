@@ -51,7 +51,7 @@ def simplest_unnormalized_pc() -> None:
     )
 
     # # # # # # # # # # # # # # # # # # # # # #
-    # Singleton-level APIs
+    # Singleton-level APIs (i.e., using the singleton pipeline context and symbolic operators registry)
     # - The user does not want to set upt a pipeline context explicitly
     # - The user wants to use the default backend (i.e., torch)
     tc = compile(sc)
@@ -75,18 +75,19 @@ def simplest_unnormalized_pc() -> None:
     # - The user does not want to manipulate symbolic circuits explicitly
     # - The user does not need to implement new layers or new operators over layers/circuits, i.e.,
     #   they will only use what already present in the library in terms of layers and backends
-    tc = ctx.compile(sc)        # Apart from the inputs to the pipeline, the user does not touch symbolic circuits
-    int_tc = ctx.integrate(tc)  # This is equivalent to 'ctx.compile(integrate(sc))' (i.e., greedy compilation)
-    # TODO: remove ctx?
+    with ctx:
+        tc = compile(sc)        # Apart from the inputs to the pipeline, the user does not touch symbolic circuits
+        int_tc = integrate(tc)  # This is equivalent to 'ctx.compile(integrate(sc))' (i.e., greedy compilation)
 
     # # # # # # # # # # # # # # # # # # # # # #
     # Low-level APIs
     # - The user is happy to operate directly on symbolic circuits
     # - The user might need to implement new operators over layers/circuits
     # - The user wants to specify a full symbolic pipeline first, perhaps save/plot it, and then compile it
-    int_sc = SF.integrate(sc)     # Explicitly use the symbolic functional APIs
-    int_tc = ctx.compile(int_sc)  # Compiling the root of the pipeline implies compiling the other circuits too
-    tc = ctx[sc]                  # Retrieve the compiled circuit corresponding to the input circuit to the pipeline
+    with ctx:
+        int_sc = SF.integrate(sc)  # Explicitly use the symbolic functional APIs
+        int_tc = compile(int_sc)   # Compiling the root of the pipeline implies compiling the other circuits too
+    tc = ctx[sc]  # Retrieve the compiled circuit corresponding to the input circuit to the pipeline
 
     # Do learning/inference with the compiled circuits
     ...
@@ -115,7 +116,7 @@ def complex_pipeline() -> None:
     )
 
     # # # # # # # # # # # # # # # # # # # # # #
-    # Singleton-level APIs
+    # Singleton-level APIs (i.e., using the singleton pipeline context and symbolic operators registry)
     # - The user does not want to set upt a pipeline context explicitly
     # - The user wants to use the default backend (i.e., torch)
     # - The user does not want to extend the operators over layers/circuits, nor define compilation rules
@@ -134,20 +135,22 @@ def complex_pipeline() -> None:
     # High-level API (e.g., for practitioners, as explained above)
     # - The user explicitly operates only on compiled circuit representations
     # Internally, the pipeline interleaves symbolic operations and compilation steps
-    tp, tq = ctx.compile(p), ctx.compile(q)
-    tr = ctx.differentiate(tq)
-    ts = ctx.multiply(tp, tr)
-    tt = ctx.integrate(ts)  # These are all already-compiled circuits
+    with ctx:
+        tp, tq = compile(p), compile(q)
+        tr = differentiate(tq)
+        ts = multiply(tp, tr)
+        tt = integrate(ts)  # These are all already-compiled circuits
 
     # # # # # # # # # # # # # # # # # # # # # #
     # Low-level API (as explained above)
     # - The user explicitly operates on symbolic circuit representations, then it compile the pipeline
     # - This is for advanced users who want to extend the domain specific language, e.g.,
     #   add new layers or new layer/circuit symbolic operators (see examples below about this)
-    r = SF.differentiate(q)
-    s = SF.multiply(p, r)
-    t = SF.integrate(s)
-    tt = ctx.compile(t)  # This also compiles the other circuits in the pipeline
+    with ctx:
+        r = SF.differentiate(q)
+        s = SF.multiply(p, r)
+        t = SF.integrate(s)
+        tt = compile(t)  # This also compiles the other circuits in the pipeline
     tr = ctx[r]  # Retrieve other compiled circuits from the pipeline context
 
     # Do learning/inference with the compiled circuits
@@ -266,8 +269,9 @@ def lib_extension() -> None:
     # We extend the pipeline context by registering new compilation rules
     ctx = PipelineContext(backend='torch', fold=True, einsum=True)
     ctx.add_layer_compilation_rule(compile_poly_gaussian)
-    tp = ctx.compile(p)  # These compilations will call our custom compilation rule
-    tq = ctx.compile(q)
+    with ctx:
+        tp = compile(p)  # These compilations will call our custom compilation rule
+        tq = compile(q)
 
     # Let's suppose the user wants to implement the product operation of circuits with their new layer.
     # As usual, it must implement first the symbolic protocol for that.
@@ -295,14 +299,15 @@ def lib_extension() -> None:
     # High-level APIs
     # To use the above symbolic product protocol, we have to register it as a symbolic operator
     ctx.register_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
-    tr = ctx.multiply(tp, tq)  # This will call ctx.compile(product(p, q)) internally
+    with ctx:
+        tr = multiply(tp, tq)  # This will call ctx.compile(product(p, q)) internally
 
     # # # # # # # # # # # # # # # # # # # # # #
     # Lower-level APIs (i.e., explicit manipulation of symbolic circuits and uses the symbolic functional APIs)
     ctx.register_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
     with ctx:
         r = SF.multiply(p, q)  # No need to specify anything here, the with statement will take care of the new protocols
-    tr = ctx.compile(r)  # We do not need to be inside the context for compilation, as the protocol above is symbolic
+        tr = compile(r)  # We do not need to be inside the context for compilation, as the protocol above is symbolic
     # Important: note that outside the with statement, multiply will raise a SymbolicOperatorNotFound exception
 
 
@@ -333,10 +338,11 @@ def serialization() -> None:
 
     # Construct the pipeline
     ctx = PipelineContext(backend='torch', fold=True, einsum=True)
-    tp = ctx.compile(p)
-    tq = ctx.compile(q)
-    tr = ctx.differentiate(tq)
-    ts = ctx.multiply(tp, tr)
+    with ctx:
+        tp = compile(p)
+        tq = compile(q)
+        tr = differentiate(tq)
+        ts = multiply(tp, tr)
 
     # Let's suppose we now want to save this pipeline and load it later
     # Saving a single symbolic/tensorized circuit would not allow us to do other operations later,
@@ -358,7 +364,8 @@ def serialization() -> None:
     # That is, we can extend the pipeline using other operations
     # Let's assume symbolic circuits will have labels (either set by the user or automatically set by the operations)
     s = ctx['product.0']
-    tt = ctx.integrate(ts)
+    with ctx:
+        tt = integrate(ts)
 
     # Do inference or learning with the compiled circuits
     ...
