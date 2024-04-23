@@ -6,7 +6,7 @@ from typing import IO, Any, Iterable, Optional, Type, Union
 
 from cirkit.backend.base import SUPPORTED_BACKENDS, AbstractCompiler, LayerCompilationFunc, \
     ParameterCompilationFunc
-import symbolic.functional as SF
+import cirkit.symbolic.functional as SF
 from cirkit.symbolic.registry import LayerOperatorFunc, OperatorRegistry
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import AbstractLayerOperator
