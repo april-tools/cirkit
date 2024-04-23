@@ -1,5 +1,6 @@
 import itertools
 from collections import defaultdict
+from contextvars import ContextVar
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from cirkit.symbolic.circuit import Circuit, CircuitBlock, CircuitOperation, CircuitOperator
@@ -14,6 +15,12 @@ from cirkit.symbolic.layers import (
 from cirkit.symbolic.registry import OperatorRegistry
 from cirkit.utils.exceptions import StructuralPropertyError
 from cirkit.utils.scope import Scope
+
+# Context variable holding the current global operator registry.
+# This is updated when entering an operator registry context.
+OPERATOR_REGISTRY: ContextVar[OperatorRegistry] = ContextVar(
+    "OPERATOR_REGISTRY", default=OperatorRegistry.from_default_rules()
+)
 
 
 def integrate(
@@ -34,9 +41,9 @@ def integrate(
             "The variables scope to integrate must be a subset of the scope of the circuit"
         )
 
-    # Use the default registry, if not specified otherwise
+    # Use the registry in the current context, if not specified otherwise
     if registry is None:
-        registry = OperatorRegistry.from_default_rules()
+        registry = OPERATOR_REGISTRY.get()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
     map_layers: Dict[Layer, CircuitBlock] = {}
@@ -98,9 +105,9 @@ def multiply(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
 
-    # Use the default registry, if not specified otherwise
+    # Use the registry in the current context, if not specified otherwise
     if registry is None:
-        registry = OperatorRegistry.from_default_rules()
+        registry = OPERATOR_REGISTRY.get()
 
     # Map from pairs of layers to their product circuit block
     map_layers: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
@@ -181,6 +188,6 @@ def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> C
             "Only smooth and decomposable circuits can be efficiently differentiated."
         )
 
-    # Use the default registry, if not specified otherwise
+    # Use the registry in the current context, if not specified otherwise
     if registry is None:
-        registry = OperatorRegistry.from_default_rules()
+        registry = OPERATOR_REGISTRY.get()

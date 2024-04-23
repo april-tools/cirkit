@@ -11,16 +11,8 @@ from cirkit.symbolic.registry import LayerOperatorFunc, OperatorRegistry
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import AbstractLayerOperator
 
-# Context variable containing the symbolic operator registry.
-# This is updated when entering a pipeline context.
-_OPERATOR_REGISTRY: ContextVar[OperatorRegistry] = ContextVar(
-    "_OPERATOR_REGISTRY", default=OperatorRegistry()
-)
-
 
 class PipelineContext(AbstractContextManager):
-    _DEFAULT_PIPELINE_CONTEXT: Optional['PipelineContext'] = None
-
     def __init__(self, backend: str = "torch", **backend_kwargs):
         if backend not in SUPPORTED_BACKENDS:
             raise NotImplementedError(f"Backend '{backend}' is not implemented")
@@ -28,24 +20,25 @@ class PipelineContext(AbstractContextManager):
         self._backend = backend
         self._backend_kwargs = backend_kwargs
 
-        # Symbolic operator registry (and token for context management)
+        # Symbolic operator registry
         self._op_registry = OperatorRegistry.from_default_rules()
-        self._op_registry_token: Optional[Token[OperatorRegistry]] = None
 
         # Get the compiler, which is backend-dependent
         self._compiler = retrieve_compiler(backend, **backend_kwargs)
 
+        # The token used to restore the pipeline context
+        self._token: Optional[Token[PipelineContext]] = None
+
     @classmethod
     def from_default_backend(cls) -> 'PipelineContext':
-        if PipelineContext._DEFAULT_PIPELINE_CONTEXT is None:
-            PipelineContext._DEFAULT_PIPELINE_CONTEXT = PipelineContext(backend='torch', fold=True, einsum=True)
-        return PipelineContext._DEFAULT_PIPELINE_CONTEXT
+        return PipelineContext(backend="torch", fold=True, einsum=True)
 
     def __getitem__(self, sc: Circuit) -> Any:
         return self._compiler.get_compiled_circuit(sc)
 
     def __enter__(self) -> "PipelineContext":
-        self._op_registry_token = _OPERATOR_REGISTRY.set(self._op_registry)
+        self._op_registry.__enter__()
+        self._token = _PIPELINE_CONTEXT.set(self)
         return self
 
     def __exit__(
@@ -54,9 +47,10 @@ class PipelineContext(AbstractContextManager):
         __exc_value: Optional[BaseException],
         __traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        _OPERATOR_REGISTRY.reset(self._op_registry_token)
-        self._op_registry_token = None
-        return None
+        ret = self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
+        _PIPELINE_CONTEXT.reset(self._token)
+        self._token = None
+        return ret
 
     def save(
         self,
@@ -110,25 +104,25 @@ class PipelineContext(AbstractContextManager):
 
 def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
-        ctx = PipelineContext.from_default_backend()
+        ctx = _PIPELINE_CONTEXT.get()
     return ctx.compile(sc)
 
 
 def integrate(tc: Any, scope: Optional[Iterable[int]] = None, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
-        ctx = PipelineContext.from_default_backend()
+        ctx = _PIPELINE_CONTEXT.get()
     return ctx.integrate(tc, scope=scope)
 
 
 def multiply(lhs_tc: Any, rhs_tc: Any, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
-        ctx = PipelineContext.from_default_backend()
+        ctx = _PIPELINE_CONTEXT.get()
     return ctx.multiply(lhs_tc, rhs_tc)
 
 
 def differentiate(tc: Any, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
-        ctx = PipelineContext.from_default_backend()
+        ctx = _PIPELINE_CONTEXT.get()
     return ctx.differentiate(tc)
 
 
@@ -140,3 +134,10 @@ def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:
 
         return TorchCompiler(**backend_kwargs)
     assert False
+
+
+# Context variable holding the current global pipeline.
+# This is updated when entering a pipeline context.
+_PIPELINE_CONTEXT: ContextVar[PipelineContext] = ContextVar(
+    "_PIPELINE_CONTEXT", default=PipelineContext.from_default_backend()
+)

@@ -1,31 +1,19 @@
-from collections import defaultdict
-from functools import cached_property
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type
+from contextlib import AbstractContextManager
+from contextvars import Token
+from types import TracebackType
+from typing import Callable, Dict, Iterable, Optional, Tuple, Type
 
-from cirkit.symbolic.circuit import CircuitBlock
-from cirkit.symbolic.layers import AbstractLayerOperator, ExpFamilyLayer, Layer, LayerOperation
-from cirkit.symbolic.operators import *
+from cirkit.symbolic.functional import OPERATOR_REGISTRY
+from cirkit.symbolic.layers import AbstractLayerOperator, Layer
+from cirkit.symbolic.operators import (
+    DEFAULT_COMMUTATIVE_OPERATORS,
+    DEFAULT_OPERATOR_RULES,
+    CircuitBlock,
+)
 
 LayerOperatorSign = Tuple[Type[Layer], ...]
 LayerOperatorFunc = Callable[..., CircuitBlock]
 LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
-
-
-_DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
-
-
-_DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
-    LayerOperation.INTEGRATION: [
-        integrate_ef_layer,
-    ],
-    LayerOperation.DIFFERENTIATION: [],
-    LayerOperation.MULTIPLICATION: [
-        multiply_hadamard_layers,
-        multiply_kronecker_layers,
-        multiply_dense_layers,
-        multiply_mixing_layers,
-    ],
-}
 
 
 class OperatorNotFound(Exception):
@@ -47,25 +35,39 @@ class OperatorSignatureNotFound(Exception):
         return f"Symbolic operator for signature ({signature_repr}) not found"
 
 
-class OperatorRegistry:
-    _DEFAULT_REGISTRY: Optional["OperatorRegistry"] = None
-
+class OperatorRegistry(AbstractContextManager):
     def __init__(self):
+        # The symbolic operator rule specifications, for each symbolic operator over layers
         self._rules: Dict[AbstractLayerOperator, LayerOperatorSpecs] = {}
+
+        # The token used to restore the operator registry context
+        self._token: Optional[Token[OperatorRegistry]] = None
 
     @classmethod
     def from_default_rules(cls) -> "OperatorRegistry":
-        if OperatorRegistry._DEFAULT_REGISTRY is None:
-            registry = cls()
-            for op, funcs in _DEFAULT_OPERATOR_RULES.items():
-                for f in funcs:
-                    registry.register_rule(op, f, commutative=op in _DEFAULT_COMMUTATIVE_OPERATORS)
-            OperatorRegistry._DEFAULT_REGISTRY = registry
-        return OperatorRegistry._DEFAULT_REGISTRY
+        registry = cls()
+        for op, funcs in DEFAULT_OPERATOR_RULES.items():
+            for f in funcs:
+                registry.register_rule(op, f, commutative=op in DEFAULT_COMMUTATIVE_OPERATORS)
+        return registry
 
     @property
     def operators(self) -> Iterable[AbstractLayerOperator]:
         return self._rules.keys()
+
+    def __enter__(self) -> "OperatorRegistry":
+        self._token = OPERATOR_REGISTRY.set(self)
+        return self
+
+    def __exit__(
+        self,
+        __exc_type: Optional[Type[BaseException]],
+        __exc_value: Optional[BaseException],
+        __traceback: Optional[TracebackType],
+    ) -> Optional[bool]:
+        OPERATOR_REGISTRY.reset(self._token)
+        self._token = None
+        return None
 
     def has_rule(self, op: AbstractLayerOperator, *signature: Type[Layer]) -> bool:
         if op not in self._rules:

@@ -1,17 +1,20 @@
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
+    AbstractLayerOperator,
     ConstantLayer,
     DenseLayer,
     ExpFamilyLayer,
     HadamardLayer,
     IndexLayer,
     KroneckerLayer,
+    LayerOperation,
     MixingLayer,
     PlaceholderParameter,
 )
 from cirkit.symbolic.params import KroneckerParameter
+from cirkit.symbolic.registry import LayerOperatorFunc
 from cirkit.utils.scope import Scope
 
 
@@ -65,3 +68,19 @@ def multiply_mixing_layers(lhs: MixingLayer, rhs: MixingLayer) -> CircuitBlock:
         ),
     )
     return CircuitBlock.from_layer(sl)
+
+
+DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
+
+DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
+    LayerOperation.INTEGRATION: [
+        integrate_ef_layer,
+    ],
+    LayerOperation.DIFFERENTIATION: [],
+    LayerOperation.MULTIPLICATION: [
+        multiply_hadamard_layers,
+        multiply_kronecker_layers,
+        multiply_dense_layers,
+        multiply_mixing_layers,
+    ],
+}
