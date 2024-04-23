@@ -1,19 +1,30 @@
 from collections import defaultdict
-from typing import Callable, Dict, Iterable, Optional, Tuple, Type
+from functools import cached_property
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import AbstractLayerOperator, ExpFamilyLayer, Layer, LayerOperation
-from cirkit.symbolic.operators import integrate_ef_layer
+from cirkit.symbolic.operators import *
 
 LayerOperatorSign = Tuple[Type[Layer], ...]
 LayerOperatorFunc = Callable[..., CircuitBlock]
 LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
 
 
-_DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, LayerOperatorSpecs] = {
-    LayerOperation.INTEGRATION: {(ExpFamilyLayer,): integrate_ef_layer},  # TODO: fill
-    LayerOperation.DIFFERENTIATION: {},  # TODO: fill
-    LayerOperation.MULTIPLICATION: {},  # TODO: fill
+_DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
+
+
+_DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
+    LayerOperation.INTEGRATION: [
+        integrate_ef_layer,
+    ],
+    LayerOperation.DIFFERENTIATION: [],
+    LayerOperation.MULTIPLICATION: [
+        multiply_hadamard_layers,
+        multiply_kronecker_layers,
+        multiply_dense_layers,
+        multiply_mixing_layers,
+    ],
 }
 
 
@@ -37,9 +48,20 @@ class OperatorSignatureNotFound(Exception):
 
 
 class OperatorRegistry:
+    _DEFAULT_REGISTRY: Optional["OperatorRegistry"] = None
+
     def __init__(self):
-        self._rules: Dict[AbstractLayerOperator, LayerOperatorSpecs] = defaultdict(dict)
-        self._rules.update(_DEFAULT_OPERATOR_RULES)
+        self._rules: Dict[AbstractLayerOperator, LayerOperatorSpecs] = {}
+
+    @classmethod
+    def from_default_rules(cls) -> "OperatorRegistry":
+        if OperatorRegistry._DEFAULT_REGISTRY is None:
+            registry = cls()
+            for op, funcs in _DEFAULT_OPERATOR_RULES.items():
+                for f in funcs:
+                    registry.register_rule(op, f, commutative=op in _DEFAULT_COMMUTATIVE_OPERATORS)
+            OperatorRegistry._DEFAULT_REGISTRY = registry
+        return OperatorRegistry._DEFAULT_REGISTRY
 
     @property
     def operators(self) -> Iterable[AbstractLayerOperator]:

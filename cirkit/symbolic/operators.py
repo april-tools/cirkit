@@ -3,11 +3,15 @@ from typing import Iterable, List, Optional
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     ConstantLayer,
+    DenseLayer,
     ExpFamilyLayer,
     HadamardLayer,
     IndexLayer,
     KroneckerLayer,
+    MixingLayer,
+    PlaceholderParameter,
 )
+from cirkit.symbolic.params import KroneckerParameter
 from cirkit.utils.scope import Scope
 
 
@@ -37,3 +41,27 @@ def multiply_kronecker_layers(lhs: KroneckerLayer, rhs: KroneckerLayer) -> Circu
     idx: List[int] = []  # TODO
     sil = IndexLayer(lhs.scope | rhs.scope, sl.num_output_units, sl.num_output_units, indices=idx)
     return CircuitBlock.from_layer_composition(sl, sil)
+
+
+def multiply_dense_layers(lhs: DenseLayer, rhs: DenseLayer) -> CircuitBlock:
+    sl = DenseLayer(
+        lhs.scope | rhs.scope,
+        lhs.num_input_units * rhs.num_input_units,
+        lhs.num_output_units * rhs.num_output_units,
+        weight=KroneckerParameter(
+            PlaceholderParameter(lhs, name="weight"), PlaceholderParameter(rhs, name="weight")
+        ),
+    )
+    return CircuitBlock.from_layer(sl)
+
+
+def multiply_mixing_layers(lhs: MixingLayer, rhs: MixingLayer) -> CircuitBlock:
+    sl = MixingLayer(
+        lhs.scope | rhs.scope,
+        lhs.num_input_units * rhs.num_input_units,
+        lhs.arity * rhs.arity,
+        weight=KroneckerParameter(
+            PlaceholderParameter(lhs, name="weight"), PlaceholderParameter(rhs, name="weight")
+        ),
+    )
+    return CircuitBlock.from_layer(sl)

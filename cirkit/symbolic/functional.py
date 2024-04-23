@@ -36,7 +36,7 @@ def integrate(
 
     # Use the default registry, if not specified otherwise
     if registry is None:
-        registry = OperatorRegistry()
+        registry = OperatorRegistry.from_default_rules()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
     map_layers: Dict[Layer, CircuitBlock] = {}
@@ -97,6 +97,10 @@ def multiply(
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
+
+    # Use the default registry, if not specified otherwise
+    if registry is None:
+        registry = OperatorRegistry.from_default_rules()
 
     # Map from pairs of layers to their product circuit block
     map_layers: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
@@ -176,4 +180,7 @@ def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> C
         raise StructuralPropertyError(
             "Only smooth and decomposable circuits can be efficiently differentiated."
         )
-    ...
+
+    # Use the default registry, if not specified otherwise
+    if registry is None:
+        registry = OperatorRegistry.from_default_rules()

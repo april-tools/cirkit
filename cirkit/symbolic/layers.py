@@ -234,6 +234,8 @@ class DenseLayer(SumLayer):
             weight = Parameter(num_output_units, num_input_units)
             if weight_param is not None:
                 weight = weight_param(weight)
+        else:
+            assert weight.shape == (num_output_units, num_input_units)
         self.weight = weight
 
     @property
@@ -265,6 +267,8 @@ class MixingLayer(SumLayer):
             weight = Parameter(num_units, arity)
             if weight_param is not None:
                 weight = weight_param(weight)
+        else:
+            assert weight.shape == (num_units, arity)
         self.weight = weight
 
     @property

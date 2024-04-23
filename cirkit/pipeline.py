@@ -6,7 +6,7 @@ from typing import IO, Any, Iterable, Optional, Type, Union
 
 from cirkit.backend.base import SUPPORTED_BACKENDS, AbstractCompiler, LayerCompilationFunc, \
     ParameterCompilationFunc
-from cirkit.symbolic.functional import differentiate, integrate, multiply
+import symbolic.functional as SF
 from cirkit.symbolic.registry import LayerOperatorFunc, OperatorRegistry
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import AbstractLayerOperator
@@ -19,6 +19,8 @@ _OPERATOR_REGISTRY: ContextVar[OperatorRegistry] = ContextVar(
 
 
 class PipelineContext(AbstractContextManager):
+    _DEFAULT_PIPELINE_CONTEXT: Optional['PipelineContext'] = None
+
     def __init__(self, backend: str = "torch", **backend_kwargs):
         if backend not in SUPPORTED_BACKENDS:
             raise NotImplementedError(f"Backend '{backend}' is not implemented")
@@ -27,11 +29,17 @@ class PipelineContext(AbstractContextManager):
         self._backend_kwargs = backend_kwargs
 
         # Symbolic operator registry (and token for context management)
-        self._op_registry = OperatorRegistry()
+        self._op_registry = OperatorRegistry.from_default_rules()
         self._op_registry_token: Optional[Token[OperatorRegistry]] = None
 
         # Get the compiler, which is backend-dependent
         self._compiler = retrieve_compiler(backend, **backend_kwargs)
+
+    @classmethod
+    def from_default_backend(cls) -> 'PipelineContext':
+        if PipelineContext._DEFAULT_PIPELINE_CONTEXT is None:
+            PipelineContext._DEFAULT_PIPELINE_CONTEXT = PipelineContext(backend='torch', fold=True, einsum=True)
+        return PipelineContext._DEFAULT_PIPELINE_CONTEXT
 
     def __getitem__(self, sc: Circuit) -> Any:
         return self._compiler.get_compiled_circuit(sc)
@@ -79,7 +87,7 @@ class PipelineContext(AbstractContextManager):
         if not self._compiler.has_symbolic(tc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(tc)
-        int_sc = integrate(sc, scope=scope, registry=self._op_registry)
+        int_sc = SF.integrate(sc, scope=scope, registry=self._op_registry)
         return self.compile(int_sc)
 
     def multiply(self, lhs_tc: Any, rhs_tc: Any) -> Any:
@@ -89,15 +97,39 @@ class PipelineContext(AbstractContextManager):
             raise ValueError("The given RHS compiled circuit is not known in this pipeline")
         lhs_sc = self._compiler.get_symbolic_circuit(lhs_tc)
         rhs_sc = self._compiler.get_symbolic_circuit(rhs_tc)
-        prod_sc = multiply(lhs_sc, rhs_sc, registry=self._op_registry)
+        prod_sc = SF.multiply(lhs_sc, rhs_sc, registry=self._op_registry)
         return self.compile(prod_sc)
 
     def differentiate(self, tc: Any) -> Any:
         if not self._compiler.has_symbolic(tc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(tc)
-        diff_sc = differentiate(sc, registry=self._op_registry)
+        diff_sc = SF.differentiate(sc, registry=self._op_registry)
         return self.compile(diff_sc)
+
+
+def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> Any:
+    if ctx is None:
+        ctx = PipelineContext.from_default_backend()
+    return ctx.compile(sc)
+
+
+def integrate(tc: Any, scope: Optional[Iterable[int]] = None, ctx: Optional[PipelineContext] = None) -> Any:
+    if ctx is None:
+        ctx = PipelineContext.from_default_backend()
+    return ctx.integrate(tc, scope=scope)
+
+
+def multiply(lhs_tc: Any, rhs_tc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+    if ctx is None:
+        ctx = PipelineContext.from_default_backend()
+    return ctx.multiply(lhs_tc, rhs_tc)
+
+
+def differentiate(tc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+    if ctx is None:
+        ctx = PipelineContext.from_default_backend()
+    return ctx.differentiate(tc)
 
 
 def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:

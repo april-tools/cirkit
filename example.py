@@ -6,9 +6,9 @@ from torch import Tensor
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.layers import TorchInputLayer
 from cirkit.backend.torch.reparams import Reparameterization
-from cirkit.pipeline import PipelineContext
-from cirkit.symbolic.functional import integrate, multiply, differentiate
-from cirkit.symbolic.circuit import Circuit
+from cirkit.pipeline import PipelineContext, compile, integrate, multiply, differentiate
+import cirkit.symbolic.functional as SF
+from cirkit.symbolic.circuit import Circuit, CircuitBlock
 from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, KroneckerLayer, InputLayer, \
     LayerOperation, MixingLayer, PlaceholderParameter
 from cirkit.symbolic.params import SoftmaxParameter, AbstractParameter, Parameter, Parameterization, KroneckerParameter
@@ -50,6 +50,17 @@ def simplest_unnormalized_pc() -> None:
         mixing_factory=mixing_layer_factory
     )
 
+    # # # # # # # # # # # # # # # # # # # # # #
+    # Singleton-level APIs
+    # - The user does not want to set upt a pipeline context explicitly
+    # - The user wants to use the default backend (i.e., torch)
+    tc = compile(sc)
+    int_tc = integrate(tc)
+
+    # # # # # # # # # # # # # # # # # # # # # #
+    # Context-level APIs
+    # - The user wants to set up the pipeline context with a different backend and/or flags
+    #
     # Given the output of a computational graph over circuits (i.e., the root of the DAG),
     # ctx.compile compiles all the circuits in topological ordering (at least by default)
     # The backend can be specified with a flag, and available optimizations using kwargs.
@@ -58,8 +69,6 @@ def simplest_unnormalized_pc() -> None:
     # - einsum=True  suggests compiling to layers using einsums when possible.
     # Also, the context stores the symbolic operator definitions, which might be extended (see examples below)
     ctx = PipelineContext(backend='torch', fold=True, einsum=True)
-    # TODO: global default contexts
-    #ctx: PipelineContext = circuit.get_context()
 
     # # # # # # # # # # # # # # # # # # # # # #
     # High-level APIs (e.g., for practitioners)
@@ -75,7 +84,7 @@ def simplest_unnormalized_pc() -> None:
     # - The user is happy to operate directly on symbolic circuits
     # - The user might need to implement new operators over layers/circuits
     # - The user wants to specify a full symbolic pipeline first, perhaps save/plot it, and then compile it
-    int_sc = integrate(sc)        # Explicitly use the symbolic functional APIs
+    int_sc = SF.integrate(sc)     # Explicitly use the symbolic functional APIs
     int_tc = ctx.compile(int_sc)  # Compiling the root of the pipeline implies compiling the other circuits too
     tc = ctx[sc]                  # Retrieve the compiled circuit corresponding to the input circuit to the pipeline
 
@@ -105,7 +114,20 @@ def complex_pipeline() -> None:
         mixing_factory=mixing_layer_factory
     )
 
-    # Create a pipeline context
+    # # # # # # # # # # # # # # # # # # # # # #
+    # Singleton-level APIs
+    # - The user does not want to set upt a pipeline context explicitly
+    # - The user wants to use the default backend (i.e., torch)
+    # - The user does not want to extend the operators over layers/circuits, nor define compilation rules
+    tp, tq = compile(p), compile(q)
+    tr = differentiate(tq)
+    ts = multiply(tp, tr)
+    tt = integrate(ts)  # These are all already-compiled circuits
+
+    # # # # # # # # # # # # # # # # # # # # # #
+    # Context-level APIs
+    # - The user wants to set up the pipeline context with a different backend and/or flags
+    #
     ctx = PipelineContext(backend='torch', fold=True, einsum=True)
 
     # # # # # # # # # # # # # # # # # # # # # #
@@ -122,9 +144,9 @@ def complex_pipeline() -> None:
     # - The user explicitly operates on symbolic circuit representations, then it compile the pipeline
     # - This is for advanced users who want to extend the domain specific language, e.g.,
     #   add new layers or new layer/circuit symbolic operators (see examples below about this)
-    r = differentiate(q)
-    s = multiply(p, r)
-    t = integrate(s)
+    r = SF.differentiate(q)
+    s = SF.multiply(p, r)
+    t = SF.integrate(s)
     tt = ctx.compile(t)  # This also compiles the other circuits in the pipeline
     tr = ctx[r]  # Retrieve other compiled circuits from the pipeline context
 
@@ -239,9 +261,11 @@ def lib_extension() -> None:
             coeffs=compiler.compile_learnable_parameter(sl.coeffs)
         )
 
+    # # # # # # # # # # # # # # # # # # # # # #
+    # Context-level APIs
     # We extend the pipeline context by registering new compilation rules
     ctx = PipelineContext(backend='torch', fold=True, einsum=True)
-    ctx.register_compilation_rule(compile_poly_gaussian)
+    ctx.add_layer_compilation_rule(compile_poly_gaussian)
     tp = ctx.compile(p)  # These compilations will call our custom compilation rule
     tq = ctx.compile(q)
 
@@ -250,10 +274,10 @@ def lib_extension() -> None:
     # Such symbolic protocol is the symbolic product operator for such a layer.
     def multiply_poly_gaussian(
         lhs: PolyGaussianLayer, rhs: PolyGaussianLayer
-    ) -> PolyGaussianLayer:
+    ) -> CircuitBlock:
         assert lhs.scope == rhs.scope
         assert lhs.num_channels == rhs.num_channels
-        return PolyGaussianLayer(
+        sl = PolyGaussianLayer(
             lhs.scope,
             num_output_units=lhs.num_output_units * rhs.num_output_units,
             num_channels=lhs.num_channels,
@@ -265,6 +289,7 @@ def lib_extension() -> None:
                 PlaceholderParameter(rhs, name='coeffs')
             )
         )
+        return CircuitBlock.from_layer(sl)
 
     # # # # # # # # # # # # # # # # # # # # # #
     # High-level APIs
@@ -276,7 +301,7 @@ def lib_extension() -> None:
     # Lower-level APIs (i.e., explicit manipulation of symbolic circuits and uses the symbolic functional APIs)
     ctx.register_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
     with ctx:
-        r = multiply(p, q)  # No need to specify anything here, the with statement will take care of the new protocols
+        r = SF.multiply(p, q)  # No need to specify anything here, the with statement will take care of the new protocols
     tr = ctx.compile(r)  # We do not need to be inside the context for compilation, as the protocol above is symbolic
     # Important: note that outside the with statement, multiply will raise a SymbolicOperatorNotFound exception
 
