@@ -5,10 +5,11 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from cirkit.symbolic.params import (
     AbstractParameter,
+    ConstantParameter,
+    LogSoftmaxParameter,
     Parameter,
     Parameterization,
     ScaledSigmoidParameter,
-    SoftmaxParameter,
 )
 from cirkit.utils.scope import Scope
 
@@ -42,7 +43,7 @@ class Layer(ABC):
         self.arity = arity
 
     @property
-    def hparams(self) -> Dict[str, Any]:
+    def config(self) -> Dict[str, Any]:
         return {
             "scope": self.scope,
             "num_input_units": self.num_input_units,
@@ -51,19 +52,19 @@ class Layer(ABC):
         }
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractParameter]:
+    def parameters(self) -> Dict[str, AbstractParameter]:
         return {}
 
 
 class PlaceholderParameter(AbstractParameter):
     def __init__(self, layer: Layer, name: str):
-        assert name in layer.learnable_params
+        assert name in layer.parameters
         self.layer = layer
         self.name = name
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return self.layer.learnable_params[self.name].shape
+        return self.layer.parameters[self.name].shape
 
 
 class InputLayer(Layer):
@@ -79,7 +80,7 @@ class InputLayer(Layer):
         return self.arity
 
     @property
-    def hparams(self) -> Dict[str, Any]:
+    def config(self) -> Dict[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
@@ -88,12 +89,23 @@ class InputLayer(Layer):
 
 
 class ExpFamilyLayer(InputLayer, ABC):
-    def __init__(self, scope: Scope, num_output_units: int, num_channels: int):
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int,
+        part: Optional[AbstractParameter] = None,
+    ):
         super().__init__(scope, num_output_units, num_channels)
+        self.part = part
 
     @abstractmethod
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
         ...
+
+    @property
+    def parameters(self) -> Dict[str, AbstractParameter]:
+        return dict(part=self.part)
 
 
 class CategoricalLayer(ExpFamilyLayer):
@@ -104,11 +116,12 @@ class CategoricalLayer(ExpFamilyLayer):
         num_channels: int,
         num_categories: int = 2,
         probs: Optional[AbstractParameter] = None,
+        part: Optional[AbstractParameter] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(scope, num_output_units, num_channels, part=part)
         self.num_categories = num_categories
         if probs is None:
-            probs = SoftmaxParameter(
+            probs = LogSoftmaxParameter(
                 Parameter(self.num_variables, num_output_units, num_channels, num_categories),
                 axis=-1,
             )
@@ -119,14 +132,16 @@ class CategoricalLayer(ExpFamilyLayer):
         return self.num_channels, self.num_categories
 
     @property
-    def hparams(self) -> dict:
-        hparams = super().hparams
-        hparams.update(num_categories=self.num_categories)
-        return hparams
+    def config(self) -> dict:
+        config = super().config
+        config.update(num_categories=self.num_categories)
+        return config
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractParameter]:
-        return dict(probs=self.probs)
+    def parameters(self) -> Dict[str, AbstractParameter]:
+        params = super().parameters
+        params.update(log_probs=self.probs)
+        return params
 
 
 class NormalLayer(ExpFamilyLayer):
@@ -137,8 +152,9 @@ class NormalLayer(ExpFamilyLayer):
         num_channels: int,
         mean: Optional[AbstractParameter] = None,
         variance: Optional[AbstractParameter] = None,
+        part: Optional[AbstractParameter] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(scope, num_output_units, num_channels, part=part)
         assert (mean is None and variance is None) or (
             mean is not None and variance is not None
         ), "Either both 'mean' and 'variance' has to be specified or none of them"
@@ -155,26 +171,24 @@ class NormalLayer(ExpFamilyLayer):
         return self.num_channels, 2
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractParameter]:
-        return dict(mean=self.mean, variance=self.variance)
+    def parameters(self) -> Dict[str, AbstractParameter]:
+        params = super().parameters
+        params.update(mean=self.mean, variance=self.variance)
+        return params
 
 
 class ConstantLayer(InputLayer):
     def __init__(
-        self,
-        scope: Scope,
-        num_output_units: int,
-        num_channels: int = 1,
-        value: Optional[float] = None,
+        self, scope: Scope, num_output_units: int, num_channels: int, value: ConstantParameter
     ):
         super().__init__(scope, num_output_units, num_channels)
-        self.value = value if value is not None else 0
+        self.value = value
 
     @property
-    def hparams(self) -> Dict[str, Any]:
-        hparams = super().hparams
-        hparams.update(value=self.value)
-        return hparams
+    def parameters(self) -> Dict[str, AbstractParameter]:
+        params = super().parameters
+        params.update(value=self.value)
+        return params
 
 
 class ProductLayer(Layer, ABC):
@@ -185,7 +199,7 @@ class ProductLayer(Layer, ABC):
         super().__init__(scope, num_input_units, num_output_units, arity)
 
     @property
-    def hparams(self) -> Dict[str, Any]:
+    def config(self) -> Dict[str, Any]:
         return {
             "scope": self.scope,
             "num_input_units": self.num_input_units,
@@ -239,7 +253,7 @@ class DenseLayer(SumLayer):
         self.weight = weight
 
     @property
-    def hparams(self) -> Dict[str, Any]:
+    def config(self) -> Dict[str, Any]:
         return {
             "scope": self.scope,
             "num_input_units": self.num_input_units,
@@ -247,7 +261,7 @@ class DenseLayer(SumLayer):
         }
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractParameter]:
+    def parameters(self) -> Dict[str, AbstractParameter]:
         return dict(weight=self.weight)
 
 
@@ -272,11 +286,11 @@ class MixingLayer(SumLayer):
         self.weight = weight
 
     @property
-    def hparams(self) -> Dict[str, Any]:
+    def config(self) -> Dict[str, Any]:
         return {"scope": self.scope, "num_units": self.num_input_units, "arity": self.arity}
 
     @property
-    def learnable_params(self) -> Dict[str, AbstractParameter]:
+    def parameters(self) -> Dict[str, AbstractParameter]:
         return dict(weight=self.weight)
 
 
@@ -294,7 +308,7 @@ class IndexLayer(SumLayer):
         self.indices = indices
 
     @property
-    def hparams(self) -> Dict[str, Any]:
+    def config(self) -> Dict[str, Any]:
         return {
             "scope": self.scope,
             "num_input_units": self.num_input_units,

@@ -1,3 +1,4 @@
+import itertools
 from contextlib import AbstractContextManager
 from contextvars import Token
 from types import TracebackType
@@ -73,10 +74,15 @@ class OperatorRegistry(AbstractContextManager):
         if op not in self._rules:
             return False
         op_rules = self._rules[op]
-        signature = tuple(signature)
-        if signature not in op_rules:
-            return False
-        return True
+        known_signatures = op_rules.keys()
+        if signature in known_signatures:
+            return True
+        for s in known_signatures:
+            if len(signature) != len(s):
+                continue
+            if all(issubclass(x[0], x[1]) for x in zip(signature, s)):
+                return True
+        return False
 
     def retrieve_rule(
         self, op: AbstractLayerOperator, *signature: Type[Layer]
@@ -84,10 +90,20 @@ class OperatorRegistry(AbstractContextManager):
         if op not in self._rules:
             raise OperatorNotFound(op)
         op_rules = self._rules[op]
-        signature = tuple(signature)
-        if signature not in op_rules:
-            raise OperatorSignatureNotFound(*signature)
-        return op_rules[signature]
+        known_signatures = op_rules.keys()
+        if signature in known_signatures:
+            return op_rules[signature]
+        for s, f in op_rules.items():
+            if len(signature) != len(s):
+                continue
+            # TODO: handle more complicated sub-signatures hierarchies obtained via sub-classing layers
+            if all(issubclass(x[0], x[1]) for x in zip(signature, s)):
+                # Cache rule signature for sub-signatures
+                self._register_rule(
+                    op, f, signature, commutative=op in DEFAULT_COMMUTATIVE_OPERATORS
+                )
+                return f
+        raise OperatorSignatureNotFound(*signature)
 
     def register_rule(
         self,
@@ -96,24 +112,33 @@ class OperatorRegistry(AbstractContextManager):
         commutative: Optional[bool] = None,
     ):
         args = func.__annotations__
-        arg_names = list(args.keys())
-        if (
-            len(arg_names) == 0
-            or "return" not in arg_names
-            or not issubclass(args["return"], CircuitBlock)
-        ):
+        arg_names = args.keys()
+        if "return" not in arg_names or not issubclass(args["return"], CircuitBlock):
             raise ValueError("The function is not an operator over symbolic layers")
-        if (
-            len(arg_names) == 3
-            and issubclass(args[arg_names[0]], Layer)
-            and issubclass(args[arg_names[1]], Layer)
-        ):
+        del args["return"]
+        arg_names = list(args.keys())
+        arg_types = [args[a] for a in arg_names]
+        arg_layer_types = list(filter(lambda x: issubclass(x[1], Layer), enumerate(arg_types)))
+        arg_layer_types_locs, signature = list(zip(*arg_layer_types))
+        if arg_layer_types_locs != list(range(len(arg_layer_types_locs))):
+            raise ValueError(
+                "The layer operands should be the first arguments of the operator rule function"
+            )
+        return self._register_rule(op, func, signature, commutative=commutative)
+
+    def _register_rule(
+        self,
+        op: AbstractLayerOperator,
+        func: LayerOperatorFunc,
+        signature: LayerOperatorSign,
+        commutative: Optional[bool] = None,
+    ):
+        if len(signature) == 2:
             # Binary operator found (special case as to deal with commutative operators)
-            lhs_cls = args[arg_names[0]]
-            rhs_cls = args[arg_names[1]]
-            self._rules[op][(lhs_cls, rhs_cls)] = func
-            if commutative and lhs_cls != rhs_cls:
-                self._rules[op][(rhs_cls, lhs_cls)] = lambda rhs, lhs: func(lhs, rhs)
+            self._rules[op][signature] = func
+            if commutative:
+                lhs_cls, rhs_cls = signature
+                if lhs_cls != rhs_cls:
+                    self._rules[op][(rhs_cls, lhs_cls)] = lambda rhs, lhs: func(lhs, rhs)
         else:  # n-ary operator
-            signature = tuple(args[a] for a in arg_names if issubclass(args[a], Layer))
             self._rules[op][signature] = func

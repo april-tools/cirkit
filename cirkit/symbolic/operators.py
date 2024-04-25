@@ -1,8 +1,9 @@
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Union
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     AbstractLayerOperator,
+    CategoricalLayer,
     ConstantLayer,
     DenseLayer,
     ExpFamilyLayer,
@@ -11,17 +12,50 @@ from cirkit.symbolic.layers import (
     KroneckerLayer,
     LayerOperation,
     MixingLayer,
+    NormalLayer,
     PlaceholderParameter,
 )
-from cirkit.symbolic.params import KroneckerParameter
+from cirkit.symbolic.params import ConstantParameter, KroneckerParameter, ReduceSumParameter
 from cirkit.symbolic.registry import LayerOperatorFunc
 from cirkit.utils.scope import Scope
 
 
 def integrate_ef_layer(sl: ExpFamilyLayer, scope: Optional[Iterable[int]] = None) -> CircuitBlock:
     scope = Scope(scope) if scope is not None else sl.scope
-    # Symbolically integrate an exponential family layer, which is a constant layer
-    sl = ConstantLayer(sl.scope, sl.num_output_units, sl.num_channels, value=1.0)
+    assert sl.scope == scope
+    if sl.part is None:
+        sv = ConstantParameter(1.0, shape=(sl.num_output_units,))
+    else:
+        sv = PlaceholderParameter(sl, name="part")
+    sl = ConstantLayer(sl.scope, sl.num_output_units, sl.num_channels, value=sv)
+    return CircuitBlock.from_layer(sl)
+
+
+def multiply_categorical_layers(lhs: CategoricalLayer, rhs: CategoricalLayer) -> CircuitBlock:
+    assert lhs.num_channels == rhs.num_channels
+    sl_probs = KroneckerParameter(
+        PlaceholderParameter(lhs, name="probs"), PlaceholderParameter(rhs, name="probs"), axis=2
+    )
+    sl = CategoricalLayer(
+        lhs.scope | rhs.scope,
+        lhs.num_output_units * rhs.num_input_units,
+        num_channels=lhs.num_channels,
+        probs=sl_probs,
+        part=ReduceSumParameter(sl_probs, axis=3),
+    )
+    return CircuitBlock.from_layer(sl)
+
+
+def multiply_normal_layers(lhs: NormalLayer, rhs: NormalLayer) -> CircuitBlock:
+    assert lhs.num_channels == rhs.num_channels
+    sl = NormalLayer(
+        lhs.scope | rhs.scope,
+        lhs.num_output_units * rhs.num_input_units,
+        num_channels=lhs.num_channels,
+        mean=None,
+        variance=None,
+        part=None,  # What to put here?
+    )
     return CircuitBlock.from_layer(sl)
 
 
@@ -78,6 +112,8 @@ DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
     ],
     LayerOperation.DIFFERENTIATION: [],
     LayerOperation.MULTIPLICATION: [
+        multiply_categorical_layers,
+        multiply_normal_layers,
         multiply_hadamard_layers,
         multiply_kronecker_layers,
         multiply_dense_layers,

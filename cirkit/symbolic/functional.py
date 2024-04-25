@@ -74,9 +74,9 @@ def integrate(
         # Sum/product layers are simply copied
         # Placeholders are used to keep track of referenced parameters
         learnable_parameters = {
-            pname: PlaceholderParameter(sl, pname) for pname in sl.learnable_params.keys()
+            pname: PlaceholderParameter(sl, pname) for pname in sl.parameters.keys()
         }
-        int_block = type(sl)(**sl.hparams, **learnable_parameters)
+        int_block = type(sl)(**sl.config, **learnable_parameters)
         map_layers[sl] = int_block
         int_block_ins = [map_layers[isl] for isl in sc.layer_inputs(sl)]
         in_blocks[int_block] = int_block_ins

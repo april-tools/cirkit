@@ -184,13 +184,13 @@ def lib_extension() -> None:
             self.coeffs = coeffs
 
         @property
-        def hparams(self) -> Dict[str, Any]:
-            hparams = super().hparams
+        def config(self) -> Dict[str, Any]:
+            hparams = super().config
             hparams.update(degree=self.degree)
             return hparams
 
         @property
-        def learnable_params(self) -> Dict[str, AbstractParameter]:
+        def parameters(self) -> Dict[str, AbstractParameter]:
             return dict(coeffs=self.coeffs)
 
     # Then, the user must write the actual layer for some backend of choice, e.g., torch
