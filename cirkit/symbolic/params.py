@@ -49,30 +49,30 @@ class UnaryOpParameter(OpParameter, ABC):
 
 
 class BinaryOpParameter(OpParameter, ABC):
-    def __init__(self, lhs: AbstractParameter, rhs: AbstractParameter) -> None:
-        self.lhs = lhs
-        self.rhs = rhs
+    def __init__(self, p1: AbstractParameter, p2: AbstractParameter) -> None:
+        self.p1 = p1
+        self.p2 = p2
 
 
-class HadamardParameter(AbstractParameter):
-    def __init__(self, lhs: AbstractParameter, rhs: AbstractParameter) -> None:
-        assert lhs.shape == rhs.shape
-        self.lhs = lhs
-        self.rhs = rhs
+class HadamardParameter(BinaryOpParameter):
+    def __init__(self, p1: AbstractParameter, p2: AbstractParameter) -> None:
+        assert p1.shape == p2.shape
+        super().__init__(p1, p2)
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return self.lhs.shape
+        return self.p1.shape
 
 
-class KroneckerParameter(AbstractParameter):
-    def __init__(self, lhs: AbstractParameter, rhs: AbstractParameter, axis: int = -1) -> None:
-        assert len(lhs.shape) == len(rhs.shape)
-        assert lhs.shape[:-1] == rhs.shape[:-1]
-        axis = axis if axis >= 0 else axis + len(lhs.shape)
-        assert 0 <= axis < len(lhs.shape)
-        self.lhs = lhs
-        self.rhs = rhs
+class KroneckerParameter(BinaryOpParameter):
+    def __init__(self, p1: AbstractParameter, p2: AbstractParameter, axis: int = -1) -> None:
+        super().__init__(p1, p2)
+        assert len(p1.shape) == len(p2.shape)
+        assert p1.shape[:-1] == p2.shape[:-1]
+        axis = axis if axis >= 0 else axis + len(p1.shape)
+        assert 0 <= axis < len(p1.shape)
+        self.p1 = p1
+        self.p2 = p2
         self.axis = axis
 
     @property
@@ -81,8 +81,8 @@ class KroneckerParameter(AbstractParameter):
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        cross_dim = self.lhs.shape[self.axis] * self.rhs.shape[self.axis]
-        return *self.lhs.shape[: self.axis], cross_dim, *self.lhs.shape[self.axis + 1]
+        cross_dim = self.p1.shape[self.axis] * self.p2.shape[self.axis]
+        return *self.p1.shape[: self.axis], cross_dim, *self.p1.shape[self.axis + 1]
 
 
 class EntrywiseOpParameter(UnaryOpParameter, ABC):
@@ -138,9 +138,71 @@ class ReduceSumParameter(ReduceOpParameter):
     ...
 
 
+class ReduceProductParameter(ReduceOpParameter):
+    ...
+
+
 class LogSoftmaxParameter(ReduceOpParameter):
     ...
 
 
 class SoftmaxParameter(ReduceOpParameter):
     ...
+
+
+class MeanNormalProduct(AbstractParameter):
+    def __init__(
+        self,
+        mean1: AbstractParameter,
+        mean2: AbstractParameter,
+        variance1: AbstractParameter,
+        variance2: AbstractParameter,
+    ):
+        assert mean1.shape[0] == mean2.shape[0] == variance1.shape[0] == variance2.shape[0]
+        assert mean1.shape[2] == mean2.shape[2] == variance1.shape[2] == variance2.shape[2]
+        assert mean1.shape[1] == variance1.shape[1] and mean2.shape[1] == variance2.shape[1]
+        self.mean1 = mean1
+        self.mean2 = mean2
+        self.variance1 = variance1
+        self.variance2 = variance2
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return self.mean1.shape[0], self.mean1.shape[1] * self.mean2.shape[1], self.mean1.shape[2]
+
+
+class VarianceNormalProduct(AbstractParameter):
+    def __init__(self, variance1: AbstractParameter, variance2: AbstractParameter):
+        assert variance1.shape[0] == variance2.shape[0]
+        assert variance1.shape[2] == variance2.shape[2]
+        self.variance1 = variance1
+        self.variance2 = variance2
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.variance1.shape[0],
+            self.variance1.shape[1] * self.variance2.shape[1],
+            self.variance1.shape[2],
+        )
+
+
+class PartitionGaussianProduct(AbstractParameter):
+    def __init__(
+        self,
+        mean1: AbstractParameter,
+        mean2: AbstractParameter,
+        variance1: AbstractParameter,
+        variance2: AbstractParameter,
+    ):
+        assert mean1.shape[0] == mean2.shape[0] == variance1.shape[0] == variance2.shape[0]
+        assert mean1.shape[2] == mean2.shape[2] == variance1.shape[2] == variance2.shape[2]
+        assert mean1.shape[1] == variance1.shape[1] and mean2.shape[1] == variance2.shape[1]
+        self.mean1 = mean1
+        self.mean2 = mean2
+        self.variance1 = variance1
+        self.variance2 = variance2
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return (self.mean1.shape[1] * self.mean2.shape[1],)

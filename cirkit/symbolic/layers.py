@@ -94,10 +94,10 @@ class ExpFamilyLayer(InputLayer, ABC):
         scope: Scope,
         num_output_units: int,
         num_channels: int,
-        part: Optional[AbstractParameter] = None,
+        partition: Optional[AbstractParameter] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
-        self.part = part
+        self.partition = partition
 
     @abstractmethod
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -105,7 +105,7 @@ class ExpFamilyLayer(InputLayer, ABC):
 
     @property
     def parameters(self) -> Dict[str, AbstractParameter]:
-        return dict(part=self.part)
+        return dict(partition=self.partition)
 
 
 class CategoricalLayer(ExpFamilyLayer):
@@ -116,9 +116,9 @@ class CategoricalLayer(ExpFamilyLayer):
         num_channels: int,
         num_categories: int = 2,
         probs: Optional[AbstractParameter] = None,
-        part: Optional[AbstractParameter] = None,
+        partition: Optional[AbstractParameter] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels, part=part)
+        super().__init__(scope, num_output_units, num_channels, partition=partition)
         self.num_categories = num_categories
         if probs is None:
             probs = LogSoftmaxParameter(
@@ -144,7 +144,7 @@ class CategoricalLayer(ExpFamilyLayer):
         return params
 
 
-class NormalLayer(ExpFamilyLayer):
+class GaussianLayer(ExpFamilyLayer):
     def __init__(
         self,
         scope: Scope,
@@ -152,9 +152,9 @@ class NormalLayer(ExpFamilyLayer):
         num_channels: int,
         mean: Optional[AbstractParameter] = None,
         variance: Optional[AbstractParameter] = None,
-        part: Optional[AbstractParameter] = None,
+        partition: Optional[AbstractParameter] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels, part=part)
+        super().__init__(scope, num_output_units, num_channels, partition=partition)
         assert (mean is None and variance is None) or (
             mean is not None and variance is not None
         ), "Either both 'mean' and 'variance' has to be specified or none of them"
