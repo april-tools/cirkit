@@ -39,7 +39,7 @@ def topological_ordering(
         num_incomings[n] = len(incomings)
         for ch in incomings:
             outgoings[ch].append(n)
-    in_nodes = filter(lambda x: x[1] == 0, num_incomings.items())
+    in_nodes = map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items()))
 
     ordering = []
     to_visit = deque(in_nodes)

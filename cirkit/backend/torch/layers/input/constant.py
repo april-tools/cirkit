@@ -1,12 +1,13 @@
-from typing import Optional
+from typing import Union
 
+import torch
 from torch import Tensor
 
-from cirkit.backend.torch.reparams import Reparameterization
-from cirkit.layers.input import InputLayer
+from cirkit.backend.torch.layers import TorchInputLayer
+from cirkit.backend.torch.params.base import AbstractTorchParameter
 
 
-class ConstantLayer(InputLayer):
+class TorchConstantLayer(TorchInputLayer):
     """The constant input layer, with no parameters."""
 
     # We still accept any Reparameterization instance for reparam, but it will be ignored.
@@ -14,40 +15,25 @@ class ConstantLayer(InputLayer):
     # pylint: disable-next=too-many-arguments
     def __init__(
         self,
-        *,
-        num_input_units: int,
+        num_variables: int,
         num_output_units: int,
-        arity: int = 1,
-        reparam: Optional[Reparameterization] = None,
-        const_value: float,
+        num_channels: int,
+        value: Union[float, AbstractTorchParameter] = 0.0,
     ) -> None:
         """Init class.
 
         Args:
-            num_input_units (int): The number of input units, i.e. number of channels for variables.
+            num_variables (int): The number of variables.
             num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
-                Defaults to 1.
-            reparam (Optional[Reparameterization], optional): Ignored. This layer has no params. \
-                Defaults to None.
-            const_value (float): The constant value, in linear space.
+            num_channels (int): The number of channels.
+            value (Optional[Reparameterization], optional): Ignored. This layer has no params.
         """
         super().__init__(
-            num_input_units=num_input_units,
+            num_variables=num_variables,
             num_output_units=num_output_units,
-            arity=arity,
-            reparam=None,
+            num_channels=num_channels,
         )
-
-        self.const_value = const_value
-
-    @property
-    def _default_initializer_(self) -> None:
-        """The default inplace initializer for the parameters of this layer.
-
-        No initialization, as ConstantLayer has no parameters.
-        """
-        return None
+        self.value = value
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -58,58 +44,6 @@ class ConstantLayer(InputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, Ko).
         """
-        return self.comp_space.from_linear(x.new_full((), self.const_value)).expand(
-            *x.shape[1:-1], self.num_output_units
-        )
-
-
-class ParameterizedConstantLayer(InputLayer):
-    """The constant input layer, with parameters and optionally a transform function, but constant \
-    w.r.t. input."""
-
-    def __init__(
-        self,
-        *,
-        num_input_units: int,
-        num_output_units: int,
-        arity: int = 1,
-        reparam: Reparameterization,
-    ) -> None:
-        """Init class.
-
-        Args:
-            num_input_units (int): The number of input units, i.e. number of channels for variables.
-            num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
-                Defaults to 1.
-            reparam (Reparameterization): The reparameterization for layer parameters.
-        """
-        super().__init__(
-            num_input_units=num_input_units,
-            num_output_units=num_output_units,
-            arity=arity,
-            reparam=reparam,
-        )
-
-        self.params = reparam
-        self.materialize_params((num_output_units,), dim=())
-
-    @property
-    def _default_initializer_(self) -> None:
-        """The default inplace initializer for the parameters of this layer.
-
-        No initialization, as ParameterizedConstantLayer's parameters should come from other layers.
-        """
-        return None
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (H, *B, Ki).
-
-        Returns:
-            Tensor: The output of this layer, shape (*B, Ko).
-        """
-        # TODO: comp_space?
-        return self.params().expand(*x.shape[1:-1], -1)
+        if isinstance(self.value, float):
+            return torch.full(*x.shape[1:-1], self.num_output_units)
+        return self.value()

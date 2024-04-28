@@ -1,6 +1,6 @@
 from torch import Tensor
 
-from cirkit.backend.torch.reparams import Reparameterization
+from cirkit.backend.torch.params import AbstractTorchParameter
 from cirkit.layers.input import InputLayer
 
 
@@ -14,7 +14,7 @@ class ParameterizedConstantLayer(InputLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: Reparameterization,
+        reparam: AbstractTorchParameter,
     ) -> None:
         """Init class.
 
@@ -23,7 +23,7 @@ class ParameterizedConstantLayer(InputLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (Reparameterization): The reparameterization for layer parameters.
+            reparam (AbstractTorchParameter): The reparameterization for layer parameters.
         """
         super().__init__(
             num_input_units=num_input_units,

@@ -1,6 +1,5 @@
 import itertools
 from collections import defaultdict
-from contextvars import ContextVar
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from cirkit.symbolic.circuit import Circuit, CircuitBlock, CircuitOperation, CircuitOperator
@@ -12,15 +11,9 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.registry import OperatorRegistry
+from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.exceptions import StructuralPropertyError
 from cirkit.utils.scope import Scope
-
-# Context variable holding the current global operator registry.
-# This is updated when entering an operator registry context.
-OPERATOR_REGISTRY: ContextVar[OperatorRegistry] = ContextVar(
-    "OPERATOR_REGISTRY", default=OperatorRegistry.from_default_rules()
-)
 
 
 def integrate(
@@ -76,7 +69,7 @@ def integrate(
         learnable_parameters = {
             pname: PlaceholderParameter(sl, pname) for pname in sl.parameters.keys()
         }
-        int_block = type(sl)(**sl.config, **learnable_parameters)
+        int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **learnable_parameters))
         map_layers[sl] = int_block
         int_block_ins = [map_layers[isl] for isl in sc.layer_inputs(sl)]
         in_blocks[int_block] = int_block_ins
@@ -137,18 +130,18 @@ def multiply(
         rhs_inputs = rhs_sc.layer_inputs(rhs_layer)
         if isinstance(lhs_layer, InputLayer):
             # TODO: generalize product between input and inner layers
-            next_to_multiply = iter([])
+            next_to_multiply = []
         elif isinstance(lhs_layer, SumLayer):
             # TODO: generalize product between input and inner layers
-            next_to_multiply = itertools.product(lhs_inputs, rhs_inputs)
+            next_to_multiply = list(itertools.product(lhs_inputs, rhs_inputs))
         elif isinstance(lhs_layer, ProductLayer):
             # TODO: generalize product such that it can multiply layers of different arity
             #       this is related to the much more relaxed definition of compatibility between circuits
             assert len(lhs_inputs) == len(rhs_inputs)
             # Sort layers based on the scope, such that we can multiply layers with matching scopes
             lhs_inputs = sorted(lhs_inputs, key=lambda sl: sl.scope)
-            rhs_inputs = sorted(lhs_inputs, key=lambda sl: sl.scope)
-            next_to_multiply = zip(lhs_inputs, rhs_inputs)
+            rhs_inputs = sorted(rhs_inputs, key=lambda sl: sl.scope)
+            next_to_multiply = list(zip(lhs_inputs, rhs_inputs))
         else:
             assert False
 

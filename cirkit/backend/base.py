@@ -75,6 +75,14 @@ class CompilerRegistry:
             raise ValueError("The function is not a symbolic parameter compilation rule")
         self._parameter_rules[param_cls] = func
 
+    def retrieve_layer_rule(self, signature: LayerCompilationSign) -> LayerCompilationFunc:
+        return self._layer_rules[signature]
+
+    def retrieve_parameter_rule(
+        self, signature: ParameterCompilationSign
+    ) -> ParameterCompilationFunc:
+        return self._parameter_rules[signature]
+
 
 class AbstractCompiler(ABC):
     def __init__(self, registry: CompilerRegistry, **flags):
@@ -103,6 +111,14 @@ class AbstractCompiler(ABC):
     def add_parameter_rule(self, func: ParameterCompilationFunc):
         self._registry.add_parameter_rule(func)
 
+    def retrieve_layer_rule(self, signature: LayerCompilationSign) -> LayerCompilationFunc:
+        return self._registry.retrieve_layer_rule(signature)
+
+    def retrieve_parameter_rule(
+        self, signature: ParameterCompilationSign
+    ) -> ParameterCompilationFunc:
+        return self._registry.retrieve_parameter_rule(signature)
+
     def compile(self, sc: Circuit) -> Any:
         if self.is_compiled(sc):
             return self.get_compiled_circuit(sc)
@@ -115,7 +131,7 @@ class AbstractCompiler(ABC):
         ...
 
     @abstractmethod
-    def compile_learnable_parameter(self, param: AbstractParameter) -> Any:
+    def compile_parameter(self, parameter: AbstractParameter) -> Any:
         ...
 
     @abstractmethod

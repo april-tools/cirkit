@@ -3,11 +3,11 @@ import math
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.layers.input import ExpFamilyLayer
-from cirkit.backend.torch.reparams import EFProductReparam
+from cirkit.backend.torch.layers.input.ef import TorchExpFamilyLayer
+from cirkit.backend.torch.params import TorchGaussianMeanProductParameter
 
 
-class ProdEFLayer(ExpFamilyLayer):
+class ProdEFLayer(TorchExpFamilyLayer):
     """The product for Exponential Family distribution layers.
 
     Exponential Family dist:
@@ -32,7 +32,7 @@ class ProdEFLayer(ExpFamilyLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: EFProductReparam,
+        reparam: TorchGaussianMeanProductParameter,
     ) -> None:
         """Init class.
 
@@ -41,13 +41,15 @@ class ProdEFLayer(ExpFamilyLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer, i.e., number of variables in the scope. \
                 Defaults to 1.
-            reparam (EFProductReparam): The reparameterization for layer parameters.
+            reparam (TorchGaussianMeanProductParameter): The reparameterization for layer parameters.
             ef1_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the left ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
             ef2_cfg (SymbLayerCfg[ExpFamilyLayer]): The config of the right ExpFamilyLayer for \
                 product, should include a reference to a concretized SymbL for EF.
         """
-        assert isinstance(reparam, EFProductReparam), "Must use a EFProductReparam for ProdEFLayer."
+        assert isinstance(
+            reparam, TorchGaussianMeanProductParameter
+        ), "Must use a EFProductReparam for ProdEFLayer."
 
         self.suff_split_point = math.prod(ef1.suff_stats_shape)
         self.suff_stats_shape = (self.suff_split_point + math.prod(ef2.suff_stats_shape),)

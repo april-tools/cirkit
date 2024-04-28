@@ -2,8 +2,8 @@ from typing import Optional
 
 from torch import Tensor
 
-from cirkit.backend.torch.layers.input import ExpFamilyLayer
-from cirkit.backend.torch.reparams import Reparameterization
+from cirkit.backend.torch.layers.input.ef import TorchExpFamilyLayer
+from cirkit.backend.torch.params import AbstractTorchParameter
 from cirkit.layers.input import InputLayer
 from cirkit.utils import batch_high_order_at
 
@@ -27,8 +27,8 @@ class DiffEFLayer(InputLayer):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        reparam: Optional[Reparameterization] = None,
-        ef_cfg: SymbLayerCfg[ExpFamilyLayer],
+        reparam: Optional[AbstractTorchParameter] = None,
+        ef_cfg: SymbLayerCfg[TorchExpFamilyLayer],
         order: int,
         var_idx: int,
         ch_idx: int,

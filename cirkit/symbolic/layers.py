@@ -94,10 +94,10 @@ class ExpFamilyLayer(InputLayer, ABC):
         scope: Scope,
         num_output_units: int,
         num_channels: int,
-        partition: Optional[AbstractParameter] = None,
+        log_partition: Optional[AbstractParameter] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
-        self.partition = partition
+        self.log_partition = log_partition
 
     @abstractmethod
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -105,7 +105,7 @@ class ExpFamilyLayer(InputLayer, ABC):
 
     @property
     def parameters(self) -> Dict[str, AbstractParameter]:
-        return dict(partition=self.partition)
+        return dict(log_partition=self.log_partition)
 
 
 class CategoricalLayer(ExpFamilyLayer):
@@ -115,17 +115,14 @@ class CategoricalLayer(ExpFamilyLayer):
         num_output_units: int,
         num_channels: int,
         num_categories: int = 2,
-        probs: Optional[AbstractParameter] = None,
-        partition: Optional[AbstractParameter] = None,
+        logits: Optional[AbstractParameter] = None,
+        log_partition: Optional[AbstractParameter] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels, partition=partition)
+        super().__init__(scope, num_output_units, num_channels, log_partition=log_partition)
         self.num_categories = num_categories
-        if probs is None:
-            probs = LogSoftmaxParameter(
-                Parameter(self.num_variables, num_output_units, num_channels, num_categories),
-                axis=-1,
-            )
-        self.probs = probs
+        if logits is None:
+            logits = Parameter(self.num_variables, num_output_units, num_channels, num_categories)
+        self.logits = logits
 
     @property
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -140,7 +137,7 @@ class CategoricalLayer(ExpFamilyLayer):
     @property
     def parameters(self) -> Dict[str, AbstractParameter]:
         params = super().parameters
-        params.update(log_probs=self.probs)
+        params.update(logits=self.logits)
         return params
 
 
@@ -151,20 +148,20 @@ class GaussianLayer(ExpFamilyLayer):
         num_output_units: int,
         num_channels: int,
         mean: Optional[AbstractParameter] = None,
-        variance: Optional[AbstractParameter] = None,
-        partition: Optional[AbstractParameter] = None,
+        stddev: Optional[AbstractParameter] = None,
+        log_partition: Optional[AbstractParameter] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels, partition=partition)
-        assert (mean is None and variance is None) or (
-            mean is not None and variance is not None
+        super().__init__(scope, num_output_units, num_channels, log_partition=log_partition)
+        assert (mean is None and stddev is None) or (
+            mean is not None and stddev is not None
         ), "Either both 'mean' and 'variance' has to be specified or none of them"
-        if mean is None and variance is None:
+        if mean is None and stddev is None:
             mean = Parameter(self.num_variables, num_output_units, num_channels)
-            variance = ScaledSigmoidParameter(
-                Parameter(self.num_variables, num_output_units, num_channels), vmin=1e-5, vmax=1.0
+            stddev = ScaledSigmoidParameter(
+                Parameter(self.num_variables, num_output_units, num_channels), vmin=1e-4, vmax=10.0
             )
         self.mean = mean
-        self.variance = variance
+        self.stddev = stddev
 
     @property
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -173,7 +170,7 @@ class GaussianLayer(ExpFamilyLayer):
     @property
     def parameters(self) -> Dict[str, AbstractParameter]:
         params = super().parameters
-        params.update(mean=self.mean, variance=self.variance)
+        params.update(mean=self.mean, stddev=self.stddev)
         return params
 
 
@@ -194,8 +191,7 @@ class ConstantLayer(InputLayer):
 class ProductLayer(Layer, ABC):
     """The abstract base class for Symolic product layers."""
 
-    def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
-        num_output_units = ProductLayer.num_prod_units(num_input_units, arity)
+    def __init__(self, scope: Scope, num_input_units: int, num_output_units: int, arity: int = 2):
         super().__init__(scope, num_input_units, num_output_units, arity)
 
     @property
@@ -206,22 +202,30 @@ class ProductLayer(Layer, ABC):
             "arity": self.arity,
         }
 
-    @staticmethod
-    @abstractmethod
-    def num_prod_units(num_units: int, arity: int) -> int:
-        ...
-
 
 class HadamardLayer(ProductLayer):
     """The Symolic Hadamard product layer."""
 
+    def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
+        super().__init__(
+            scope, num_input_units, HadamardLayer.num_prod_units(num_input_units), arity=arity
+        )
+
     @staticmethod
-    def num_prod_units(in_num_units: int, arity: int) -> int:
+    def num_prod_units(in_num_units: int) -> int:
         return in_num_units
 
 
 class KroneckerLayer(ProductLayer):
     """The Symolic Kronecker product layer."""
+
+    def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
+        super().__init__(
+            scope,
+            num_input_units,
+            KroneckerLayer.num_prod_units(num_input_units, arity),
+            arity=arity,
+        )
 
     @staticmethod
     def num_prod_units(in_num_units: int, arity: int) -> int:

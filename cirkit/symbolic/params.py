@@ -19,6 +19,7 @@ class Parameter(AbstractParameter):
     def __init__(self, *shape: int):
         self._shape = tuple(shape)
 
+    @property
     def shape(self) -> Tuple[int, ...]:
         return self._shape
 
@@ -65,10 +66,41 @@ class HadamardParameter(BinaryOpParameter):
 
 
 class KroneckerParameter(BinaryOpParameter):
+    def __init__(self, p1: AbstractParameter, p2: AbstractParameter) -> None:
+        assert len(p1.shape) == len(p2.shape)
+        super().__init__(p1, p2)
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return tuple(self.p1.shape[i] * self.p2.shape[i] for i in range(len(self.p1.shape)))
+
+
+class OuterProductParameter(BinaryOpParameter):
     def __init__(self, p1: AbstractParameter, p2: AbstractParameter, axis: int = -1) -> None:
         super().__init__(p1, p2)
         assert len(p1.shape) == len(p2.shape)
-        assert p1.shape[:-1] == p2.shape[:-1]
+        axis = axis if axis >= 0 else axis + len(p1.shape)
+        assert 0 <= axis < len(p1.shape)
+        assert p1.shape[:axis] == p2.shape[:axis]
+        assert p1.shape[axis + 1 :] == p2.shape[axis + 1 :]
+        self.p1 = p1
+        self.p2 = p2
+        self.axis = axis
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(axis=self.axis)
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        cross_dim = self.p1.shape[self.axis] * self.p2.shape[self.axis]
+        return *self.p1.shape[: self.axis], cross_dim, *self.p1.shape[self.axis + 1 :]
+
+
+class OuterSumParameter(BinaryOpParameter):
+    def __init__(self, p1: AbstractParameter, p2: AbstractParameter, axis: int = -1) -> None:
+        super().__init__(p1, p2)
+        assert len(p1.shape) == len(p2.shape)
         axis = axis if axis >= 0 else axis + len(p1.shape)
         assert 0 <= axis < len(p1.shape)
         self.p1 = p1
@@ -82,7 +114,7 @@ class KroneckerParameter(BinaryOpParameter):
     @cached_property
     def shape(self) -> Tuple[int, ...]:
         cross_dim = self.p1.shape[self.axis] * self.p2.shape[self.axis]
-        return *self.p1.shape[: self.axis], cross_dim, *self.p1.shape[self.axis + 1]
+        return *self.p1.shape[: self.axis], cross_dim, *self.p1.shape[self.axis + 1 :]
 
 
 class EntrywiseOpParameter(UnaryOpParameter, ABC):
@@ -110,7 +142,11 @@ class ReduceOpParameter(UnaryOpParameter, ABC):
         return dict(axis=self.axis)
 
 
-class ExponentialParameter(EntrywiseOpParameter):
+class ExpParameter(EntrywiseOpParameter):
+    ...
+
+
+class LogParameter(EntrywiseOpParameter):
     ...
 
 

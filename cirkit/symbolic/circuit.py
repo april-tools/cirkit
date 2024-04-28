@@ -28,7 +28,7 @@ class CircuitOperator(AbstractCircuitOperator):
 
 @dataclass(frozen=True)
 class CircuitOperation:
-    """The Symolic operation applied on a SymCircuit."""
+    """The Symbolic operation applied on a SymCircuit."""
 
     operator: AbstractCircuitOperator
     operands: Tuple["Circuit", ...]
@@ -90,7 +90,7 @@ class CircuitBlock:
 
 
 class Circuit:
-    """The symolic representation of a circuit."""
+    """The symbolic representation of a circuit."""
 
     def __init__(
         self,
@@ -121,11 +121,17 @@ class Circuit:
     ):
         # Unwrap blocks into layers (as well as their connections)
         layers = [l for b in blocks for l in b.layers]
-        in_layers = {b.input: [bi.output for bi in b_ins] for b, b_ins in in_blocks.items()}
-        out_layers = {b.output: [bo.input for bo in b_outs] for b, b_outs in out_blocks.items()}
+        in_layers = defaultdict(list)
+        out_layers = defaultdict(list)
+
+        # Retrive connections between layers from connections between circuit blocks
         for b in blocks:
-            in_layers.update(b.layer_inputs)
-            out_layers.update(b.layer_outputs)
+            in_layers[b.input].extend(bi.output for bi in in_blocks[b])
+            out_layers[b.output].extend(bo.input for bo in out_blocks[b])
+            for l, l_ins in b.layer_inputs:
+                in_layers[l].extend(l_ins)
+            for l, l_outs in b.layer_outputs:
+                out_layers[l].extend(l_outs)
         # Build the circuit and set the operation
         return cls(scope, layers, in_layers, out_layers, operation=operation)
 
@@ -151,8 +157,10 @@ class Circuit:
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
                 input_sl = input_factory(rgn.scope, num_input_units, num_channels)
-                num_sum_units = num_classes if rgn in region_graph.output_nodes else num_sum_units
-                sum_sl = sum_factory(rgn.scope, num_input_units, num_sum_units)
+                num_output_units = (
+                    num_classes if rgn in region_graph.output_nodes else num_sum_units
+                )
+                sum_sl = sum_factory(rgn.scope, num_input_units, num_output_units)
                 layers.append(input_sl)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = [input_sl]
@@ -168,12 +176,17 @@ class Circuit:
                 rgn_to_layers[rgn] = prod_sl
             elif isinstance(rgn, RegionNode):  # Inner region node
                 sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
-                num_input_units = sum_inputs[0].num_output_units
-                num_sum_units = num_classes if rgn in region_graph.output_nodes else num_sum_units
+                num_output_units = (
+                    num_classes if rgn in region_graph.output_nodes else num_sum_units
+                )
                 if len(sum_inputs) == 1:  # Region node being partitioned in one way
-                    sum_sl = sum_factory(rgn.scope, num_input_units, num_sum_units)
+                    sum_sl = sum_factory(
+                        rgn.scope, sum_inputs[0].num_output_units, num_output_units
+                    )
                 else:  # Region node being partitioned in multiple way -> add "mixing" layer
-                    sum_sl = mixing_factory(rgn.scope, num_input_units, len(sum_inputs))
+                    sum_sl = mixing_factory(
+                        rgn.scope, sum_inputs[0].num_output_units, len(sum_inputs)
+                    )
                 layers.append(sum_sl)
                 in_layers[sum_sl] = sum_inputs
                 for in_sl in sum_inputs:
@@ -199,7 +212,7 @@ class Circuit:
             set(self.output_layers), incomings_fn=lambda sl: self._in_layers[sl]
         )
         if ordering is None:
-            raise ValueError("The given Symolic circuit has at least one layers cycle")
+            raise ValueError("The given symbolic circuit has at least one layers cycle")
         return ordering
 
     ##################################### Structural properties ####################################
@@ -240,7 +253,7 @@ class Circuit:
         if not self.is_decomposable:
             return False
         # TODO
-        return False
+        return True
 
     #######################################    Layer views    ######################################
     # These are iterable views of the nodes in the SymC, and the topological order is guaranteed
@@ -284,5 +297,5 @@ def pipeline_topological_ordering(roots: Set[Circuit]) -> List[Circuit]:
         roots, incomings_fn=lambda sc: () if sc.operation is None else sc.operation.operands
     )
     if ordering is None:
-        raise ValueError("The given Symolic circuits pipeline has at least one cycle")
+        raise ValueError("The given symbolic circuits pipeline has at least one cycle")
     return ordering

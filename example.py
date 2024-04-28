@@ -5,13 +5,13 @@ from torch import Tensor
 
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.layers import TorchInputLayer
-from cirkit.backend.torch.reparams import Reparameterization
+from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.pipeline import PipelineContext, compile, integrate, multiply, differentiate
 import cirkit.symbolic.functional as SF
 from cirkit.symbolic.circuit import Circuit, CircuitBlock
 from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, KroneckerLayer, InputLayer, \
     LayerOperation, MixingLayer, PlaceholderParameter
-from cirkit.symbolic.params import SoftmaxParameter, AbstractParameter, Parameter, Parameterization, KroneckerParameter
+from cirkit.symbolic.params import SoftmaxParameter, AbstractParameter, Parameter, Parameterization, OuterProductParameter
 from cirkit.templates.region_graph.algorithms import FullyFactorized, QuadTree
 from cirkit.utils.scope import Scope
 
@@ -198,17 +198,17 @@ def lib_extension() -> None:
     class TorchPolyGaussianLayer(TorchInputLayer):
         def __init__(
             self,
-            num_vars: int,
+            num_variables: int,
             num_channels: int,
             num_output_units: int,
             *,
             degree: int,
-            coeffs: Reparameterization
+            coeffs: AbstractTorchParameter
         ):
             super().__init__(
-                num_input_units=num_channels,
+                num_variables=num_variables,
                 num_output_units=num_output_units,
-                arity=num_vars
+                num_channels=num_channels
             )
             self.degree = degree
             self.coeffs = coeffs
@@ -261,7 +261,7 @@ def lib_extension() -> None:
             # The Torch compiler comes with a utility method for compiling symbolic parameters
             # In other words, the compiler is responsible for parameter sharing
             # E.g., 'coeffs' is the kronecker product of other 'coeffs' (see below)
-            coeffs=compiler.compile_learnable_parameter(sl.coeffs)
+            coeffs=compiler.compile_parameter(sl.coeffs)
         )
 
     # # # # # # # # # # # # # # # # # # # # # #
@@ -286,7 +286,7 @@ def lib_extension() -> None:
             num_output_units=lhs.num_output_units * rhs.num_output_units,
             num_channels=lhs.num_channels,
             degree=lhs.degree * rhs.degree + 1,  # Record the change in hyperparameters or other static attributes ...
-            coeffs=KroneckerParameter(  # ... as well as the change over the learnable parameters
+            coeffs=OuterProductParameter(  # ... as well as the change over the learnable parameters
                 # Each placeholder will "tell the compiler" to re-use the parameters named 'coeffs',
                 # which are stored (or referenced elsewhere) in the operand layers 'lhs' and 'rhs'
                 PlaceholderParameter(lhs, name='coeffs'),
@@ -298,13 +298,13 @@ def lib_extension() -> None:
     # # # # # # # # # # # # # # # # # # # # # #
     # High-level APIs
     # To use the above symbolic product protocol, we have to register it as a symbolic operator
-    ctx.register_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
+    ctx.add_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
     with ctx:
         tr = multiply(tp, tq)  # This will call ctx.compile(product(p, q)) internally
 
     # # # # # # # # # # # # # # # # # # # # # #
     # Lower-level APIs (i.e., explicit manipulation of symbolic circuits and uses the symbolic functional APIs)
-    ctx.register_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
+    ctx.add_operator_rule(LayerOperation.MULTIPLICATION, multiply_poly_gaussian)
     with ctx:
         r = SF.multiply(p, q)  # No need to specify anything here, the with statement will take care of the new protocols
         tr = compile(r)  # We do not need to be inside the context for compilation, as the protocol above is symbolic

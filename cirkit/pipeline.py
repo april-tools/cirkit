@@ -65,8 +65,8 @@ class PipelineContext(AbstractContextManager):
     ) -> "PipelineContext":
         ...
 
-    def register_operator_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
-        self._op_registry.register_rule(op, func)
+    def add_operator_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
+        self._op_registry.add_rule(op, func)
 
     def add_layer_compilation_rule(self, func: LayerCompilationFunc):
         self._compiler.add_layer_rule(func)

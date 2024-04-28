@@ -1,11 +1,9 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Callable, ClassVar, Optional, Sequence, Type, Union
+from typing import ClassVar, Type
 
-import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.reparams import Reparameterization
 from cirkit.backend.torch.semiring import ComputationSapce
 
 
@@ -17,22 +15,13 @@ class TorchLayer(nn.Module, ABC):
     """The computational space for all Layers."""
 
     # DISABLE: reparam is not used in the base class. It's only here for the interface.
-    def __init__(
-        self,
-        *,
-        num_input_units: int,
-        num_output_units: int,
-        arity: int = 0,
-        reparam: Optional[Reparameterization] = None,  # pylint: disable=unused-argument
-    ) -> None:
+    def __init__(self, *, num_input_units: int, num_output_units: int, arity: int = 0) -> None:
         """Init class.
 
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer. Defaults to 0.
-            reparam (Optional[Reparameterization], optional): The reparameterization for layer \
-                parameters, can be None if the layer has no params. Defaults to None.
+            arity (int, optional): The arity of the layer. Defaults to 0
         """
         super().__init__()
         assert num_input_units > 0, "The number of input units must be positive."
@@ -42,53 +31,11 @@ class TorchLayer(nn.Module, ABC):
         self.num_output_units = num_output_units
         self.arity = arity
 
-    # We enforce subclasses to implement this property so that we don't forget it. For layers that
-    # don't have parameters, just return None.
-    @property
-    @abstractmethod
-    def _default_initializer_(self) -> Optional[Callable[[Tensor], Tensor]]:
-        """The default inplace initializer for the parameters of this layer.
-
-        The function should modify a Tensor inplace and also return its value. Or use None for no \
-        initialization.
-        """
-
-    def materialize_params(
-        self, shape: Sequence[int], /, *, dim: Union[int, Sequence[int]]
-    ) -> None:
-        """Wrap self.params.materialize() with initializer_=self._default_initializer_, if \
-        self.params is a valid Reparameterization.
-
-        For details of the args and kwargs, see Reparameterization.materialize().
-
-        Args:
-            shape (Sequence[int]): The shape for self.params.
-            dim (Union[int, Sequence[int]]): The dimension(s) along which the normalization will \
-                be applied.
-        """
-        # IGNORE: getattr gives Any.
-        if not isinstance(
-            self_params := getattr(self, "params", None), Reparameterization  # type: ignore[misc]
-        ):
-            return
-
-        self_params.materialize(shape, dim=dim, initializer_=self._default_initializer_)
-
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        """Reset parameters with default initialization."""
-        initializer_ = self._default_initializer_
-        for child in self.children():  # Only immediate children, not all modules().
-            if isinstance(child, Reparameterization) and initializer_ is not None:
-                child.initialize(initializer_)
-            if isinstance(child, TorchLayer):  # Recursively reset with their own initializer_.
-                child.reset_parameters()
-
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property
-    def num_params(self) -> int:
+    def num_parameters(self) -> int:
         """The number of params."""
-        return sum(param.numel() for param in self.parameters())
+        return sum(p.numel() for p in self.parameters())
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property

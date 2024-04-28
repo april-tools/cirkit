@@ -1,8 +1,7 @@
-from typing import Dict, Iterable, List, Optional
+from typing import Iterable, List, Optional
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
-    AbstractLayerOperator,
     CategoricalLayer,
     ConstantLayer,
     DenseLayer,
@@ -11,49 +10,53 @@ from cirkit.symbolic.layers import (
     HadamardLayer,
     IndexLayer,
     KroneckerLayer,
-    LayerOperation,
     MixingLayer,
     PlaceholderParameter,
 )
 from cirkit.symbolic.params import (
     ConstantParameter,
+    ExpParameter,
     KroneckerParameter,
+    LogParameter,
     MeanNormalProduct,
+    OuterProductParameter,
+    OuterSumParameter,
     PartitionGaussianProduct,
     ReduceSumParameter,
     VarianceNormalProduct,
 )
-from cirkit.symbolic.registry import LayerOperatorFunc
 from cirkit.utils.scope import Scope
 
 
 def integrate_ef_layer(sl: ExpFamilyLayer, scope: Optional[Iterable[int]] = None) -> CircuitBlock:
     scope = Scope(scope) if scope is not None else sl.scope
     assert sl.scope == scope
-    if sl.partition is None:
+    if sl.log_partition is None:
         sv = ConstantParameter(1.0, shape=(sl.num_output_units,))
     else:
-        sv = PlaceholderParameter(sl, name="partition")
+        sv = PlaceholderParameter(sl, name="log_partition")
     sl = ConstantLayer(sl.scope, sl.num_output_units, sl.num_channels, value=sv)
     return CircuitBlock.from_layer(sl)
 
 
 def multiply_categorical_layers(lhs: CategoricalLayer, rhs: CategoricalLayer) -> CircuitBlock:
+    assert lhs.num_variables == rhs.num_variables
     assert lhs.num_channels == rhs.num_channels
-    sl_probs = KroneckerParameter(
-        PlaceholderParameter(lhs, name="probs"), PlaceholderParameter(rhs, name="probs"), axis=2
+    sl_logits = OuterSumParameter(
+        PlaceholderParameter(lhs, name="logits"), PlaceholderParameter(rhs, name="logits"), axis=2
     )
     sl = CategoricalLayer(
         lhs.scope | rhs.scope,
         lhs.num_output_units * rhs.num_input_units,
         num_channels=lhs.num_channels,
-        probs=sl_probs,
-        partition=ReduceSumParameter(sl_probs, axis=3),
+        logits=sl_logits,
+        log_partition=LogParameter(ReduceSumParameter(ExpParameter(sl_logits), axis=3)),
     )
     return CircuitBlock.from_layer(sl)
 
 
 def multiply_gaussian_layers(lhs: GaussianLayer, rhs: GaussianLayer) -> CircuitBlock:
+    assert lhs.num_variables == rhs.num_variables
     assert lhs.num_channels == rhs.num_channels
     mean_lhs = PlaceholderParameter(lhs, name="mean")
     mean_rhs = PlaceholderParameter(rhs, name="mean")
@@ -64,8 +67,8 @@ def multiply_gaussian_layers(lhs: GaussianLayer, rhs: GaussianLayer) -> CircuitB
         lhs.num_output_units * rhs.num_input_units,
         num_channels=lhs.num_channels,
         mean=MeanNormalProduct(mean_lhs, mean_rhs, variance_lhs, variance_rhs),
-        variance=VarianceNormalProduct(variance_lhs, variance_rhs),
-        partition=PartitionGaussianProduct(mean_lhs, mean_rhs, variance_lhs, variance_rhs),
+        stddev=VarianceNormalProduct(variance_lhs, variance_rhs),
+        log_partition=PartitionGaussianProduct(mean_lhs, mean_rhs, variance_lhs, variance_rhs),
     )
     return CircuitBlock.from_layer(sl)
 
@@ -108,26 +111,8 @@ def multiply_mixing_layers(lhs: MixingLayer, rhs: MixingLayer) -> CircuitBlock:
         lhs.scope | rhs.scope,
         lhs.num_input_units * rhs.num_input_units,
         lhs.arity * rhs.arity,
-        weight=KroneckerParameter(
+        weight=OuterProductParameter(
             PlaceholderParameter(lhs, name="weight"), PlaceholderParameter(rhs, name="weight")
         ),
     )
     return CircuitBlock.from_layer(sl)
-
-
-DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
-
-DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
-    LayerOperation.INTEGRATION: [
-        integrate_ef_layer,
-    ],
-    LayerOperation.DIFFERENTIATION: [],
-    LayerOperation.MULTIPLICATION: [
-        multiply_categorical_layers,
-        multiply_gaussian_layers,
-        multiply_hadamard_layers,
-        multiply_kronecker_layers,
-        multiply_dense_layers,
-        multiply_mixing_layers,
-    ],
-}

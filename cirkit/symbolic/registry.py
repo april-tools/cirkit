@@ -1,20 +1,41 @@
-import itertools
+from collections import defaultdict
 from contextlib import AbstractContextManager
-from contextvars import Token
+from contextvars import ContextVar, Token
 from types import TracebackType
-from typing import Callable, Dict, Iterable, Optional, Tuple, Type
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type
 
-from cirkit.symbolic.functional import OPERATOR_REGISTRY
-from cirkit.symbolic.layers import AbstractLayerOperator, Layer
+from cirkit.symbolic.circuit import CircuitBlock
+from cirkit.symbolic.layers import AbstractLayerOperator, Layer, LayerOperation
 from cirkit.symbolic.operators import (
-    DEFAULT_COMMUTATIVE_OPERATORS,
-    DEFAULT_OPERATOR_RULES,
-    CircuitBlock,
+    integrate_ef_layer,
+    multiply_categorical_layers,
+    multiply_dense_layers,
+    multiply_gaussian_layers,
+    multiply_hadamard_layers,
+    multiply_kronecker_layers,
+    multiply_mixing_layers,
 )
 
 LayerOperatorSign = Tuple[Type[Layer], ...]
 LayerOperatorFunc = Callable[..., CircuitBlock]
 LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
+
+
+DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
+DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
+    LayerOperation.INTEGRATION: [
+        integrate_ef_layer,
+    ],
+    LayerOperation.DIFFERENTIATION: [],
+    LayerOperation.MULTIPLICATION: [
+        multiply_categorical_layers,
+        multiply_gaussian_layers,
+        multiply_hadamard_layers,
+        multiply_kronecker_layers,
+        multiply_dense_layers,
+        multiply_mixing_layers,
+    ],
+}
 
 
 class OperatorNotFound(Exception):
@@ -39,7 +60,7 @@ class OperatorSignatureNotFound(Exception):
 class OperatorRegistry(AbstractContextManager):
     def __init__(self):
         # The symbolic operator rule specifications, for each symbolic operator over layers
-        self._rules: Dict[AbstractLayerOperator, LayerOperatorSpecs] = {}
+        self._rules: Dict[AbstractLayerOperator, LayerOperatorSpecs] = defaultdict(dict)
 
         # The token used to restore the operator registry context
         self._token: Optional[Token[OperatorRegistry]] = None
@@ -49,7 +70,7 @@ class OperatorRegistry(AbstractContextManager):
         registry = cls()
         for op, funcs in DEFAULT_OPERATOR_RULES.items():
             for f in funcs:
-                registry.register_rule(op, f, commutative=op in DEFAULT_COMMUTATIVE_OPERATORS)
+                registry.add_rule(op, f, commutative=op in DEFAULT_COMMUTATIVE_OPERATORS)
         return registry
 
     @property
@@ -105,7 +126,7 @@ class OperatorRegistry(AbstractContextManager):
                 return f
         raise OperatorSignatureNotFound(*signature)
 
-    def register_rule(
+    def add_rule(
         self,
         op: AbstractLayerOperator,
         func: LayerOperatorFunc,
@@ -118,9 +139,14 @@ class OperatorRegistry(AbstractContextManager):
         del args["return"]
         arg_names = list(args.keys())
         arg_types = [args[a] for a in arg_names]
-        arg_layer_types = list(filter(lambda x: issubclass(x[1], Layer), enumerate(arg_types)))
-        arg_layer_types_locs, signature = list(zip(*arg_layer_types))
-        if arg_layer_types_locs != list(range(len(arg_layer_types_locs))):
+        print(arg_types)
+        arg_layer_types = list(
+            filter(
+                lambda x: isinstance(x[1], type) and issubclass(x[1], Layer), enumerate(arg_types)
+            )
+        )
+        arg_layer_types_locs, signature = zip(*arg_layer_types)
+        if arg_layer_types_locs != tuple(range(len(arg_layer_types_locs))):
             raise ValueError(
                 "The layer operands should be the first arguments of the operator rule function"
             )
@@ -142,3 +168,10 @@ class OperatorRegistry(AbstractContextManager):
                     self._rules[op][(rhs_cls, lhs_cls)] = lambda rhs, lhs: func(lhs, rhs)
         else:  # n-ary operator
             self._rules[op][signature] = func
+
+
+# Context variable holding the current global operator registry.
+# This is updated when entering an operator registry context.
+OPERATOR_REGISTRY: ContextVar[OperatorRegistry] = ContextVar(
+    "OPERATOR_REGISTRY", default=OperatorRegistry.from_default_rules()
+)

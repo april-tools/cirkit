@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from cirkit.backend.torch.reparams import Reparameterization
+from cirkit.backend.torch.params import AbstractTorchParameter
 from cirkit.layers.input import InputLayer
 
 
@@ -13,7 +13,7 @@ class UnivariateInputLayer(InputLayer):
         num_input_units: Literal[1] = 1,
         num_output_units: int,
         arity: Literal[1] = 1,
-        reparam: Optional[Reparameterization] = None,
+        reparam: Optional[AbstractTorchParameter] = None,
     ) -> None:
         """Init class.
 
