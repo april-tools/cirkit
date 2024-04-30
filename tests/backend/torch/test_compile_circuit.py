@@ -33,20 +33,20 @@ def test_compile_integrate_pc(normalized: bool):
     tc: TensorizedCircuit = compiler.get_compiled_circuit(sc)
     assert isinstance(tc, TensorizedCircuit) and isinstance(int_tc, TensorizedConstantCircuit)
 
-    log_z = int_tc()  # compute the partition function
-    assert log_z.shape == (1, 1)
-    log_z = log_z.squeeze()
+    z = int_tc()  # compute the partition function
+    assert z.shape == (1, 1)
+    z = z.squeeze()
     if normalized:
-        assert isclose(log_z.item(), 1.0)
+        assert isclose(z.item(), 1.0)
     else:
-        assert not isclose(log_z.item(), 1.0)
+        assert not isclose(z.item(), 1.0)
 
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
     assert worlds.shape == (2 ** num_variables, 1, num_variables)
-    log_scores = tc(worlds)
-    assert log_scores.shape == (2 ** num_variables, 1, 1)
-    log_scores = log_scores.squeeze()
+    scores = tc(worlds)
+    assert scores.shape == (2 ** num_variables, 1, 1)
+    scores = scores.squeeze()
     if normalized:
-        assert isclose(torch.logsumexp(log_scores, dim=0), 0.0)
+        assert isclose(torch.sum(scores), 1.0)
     else:
-        assert isclose(torch.logsumexp(log_scores, dim=0), log_z)
+        assert isclose(torch.sum(scores), z)
