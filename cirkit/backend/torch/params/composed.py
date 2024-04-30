@@ -43,7 +43,7 @@ class TorchComposedParameter(AbstractTorchParameter, Generic[Unpack[Ts]]):
         self.func = func
         self.inv_func = inv_func
 
-    @cached_property
+    @property
     @abstractmethod
     def shape(self) -> Tuple[int, ...]:
         ...
@@ -105,7 +105,7 @@ class TorchComposedParameter(AbstractTorchParameter, Generic[Unpack[Ts]]):
         return self.func(*params)
 
 
-class TorchUnaryOpParameter(TorchComposedParameter[AbstractTorchParameter]):
+class TorchUnaryOpParameter(TorchComposedParameter[AbstractTorchParameter], ABC):
     """The base class for unary composed reparameterization."""
 
     def __init__(
@@ -130,7 +130,7 @@ class TorchUnaryOpParameter(TorchComposedParameter[AbstractTorchParameter]):
 
 
 class TorchBinaryOpParameter(
-    TorchComposedParameter[AbstractTorchParameter, AbstractTorchParameter]
+    TorchComposedParameter[AbstractTorchParameter, AbstractTorchParameter], ABC
 ):
     """The base class for binary composed reparameterization."""
 
@@ -156,6 +156,40 @@ class TorchBinaryOpParameter(
         super().__init__(param1, param2, func=func)
 
 
+class TorchOuterSumParameter(TorchBinaryOpParameter):
+    def __init__(
+        self, param1: AbstractTorchParameter, param2: AbstractTorchParameter, dim: int = -1
+    ) -> None:
+        """Init class.
+
+        Args:
+            param1 (AbstractTorchParameter): The first input param to be composed.
+            param2 (AbstractTorchParameter): The second input param to be composed.
+        """
+        assert len(param1.shape) == len(param2.shape)
+        dim = dim if dim >= 0 else dim + len(param1.shape)
+        assert 0 <= dim < len(param1.shape)
+        super().__init__(param1, param2, func=self._func)
+        self.dim = dim
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            *self.params[0].shape[: self.dim],
+            self.params[0].shape[self.dim] * self.params[1].shape[self.dim],
+            *self.params[0].shape[self.dim + 1 :],
+        )
+
+    def _func(self, x1: Tensor, x2: Tensor) -> Tensor:
+        # x1: (d1, d2, ..., dk1, ... dn)
+        # x2: (d1, d2, ..., dk2, ... dn)
+        x1 = x1.unsqueeze(self.dim)  # (d1, d2, ..., 1, dk1, ..., dn)
+        x2 = x2.unsqueeze(self.dim + 1)  # (d1, d2, ..., dk1, 1, ...., dn)
+        x = x1 + x2  # (d1, d2, ..., dk1, dk2, ..., dn)
+        x = x.view(self.shape)  # (d1, d2, ..., dk1 * dk2, ..., dn)
+        return x
+
+
 class TorchHadamardParameter(TorchBinaryOpParameter):
     """Hadamard product reparameterization."""
 
@@ -167,15 +201,14 @@ class TorchHadamardParameter(TorchBinaryOpParameter):
             param2 (AbstractTorchParameter): The second input param to be composed.
         """
         assert param1.shape == param2.shape
-        super().__init__(param1, param2, func=TorchHadamardParameter._forward)
+        super().__init__(param1, param2, func=self._func)
 
-    @property
+    @cached_property
     def shape(self) -> Tuple[int, ...]:
         return self.params[0].shape
 
-    @staticmethod
-    def _forward(x1: Tensor, x2: Tensor) -> Tensor:
-        ...
+    def _func(self, x1: Tensor, x2: Tensor) -> Tensor:
+        return x1 * x2
 
 
 class TorchKroneckerParameter(TorchBinaryOpParameter):
@@ -188,7 +221,15 @@ class TorchKroneckerParameter(TorchBinaryOpParameter):
             param1 (AbstractTorchParameter): The first input param to be composed.
             param2 (AbstractTorchParameter): The second input param to be composed.
         """
+        assert len(param1.shape) == len(param2.shape)
         super().__init__(param1, param2, func=torch.kron)
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return tuple(
+            self.params[0].shape[i] * self.params[1].shape[i]
+            for i in range(len(self.params[0].shape))
+        )
 
 
 class TorchAffineParameter(TorchUnaryOpParameter):
@@ -369,7 +410,7 @@ class TorchReduceOpParamter(TorchUnaryOpParameter, ABC):
         return *self.params[0].shape[: self.dim], *self.params[0].shape[self.dim + 1 :]
 
 
-class TorchElementwiseReduceOpParameter(TorchUnaryOpParameter, ABC):
+class TorchElementwiseReduceOpParameter(TorchUnaryOpParameter):
     """The base class for normalized reparameterization."""
 
     # NOTE: This class only serves as the common base of all normalized reparams, but include

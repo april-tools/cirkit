@@ -20,7 +20,7 @@ class TorchParameter(AbstractTorchParameter):
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.ptensor.shape
+        return tuple(self.ptensor.shape)
 
     @property
     def dtype(self) -> torch.dtype:

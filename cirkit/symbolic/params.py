@@ -48,41 +48,41 @@ class UnaryOpParameter(OpParameter, ABC):
 
 
 class BinaryOpParameter(OpParameter, ABC):
-    def __init__(self, p1: AbstractParameter, p2: AbstractParameter) -> None:
-        self.p1 = p1
-        self.p2 = p2
+    def __init__(self, opd1: AbstractParameter, opd2: AbstractParameter) -> None:
+        self.opd1 = opd1
+        self.opd2 = opd2
 
 
 class HadamardParameter(BinaryOpParameter):
-    def __init__(self, p1: AbstractParameter, p2: AbstractParameter) -> None:
-        assert p1.shape == p2.shape
-        super().__init__(p1, p2)
+    def __init__(self, opd1: AbstractParameter, opd2: AbstractParameter) -> None:
+        assert opd1.shape == opd2.shape
+        super().__init__(opd1, opd2)
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return self.p1.shape
+        return self.opd1.shape
 
 
 class KroneckerParameter(BinaryOpParameter):
-    def __init__(self, p1: AbstractParameter, p2: AbstractParameter) -> None:
-        assert len(p1.shape) == len(p2.shape)
-        super().__init__(p1, p2)
+    def __init__(self, opd1: AbstractParameter, opd2: AbstractParameter) -> None:
+        assert len(opd1.shape) == len(opd2.shape)
+        super().__init__(opd1, opd2)
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return tuple(self.p1.shape[i] * self.p2.shape[i] for i in range(len(self.p1.shape)))
+        return tuple(self.opd1.shape[i] * self.opd2.shape[i] for i in range(len(self.opd1.shape)))
 
 
 class OuterProductParameter(BinaryOpParameter):
-    def __init__(self, p1: AbstractParameter, p2: AbstractParameter, axis: int = -1) -> None:
-        super().__init__(p1, p2)
-        assert len(p1.shape) == len(p2.shape)
-        axis = axis if axis >= 0 else axis + len(p1.shape)
-        assert 0 <= axis < len(p1.shape)
-        assert p1.shape[:axis] == p2.shape[:axis]
-        assert p1.shape[axis + 1 :] == p2.shape[axis + 1 :]
-        self.p1 = p1
-        self.p2 = p2
+    def __init__(self, opd1: AbstractParameter, opd2: AbstractParameter, axis: int = -1) -> None:
+        super().__init__(opd1, opd2)
+        assert len(opd1.shape) == len(opd2.shape)
+        axis = axis if axis >= 0 else axis + len(opd1.shape)
+        assert 0 <= axis < len(opd1.shape)
+        assert opd1.shape[:axis] == opd2.shape[:axis]
+        assert opd1.shape[axis + 1 :] == opd2.shape[axis + 1 :]
+        self.p1 = opd1
+        self.p2 = opd2
         self.axis = axis
 
     @property
@@ -96,13 +96,13 @@ class OuterProductParameter(BinaryOpParameter):
 
 
 class OuterSumParameter(BinaryOpParameter):
-    def __init__(self, p1: AbstractParameter, p2: AbstractParameter, axis: int = -1) -> None:
-        super().__init__(p1, p2)
-        assert len(p1.shape) == len(p2.shape)
-        axis = axis if axis >= 0 else axis + len(p1.shape)
-        assert 0 <= axis < len(p1.shape)
-        self.p1 = p1
-        self.p2 = p2
+    def __init__(self, opd1: AbstractParameter, opd2: AbstractParameter, axis: int = -1) -> None:
+        super().__init__(opd1, opd2)
+        assert len(opd1.shape) == len(opd2.shape)
+        axis = axis if axis >= 0 else axis + len(opd1.shape)
+        assert 0 <= axis < len(opd1.shape)
+        self.p1 = opd1
+        self.p2 = opd2
         self.axis = axis
 
     @property

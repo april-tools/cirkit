@@ -23,6 +23,7 @@ from cirkit.backend.torch.params.composed import (
     TorchExpParameter,
     TorchKroneckerParameter,
     TorchLogSoftmaxParameter,
+    TorchOuterSumParameter,
     TorchReduceLSEParameter,
     TorchReduceSumParameter,
     TorchSoftmaxParameter,
@@ -42,7 +43,9 @@ from cirkit.symbolic.layers import (
 from cirkit.symbolic.params import (
     ConstantParameter,
     ExpParameter,
+    KroneckerParameter,
     LogSoftmaxParameter,
+    OuterSumParameter,
     Parameter,
     ReduceLSEParameter,
     ReduceSumParameter,
@@ -109,12 +112,22 @@ def compile_reduce_lse_parameter(
     return TorchReduceLSEParameter(opd, dim=p.axis)
 
 
+def compile_outer_sum_parameter(
+    compiler: "TorchCompiler", p: OuterSumParameter, init_func: Optional[InitializerFunc] = None
+) -> TorchOuterSumParameter:
+    opd1 = compiler.compile_parameter(p.opd1)
+    opd2 = compiler.compile_parameter(p.opd2)
+    return TorchOuterSumParameter(opd1, opd2, dim=p.axis)
+
+
 def compile_kronecker_parameter(
     compiler: "TorchCompiler",
-    p: TorchKroneckerParameter,
+    p: KroneckerParameter,
     init_func: Optional[InitializerFunc] = None,
 ) -> TorchKroneckerParameter:
-    ...
+    opd1 = compiler.compile_parameter(p.opd1)
+    opd2 = compiler.compile_parameter(p.opd2)
+    return TorchKroneckerParameter(opd1, opd2)
 
 
 def compile_log_partition_layer(
@@ -200,4 +213,6 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     LogSoftmaxParameter: compile_log_softmax_parameter,
     ReduceSumParameter: compile_reduce_sum_parameter,
     ReduceLSEParameter: compile_reduce_lse_parameter,
+    OuterSumParameter: compile_outer_sum_parameter,
+    KroneckerParameter: compile_kronecker_parameter,
 }

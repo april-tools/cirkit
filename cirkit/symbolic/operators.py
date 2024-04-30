@@ -42,11 +42,11 @@ def multiply_categorical_layers(lhs: CategoricalLayer, rhs: CategoricalLayer) ->
     assert lhs.num_variables == rhs.num_variables
     assert lhs.num_channels == rhs.num_channels
     sl_logits = OuterSumParameter(
-        PlaceholderParameter(lhs, name="logits"), PlaceholderParameter(rhs, name="logits"), axis=2
+        PlaceholderParameter(lhs, name="logits"), PlaceholderParameter(rhs, name="logits"), axis=1
     )
     sl = CategoricalLayer(
         lhs.scope | rhs.scope,
-        lhs.num_output_units * rhs.num_input_units,
+        lhs.num_output_units * rhs.num_output_units,
         num_channels=lhs.num_channels,
         logits=sl_logits,
     )
