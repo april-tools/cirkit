@@ -1,4 +1,4 @@
-from typing import Callable, final
+from typing import Callable, Tuple, final
 
 import torch
 from torch import Tensor, nn
@@ -15,17 +15,21 @@ class TorchParameter(AbstractTorchParameter):
     def __init__(self, *shape: int) -> None:
         """Init class."""
         super().__init__()
-        self.weight = nn.Parameter(torch.empty(*shape), requires_grad=True)
+        self.ptensor = nn.Parameter(torch.empty(*shape), requires_grad=True)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.ptensor.shape
 
     @property
     def dtype(self) -> torch.dtype:
         """The dtype of the output parameter."""
-        return self.weight.dtype
+        return self.ptensor.dtype
 
     @property
     def device(self) -> torch.device:
         """The device of the output parameter."""
-        return self.weight.device
+        return self.ptensor.device
 
     @torch.no_grad()
     def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
@@ -42,7 +46,7 @@ class TorchParameter(AbstractTorchParameter):
             initializer_ (Callable[[Tensor], Tensor]): The function that initialize a Tensor \
                 inplace while also returning the value.
         """
-        initializer_(self.weight)
+        initializer_(self.ptensor)
 
     def forward(self) -> Tensor:
         """Get the reparameterized parameters.
@@ -50,4 +54,4 @@ class TorchParameter(AbstractTorchParameter):
         Returns:
             Tensor: The parameters after reparameterization.
         """
-        return self.weight
+        return self.ptensor

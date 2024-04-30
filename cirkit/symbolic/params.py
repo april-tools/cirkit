@@ -25,14 +25,12 @@ class Parameter(AbstractParameter):
 
 
 class ConstantParameter(AbstractParameter):
-    def __init__(self, value: Union[Number, AbstractParameter], shape: Optional[Tuple[int]]):
-        assert isinstance(value, AbstractParameter) or (
-            isinstance(value, Number) and shape is not None
-        )
+    def __init__(self, shape: Tuple[int, ...], value: Number):
         super().__init__()
         self.value = value
-        self._shape = value.shape if isinstance(value, AbstractParameter) else shape
+        self._shape = shape
 
+    @property
     def shape(self) -> Tuple[int, ...]:
         return self._shape
 
@@ -135,7 +133,7 @@ class ReduceOpParameter(UnaryOpParameter, ABC):
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return *self.opd.shape[: self.axis], *self.opd.shape[self.axis + 1]
+        return *self.opd.shape[: self.axis], *self.opd.shape[self.axis + 1 :]
 
     @property
     def config(self) -> Dict[str, Any]:

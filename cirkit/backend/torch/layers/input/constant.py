@@ -1,10 +1,11 @@
-from typing import Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.layers import TorchInputLayer
+from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.semiring import SemiringCls
 
 
 class TorchConstantLayer(TorchInputLayer):
@@ -17,15 +18,16 @@ class TorchConstantLayer(TorchInputLayer):
         self,
         num_variables: int,
         num_output_units: int,
-        num_channels: int,
+        num_channels: int = 1,
         value: Union[float, AbstractTorchParameter] = 0.0,
+        semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
 
         Args:
             num_variables (int): The number of variables.
             num_output_units (int): The number of output units.
-            num_channels (int): The number of channels.
+            num_channels (int): The number of channels. Defaults to 1.
             value (Optional[Reparameterization], optional): Ignored. This layer has no params.
         """
         super().__init__(

@@ -1,7 +1,9 @@
-from typing import Sequence
+from typing import Callable, Sequence
 
 import torch
 from torch import Tensor
+
+InitializerFunc = Callable[[Tensor], Tensor]
 
 
 def flatten_dims(x: Tensor, /, *, dims: Sequence[int]) -> Tensor:

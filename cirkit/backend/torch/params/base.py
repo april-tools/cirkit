@@ -18,7 +18,7 @@ class AbstractTorchParameter(nn.Module, ABC):
         """Init class."""
         super().__init__()
 
-    @cached_property
+    @property
     @abstractmethod
     def shape(self) -> Tuple[int, ...]:
         ...

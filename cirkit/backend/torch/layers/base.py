@@ -1,27 +1,31 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import ClassVar, Type
+from typing import ClassVar, Dict, Optional, Type
 
 from torch import Tensor, nn
 
-from cirkit.backend.torch.semiring import ComputationSapce
+from cirkit.backend.torch.semiring import SemiringCls, SumProductSemiring
+from cirkit.backend.torch.utils import InitializerFunc
 
 
 class TorchLayer(nn.Module, ABC):
     """The abstract base class for all layers."""
 
-    # NOTE: This is uninitialized for the class, but to be set later.
-    comp_space: ClassVar[Type[ComputationSapce]]
-    """The computational space for all Layers."""
-
     # DISABLE: reparam is not used in the base class. It's only here for the interface.
-    def __init__(self, *, num_input_units: int, num_output_units: int, arity: int = 0) -> None:
+    def __init__(
+        self,
+        num_input_units: int,
+        num_output_units: int,
+        *,
+        arity: int = 1,
+        semiring: Optional[SemiringCls] = None,
+    ) -> None:
         """Init class.
 
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer. Defaults to 0
+            arity (int, optional): The arity of the layer. Defaults to 1.
         """
         super().__init__()
         assert num_input_units > 0, "The number of input units must be positive."
@@ -30,6 +34,11 @@ class TorchLayer(nn.Module, ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
+        self.semiring = semiring if semiring is not None else SumProductSemiring
+
+    @staticmethod
+    def default_initializers() -> Dict[str, InitializerFunc]:
+        return {}
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property

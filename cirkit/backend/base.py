@@ -7,9 +7,9 @@ from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.params import AbstractParameter
 
 LayerCompilationSign = Type[Layer]
-LayerCompilationFunc = Callable[[Layer, "AbstractCompiler"], Any]
+LayerCompilationFunc = Callable[..., Any]
 ParameterCompilationSign = Type[AbstractParameter]
-ParameterCompilationFunc = Callable[[AbstractParameter, "AbstractCompiler"], Any]
+ParameterCompilationFunc = Callable[..., Any]
 
 
 SUPPORTED_BACKENDS = ["torch"]
@@ -131,7 +131,7 @@ class AbstractCompiler(ABC):
         ...
 
     @abstractmethod
-    def compile_parameter(self, parameter: AbstractParameter) -> Any:
+    def compile_parameter(self, parameter: AbstractParameter, *args, **kwargs) -> Any:
         ...
 
     @abstractmethod

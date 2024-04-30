@@ -1,12 +1,14 @@
 from abc import abstractmethod
-from typing import Tuple, Optional
+from typing import Dict, Optional
 
 import torch
-from torch import Tensor, distributions
+from torch import Tensor, distributions, nn
 from torch.nn import functional as F
 
-from cirkit.backend.torch.layers import TorchInputLayer
+from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.utils import InitializerFunc
 
 
 class TorchExpFamilyLayer(TorchInputLayer):
@@ -27,25 +29,22 @@ class TorchExpFamilyLayer(TorchInputLayer):
 
     def __init__(
         self,
-        *,
         num_variables: int,
         num_output_units: int,
-        num_channels: int,
-        log_partition: Optional[AbstractTorchParameter] = None,
+        *,
+        num_channels: int = 1,
+        semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
 
         Args:
             num_variables (int): The number of variables.
             num_output_units (int): The number of output units.
-            num_channels (int): The number of channels.
+            num_channels (int): The number of channels. Defaults to 1.
         """
         super().__init__(
-            num_variables=num_variables,
-            num_output_units=num_output_units,
-            num_channels=num_channels
+            num_variables, num_output_units, num_channels=num_channels, semiring=semiring
         )
-        self.log_partition = log_partition
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -56,7 +55,7 @@ class TorchExpFamilyLayer(TorchInputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, Ko).
         """
-        return self.comp_space.from_log(self.log_score(x))
+        return self.semiring.from_lse_sum(self.log_score(x))
 
     @abstractmethod
     def log_score(self, x: Tensor) -> Tensor:
@@ -73,13 +72,13 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     # pylint: disable-next=too-many-arguments
     def __init__(
         self,
-        *,
         num_variables: int,
         num_output_units: int,
-        num_channels: int,
-        num_categories: int,
+        *,
+        num_channels: int = 1,
+        num_categories: int = 2,
         logits: AbstractTorchParameter,
-        log_partition: Optional[AbstractTorchParameter] = None,
+        semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
 
@@ -89,26 +88,29 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             num_channels (int): The number of channels.
             num_categories (int): The number of categories for Categorical distribution. Defaults to 2.
             logits (AbstractTorchParameter): The reparameterization for layer parameters.
-            log_partition (AbstractTorchParameter): The reparameterization for layer parameters.
         """
         assert (
             num_categories > 0
         ), "The number of categories for Categorical distribution must be positive."
         assert logits.shape == (num_variables, num_output_units, num_channels, num_categories)
-        self.num_categories = num_categories
         # Set self.suff_stats_shape before ExpFamilyLayer.__init__. The reparam will be set in
         # ExpFamilyLayer.__init__ to normalize dim=-1 (cat).
         super().__init__(
-            num_variables=num_variables,
-            num_output_units=num_output_units,
-            num_channels=num_channels,
-            log_partition=log_partition
+            num_variables, num_output_units, num_channels=num_channels, semiring=semiring
         )
+        self.num_categories = num_categories
         self.logits = logits
 
+    @staticmethod
+    def default_initializers() -> Dict[str, InitializerFunc]:
+        return dict(logits=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
+
     def log_score(self, x: Tensor) -> Tensor:
-        x = F.one_hot(x, self.num_categories)  # (H, *B, K, num_categories)
-        return torch.einsum('cbdk,dick->bc')
+        if x.is_floating_point():
+            x = x.long()  # The input to Categorical should be discrete.
+        x = F.one_hot(x, self.num_categories)  # (C, *B, D, num_categories)
+        x = x.to(torch.get_default_dtype())
+        return torch.einsum("cbdi,dkci->bk", x, self.logits())
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
@@ -119,32 +121,35 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
     def __init__(
         self,
-        *,
         num_variables: int,
         num_output_units: int,
-        num_channels: int,
+        *,
+        num_channels: int = 1,
         mean: AbstractTorchParameter,
         stddev: AbstractTorchParameter,
-        log_partition: Optional[AbstractTorchParameter] = None
+        semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
 
         Args:
             num_variables (int): The number of variables.
             num_output_units (int): The number of output units.
-            num_channels (int): The number of channels.
+            num_channels (int): The number of channels. Defaults to 1.
             mean (AbstractTorchParameter): The reparameterization for layer parameters.
             stddev (AbstractTorchParameter): The reparameterization for layer parameters.
-            log_partition (Optional[AbstractTorchParameter]): The reparameterization for layer parameters.
         """
         super().__init__(
-            num_variables=num_variables,
-            num_output_units=num_output_units,
-            num_channels=num_channels,
-            log_partition=log_partition
+            num_variables, num_output_units, num_channels=num_channels, semiring=semiring
         )
         self.mean = mean
         self.stddev = stddev
+
+    @staticmethod
+    def default_initializers() -> Dict[str, InitializerFunc]:
+        return dict(
+            mean=lambda t: nn.init.normal_(t, mean=0.0, std=3e-1),
+            stddev=lambda t: nn.init.normal_(t, mean=0.0, std=3e-1),
+        )
 
     def log_score(self, x: torch.Tensor) -> torch.Tensor:
         # (C, B, D)

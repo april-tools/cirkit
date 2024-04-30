@@ -1,3 +1,4 @@
+from .base import TorchLayer as TorchLayer
 from .inner import TorchDenseLayer as TorchDenseLayer
 from .inner import TorchHadamardLayer as TorchHadamardLayer
 from .inner import TorchInnerLayer as TorchInnerLayer
@@ -8,6 +9,5 @@ from .input import TorchConstantLayer as TorchConstantLayer
 from .input import TorchExpFamilyLayer as TorchExpFamilyLayer
 from .input import TorchGaussianLayer as TorchGaussianLayer
 from .input import TorchInputLayer as TorchInputLayer
-from .layer import TorchLayer as TorchLayer
 from .sum_product import TorchCPLayer as TorchCPLayer
 from .sum_product import TorchTuckerLayer as TorchTuckerLayer

@@ -2,40 +2,17 @@ from collections import defaultdict
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 from types import TracebackType
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type
+from typing import Dict, Iterable, Optional, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
-from cirkit.symbolic.layers import AbstractLayerOperator, Layer, LayerOperation
+from cirkit.symbolic.layers import AbstractLayerOperator, Layer
 from cirkit.symbolic.operators import (
-    integrate_ef_layer,
-    multiply_categorical_layers,
-    multiply_dense_layers,
-    multiply_gaussian_layers,
-    multiply_hadamard_layers,
-    multiply_kronecker_layers,
-    multiply_mixing_layers,
+    DEFAULT_COMMUTATIVE_OPERATORS,
+    DEFAULT_OPERATOR_RULES,
+    LayerOperatorFunc,
+    LayerOperatorSign,
+    LayerOperatorSpecs,
 )
-
-LayerOperatorSign = Tuple[Type[Layer], ...]
-LayerOperatorFunc = Callable[..., CircuitBlock]
-LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
-
-
-DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
-DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
-    LayerOperation.INTEGRATION: [
-        integrate_ef_layer,
-    ],
-    LayerOperation.DIFFERENTIATION: [],
-    LayerOperation.MULTIPLICATION: [
-        multiply_categorical_layers,
-        multiply_gaussian_layers,
-        multiply_hadamard_layers,
-        multiply_kronecker_layers,
-        multiply_dense_layers,
-        multiply_mixing_layers,
-    ],
-}
 
 
 class OperatorNotFound(Exception):
@@ -132,14 +109,15 @@ class OperatorRegistry(AbstractContextManager):
         func: LayerOperatorFunc,
         commutative: Optional[bool] = None,
     ):
-        args = func.__annotations__
+        args = func.__annotations__.copy()
         arg_names = args.keys()
         if "return" not in arg_names or not issubclass(args["return"], CircuitBlock):
-            raise ValueError("The function is not an operator over symbolic layers")
+            raise ValueError(
+                f"The function is not an operator over symbolic layers.\nIdentifier: {func.__name__}\nAnnotations: {args}"
+            )
         del args["return"]
         arg_names = list(args.keys())
         arg_types = [args[a] for a in arg_names]
-        print(arg_types)
         arg_layer_types = list(
             filter(
                 lambda x: isinstance(x[1], type) and issubclass(x[1], Layer), enumerate(arg_types)

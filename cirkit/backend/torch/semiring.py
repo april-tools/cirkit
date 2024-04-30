@@ -21,10 +21,10 @@ from torch import Tensor
 from cirkit.backend.torch.utils import flatten_dims, unflatten_dims
 
 Ts = TypeVarTuple("Ts")
-CompSpaceClsT = TypeVar("CompSpaceClsT", bound=Type["ComputationSapce"])
+SemiringCls = TypeVar("SemiringClsT", bound=Type["Semiring"])
 
 
-class ComputationSapce(ABC):
+class Semiring(ABC):
     """The abstract base class for compotational spaces.
 
     Due to numerical precision, the actual units in computational graph may hold values in, e.g., \
@@ -33,12 +33,12 @@ class ComputationSapce(ABC):
     regardless of the global setting.
     """
 
-    _registry: ClassVar[Dict[str, Type["ComputationSapce"]]] = {}
+    _registry: ClassVar[Dict[str, Type["Semiring"]]] = {}
 
     @final
     @staticmethod
-    def register(name: str) -> Callable[[CompSpaceClsT], CompSpaceClsT]:
-        """Register a concrete ComputationSapce implementation by its name.
+    def register(name: str) -> Callable[[SemiringCls], SemiringCls]:
+        """Register a concrete Semiring implementation by its name.
 
         Args:
             name (str): The name to register.
@@ -47,11 +47,11 @@ class ComputationSapce(ABC):
             Callable[[CompSpaceClsT], CompSpaceClsT]: The class decorator to register a subclass.
         """
 
-        def _decorator(cls: CompSpaceClsT) -> CompSpaceClsT:
-            """Register a concrete ComputationSapce implementation by its name.
+        def _decorator(cls: SemiringCls) -> SemiringCls:
+            """Register a concrete Semiring implementation by its name.
 
             Args:
-                cls (CompSpaceClsT): The ComputationSapce subclass to register.
+                cls (CompSpaceClsT): The Semiring subclass to register.
 
             Returns:
                 CompSpaceClsT: The class passed in.
@@ -59,8 +59,8 @@ class ComputationSapce(ABC):
             # CAST: getattr gives Any.
             assert cast(
                 bool, getattr(cls, "__final__", False)
-            ), "Subclasses of ComputationSapce should be final."
-            ComputationSapce._registry[name] = cls
+            ), "Subclasses of Semiring should be final."
+            Semiring._registry[name] = cls
             return cls
 
         return _decorator
@@ -68,25 +68,25 @@ class ComputationSapce(ABC):
     @final
     @staticmethod
     def list_all_comp_space() -> Iterable[str]:
-        """List all ComputationSapce names registered.
+        """List all Semiring names registered.
 
         Returns:
             Iterable[str]: An iterable over all names available.
         """
-        return iter(ComputationSapce._registry)
+        return iter(Semiring._registry)
 
     @final
     @staticmethod
-    def get_comp_space_by_name(name: str) -> Type["ComputationSapce"]:
-        """Get a ComputationSapce by its registered name.
+    def get_comp_space_by_name(name: str) -> Type["Semiring"]:
+        """Get a Semiring by its registered name.
 
         Args:
             name (str): The name to probe.
 
         Returns:
-            Type[ComputationSapce]: The retrieved concrete ComputationSapce.
+            Type[Semiring]: The retrieved concrete Semiring.
         """
-        return ComputationSapce._registry[name]
+        return Semiring._registry[name]
 
     # TODO: Never should be used. This is known issue: https://github.com/python/mypy/issues/14044
     @final
@@ -107,7 +107,7 @@ class ComputationSapce(ABC):
     # TODO: if needed, we can also have to_log, to_lin.
     @classmethod
     @abstractmethod
-    def from_log(cls, x: Tensor) -> Tensor:
+    def from_lse_sum(cls, x: Tensor) -> Tensor:
         """Convert a value from log space to the current space.
 
         Args:
@@ -119,7 +119,7 @@ class ComputationSapce(ABC):
 
     @classmethod
     @abstractmethod
-    def from_linear(cls, x: Tensor) -> Tensor:
+    def from_sum_product(cls, x: Tensor) -> Tensor:
         """Convert a value from linear space to the current space.
 
         Args:
@@ -194,13 +194,13 @@ class ComputationSapce(ABC):
         """
 
 
-@ComputationSapce.register("linear")
+@Semiring.register("sum-product")
 @final  # type: ignore[misc]
-class LinearSpace(ComputationSapce):
+class SumProductSemiring(Semiring):
     """The linear space computation."""
 
     @classmethod
-    def from_log(cls, x: Tensor) -> Tensor:
+    def from_lse_sum(cls, x: Tensor) -> Tensor:
         """Convert a value from log space to the current space.
 
         Args:
@@ -212,7 +212,7 @@ class LinearSpace(ComputationSapce):
         return torch.exp(x)
 
     @classmethod
-    def from_linear(cls, x: Tensor) -> Tensor:
+    def from_sum_product(cls, x: Tensor) -> Tensor:
         """Convert a value from linear space to the current space.
 
         Args:
@@ -284,13 +284,13 @@ class LinearSpace(ComputationSapce):
         return functools.reduce(torch.mul, xs)
 
 
-@ComputationSapce.register("log")
+@Semiring.register("lse-sum")
 @final  # type: ignore[misc]
-class LogSpace(ComputationSapce):
+class LSESumSemiring(Semiring):
     """The log space computation."""
 
     @classmethod
-    def from_log(cls, x: Tensor) -> Tensor:
+    def from_lse_sum(cls, x: Tensor) -> Tensor:
         """Convert a value from log space to the current space.
 
         Args:
@@ -302,7 +302,7 @@ class LogSpace(ComputationSapce):
         return x
 
     @classmethod
-    def from_linear(cls, x: Tensor) -> Tensor:
+    def from_sum_product(cls, x: Tensor) -> Tensor:
         """Convert a value from linear space to the current space.
 
         Args:

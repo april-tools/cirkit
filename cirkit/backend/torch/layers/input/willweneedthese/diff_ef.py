@@ -110,5 +110,5 @@ class DiffEFLayer(InputLayer):
             raise NotImplementedError("order>2 is not yet implemented for DiffEFLayer.")
 
         return self.comp_space.mul(
-            self.comp_space.from_log(log_p), self.comp_space.from_linear(factor)
+            self.comp_space.from_lse_sum(log_p), self.comp_space.from_sum_product(factor)
         )

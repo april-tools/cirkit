@@ -1,7 +1,8 @@
-from typing import Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
+    AbstractLayerOperator,
     CategoricalLayer,
     ConstantLayer,
     DenseLayer,
@@ -10,6 +11,8 @@ from cirkit.symbolic.layers import (
     HadamardLayer,
     IndexLayer,
     KroneckerLayer,
+    Layer,
+    LayerOperation,
     MixingLayer,
     PlaceholderParameter,
 )
@@ -19,7 +22,6 @@ from cirkit.symbolic.params import (
     KroneckerParameter,
     LogParameter,
     MeanNormalProduct,
-    OuterProductParameter,
     OuterSumParameter,
     PartitionGaussianProduct,
     ReduceSumParameter,
@@ -32,7 +34,9 @@ def integrate_ef_layer(sl: ExpFamilyLayer, scope: Optional[Iterable[int]] = None
     scope = Scope(scope) if scope is not None else sl.scope
     assert sl.scope == scope
     if sl.log_partition is None:
-        sv = ConstantParameter(1.0, shape=(sl.num_output_units,))
+        sv = ConstantParameter(
+            shape=(sl.num_variables, sl.num_output_units, sl.num_channels), value=0.0
+        )
     else:
         sv = PlaceholderParameter(sl, name="log_partition")
     sl = ConstantLayer(sl.scope, sl.num_output_units, sl.num_channels, value=sv)
@@ -111,8 +115,28 @@ def multiply_mixing_layers(lhs: MixingLayer, rhs: MixingLayer) -> CircuitBlock:
         lhs.scope | rhs.scope,
         lhs.num_input_units * rhs.num_input_units,
         lhs.arity * rhs.arity,
-        weight=OuterProductParameter(
+        weight=KroneckerParameter(
             PlaceholderParameter(lhs, name="weight"), PlaceholderParameter(rhs, name="weight")
         ),
     )
     return CircuitBlock.from_layer(sl)
+
+
+DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
+LayerOperatorFunc = Callable[..., CircuitBlock]
+DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
+    LayerOperation.INTEGRATION: [
+        integrate_ef_layer,
+    ],
+    LayerOperation.DIFFERENTIATION: [],
+    LayerOperation.MULTIPLICATION: [
+        multiply_categorical_layers,
+        multiply_gaussian_layers,
+        multiply_hadamard_layers,
+        multiply_kronecker_layers,
+        multiply_dense_layers,
+        multiply_mixing_layers,
+    ],
+}
+LayerOperatorSign = Tuple[Type[Layer], ...]
+LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]

@@ -1,4 +1,3 @@
-import random
 from typing import List, Optional, Sequence, cast
 
 import numpy as np
@@ -11,6 +10,7 @@ from cirkit.templates.region_graph.rg_node import RegionNode
 def _partition_node_randomly(
     graph: RegionGraph,
     node: RegionNode,
+    random_state: np.random.RandomState,
     num_parts: Optional[int] = None,
     proportions: Optional[Sequence[float]] = None,
 ) -> List[RegionNode]:
@@ -28,7 +28,7 @@ def _partition_node_randomly(
         List[RegionNode]: The region nodes forming the partitioning.
     """
     scope_list = list(node.scope)
-    random.shuffle(scope_list)
+    random_state.shuffle(scope_list)
 
     # ANNOTATE: Numpy has typing issues.
     split: NDArray[np.float64]  # Unnormalized split points including 0 and 1.
@@ -67,7 +67,9 @@ def _partition_node_randomly(
 
 # DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name
-def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionGraph:
+def RandomBinaryTree(
+    num_variables: int, depth: int, num_repetitions: int = 1, seed: int = 42
+) -> RegionGraph:
     """Construct a RG with random binary trees.
 
     See:
@@ -77,20 +79,27 @@ def RandomBinaryTree(num_vars: int, depth: int, num_repetitions: int) -> RegionG
         UAI 2019.
 
     Args:
-        num_vars (int): The number of variables in the RG.
+        num_variables (int): The number of variables in the RG.
         depth (int): The depth of the binary tree.
         num_repetitions (int): The number of repetitions of binary trees (degree of root).
 
     Returns:
         RegionGraph: The RBT RG.
     """
+    random_state = np.random.RandomState(seed)
     graph = RegionGraph()
-    root = RegionNode(range(num_vars))
+    root = RegionNode(range(num_variables))
     graph.add_node(root)
 
     for _ in range(num_repetitions):
         layer = [root]
         for _ in range(depth):
-            layer = sum((_partition_node_randomly(graph, node, num_parts=2) for node in layer), [])
+            layer = sum(
+                (
+                    _partition_node_randomly(graph, node, random_state, num_parts=2)
+                    for node in layer
+                ),
+                [],
+            )
 
     return graph.freeze()

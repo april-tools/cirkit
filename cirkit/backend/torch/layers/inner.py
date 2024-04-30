@@ -1,19 +1,28 @@
 import functools
-from typing import Callable, Optional
+from abc import ABC
+from typing import Callable, Dict, Optional
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.utils import InitializerFunc
 
 
-class TorchInnerLayer(TorchLayer):
+class TorchInnerLayer(TorchLayer, ABC):
     """The abstract base class for inner layers."""
 
     # __init__ is overriden here to change the default value of arity, as arity=2 is the most common
     # case for all inner layers.
-    def __init__(self, *, num_input_units: int, num_output_units: int, arity: int = 2) -> None:
+    def __init__(
+        self,
+        num_input_units: int,
+        num_output_units: int,
+        arity: int,
+        semiring: Optional[SemiringCls] = None,
+    ) -> None:
         """Init class.
 
         Args:
@@ -21,31 +30,27 @@ class TorchInnerLayer(TorchLayer):
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 2.
         """
-        super().__init__(
-            num_input_units=num_input_units, num_output_units=num_output_units, arity=arity
-        )
+        super().__init__(num_input_units, num_output_units, arity=arity, semiring=semiring)
 
 
-class TorchProductLayer(TorchInnerLayer):
-    """The abstract base class for product layers."""
+class TorchProductLayer(TorchInnerLayer, ABC):
+    ...
 
-    # NOTE: We don't change the __init__ of InnerLayer here. We still accept any Reparameterization
-    #       instance in ProductLayer, but it will be ignored.
 
-    # NOTE: We need to annotate as Optional instead of None to make SumProdL work.
-    @property
-    def _default_initializer_(self) -> Optional[Callable[[Tensor], Tensor]]:
-        """The default inplace initializer for the parameters of this layer.
-
-        No initialization, as ProductLayer has no parameters.
-        """
-        return None
+class TorchSumLayer(TorchInnerLayer, ABC):
+    ...
 
 
 class TorchHadamardLayer(TorchProductLayer):
     """The Hadamard product layer."""
 
-    def __init__(self, *, num_input_units: int, num_output_units: int, arity: int = 2) -> None:
+    def __init__(
+        self,
+        num_input_units: int,
+        num_output_units: int,
+        arity: int,
+        semiring: Optional[SemiringCls] = None,
+    ) -> None:
         """Init class.
 
         Args:
@@ -56,9 +61,7 @@ class TorchHadamardLayer(TorchProductLayer):
         assert (
             num_output_units == num_input_units
         ), "The number of input and output units must be the same for Hadamard product."
-        super().__init__(
-            num_input_units=num_input_units, num_output_units=num_output_units, arity=arity
-        )
+        super().__init__(num_input_units, num_output_units, arity=arity, semiring=semiring)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -69,13 +72,19 @@ class TorchHadamardLayer(TorchProductLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, Ko).
         """
-        return self.comp_space.prod(x, dim=0, keepdim=False)  # shape (H, *B, K) -> (*B, K).
+        return self.semiring.prod(x, dim=0, keepdim=False)  # shape (H, *B, K) -> (*B, K).
 
 
 class TorchKroneckerLayer(TorchProductLayer):
     """The Kronecker product layer."""
 
-    def __init__(self, *, num_input_units: int, num_output_units: int, arity: int = 2) -> None:
+    def __init__(
+        self,
+        num_input_units: int,
+        num_output_units: int,
+        arity: int = 2,
+        semiring: Optional[SemiringCls] = None,
+    ) -> None:
         """Init class.
 
         Args:
@@ -89,9 +98,7 @@ class TorchKroneckerLayer(TorchProductLayer):
         )
         if arity != 2:
             raise NotImplementedError("Kronecker only implemented for binary product units.")
-        super().__init__(
-            num_input_units=num_input_units, num_output_units=num_output_units, arity=arity
-        )
+        super().__init__(num_input_units, num_output_units, arity=arity, semiring=semiring)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -105,22 +112,7 @@ class TorchKroneckerLayer(TorchProductLayer):
         x0 = x[0].unsqueeze(dim=-1)  # shape (*B, Ki, 1).
         x1 = x[1].unsqueeze(dim=-2)  # shape (*B, 1, Ki).
         # shape (*B, Ki, Ki) -> (*B, Ko=Ki**2).
-        return self.comp_space.mul(x0, x1).flatten(start_dim=-2)
-
-
-class TorchSumLayer(TorchInnerLayer):
-    """The abstract base class for sum layers."""
-
-    # NOTE: We don't change the __init__ of InnerLayer here. Although sum layers typically have
-    #       parameters, we still allow it to be optional for flexibility.
-
-    @property
-    def _default_initializer_(self) -> Callable[[Tensor], Tensor]:
-        """The default inplace initializer for the parameters of this layer.
-
-        The sum weights are initialized to U(0.01, 0.99).
-        """
-        return functools.partial(nn.init.uniform_, a=0.01, b=0.99)
+        return self.semiring.mul(x0, x1).flatten(start_dim=-2)
 
 
 class TorchDenseLayer(TorchSumLayer):
@@ -128,26 +120,32 @@ class TorchDenseLayer(TorchSumLayer):
 
     def __init__(
         self,
-        *,
         num_input_units: int,
         num_output_units: int,
-        param: AbstractTorchParameter,
+        weight: AbstractTorchParameter,
+        semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
 
         Args:
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
-            param (AbstractTorchParameter): The reparameterization for layer parameters.
+            weight (AbstractTorchParameter): The reparameterization for layer parameters.
         """
         super().__init__(
-            num_input_units=num_input_units, num_output_units=num_output_units, arity=1
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=1,
+            semiring=semiring,
         )
+        self.weight = weight
 
-        self.param = param
+    @staticmethod
+    def default_initializers() -> Dict[str, InitializerFunc]:
+        return dict(weight=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
 
-    def _forward_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("oi,...i->...o", self.param(), x)  # shape (*B, Ki) -> (*B, Ko).
+    def _forward_impl(self, x: Tensor) -> Tensor:
+        return torch.einsum("oi,...i->...o", self.weight(), x)  # shape (*B, Ki) -> (*B, Ko).
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -159,7 +157,7 @@ class TorchDenseLayer(TorchSumLayer):
             Tensor: The output of this layer, shape (*B, Ko).
         """
         x = x.squeeze(dim=0)  # shape (H=1, *B, Ki) -> (*B, Ki).
-        return self.comp_space.sum(self._forward_linear, x, dim=-1, keepdim=True)  # shape (*B, Ko).
+        return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # shape (*B, Ko).
 
 
 class TorchMixingLayer(TorchSumLayer):
@@ -172,11 +170,12 @@ class TorchMixingLayer(TorchSumLayer):
 
     def __init__(
         self,
-        *,
         num_input_units: int,
         num_output_units: int,
+        *,
         arity: int = 2,
-        param: AbstractTorchParameter,
+        weight: AbstractTorchParameter,
+        semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
 
@@ -184,18 +183,20 @@ class TorchMixingLayer(TorchSumLayer):
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units, must be the same as input.
             arity (int, optional): The arity of the layer. Defaults to 2.
-            param (AbstractTorchParameter): The reparameterization for layer parameters.
+            weight (AbstractTorchParameter): The reparameterization for layer parameters.
         """
         assert (
             num_output_units == num_input_units
         ), "The number of input and output units must be the same for MixingLayer."
-        super().__init__(
-            num_input_units=num_input_units, num_output_units=num_output_units, arity=arity
-        )
-        self.param = param
+        super().__init__(num_input_units, num_output_units, arity=arity, semiring=semiring)
+        self.weight = weight
 
-    def _forward_linear(self, x: Tensor) -> Tensor:
-        return torch.einsum("kh,h...k->...k", self.params(), x)  # shape (H, *B, K) -> (*B, K).
+    @staticmethod
+    def default_initializers() -> Dict[str, InitializerFunc]:
+        return dict(weight=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
+
+    def _forward_impl(self, x: Tensor) -> Tensor:
+        return torch.einsum("kh,h...k->...k", self.weight(), x)  # shape (H, *B, K) -> (*B, K).
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -207,4 +208,4 @@ class TorchMixingLayer(TorchSumLayer):
             Tensor: The output of this layer, shape (*B, Ko).
         """
         # shape (H, *B, K) -> (*B, K).
-        return self.comp_space.sum(self._forward_linear, x, dim=0, keepdim=False)
+        return self.semiring.sum(self._forward_impl, x, dim=0, keepdim=False)

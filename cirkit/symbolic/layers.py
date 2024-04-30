@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from cirkit.symbolic.params import (
     AbstractParameter,
     ConstantParameter,
-    LogSoftmaxParameter,
     Parameter,
     Parameterization,
     ScaledSigmoidParameter,
@@ -176,7 +175,7 @@ class GaussianLayer(ExpFamilyLayer):
 
 class ConstantLayer(InputLayer):
     def __init__(
-        self, scope: Scope, num_output_units: int, num_channels: int, value: ConstantParameter
+        self, scope: Scope, num_output_units: int, num_channels: int, value: AbstractParameter
     ):
         super().__init__(scope, num_output_units, num_channels)
         self.value = value

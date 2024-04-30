@@ -39,7 +39,7 @@ class TorchCPLayer(TorchInnerLayer):
             num_input_units=num_input_units, num_output_units=num_input_units, arity=arity
         )
         self.sum_layer = TorchDenseLayer(
-            num_input_units=num_input_units, num_output_units=num_output_units, param=param
+            num_input_units=num_input_units, num_output_units=num_output_units, weight=param
         )
         # The params belong to DenseLayer so we don't handle it here.
 
@@ -125,4 +125,4 @@ class TorchTuckerLayer(TorchInnerLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, Ko).
         """
-        return self.comp_space.sum(self._forward_linear, x[0], x[1], dim=-1, keepdim=True)
+        return self.semiring.sum(self._forward_linear, x[0], x[1], dim=-1, keepdim=True)

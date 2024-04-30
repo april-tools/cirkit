@@ -176,17 +176,11 @@ class Circuit:
                 rgn_to_layers[rgn] = prod_sl
             elif isinstance(rgn, RegionNode):  # Inner region node
                 sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
-                num_output_units = (
-                    num_classes if rgn in region_graph.output_nodes else num_sum_units
-                )
+                num_units = num_sum_units if rgn in rgn.outputs else num_classes
                 if len(sum_inputs) == 1:  # Region node being partitioned in one way
-                    sum_sl = sum_factory(
-                        rgn.scope, sum_inputs[0].num_output_units, num_output_units
-                    )
+                    sum_sl = sum_factory(rgn.scope, num_units, num_units)
                 else:  # Region node being partitioned in multiple way -> add "mixing" layer
-                    sum_sl = mixing_factory(
-                        rgn.scope, sum_inputs[0].num_output_units, len(sum_inputs)
-                    )
+                    sum_sl = mixing_factory(rgn.scope, num_units, len(sum_inputs))
                 layers.append(sum_sl)
                 in_layers[sum_sl] = sum_inputs
                 for in_sl in sum_inputs:

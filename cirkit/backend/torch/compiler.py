@@ -1,67 +1,29 @@
 import os
-from typing import IO, Dict, List, Optional, Tuple, Union
+from typing import IO, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from torch import Tensor
 
-from cirkit.backend.base import (
-    AbstractCompiler,
-    CompilerRegistry,
-    LayerCompilationFunc,
-    LayerCompilationSign,
-    ParameterCompilationFunc,
-    ParameterCompilationSign,
-)
+from cirkit.backend.base import AbstractCompiler, CompilerRegistry
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.models import TensorizedCircuit
 from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.rules import (
-    compile_categorical_layer,
-    compile_dense_layer,
-    compile_gaussian_layer,
-    compile_hadamard_layer,
-    compile_kronecker_layer,
-    compile_mixing_layer,
-    compile_parameter,
-    compile_placeholder_parameter,
+    DEFAULT_LAYER_COMPILATION_RULES,
+    DEFAULT_PARAMETER_COMPILATION_RULES,
 )
+from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
-from cirkit.symbolic.layers import (
-    CategoricalLayer,
-    DenseLayer,
-    GaussianLayer,
-    HadamardLayer,
-    InputLayer,
-    KroneckerLayer,
-    Layer,
-    MixingLayer,
-    PlaceholderParameter,
-    ProductLayer,
-    SumLayer,
-)
-from cirkit.symbolic.params import AbstractParameter, Parameter
-
-_DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {
-    CategoricalLayer: compile_categorical_layer,
-    GaussianLayer: compile_gaussian_layer,
-    HadamardLayer: compile_hadamard_layer,
-    KroneckerLayer: compile_kronecker_layer,
-    DenseLayer: compile_dense_layer,
-    MixingLayer: compile_mixing_layer,
-}
-
-_DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {
-    Parameter: compile_parameter,
-    PlaceholderParameter: compile_placeholder_parameter,
-}
+from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
+from cirkit.symbolic.params import AbstractParameter
 
 
 class TorchCompiler(AbstractCompiler):
-    def __init__(self, **flags):
+    def __init__(self, fold: bool = False, einsum: bool = False):
         default_registry = CompilerRegistry(
-            _DEFAULT_LAYER_COMPILATION_RULES, _DEFAULT_PARAMETER_COMPILATION_RULES
+            DEFAULT_LAYER_COMPILATION_RULES, DEFAULT_PARAMETER_COMPILATION_RULES
         )
-        super().__init__(default_registry, **flags)
+        super().__init__(default_registry, fold=fold, einsum=einsum)
         self._compiled_layers: Dict[Layer, TorchLayer] = {}
 
     def retrieve_parameter(self, layer: Layer, name: str) -> AbstractTorchParameter:
@@ -87,10 +49,15 @@ class TorchCompiler(AbstractCompiler):
         # Return the compiled circuit (i.e., the output of the circuit pipeline)
         return self.get_compiled_circuit(sc)
 
-    def compile_parameter(self, parameter: AbstractParameter):
+    def compile_parameter(
+        self, parameter: AbstractParameter, initializer: InitializerFunc
+    ) -> AbstractTorchParameter:
         signature = type(parameter)
         func = self.retrieve_parameter_rule(signature)
-        return func(parameter, self)
+        return func(parameter, initializer, self)
+
+    def retrieve_initializer(self, layer_cls: Type[TorchLayer], name: str) -> InitializerFunc:
+        return layer_cls.default_initializers()[name]
 
     def _register_compiled_circuit(
         self, sc: Circuit, tc: TensorizedCircuit, compiled_layer_ids: Dict[Layer, int]
