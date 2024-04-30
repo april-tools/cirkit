@@ -23,7 +23,7 @@ def test_compile_output_shape():
     assert torch.all(torch.isfinite(y))
 
 
-@pytest.mark.parametrize("normalized", [True])
+@pytest.mark.parametrize("normalized", [False, True])
 def test_compile_integrate_pc(normalized: bool):
     compiler = TorchCompiler()
     num_variables, num_channels = 7, 1
