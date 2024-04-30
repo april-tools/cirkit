@@ -1,19 +1,23 @@
 import os
-from typing import IO, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import IO, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
 from cirkit.backend.torch.layers import TorchLayer
-from cirkit.backend.torch.models import TensorizedCircuit
+from cirkit.backend.torch.models import (
+    AbstractTensorizedCircuit,
+    TensorizedCircuit,
+    TensorizedConstantCircuit,
+)
 from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
 from cirkit.backend.torch.utils import InitializerFunc
-from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
+from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
 from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.symbolic.params import AbstractParameter
 
@@ -35,7 +39,7 @@ class TorchCompiler(AbstractCompiler):
             )
         return p
 
-    def compile_pipeline(self, sc: Circuit) -> TensorizedCircuit:
+    def compile_pipeline(self, sc: Circuit) -> AbstractTensorizedCircuit:
         # Compile the circuits following the topological ordering of the pipeline.
         ordering = pipeline_topological_ordering({sc})
         for sci in ordering:
@@ -50,22 +54,22 @@ class TorchCompiler(AbstractCompiler):
         return self.get_compiled_circuit(sc)
 
     def compile_parameter(
-        self, parameter: AbstractParameter, initializer: InitializerFunc
+        self, parameter: AbstractParameter, *, init_func: Optional[InitializerFunc] = None
     ) -> AbstractTorchParameter:
         signature = type(parameter)
         func = self.retrieve_parameter_rule(signature)
-        return func(parameter, initializer, self)
+        return func(self, parameter, init_func=init_func)
 
     def retrieve_initializer(self, layer_cls: Type[TorchLayer], name: str) -> InitializerFunc:
         return layer_cls.default_initializers()[name]
 
     def _register_compiled_circuit(
-        self, sc: Circuit, tc: TensorizedCircuit, compiled_layer_ids: Dict[Layer, int]
+        self, sc: Circuit, tc: AbstractTensorizedCircuit, compiled_layer_ids: Dict[Layer, int]
     ):
         super().register_compiled_circuit(sc, tc)
         self._compiled_layers.update({l: tc.layers[i] for l, i in compiled_layer_ids.items()})
 
-    def _compile_circuit(self, sc: Circuit) -> TensorizedCircuit:
+    def _compile_circuit(self, sc: Circuit) -> AbstractTensorizedCircuit:
         # The list of layers
         layers: List[TorchLayer] = []
 
@@ -98,7 +102,18 @@ class TorchCompiler(AbstractCompiler):
         bookkeeping.append(bookkeeping_entry)
 
         # Construct the tensorized circuit, which is a torch module
-        circuit = TensorizedCircuit(layers, bookkeeping)
+        # If the symbolic circuit being compiled has been obtained by integrating
+        # another circuit over all the variables it is defined on,
+        # then return a 'constant circuit' whose interface does not require inputs
+        if (
+            sc.operation is not None
+            and sc.operation.operator == CircuitOperator.INTEGRATION
+            and sc.operation.metadata["scope"] == sc.scope
+        ):
+            circuit_cls = TensorizedConstantCircuit
+        else:
+            circuit_cls = TensorizedCircuit
+        circuit = circuit_cls(sc.num_variables, sc.num_channels, layers, bookkeeping)
 
         # Register the compiled circuit, as well as the compiled layer infos
         self._register_compiled_circuit(sc, circuit, compiled_layer_ids)
@@ -107,7 +122,7 @@ class TorchCompiler(AbstractCompiler):
     def _compile_layer(self, layer: Layer) -> TorchLayer:
         signature = type(layer)
         func = self.retrieve_layer_rule(signature)
-        return func(layer, self)
+        return func(self, layer)
 
     def save(
         self,

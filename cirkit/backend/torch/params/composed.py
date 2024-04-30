@@ -1,60 +1,13 @@
 import functools
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Callable, Generic, List, Optional, Protocol, Tuple, cast
+from typing import Callable, Generic, List, Optional, Tuple, cast
 from typing_extensions import TypeVarTuple, Unpack  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.params.base import AbstractTorchParameter
-from cirkit.backend.torch.utils import flatten_dims, unflatten_dims
-
-
-class _TensorFuncWithDim(Protocol):
-    """The protocol for `(Tensor, dim: int) -> Tensor`."""
-
-    def __call__(self, x: Tensor, /, dim: int) -> Tensor:
-        ...
-
-
-class _HasDimsTuple(Protocol):
-    """The protocol providing self.dims.
-
-    See: https://mypy.readthedocs.io/en/stable/more_types.html?highlight=reveal_type#mixin-classes.
-    """
-
-    # DISABLE: It's intended to omit method docstring for this Protocol.
-    @property
-    @abstractmethod
-    # pylint: disable-next=missing-function-docstring
-    def dims(self) -> Tuple[int, ...]:
-        ...
-
-
-class _ApplySingleDimFuncMixin:
-    """A mixin with a helper method that applies a function accepting a single dim to multiple \
-    dims specified by self.dims.
-
-    This is useful for NormalizedReparam with certain normalizers.
-    """
-
-    def _apply_single_dim_func(
-        self: _HasDimsTuple, func: _TensorFuncWithDim, x: Tensor, /
-    ) -> Tensor:
-        """Apply a tensor function accepting a single dim over self.dims.
-
-        Args:
-            func (_TensorFuncWithDim): The function with a single dim.
-            x (Tensor): The tensor input.
-
-        Returns:
-            Tensor: The tensor output.
-        """
-        return unflatten_dims(
-            func(flatten_dims(x, dims=self.dims), dim=self.dims[0]), dims=self.dims, shape=x.shape
-        )
-
 
 Ts = TypeVarTuple("Ts")
 
@@ -173,7 +126,7 @@ class TorchUnaryOpParameter(TorchComposedParameter[AbstractTorchParameter]):
             inv_func (Optional[Callable[[Tensor], Tensor]], optional): The inverse of func, used \
                 to transform the intialization. Defaults to lambda x: x.
         """
-        super().__init__(param, func=func)
+        super().__init__(param, func=func, inv_func=inv_func)
 
 
 class TorchBinaryOpParameter(
@@ -394,21 +347,74 @@ class TorchSigmoidParameter(TorchUnaryOpParameter):
         return self.params[0].shape
 
 
-class TorchReduceOpParameter(TorchUnaryOpParameter, _ApplySingleDimFuncMixin):
+class TorchReduceOpParamter(TorchUnaryOpParameter, ABC):
     """The base class for normalized reparameterization."""
 
     # NOTE: This class only serves as the common base of all normalized reparams, but include
     #       nothing more. It's up to the implementations to define further details.
+    def __init__(
+        self,
+        param: AbstractTorchParameter,
+        /,
+        *,
+        func: Callable[[Tensor], Tensor],
+        inv_func: Callable[[Tensor], Tensor] = lambda x: x,
+        dim: int = -1,
+    ) -> None:
+        super().__init__(param, func=func, inv_func=inv_func)
+        self.dim = dim
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return *self.params[0].shape[: self.dim], *self.params[0].shape[self.dim + 1 :]
 
 
-class TorchSoftmaxParameter(TorchReduceOpParameter):
+class TorchElementwiseReduceOpParameter(TorchUnaryOpParameter, ABC):
+    """The base class for normalized reparameterization."""
+
+    # NOTE: This class only serves as the common base of all normalized reparams, but include
+    #       nothing more. It's up to the implementations to define further details.
+    def __init__(
+        self,
+        param: AbstractTorchParameter,
+        /,
+        *,
+        func: Callable[[Tensor], Tensor],
+        inv_func: Callable[[Tensor], Tensor] = lambda x: x,
+        dim: int = -1,
+    ) -> None:
+        super().__init__(param, func=func, inv_func=inv_func)
+        self.dim = dim
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return self.params[0].shape
+
+
+class TorchReduceSumParameter(TorchReduceOpParamter):
+    def __init__(self, param: AbstractTorchParameter, dim: int = -1) -> None:
+        super().__init__(param, func=self._func, dim=dim)
+
+    def _func(self, x: Tensor) -> Tensor:
+        return torch.sum(x, dim=self.dim)
+
+
+class TorchReduceLSEParameter(TorchReduceOpParamter):
+    def __init__(self, param: AbstractTorchParameter, dim: int = -1) -> None:
+        super().__init__(param, func=self._func, dim=dim)
+
+    def _func(self, x: Tensor) -> Tensor:
+        return torch.logsumexp(x, dim=self.dim)
+
+
+class TorchSoftmaxParameter(TorchElementwiseReduceOpParameter):
     """Softmax reparameterization.
 
     Range: (0, 1), 0 available if input is masked, 1 available when only one element valid.
     Constraints: sum to 1.
     """
 
-    def __init__(self, param: AbstractTorchParameter) -> None:
+    def __init__(self, param: AbstractTorchParameter, dim: int = -1) -> None:
         """Init class.
 
         Args:
@@ -416,24 +422,20 @@ class TorchSoftmaxParameter(TorchReduceOpParameter):
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
         # Softmax is just scaled exp, so we take log as inv.
-        super().__init__(param, func=self._func, inv_func=torch.log)
+        super().__init__(param, func=self._func, inv_func=torch.log, dim=dim)
 
     def _func(self, x: Tensor) -> Tensor:
-        # torch.softmax only accepts a single dim, so we need the applier.
-        x = self._apply_single_dim_func(torch.softmax, x)
-        # nan will appear when there's only one element and it's masked. In that case we project nan
-        # as 1 (0 in log-sapce). +inf and -inf are (unsafely) projected but will not appear.
-        return torch.nan_to_num(x, nan=1)
+        return torch.softmax(x, dim=self.dim)
 
 
-class TorchLogSoftmaxParameter(TorchReduceOpParameter, _ApplySingleDimFuncMixin):
+class TorchLogSoftmaxParameter(TorchElementwiseReduceOpParameter):
     """LogSoftmax reparameterization, which is more numarically-stable than log(softmax(...)).
 
     Range: (-inf, 0), -inf available if input is masked, 0 available when only one element valid.
     Constraints: logsumexp to 0.
     """
 
-    def __init__(self, param: Optional[AbstractTorchParameter] = None, /) -> None:
+    def __init__(self, param: Optional[AbstractTorchParameter] = None, dim: int = -1) -> None:
         """Init class.
 
         Args:
@@ -441,14 +443,10 @@ class TorchLogSoftmaxParameter(TorchReduceOpParameter, _ApplySingleDimFuncMixin)
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
         # LogSoftmax is just additive offset, so we take identity as inv.
-        super().__init__(param, func=self._func)
+        super().__init__(param, func=self._func, dim=dim)
 
     def _func(self, x: Tensor) -> Tensor:
-        # torch.log_softmax only accepts a single dim, so we need the applier.
-        x = self._apply_single_dim_func(torch.log_softmax, x)
-        # -inf still passes gradients, so we use a redundant projection to stop it. nan is the same
-        # as SoftmaxReparam, projected to 0 (in log-space). +inf will not appear.
-        return torch.nan_to_num(x, nan=0, neginf=float("-inf"))
+        return torch.log_softmax(x, dim=self.dim)
 
 
 class TorchScaledSigmoidParameter(TorchUnaryOpParameter):

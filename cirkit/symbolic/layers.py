@@ -5,9 +5,11 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from cirkit.symbolic.params import (
     AbstractParameter,
-    ConstantParameter,
+    LogSoftmaxParameter,
     Parameter,
     Parameterization,
+    ReduceLSEParameter,
+    ReduceSumParameter,
     ScaledSigmoidParameter,
 )
 from cirkit.utils.scope import Scope
@@ -115,13 +117,21 @@ class CategoricalLayer(ExpFamilyLayer):
         num_channels: int,
         num_categories: int = 2,
         logits: Optional[AbstractParameter] = None,
-        log_partition: Optional[AbstractParameter] = None,
+        logits_param: Optional[Parameterization] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels, log_partition=log_partition)
+        super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
         if logits is None:
-            logits = Parameter(self.num_variables, num_output_units, num_channels, num_categories)
+            logits = Parameter(len(scope), num_output_units, num_channels, num_categories)
+            if logits_param is not None:
+                logits = LogSoftmaxParameter(logits)
         self.logits = logits
+        self.log_partition = ReduceSumParameter(
+            ReduceSumParameter(
+                ReduceLSEParameter(PlaceholderParameter(self, "logits"), axis=-1), axis=2
+            ),
+            axis=0,
+        )
 
     @property
     def sufficient_statistics_shape(self) -> Tuple[int, ...]:
@@ -173,7 +183,7 @@ class GaussianLayer(ExpFamilyLayer):
         return params
 
 
-class ConstantLayer(InputLayer):
+class LogPartitionLayer(InputLayer):
     def __init__(
         self, scope: Scope, num_output_units: int, num_channels: int, value: AbstractParameter
     ):

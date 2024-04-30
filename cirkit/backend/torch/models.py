@@ -6,34 +6,21 @@ from torch import Tensor, nn
 from cirkit.backend.torch.layers import TorchLayer
 
 
-class TensorizedCircuit(nn.Module):
-    """The tensorized circuit with concrete computational graph in PyTorch.
-
-    This class is aimed for computation, and therefore does not include strutural properties.
-    """
-
+class AbstractTensorizedCircuit(nn.Module):
     def __init__(
         self,
+        num_variables: int,
+        num_channels: int,
         layers: List[TorchLayer],
         bookkeeping: List[Tuple[List[int], Optional[Tensor]]],
     ) -> None:
         super().__init__()
+        self._num_variables = num_variables
+        self._num_channels = num_channels
         self.layers = nn.ModuleList(layers)
         self.bookkeeping = bookkeeping
 
-    def __call__(self, x: Tensor) -> Tensor:
-        """Invoke the forward function.
-
-        Args:
-            x (Tensor): The input of the circuit, shape (*B, C, D).
-
-        Returns:
-            Tensor: The output of the circuit, shape (*B, num_out, num_cls).
-        """  # TODO: single letter name?
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
-
-    def forward(self, x: Tensor) -> Tensor:
+    def _eval_forward(self, x: Tensor) -> Tensor:
         """Invoke the forward function.
 
         Args:
@@ -57,6 +44,7 @@ class TensorizedCircuit(nn.Module):
                     inputs = torch.stack(in_tensors, dim=0)
                 else:
                     (inputs,) = in_tensors
+                    inputs = inputs.unsqueeze(dim=0)
 
                 if in_fold_idx is None:
                     # This layer is not folded, introduce fold dimension
@@ -64,8 +52,7 @@ class TensorizedCircuit(nn.Module):
                     pass  # inputs: (H, B, K) [without folding]
                 else:
                     # This layer is folded, and in_fold_idx has shape (F, H)
-                    inputs = x[in_fold_idx]  # (F', H, B, K) [with folding]
-                    assert False  # [without folding]
+                    inputs = inputs[in_fold_idx]  # (F', H, B, K) [with folding]
             else:
                 # The layer is an input layer
                 # in_fold_idx has shape (D',) with D' <= D  [without folding]
@@ -74,7 +61,9 @@ class TensorizedCircuit(nn.Module):
                 )  # (C, B, D)  [without folding]
 
             # outputs.append(layer(inputs))  # (F', B, K), with possibly F' = 1 [with folding]
-            outputs.append(layer(inputs))  # (B, K) [without folding]
+            lout = layer(inputs)
+            # print(type(layer), lout[0])
+            outputs.append(lout)  # (B, K) [without folding]
 
         # Retrieve the indices of the output tensors
         out_layer_indices, out_fold_idx = self.bookkeeping[-1]
@@ -94,3 +83,46 @@ class TensorizedCircuit(nn.Module):
 
         # Move batch dimension to be the first dimension
         return outputs.permute(1, 2, 0)  # (B, F', K)
+
+
+class TensorizedCircuit(AbstractTensorizedCircuit):
+    """The tensorized circuit with concrete computational graph in PyTorch.
+
+    This class is aimed for computation, and therefore does not include strutural properties.
+    """
+
+    def __call__(self, x: Tensor) -> Tensor:
+        """Invoke the forward function.
+
+        Args:
+            x (Tensor): The input of the circuit, shape (*B, C, D).
+
+        Returns:
+            Tensor: The output of the circuit, shape (*B, num_out, num_cls).
+        """  # TODO: single letter name?
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self._eval_forward(x)
+
+
+class TensorizedConstantCircuit(AbstractTensorizedCircuit):
+    """The tensorized circuit with concrete computational graph in PyTorch.
+
+    This class is aimed for computation, and therefore does not include strutural properties.
+    """
+
+    def __call__(self) -> Tensor:
+        """Invoke the forward function.
+
+        Returns:
+            Tensor: The output of the circuit, shape (*B, num_out, num_cls).
+        """  # TODO: single letter name?
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__()  # type: ignore[no-any-return,misc]
+
+    def forward(self) -> Tensor:
+        x = torch.empty(size=(1, self._num_channels, self._num_variables))
+        x = self._eval_forward(x)
+        return x.squeeze(dim=0)  # squeeze dummy batch dimension

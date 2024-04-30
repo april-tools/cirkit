@@ -2,7 +2,13 @@ import itertools
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from cirkit.symbolic.circuit import Circuit, CircuitBlock, CircuitOperation, CircuitOperator
+from cirkit.symbolic.circuit import (
+    Circuit,
+    CircuitBlock,
+    CircuitOperation,
+    CircuitOperator,
+    StructuralPropertyError,
+)
 from cirkit.symbolic.layers import (
     InputLayer,
     Layer,
@@ -12,7 +18,6 @@ from cirkit.symbolic.layers import (
     SumLayer,
 )
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
-from cirkit.utils.exceptions import StructuralPropertyError
 from cirkit.utils.scope import Scope
 
 
@@ -79,6 +84,7 @@ def integrate(
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit.from_operation(
         sc.scope,
+        sc.num_channels,
         list(map_layers.values()),
         in_blocks,
         out_blocks,
@@ -166,6 +172,7 @@ def multiply(
     # Construct the product symbolic circuit
     return Circuit.from_operation(
         lhs_sc.scope | rhs_sc.scope,
+        lhs_sc.num_channels,
         list(map_layers.values()),
         in_blocks,
         out_blocks,

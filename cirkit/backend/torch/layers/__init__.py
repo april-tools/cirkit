@@ -5,9 +5,9 @@ from .inner import TorchInnerLayer as TorchInnerLayer
 from .inner import TorchKroneckerLayer as TorchKroneckerLayer
 from .inner import TorchMixingLayer as TorchMixingLayer
 from .input import TorchCategoricalLayer as TorchCategoricalLayer
-from .input import TorchConstantLayer as TorchConstantLayer
 from .input import TorchExpFamilyLayer as TorchExpFamilyLayer
 from .input import TorchGaussianLayer as TorchGaussianLayer
 from .input import TorchInputLayer as TorchInputLayer
+from .input import TorchLogPartitionLayer as TorchLogPartitionLayer
 from .sum_product import TorchCPLayer as TorchCPLayer
 from .sum_product import TorchTuckerLayer as TorchTuckerLayer

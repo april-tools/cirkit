@@ -95,12 +95,14 @@ class Circuit:
     def __init__(
         self,
         scope: Scope,
+        num_channels: int,
         layers: List[Layer],
         in_layers: Dict[Layer, List[Layer]],
         out_layers: Dict[Layer, List[Layer]],
         operation: Optional[CircuitOperation] = None,
     ) -> None:
         self.scope = scope
+        self.num_channels = num_channels
         self.operation = operation
         self._layers = layers
         self._in_layers = in_layers
@@ -114,6 +116,7 @@ class Circuit:
     def from_operation(
         cls,
         scope: Scope,
+        num_channels: int,
         blocks: List[CircuitBlock],
         in_blocks: Dict[CircuitBlock, List[CircuitBlock]],
         out_blocks: Dict[CircuitBlock, List[CircuitBlock]],
@@ -133,7 +136,7 @@ class Circuit:
             for l, l_outs in b.layer_outputs:
                 out_layers[l].extend(l_outs)
         # Build the circuit and set the operation
-        return cls(scope, layers, in_layers, out_layers, operation=operation)
+        return cls(scope, num_channels, layers, in_layers, out_layers, operation=operation)
 
     @classmethod
     def from_region_graph(
@@ -157,9 +160,7 @@ class Circuit:
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
                 input_sl = input_factory(rgn.scope, num_input_units, num_channels)
-                num_output_units = (
-                    num_classes if rgn in region_graph.output_nodes else num_sum_units
-                )
+                num_output_units = num_sum_units if rgn.outputs else num_classes
                 sum_sl = sum_factory(rgn.scope, num_input_units, num_output_units)
                 layers.append(input_sl)
                 layers.append(sum_sl)
@@ -174,18 +175,30 @@ class Circuit:
                 for in_sl in prod_inputs:
                     out_layers[in_sl].append(prod_sl)
                 rgn_to_layers[rgn] = prod_sl
-            elif isinstance(rgn, RegionNode):  # Inner region node
-                sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
-                num_units = num_sum_units if rgn in rgn.outputs else num_classes
-                if len(sum_inputs) == 1:  # Region node being partitioned in one way
-                    sum_sl = sum_factory(rgn.scope, num_units, num_units)
-                else:  # Region node being partitioned in multiple way -> add "mixing" layer
-                    sum_sl = mixing_factory(rgn.scope, num_units, len(sum_inputs))
+            elif isinstance(rgn, RegionNode) and len(rgn.inputs) == 1:  # Region node
+                num_units = num_sum_units if rgn.outputs else num_classes
+                (rgn_in,) = rgn.inputs
+                sum_input = rgn_to_layers[rgn_in]
+                sum_sl = sum_factory(rgn.scope, num_units, num_units)
                 layers.append(sum_sl)
-                in_layers[sum_sl] = sum_inputs
-                for in_sl in sum_inputs:
-                    out_layers[in_sl].append(sum_sl)
+                in_layers[sum_sl] = [sum_input]
+                out_layers[sum_input].append(sum_sl)
                 rgn_to_layers[rgn] = sum_sl
+            elif (
+                isinstance(rgn, RegionNode) and len(rgn.inputs) > 1
+            ):  # Region with multiple partitionings
+                num_units = num_sum_units if rgn.outputs else num_classes
+                sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
+                mix_sl = mixing_factory(rgn.scope, num_units, len(sum_inputs))
+                for in_sl in sum_inputs:
+                    sum_sl = sum_factory(rgn.scope, in_sl.num_output_units, num_units)
+                    layers.append(sum_sl)
+                    in_layers[sum_sl] = [in_sl]
+                    out_layers[in_sl].append(sum_sl)
+                    in_layers[mix_sl].append(sum_sl)
+                    out_layers[sum_sl].append(mix_sl)
+                layers.append(mix_sl)
+                rgn_to_layers[rgn] = mix_sl
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
                 #       readable and also easier for static analysis inside the blocks. Yet the
@@ -193,7 +206,7 @@ class Circuit:
                 #       Also, should anything really go wrong, we will hit this guard statement
                 #       instead of going into a wrong branch.
                 assert False, "Region graph nodes must be either region or partition nodes"
-        return cls(region_graph.scope, layers, in_layers, out_layers)
+        return cls(region_graph.scope, num_channels, layers, in_layers, out_layers)
 
     def layer_inputs(self, sl: Layer) -> List[Layer]:
         return self._in_layers[sl]
@@ -293,3 +306,8 @@ def pipeline_topological_ordering(roots: Set[Circuit]) -> List[Circuit]:
     if ordering is None:
         raise ValueError("The given symbolic circuits pipeline has at least one cycle")
     return ordering
+
+
+class StructuralPropertyError(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)

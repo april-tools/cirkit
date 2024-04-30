@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 
 from cirkit.backend.base import (
     LayerCompilationFunc,
@@ -8,8 +8,8 @@ from cirkit.backend.base import (
 )
 from cirkit.backend.torch.layers import (
     TorchCategoricalLayer,
-    TorchConstantLayer,
     TorchGaussianLayer,
+    TorchLogPartitionLayer,
 )
 from cirkit.backend.torch.layers.inner import (
     TorchDenseLayer,
@@ -19,64 +19,121 @@ from cirkit.backend.torch.layers.inner import (
 )
 from cirkit.backend.torch.params import TorchParameter
 from cirkit.backend.torch.params.base import AbstractTorchParameter
-from cirkit.backend.torch.params.composed import TorchKroneckerParameter
+from cirkit.backend.torch.params.composed import (
+    TorchExpParameter,
+    TorchKroneckerParameter,
+    TorchLogSoftmaxParameter,
+    TorchReduceLSEParameter,
+    TorchReduceSumParameter,
+    TorchSoftmaxParameter,
+)
+from cirkit.backend.torch.params.parameter import TorchConstantParameter
 from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.symbolic.layers import (
     CategoricalLayer,
-    ConstantLayer,
     DenseLayer,
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
+    LogPartitionLayer,
     MixingLayer,
     PlaceholderParameter,
 )
-from cirkit.symbolic.params import ConstantParameter, Parameter
+from cirkit.symbolic.params import (
+    ConstantParameter,
+    ExpParameter,
+    LogSoftmaxParameter,
+    Parameter,
+    ReduceLSEParameter,
+    ReduceSumParameter,
+    SoftmaxParameter,
+)
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
 def compile_parameter(
-    p: Parameter, init_func: InitializerFunc, compiler: "TorchCompiler"
+    compiler: "TorchCompiler", p: Parameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchParameter:
     compiled_p = TorchParameter(*p.shape)
-    compiled_p.initialize(init_func)
+    if init_func is not None:
+        compiled_p.initialize(init_func)
     return compiled_p
 
 
 def compile_placeholder_parameter(
-    p: PlaceholderParameter, init_func: InitializerFunc, compiler: "TorchCompiler"
+    compiler: "TorchCompiler", p: PlaceholderParameter, init_func: Optional[InitializerFunc] = None
 ) -> AbstractTorchParameter:
     return compiler.retrieve_parameter(p.layer, p.name)
 
 
 def compile_constant_parameter(
-    p: ConstantParameter, init_func: InitializerFunc, compiler: "TorchCompiler"
+    compiler: "TorchCompiler", p: ConstantParameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchParameter:
-    ...
+    return TorchConstantParameter(p.shape, p.value)
+
+
+def compile_exp_parameter(
+    compiler: "TorchCompiler", p: ExpParameter, init_func: Optional[InitializerFunc] = None
+) -> TorchParameter:
+    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    return TorchExpParameter(opd)
+
+
+def compile_softmax_parameter(
+    compiler: "TorchCompiler", p: SoftmaxParameter, init_func: Optional[InitializerFunc] = None
+) -> TorchSoftmaxParameter:
+    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    return TorchSoftmaxParameter(opd, dim=p.axis)
+
+
+def compile_log_softmax_parameter(
+    compiler: "TorchCompiler", p: SoftmaxParameter, init_func: Optional[InitializerFunc] = None
+) -> TorchLogSoftmaxParameter:
+    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    return TorchLogSoftmaxParameter(opd, dim=p.axis)
+
+
+def compile_reduce_sum_parameter(
+    compiler: "TorchCompiler", p: ReduceSumParameter, init_func: Optional[InitializerFunc] = None
+) -> TorchReduceSumParameter:
+    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    return TorchReduceSumParameter(opd, dim=p.axis)
+
+
+def compile_reduce_lse_parameter(
+    compiler: "TorchCompiler", p: ReduceSumParameter, init_func: Optional[InitializerFunc] = None
+) -> TorchReduceLSEParameter:
+    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    return TorchReduceLSEParameter(opd, dim=p.axis)
 
 
 def compile_kronecker_parameter(
-    p: TorchKroneckerParameter, init_func: InitializerFunc, compiler: "TorchCompiler"
+    compiler: "TorchCompiler",
+    p: TorchKroneckerParameter,
+    init_func: Optional[InitializerFunc] = None,
 ) -> TorchKroneckerParameter:
     ...
 
 
-def compile_constant_layer(sl: ConstantLayer, compiler: "TorchCompiler") -> TorchConstantLayer:
-    return TorchConstantLayer(
+def compile_log_partition_layer(
+    compiler: "TorchCompiler", sl: LogPartitionLayer
+) -> TorchLogPartitionLayer:
+    value = compiler.compile_parameter(sl.value)
+    return TorchLogPartitionLayer(
         num_variables=sl.num_variables,
         num_output_units=sl.num_output_units,
         num_channels=sl.num_channels,
-        value=compiler.compile_parameter(sl.value),
+        value=value,
     )
 
 
 def compile_categorical_layer(
-    sl: CategoricalLayer, compiler: "TorchCompiler"
+    compiler: "TorchCompiler", sl: CategoricalLayer
 ) -> TorchCategoricalLayer:
     logits = compiler.compile_parameter(
-        sl.logits, compiler.retrieve_initializer(TorchCategoricalLayer, "logits")
+        sl.logits, init_func=compiler.retrieve_initializer(TorchCategoricalLayer, "logits")
     )
     return TorchCategoricalLayer(
         sl.num_variables,
@@ -87,45 +144,47 @@ def compile_categorical_layer(
     )
 
 
-def compile_gaussian_layer(sl: GaussianLayer, compiler: "TorchCompiler") -> TorchGaussianLayer:
+def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> TorchGaussianLayer:
+    mean = compiler.compile_parameter(
+        sl.mean, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "mean")
+    )
+    stddev = compiler.compile_parameter(
+        sl.stddev, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "stddev")
+    )
     return TorchGaussianLayer(
         num_variables=sl.num_variables,
         num_output_units=sl.num_output_units,
         num_channels=sl.num_channels,
-        mean=compiler.compile_parameter(sl.mean),
-        stddev=compiler.compile_parameter(sl.stddev),
+        mean=mean,
+        stddev=stddev,
     )
 
 
-def compile_hadamard_layer(sl: KroneckerLayer, compiler: "TorchCompiler") -> TorchHadamardLayer:
-    return TorchHadamardLayer(
-        num_input_units=sl.num_input_units, num_output_units=sl.num_output_units, arity=sl.arity
-    )
+def compile_hadamard_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchHadamardLayer:
+    return TorchHadamardLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity)
 
 
-def compile_kronecker_layer(sl: KroneckerLayer, compiler: "TorchCompiler") -> TorchKroneckerLayer:
-    return TorchKroneckerLayer(
-        num_input_units=sl.num_input_units, num_output_units=sl.num_output_units, arity=sl.arity
-    )
+def compile_kronecker_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchKroneckerLayer:
+    return TorchKroneckerLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity)
 
 
-def compile_dense_layer(sl: DenseLayer, compiler: "TorchCompiler") -> TorchDenseLayer:
+def compile_dense_layer(compiler: "TorchCompiler", sl: DenseLayer) -> TorchDenseLayer:
     weight = compiler.compile_parameter(
-        sl.weight, compiler.retrieve_initializer(TorchDenseLayer, "weight")
+        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
     )
     return TorchDenseLayer(sl.num_input_units, sl.num_output_units, weight=weight)
 
 
-def compile_mixing_layer(sl: MixingLayer, compiler: "TorchCompiler") -> TorchMixingLayer:
+def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMixingLayer:
     weight = compiler.compile_parameter(
-        sl.weight, compiler.retrieve_initializer(TorchDenseLayer, "weight")
+        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
     )
     return TorchMixingLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity, weight=weight)
 
 
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     CategoricalLayer: compile_categorical_layer,
-    ConstantLayer: compile_constant_layer,
+    LogPartitionLayer: compile_log_partition_layer,
     GaussianLayer: compile_gaussian_layer,
     HadamardLayer: compile_hadamard_layer,
     KroneckerLayer: compile_kronecker_layer,
@@ -135,4 +194,10 @@ DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     Parameter: compile_parameter,
     PlaceholderParameter: compile_placeholder_parameter,
+    ConstantParameter: compile_constant_parameter,
+    ExpParameter: compile_exp_parameter,
+    SoftmaxParameter: compile_softmax_parameter,
+    LogSoftmaxParameter: compile_log_softmax_parameter,
+    ReduceSumParameter: compile_reduce_sum_parameter,
+    ReduceLSEParameter: compile_reduce_lse_parameter,
 }

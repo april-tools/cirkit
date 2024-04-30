@@ -1,15 +1,30 @@
 import os
 from abc import ABC, abstractmethod
-from typing import IO, Any, Callable, Dict, Optional, Type, Union
+from typing import IO, Any, Callable, Dict, Optional, Protocol, Type, Union
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.params import AbstractParameter
 
 LayerCompilationSign = Type[Layer]
-LayerCompilationFunc = Callable[..., Any]
+
+
+class LayerCompilationFunc(Protocol):
+    def __call__(self, compiler: "AbstractCompiler", sl: Layer, **kwargs) -> Any:
+        ...
+
+
 ParameterCompilationSign = Type[AbstractParameter]
-ParameterCompilationFunc = Callable[..., Any]
+
+
+class ParameterCompilationFunc(Protocol):
+    def __call__(self, compiler: "AbstractCompiler", p: AbstractParameter, **kwargs) -> Any:
+        ...
+
+
+class CompilationRuleNotFound(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
 
 
 SUPPORTED_BACKENDS = ["torch"]
@@ -76,11 +91,19 @@ class CompilerRegistry:
         self._parameter_rules[param_cls] = func
 
     def retrieve_layer_rule(self, signature: LayerCompilationSign) -> LayerCompilationFunc:
+        if signature not in self._layer_rules:
+            raise CompilationRuleNotFound(
+                f"Layer compilation rule for signature '{signature}' not found"
+            )
         return self._layer_rules[signature]
 
     def retrieve_parameter_rule(
         self, signature: ParameterCompilationSign
     ) -> ParameterCompilationFunc:
+        if signature not in self._parameter_rules:
+            raise CompilationRuleNotFound(
+                f"Parameter compilation rule for signature '{signature}' not found"
+            )
         return self._parameter_rules[signature]
 
 
@@ -131,7 +154,7 @@ class AbstractCompiler(ABC):
         ...
 
     @abstractmethod
-    def compile_parameter(self, parameter: AbstractParameter, *args, **kwargs) -> Any:
+    def compile_parameter(self, parameter: AbstractParameter, **kwargs) -> Any:
         ...
 
     @abstractmethod

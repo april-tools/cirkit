@@ -1,3 +1,4 @@
+from numbers import Number
 from typing import Callable, Tuple, final
 
 import torch
@@ -55,3 +56,33 @@ class TorchParameter(AbstractTorchParameter):
             Tensor: The parameters after reparameterization.
         """
         return self.ptensor
+
+
+@final
+class TorchConstantParameter(AbstractTorchParameter):
+    def __init__(self, shape: Tuple[int, ...], value: Number) -> None:
+        """Init class."""
+        super().__init__()
+        self.register_buffer("btensor", tensor=torch.full(shape, fill_value=value))
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.btensor.shape
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """The dtype of the output parameter."""
+        return self.btensor.dtype
+
+    @property
+    def device(self) -> torch.device:
+        """The device of the output parameter."""
+        return self.btensor.device
+
+    def forward(self) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        return self.btensor

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
 from numbers import Number
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Tuple
 
 
 class AbstractParameter(ABC):
@@ -140,6 +140,18 @@ class ReduceOpParameter(UnaryOpParameter, ABC):
         return dict(axis=self.axis)
 
 
+class EntrywiseReduceOpParameter(EntrywiseOpParameter, ABC):
+    def __init__(self, opd: AbstractParameter, axis: int = -1):
+        super().__init__(opd)
+        axis = axis if axis >= 0 else axis + len(opd.shape)
+        assert 0 <= axis < len(opd.shape)
+        self.axis = axis
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(axis=self.axis)
+
+
 class ExpParameter(EntrywiseOpParameter):
     ...
 
@@ -176,11 +188,15 @@ class ReduceProductParameter(ReduceOpParameter):
     ...
 
 
-class LogSoftmaxParameter(ReduceOpParameter):
+class ReduceLSEParameter(ReduceOpParameter):
     ...
 
 
-class SoftmaxParameter(ReduceOpParameter):
+class LogSoftmaxParameter(EntrywiseReduceOpParameter):
+    ...
+
+
+class SoftmaxParameter(EntrywiseReduceOpParameter):
     ...
 
 

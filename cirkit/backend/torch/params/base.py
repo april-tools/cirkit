@@ -33,24 +33,6 @@ class AbstractTorchParameter(nn.Module, ABC):
     def device(self) -> torch.device:
         """The device of the output parameter."""
 
-    # NOTE: Subclasses should include @torch.no_grad() to disable grad for initialization.
-    @abstractmethod
-    def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
-        """Initialize the internal parameter tensor(s) with the given initializer.
-
-        This can only be called after materialization and will always overwrite whatever is \
-        already in the internal param. To safely provide an initial value to a possibly reused \
-        reparam, initialize through materialize() instead.
-
-        The provided initializer_ is expected to provide an initial value for the output \
-        parameter, and implementations may define how the value is transformated to initialize the \
-        internal tensor(s).
-
-        Args:
-            initializer_ (Callable[[Tensor], Tensor]): The function that initialize a Tensor \
-                inplace while also returning the value.
-        """
-
     def __call__(self) -> Tensor:
         """Get the reparameterized parameters.
 

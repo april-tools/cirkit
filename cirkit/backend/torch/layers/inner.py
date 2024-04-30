@@ -132,17 +132,13 @@ class TorchDenseLayer(TorchSumLayer):
             num_output_units (int): The number of output units.
             weight (AbstractTorchParameter): The reparameterization for layer parameters.
         """
-        super().__init__(
-            num_input_units=num_input_units,
-            num_output_units=num_output_units,
-            arity=1,
-            semiring=semiring,
-        )
+        assert weight.shape == (num_output_units, num_input_units)
+        super().__init__(num_input_units, num_output_units, arity=1, semiring=semiring)
         self.weight = weight
 
     @staticmethod
     def default_initializers() -> Dict[str, InitializerFunc]:
-        return dict(weight=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
+        return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         return torch.einsum("oi,...i->...o", self.weight(), x)  # shape (*B, Ki) -> (*B, Ko).
@@ -188,12 +184,13 @@ class TorchMixingLayer(TorchSumLayer):
         assert (
             num_output_units == num_input_units
         ), "The number of input and output units must be the same for MixingLayer."
+        assert weight.shape == (num_output_units, arity)
         super().__init__(num_input_units, num_output_units, arity=arity, semiring=semiring)
         self.weight = weight
 
     @staticmethod
     def default_initializers() -> Dict[str, InitializerFunc]:
-        return dict(weight=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
+        return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         return torch.einsum("kh,h...k->...k", self.weight(), x)  # shape (H, *B, K) -> (*B, K).

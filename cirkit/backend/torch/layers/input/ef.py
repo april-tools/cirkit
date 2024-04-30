@@ -93,8 +93,6 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             num_categories > 0
         ), "The number of categories for Categorical distribution must be positive."
         assert logits.shape == (num_variables, num_output_units, num_channels, num_categories)
-        # Set self.suff_stats_shape before ExpFamilyLayer.__init__. The reparam will be set in
-        # ExpFamilyLayer.__init__ to normalize dim=-1 (cat).
         super().__init__(
             num_variables, num_output_units, num_channels=num_channels, semiring=semiring
         )
@@ -110,7 +108,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             x = x.long()  # The input to Categorical should be discrete.
         x = F.one_hot(x, self.num_categories)  # (C, *B, D, num_categories)
         x = x.to(torch.get_default_dtype())
-        return torch.einsum("cbdi,dkci->bk", x, self.logits())
+        x = torch.einsum("cbdi,dkci->bk", x, self.logits())
+        return x
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):

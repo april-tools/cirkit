@@ -1,10 +1,9 @@
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type
+from typing import Dict, Iterable, List, Optional, Protocol, Tuple, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     AbstractLayerOperator,
     CategoricalLayer,
-    ConstantLayer,
     DenseLayer,
     ExpFamilyLayer,
     GaussianLayer,
@@ -13,18 +12,16 @@ from cirkit.symbolic.layers import (
     KroneckerLayer,
     Layer,
     LayerOperation,
+    LogPartitionLayer,
     MixingLayer,
     PlaceholderParameter,
 )
 from cirkit.symbolic.params import (
     ConstantParameter,
-    ExpParameter,
     KroneckerParameter,
-    LogParameter,
     MeanNormalProduct,
     OuterSumParameter,
     PartitionGaussianProduct,
-    ReduceSumParameter,
     VarianceNormalProduct,
 )
 from cirkit.utils.scope import Scope
@@ -34,12 +31,10 @@ def integrate_ef_layer(sl: ExpFamilyLayer, scope: Optional[Iterable[int]] = None
     scope = Scope(scope) if scope is not None else sl.scope
     assert sl.scope == scope
     if sl.log_partition is None:
-        sv = ConstantParameter(
-            shape=(sl.num_variables, sl.num_output_units, sl.num_channels), value=0.0
-        )
+        log_partition = ConstantParameter(shape=(sl.num_output_units,), value=0.0)
     else:
-        sv = PlaceholderParameter(sl, name="log_partition")
-    sl = ConstantLayer(sl.scope, sl.num_output_units, sl.num_channels, value=sv)
+        log_partition = sl.log_partition
+    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
 
@@ -54,7 +49,6 @@ def multiply_categorical_layers(lhs: CategoricalLayer, rhs: CategoricalLayer) ->
         lhs.num_output_units * rhs.num_input_units,
         num_channels=lhs.num_channels,
         logits=sl_logits,
-        log_partition=LogParameter(ReduceSumParameter(ExpParameter(sl_logits), axis=3)),
     )
     return CircuitBlock.from_layer(sl)
 
@@ -123,7 +117,13 @@ def multiply_mixing_layers(lhs: MixingLayer, rhs: MixingLayer) -> CircuitBlock:
 
 
 DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
-LayerOperatorFunc = Callable[..., CircuitBlock]
+
+
+class LayerOperatorFunc(Protocol):
+    def __call__(self, *sl: Layer, **kwargs) -> CircuitBlock:
+        ...
+
+
 DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
     LayerOperation.INTEGRATION: [
         integrate_ef_layer,
