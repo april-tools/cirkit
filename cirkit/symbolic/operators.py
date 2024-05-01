@@ -5,7 +5,6 @@ from cirkit.symbolic.layers import (
     AbstractLayerOperator,
     CategoricalLayer,
     DenseLayer,
-    ExpFamilyLayer,
     GaussianLayer,
     HadamardLayer,
     IndexLayer,
@@ -22,19 +21,36 @@ from cirkit.symbolic.params import (
     MeanNormalProduct,
     OuterSumParameter,
     PartitionGaussianProduct,
+    ReduceLSEParameter,
+    ReduceSumParameter,
     VarianceNormalProduct,
 )
 from cirkit.utils.scope import Scope
 
 
-def integrate_ef_layer(sl: ExpFamilyLayer, scope: Optional[Iterable[int]] = None) -> CircuitBlock:
+def integrate_categorical_layer(
+    sl: CategoricalLayer, scope: Optional[Iterable[int]] = None
+) -> CircuitBlock:
+    scope = Scope(scope) if scope is not None else sl.scope
+    assert sl.scope == scope
+    lp = ReduceSumParameter(
+        ReduceSumParameter(ReduceLSEParameter(PlaceholderParameter(sl, "logits"), axis=-1), axis=2),
+        axis=0,
+    )
+    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=lp)
+    return CircuitBlock.from_layer(sl)
+
+
+def integrate_gaussian_layer(
+    sl: GaussianLayer, scope: Optional[Iterable[int]] = None
+) -> CircuitBlock:
     scope = Scope(scope) if scope is not None else sl.scope
     assert sl.scope == scope
     if sl.log_partition is None:
-        log_partition = ConstantParameter(shape=(sl.num_output_units,), value=0.0)
+        lp = ConstantParameter(shape=(sl.num_output_units,), value=0.0)
     else:
-        log_partition = sl.log_partition
-    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+        lp = PlaceholderParameter(sl, "log_partition")
+    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=lp)
     return CircuitBlock.from_layer(sl)
 
 
@@ -125,9 +141,7 @@ class LayerOperatorFunc(Protocol):
 
 
 DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
-    LayerOperation.INTEGRATION: [
-        integrate_ef_layer,
-    ],
+    LayerOperation.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
     LayerOperation.DIFFERENTIATION: [],
     LayerOperation.MULTIPLICATION: [
         multiply_categorical_layers,

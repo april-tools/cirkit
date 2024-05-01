@@ -89,27 +89,7 @@ class InputLayer(Layer):
         }
 
 
-class ExpFamilyLayer(InputLayer, ABC):
-    def __init__(
-        self,
-        scope: Scope,
-        num_output_units: int,
-        num_channels: int,
-        log_partition: Optional[AbstractParameter] = None,
-    ):
-        super().__init__(scope, num_output_units, num_channels)
-        self.log_partition = log_partition
-
-    @abstractmethod
-    def sufficient_statistics_shape(self) -> Tuple[int, ...]:
-        ...
-
-    @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
-        return dict(log_partition=self.log_partition)
-
-
-class CategoricalLayer(ExpFamilyLayer):
+class CategoricalLayer(InputLayer):
     def __init__(
         self,
         scope: Scope,
@@ -124,18 +104,8 @@ class CategoricalLayer(ExpFamilyLayer):
         if logits is None:
             logits = Parameter(len(scope), num_output_units, num_channels, num_categories)
             if logits_param is not None:
-                logits = LogSoftmaxParameter(logits)
+                logits = logits_param(logits)
         self.logits = logits
-        self.log_partition = ReduceSumParameter(
-            ReduceSumParameter(
-                ReduceLSEParameter(PlaceholderParameter(self, "logits"), axis=-1), axis=2
-            ),
-            axis=0,
-        )
-
-    @property
-    def sufficient_statistics_shape(self) -> Tuple[int, ...]:
-        return self.num_channels, self.num_categories
 
     @property
     def config(self) -> dict:
@@ -150,7 +120,7 @@ class CategoricalLayer(ExpFamilyLayer):
         return params
 
 
-class GaussianLayer(ExpFamilyLayer):
+class GaussianLayer(InputLayer):
     def __init__(
         self,
         scope: Scope,
@@ -160,7 +130,7 @@ class GaussianLayer(ExpFamilyLayer):
         stddev: Optional[AbstractParameter] = None,
         log_partition: Optional[AbstractParameter] = None,
     ):
-        super().__init__(scope, num_output_units, num_channels, log_partition=log_partition)
+        super().__init__(scope, num_output_units, num_channels)
         assert (mean is None and stddev is None) or (
             mean is not None and stddev is not None
         ), "Either both 'mean' and 'variance' has to be specified or none of them"
@@ -171,10 +141,7 @@ class GaussianLayer(ExpFamilyLayer):
             )
         self.mean = mean
         self.stddev = stddev
-
-    @property
-    def sufficient_statistics_shape(self) -> Tuple[int, ...]:
-        return self.num_channels, 2
+        self.log_partition = log_partition
 
     @property
     def parameters(self) -> Dict[str, AbstractParameter]:

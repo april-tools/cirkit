@@ -58,6 +58,10 @@ class TorchExpFamilyLayer(TorchInputLayer):
         return self.semiring.from_lse_sum(self.log_score(x))
 
     @abstractmethod
+    def log_probs(self, x: Tensor) -> Tensor:
+        ...
+
+    @abstractmethod
     def log_score(self, x: Tensor) -> Tensor:
         ...
 
@@ -103,13 +107,22 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     def default_initializers() -> Dict[str, InitializerFunc]:
         return dict(logits=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
 
-    def log_score(self, x: Tensor) -> Tensor:
+    def _eval_forward(self, x: Tensor, logits: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete.
         x = F.one_hot(x, self.num_categories)  # (C, *B, D, num_categories)
         x = x.to(torch.get_default_dtype())
-        x = torch.einsum("cbdi,dkci->bk", x, self.logits())
+        x = torch.einsum("cbdi,dkci->bk", x, logits)
         return x
+
+    def log_probs(self, x: Tensor) -> Tensor:
+        logits = self.logits()
+        log_z = torch.logsumexp(logits, dim=-1, keepdim=True)
+        return self._eval_forward(x, logits) - log_z
+
+    def log_score(self, x: Tensor) -> Tensor:
+        logits = self.logits()
+        return self._eval_forward(x, logits)
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
@@ -126,6 +139,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         num_channels: int = 1,
         mean: AbstractTorchParameter,
         stddev: AbstractTorchParameter,
+        log_partition: Optional[AbstractTorchParameter] = None,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
@@ -142,6 +156,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         )
         self.mean = mean
         self.stddev = stddev
+        self.log_partition = log_partition
 
     @staticmethod
     def default_initializers() -> Dict[str, InitializerFunc]:
@@ -150,7 +165,13 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             stddev=lambda t: nn.init.normal_(t, mean=0.0, std=3e-1),
         )
 
-    def log_score(self, x: torch.Tensor) -> torch.Tensor:
+    def log_probs(self, x: Tensor) -> Tensor:
+        y = self.log_score(x)
+        if self.log_partition is None:
+            return y
+        log_z = self.log_partition()
+        return y - log_z
+
+    def log_score(self, x: Tensor) -> Tensor:
         # (C, B, D)
-        log_prob = distributions.Normal(loc=self.mean, scale=self.stddev).log_prob(x)
-        return log_prob
+        return distributions.Normal(loc=self.mean(), scale=self.stddev()).log_prob(x)

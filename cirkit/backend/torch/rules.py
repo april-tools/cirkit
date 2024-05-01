@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Dict, Optional
 
+import torch
+
 from cirkit.backend.base import (
     LayerCompilationFunc,
     LayerCompilationSign,
@@ -79,22 +81,22 @@ def compile_constant_parameter(
 
 def compile_exp_parameter(
     compiler: "TorchCompiler", p: ExpParameter, init_func: Optional[InitializerFunc] = None
-) -> TorchParameter:
-    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+) -> TorchExpParameter:
+    opd = compiler.compile_parameter(p.opd, init_func=lambda t: init_func(t).log_())
     return TorchExpParameter(opd)
 
 
 def compile_softmax_parameter(
     compiler: "TorchCompiler", p: SoftmaxParameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchSoftmaxParameter:
-    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    opd = compiler.compile_parameter(p.opd, init_func=lambda t: init_func(t).log_())
     return TorchSoftmaxParameter(opd, dim=p.axis)
 
 
 def compile_log_softmax_parameter(
     compiler: "TorchCompiler", p: SoftmaxParameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchLogSoftmaxParameter:
-    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    opd = compiler.compile_parameter(p.opd, init_func=lambda t: init_func(t).exp_())
     return TorchLogSoftmaxParameter(opd, dim=p.axis)
 
 
@@ -164,12 +166,14 @@ def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> Torc
     stddev = compiler.compile_parameter(
         sl.stddev, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "stddev")
     )
+    lp = compiler.compile_parameter(sl.log_partition) if sl.log_partition is not None else None
     return TorchGaussianLayer(
-        num_variables=sl.num_variables,
-        num_output_units=sl.num_output_units,
+        sl.num_variables,
+        sl.num_output_units,
         num_channels=sl.num_channels,
         mean=mean,
         stddev=stddev,
+        log_partition=lp,
     )
 
 

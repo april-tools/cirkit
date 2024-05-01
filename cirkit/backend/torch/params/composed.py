@@ -18,10 +18,7 @@ class TorchComposedParameter(AbstractTorchParameter, Generic[Unpack[Ts]]):
     """The base class for composed reparameterization."""
 
     def __init__(
-        self,
-        *params: AbstractTorchParameter,
-        func: Callable[[Unpack[Ts]], Tensor],
-        inv_func: Callable[[Tensor], Tensor] = lambda x: x,
+        self, *params: AbstractTorchParameter, func: Callable[[Unpack[Ts]], Tensor]
     ) -> None:
         """Init class.
 
@@ -29,9 +26,6 @@ class TorchComposedParameter(AbstractTorchParameter, Generic[Unpack[Ts]]):
             *params (AbstractTorchParameter): The input param(s) to be composed.
             func (Callable[[*Ts], Tensor]): The function to compose the output from the parameters \
                 given by the input param(s).
-            inv_func (Optional[Callable[[Tensor], Tensor]], optional): The inverse of func (in \
-                unary form), used to transform the intialization. For n-ary func, this inverse may \
-                not be well-defined and is therefore NOT used. Defaults to lambda x: x.
         """
         super().__init__()
         # TODO: make ModuleList a generic?
@@ -41,7 +35,6 @@ class TorchComposedParameter(AbstractTorchParameter, Generic[Unpack[Ts]]):
             params
         )
         self.func = func
-        self.inv_func = inv_func
 
     @property
     @abstractmethod
@@ -66,33 +59,6 @@ class TorchComposedParameter(AbstractTorchParameter, Generic[Unpack[Ts]]):
         ), "The device of all composing parameters should be the same."
         return device
 
-    @torch.no_grad()
-    def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
-        """Initialize the internal parameter tensor(s) with the given initializer.
-
-        This can only be called after materialization and will always overwrite whatever is \
-        already in the internal param. To safely provide an initial value to a possibly reused \
-        param, initialize through materialize() instead.
-
-        The provided initializer_ is expected to provide an initial value for the output \
-        parameter, and the value will be transformed through inv_func (as defined in __init__) and \
-        passed to the input param, if there's only one input.
-        In case of multiple inputs, the inputs are expected to initialized beforehand, as also in \
-        materialization, and this function will silently become a no-op. This is because it's \
-        generally difficult to define the inverse of n-ary functions and we just skip it for safety.
-
-        Args:
-            initializer_ (Callable[[Tensor], Tensor]): The function that initialize a Tensor \
-                inplace while also returning the value.
-        """
-        if len(self.params) > 1:
-            return
-
-        # Construct a tmp Tensor -> initialize it -> transform by inv_func -> fill into x.
-        self.params[0].initialize(
-            lambda x: x.copy_(self.inv_func(initializer_(x.new_empty(self.shape))))
-        )
-
     def forward(self) -> Tensor:
         """Get the reparameterized parameters.
 
@@ -109,12 +75,7 @@ class TorchUnaryOpParameter(TorchComposedParameter[AbstractTorchParameter], ABC)
     """The base class for unary composed reparameterization."""
 
     def __init__(
-        self,
-        param: AbstractTorchParameter,
-        /,
-        *,
-        func: Callable[[Tensor], Tensor],
-        inv_func: Callable[[Tensor], Tensor] = lambda x: x,
+        self, param: AbstractTorchParameter, /, *, func: Callable[[Tensor], Tensor]
     ) -> None:
         """Init class.
 
@@ -123,10 +84,8 @@ class TorchUnaryOpParameter(TorchComposedParameter[AbstractTorchParameter], ABC)
                 None, a LeafReparam will be automatically constructed. Defaults to None.
             func (Callable[[Tensor], Tensor]): The function to compose the output from the \
                 parameters given by the input param.
-            inv_func (Optional[Callable[[Tensor], Tensor]], optional): The inverse of func, used \
-                to transform the intialization. Defaults to lambda x: x.
         """
-        super().__init__(param, func=func, inv_func=inv_func)
+        super().__init__(param, func=func)
 
 
 class TorchBinaryOpParameter(
@@ -141,7 +100,6 @@ class TorchBinaryOpParameter(
         /,
         *,
         func: Callable[[Tensor, Tensor], Tensor],
-        inv_func: Optional[Callable[[Tensor], Tensor]] = None,
     ) -> None:
         """Init class.
 
@@ -150,8 +108,6 @@ class TorchBinaryOpParameter(
             param2 (AbstractTorchParameter): The second input param to be composed.
             func (Callable[[Tensor, Tensor], Tensor]): The function to compose the output from the \
                 parameters given by the input reparams.
-            inv_func (Optional[Callable[[Tensor], Tensor]], optional): Ignored. BinaryReparam does \
-                not propagate initialization. Defaults to None.
         """
         super().__init__(param1, param2, func=func)
 
@@ -250,25 +206,21 @@ class TorchAffineParameter(TorchUnaryOpParameter):
         # Faster code path for simpler cases, to save some computations.
         # ANNOTATE: Specify signature for lambda.
         func: Callable[[Tensor], Tensor]
-        inv_func: Callable[[Tensor], Tensor]
         # DISABLE: It's intended to use lambda here because it's too simple to use def.
         # pylint: disable=unnecessary-lambda-assignment
         # DISABLE: It's intended to explicitly compare with 0, so that it's easier to understand.
         # pylint: disable=use-implicit-booleaness-not-comparison-to-zero
         if a == 1 and b == 0:
-            func = inv_func = lambda x: x
+            func = lambda x: x
         elif a == 1:  # and b != 0
             func = lambda x: x + b
-            inv_func = lambda x: x - b
         elif b == 0:  # and a != 1
             func = lambda x: a * x
-            inv_func = lambda x: (1 / a) * x
         else:  # a != 1 and b != 0
             func = lambda x: a * x + b  # TODO: possible FMA? addcmul?
-            inv_func = lambda x: (1 / a) * (x - b)
         # pylint: enable=use-implicit-booleaness-not-comparison-to-zero
         # pylint: enable=unnecessary-lambda-assignment
-        super().__init__(param, func=func, inv_func=inv_func)
+        super().__init__(param, func=func)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -288,7 +240,7 @@ class TorchExpParameter(TorchUnaryOpParameter):
             param (Optional[Reparameterization], optional): The input param to be composed. If \
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
-        super().__init__(param, func=torch.exp, inv_func=torch.log)
+        super().__init__(param, func=torch.exp)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -308,7 +260,7 @@ class TorchLogParameter(TorchUnaryOpParameter):
             param (Optional[Reparameterization], optional): The input param to be composed. If \
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
-        super().__init__(param, func=torch.log, inv_func=torch.exp)
+        super().__init__(param, func=torch.log)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -328,7 +280,7 @@ class TorchSquareParameter(TorchUnaryOpParameter):
             param (Optional[Reparameterization], optional): The input param to be composed. If \
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
-        super().__init__(param, func=torch.square, inv_func=torch.sqrt)
+        super().__init__(param, func=torch.square)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -360,7 +312,6 @@ class TorchClampParameter(TorchUnaryOpParameter):
             max (Optional[float], optional): The upper-bound for clamping, None for no clamping in \
                 this direction. Defaults to None.
         """
-        # We assume the inv of clamp is identity.
         super().__init__(param, func=functools.partial(torch.clamp, min=min, max=max))
 
     @property
@@ -381,7 +332,7 @@ class TorchSigmoidParameter(TorchUnaryOpParameter):
             param (Optional[Reparameterization], optional): The input param to be composed. If \
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
-        super().__init__(param, func=torch.sigmoid, inv_func=torch.logit)
+        super().__init__(param, func=torch.sigmoid)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -399,10 +350,9 @@ class TorchReduceOpParamter(TorchUnaryOpParameter, ABC):
         /,
         *,
         func: Callable[[Tensor], Tensor],
-        inv_func: Callable[[Tensor], Tensor] = lambda x: x,
         dim: int = -1,
     ) -> None:
-        super().__init__(param, func=func, inv_func=inv_func)
+        super().__init__(param, func=func)
         self.dim = dim
 
     @cached_property
@@ -421,10 +371,9 @@ class TorchElementwiseReduceOpParameter(TorchUnaryOpParameter):
         /,
         *,
         func: Callable[[Tensor], Tensor],
-        inv_func: Callable[[Tensor], Tensor] = lambda x: x,
         dim: int = -1,
     ) -> None:
-        super().__init__(param, func=func, inv_func=inv_func)
+        super().__init__(param, func=func)
         self.dim = dim
 
     @cached_property
@@ -462,8 +411,7 @@ class TorchSoftmaxParameter(TorchElementwiseReduceOpParameter):
             param (Optional[Reparameterization], optional): The input param to be composed. If \
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
-        # Softmax is just scaled exp, so we take log as inv.
-        super().__init__(param, func=self._func, inv_func=torch.log, dim=dim)
+        super().__init__(param, func=self._func, dim=dim)
 
     def _func(self, x: Tensor) -> Tensor:
         return torch.softmax(x, dim=self.dim)
@@ -483,7 +431,6 @@ class TorchLogSoftmaxParameter(TorchElementwiseReduceOpParameter):
             param (Optional[Reparameterization], optional): The input param to be composed. If \
                 None, a LeafReparam will be automatically constructed. Defaults to None.
         """
-        # LogSoftmax is just additive offset, so we take identity as inv.
         super().__init__(param, func=self._func, dim=dim)
 
     def _func(self, x: Tensor) -> Tensor:
@@ -509,7 +456,6 @@ class TorchScaledSigmoidParameter(TorchUnaryOpParameter):
             vmin (float, optional): The min variance. Defaults to 0.0001.
             vmax (float, optional): The max variance. Defaults to 10.0.
         """
-        # We don't assign inv_func and simply pass through the initialization.
         super().__init__(param, func=self._func)
         assert 0 <= vmin < vmax, "Must provide 0 <= min_var < max_var."
         self.vmin = vmin

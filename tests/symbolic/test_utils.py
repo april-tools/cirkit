@@ -69,7 +69,7 @@ def build_simple_circuit(
 ):
     rg = RandomBinaryTree(
         num_variables,
-        depth=int(np.floor(np.log2(num_variables))),
+        depth=int(np.ceil(np.log2(num_variables))),
         num_repetitions=num_repetitions,
         seed=seed)
     if input_layer == 'categorical':

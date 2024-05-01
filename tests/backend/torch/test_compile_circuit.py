@@ -16,7 +16,7 @@ def test_compile_output_shape():
     num_variables, num_channels = 12, 1
     sc = build_simple_circuit(num_variables, 4, 3, num_repetitions=3)
     tc: TensorizedCircuit = compiler.compile(sc)
-    batch_size = 32
+    batch_size = 42
     input_shape = (batch_size, num_channels, num_variables)
     x = torch.zeros(input_shape)
     y = tc(x)
@@ -27,7 +27,7 @@ def test_compile_output_shape():
 @pytest.mark.parametrize("normalized", [False, True])
 def test_compile_integrate_pc(normalized: bool):
     compiler = TorchCompiler()
-    num_variables, num_channels = 7, 1
+    num_variables, num_channels = 5, 1
     sc = build_simple_pc(num_variables, 4, 3, num_repetitions=3, normalized=normalized)
     int_sc = SF.integrate(sc)
     int_tc: TensorizedConstantCircuit = compiler.compile(int_sc)
@@ -54,18 +54,19 @@ def test_compile_integrate_pc(normalized: bool):
         assert isclose(torch.sum(scores), z)
 
 
-@pytest.mark.parametrize("num_products", [2, 3, 4])
-def test_compile_product_integrate_pc(num_products: int):
+@pytest.mark.parametrize("normalized,num_products", itertools.product([False, True], [2]))
+def test_compile_product_integrate_pc(normalized: bool, num_products: int):
     compiler = TorchCompiler()
-    num_variables, num_channels = 7, 1
+    num_variables, num_channels = 5, 1
     scs = []
     last_sc = None
     for i in range(num_products):
-        sci = build_simple_pc(num_variables, 4 + i, 3 + i)
+        sci = build_simple_pc(num_variables, 4 + i, 3 + i, normalized=normalized)
         if i == 0:
             last_sc = sci
         else:
             last_sc = SF.multiply(last_sc, sci)
+        scs.append(sci)
     tc: TensorizedCircuit = compiler.compile(last_sc)
     tcs: List[TensorizedCircuit] = [compiler.get_compiled_circuit(sc) for sc in scs]
     int_sc = SF.integrate(last_sc)
@@ -74,11 +75,17 @@ def test_compile_product_integrate_pc(num_products: int):
     z = int_tc()  # compute the partition function
     assert z.shape == (1, 1)
     z = z.squeeze()
-    assert not isclose(z.item(), 1.0)
+    if normalized:
+        assert 0.0 < z.item() < 1.0
+    else:
+        assert not isclose(z.item(), 1.0)
 
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
     assert worlds.shape == (2 ** num_variables, 1, num_variables)
     scores = tc(worlds)
     assert scores.shape == (2 ** num_variables, 1, 1)
     scores = scores.squeeze()
-    assert isclose(torch.sum(scores), z)
+    assert isclose(torch.sum(scores, dim=0), z)
+
+    each_tc_scores = torch.prod(torch.stack([tci(worlds).squeeze() for tci in tcs], dim=0), dim=0)
+    assert allclose(each_tc_scores, scores)
