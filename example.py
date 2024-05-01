@@ -254,7 +254,7 @@ def lib_extension() -> None:
     # Now, we need to extend the compiler such that it knows that:
     # - SymPolyGaussianLayer must be compiled into PolyGaussianLayer
     # In order to do so, we write a compilation rule
-    def compile_poly_gaussian(sl: PolyGaussianLayer, compiler: TorchCompiler) -> TorchPolyGaussianLayer:
+    def compile_poly_gaussian(compiler: TorchCompiler, sl: PolyGaussianLayer) -> TorchPolyGaussianLayer:
         return TorchPolyGaussianLayer(
             sl.num_variables, sl.num_channels, sl.num_output_units,
             degree=sl.degree,
