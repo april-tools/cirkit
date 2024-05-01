@@ -16,6 +16,7 @@ from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
+from cirkit.backend.torch.semiring import Semiring, SemiringCls
 from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
 from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
@@ -23,21 +24,13 @@ from cirkit.symbolic.params import AbstractParameter
 
 
 class TorchCompiler(AbstractCompiler):
-    def __init__(self, fold: bool = False, einsum: bool = False):
+    def __init__(self, semiring: str = "sum-product", fold: bool = False, einsum: bool = False):
         default_registry = CompilerRegistry(
             DEFAULT_LAYER_COMPILATION_RULES, DEFAULT_PARAMETER_COMPILATION_RULES
         )
         super().__init__(default_registry, fold=fold, einsum=einsum)
         self._compiled_layers: Dict[Layer, TorchLayer] = {}
-
-    def retrieve_parameter(self, layer: Layer, name: str) -> AbstractTorchParameter:
-        compiled_layer = self._compiled_layers[layer]
-        p = getattr(compiled_layer, name)
-        if not isinstance(p, AbstractTorchParameter):
-            raise ValueError(
-                f"Attribute '{name}' of layer '{layer.__class__.__name__}' is not a parameter"
-            )
-        return p
+        self._semiring = Semiring.from_name(semiring)
 
     def compile_pipeline(self, sc: Circuit) -> AbstractTensorizedCircuit:
         # Compile the circuits following the topological ordering of the pipeline.
@@ -52,6 +45,19 @@ class TorchCompiler(AbstractCompiler):
 
         # Return the compiled circuit (i.e., the output of the circuit pipeline)
         return self.get_compiled_circuit(sc)
+
+    @property
+    def semiring(self) -> SemiringCls:
+        return self._semiring
+
+    def retrieve_parameter(self, layer: Layer, name: str) -> AbstractTorchParameter:
+        compiled_layer = self._compiled_layers[layer]
+        p = getattr(compiled_layer, name)
+        if not isinstance(p, AbstractTorchParameter):
+            raise ValueError(
+                f"Attribute '{name}' of layer '{layer.__class__.__name__}' is not a parameter"
+            )
+        return p
 
     def compile_parameter(
         self, parameter: AbstractParameter, *, init_func: Optional[InitializerFunc] = None

@@ -77,7 +77,7 @@ class Semiring(ABC):
 
     @final
     @staticmethod
-    def get_comp_space_by_name(name: str) -> Type["Semiring"]:
+    def from_name(name: str) -> Type["Semiring"]:
         """Get a Semiring by its registered name.
 
         Args:
@@ -86,6 +86,10 @@ class Semiring(ABC):
         Returns:
             Type[Semiring]: The retrieved concrete Semiring.
         """
+        if name not in Semiring._registry:
+            raise IndexError(
+                f"Unknown semiring '{name}'. Use @Semiring.register(<name>) to register a new semiring"
+            )
         return Semiring._registry[name]
 
     # TODO: Never should be used. This is known issue: https://github.com/python/mypy/issues/14044

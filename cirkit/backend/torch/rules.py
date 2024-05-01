@@ -58,6 +58,88 @@ if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
+def compile_log_partition_layer(
+    compiler: "TorchCompiler", sl: LogPartitionLayer
+) -> TorchLogPartitionLayer:
+    value = compiler.compile_parameter(sl.value)
+    return TorchLogPartitionLayer(
+        sl.num_variables,
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        value=value,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_categorical_layer(
+    compiler: "TorchCompiler", sl: CategoricalLayer
+) -> TorchCategoricalLayer:
+    logits = compiler.compile_parameter(
+        sl.logits, init_func=compiler.retrieve_initializer(TorchCategoricalLayer, "logits")
+    )
+    return TorchCategoricalLayer(
+        sl.num_variables,
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        num_categories=sl.num_categories,
+        logits=logits,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> TorchGaussianLayer:
+    mean = compiler.compile_parameter(
+        sl.mean, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "mean")
+    )
+    stddev = compiler.compile_parameter(
+        sl.stddev, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "stddev")
+    )
+    lp = compiler.compile_parameter(sl.log_partition) if sl.log_partition is not None else None
+    return TorchGaussianLayer(
+        sl.num_variables,
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        mean=mean,
+        stddev=stddev,
+        log_partition=lp,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_hadamard_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchHadamardLayer:
+    return TorchHadamardLayer(
+        sl.num_input_units, sl.num_output_units, arity=sl.arity, semiring=compiler.semiring
+    )
+
+
+def compile_kronecker_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchKroneckerLayer:
+    return TorchKroneckerLayer(
+        sl.num_input_units, sl.num_output_units, arity=sl.arity, semiring=compiler.semiring
+    )
+
+
+def compile_dense_layer(compiler: "TorchCompiler", sl: DenseLayer) -> TorchDenseLayer:
+    weight = compiler.compile_parameter(
+        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
+    )
+    return TorchDenseLayer(
+        sl.num_input_units, sl.num_output_units, weight=weight, semiring=compiler.semiring
+    )
+
+
+def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMixingLayer:
+    weight = compiler.compile_parameter(
+        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
+    )
+    return TorchMixingLayer(
+        sl.num_input_units,
+        sl.num_output_units,
+        arity=sl.arity,
+        weight=weight,
+        semiring=compiler.semiring,
+    )
+
+
 def compile_parameter(
     compiler: "TorchCompiler", p: Parameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchParameter:
@@ -132,76 +214,9 @@ def compile_kronecker_parameter(
     return TorchKroneckerParameter(opd1, opd2)
 
 
-def compile_log_partition_layer(
-    compiler: "TorchCompiler", sl: LogPartitionLayer
-) -> TorchLogPartitionLayer:
-    value = compiler.compile_parameter(sl.value)
-    return TorchLogPartitionLayer(
-        num_variables=sl.num_variables,
-        num_output_units=sl.num_output_units,
-        num_channels=sl.num_channels,
-        value=value,
-    )
-
-
-def compile_categorical_layer(
-    compiler: "TorchCompiler", sl: CategoricalLayer
-) -> TorchCategoricalLayer:
-    logits = compiler.compile_parameter(
-        sl.logits, init_func=compiler.retrieve_initializer(TorchCategoricalLayer, "logits")
-    )
-    return TorchCategoricalLayer(
-        sl.num_variables,
-        sl.num_output_units,
-        num_channels=sl.num_channels,
-        num_categories=sl.num_categories,
-        logits=logits,
-    )
-
-
-def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> TorchGaussianLayer:
-    mean = compiler.compile_parameter(
-        sl.mean, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "mean")
-    )
-    stddev = compiler.compile_parameter(
-        sl.stddev, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "stddev")
-    )
-    lp = compiler.compile_parameter(sl.log_partition) if sl.log_partition is not None else None
-    return TorchGaussianLayer(
-        sl.num_variables,
-        sl.num_output_units,
-        num_channels=sl.num_channels,
-        mean=mean,
-        stddev=stddev,
-        log_partition=lp,
-    )
-
-
-def compile_hadamard_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchHadamardLayer:
-    return TorchHadamardLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity)
-
-
-def compile_kronecker_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchKroneckerLayer:
-    return TorchKroneckerLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity)
-
-
-def compile_dense_layer(compiler: "TorchCompiler", sl: DenseLayer) -> TorchDenseLayer:
-    weight = compiler.compile_parameter(
-        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
-    )
-    return TorchDenseLayer(sl.num_input_units, sl.num_output_units, weight=weight)
-
-
-def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMixingLayer:
-    weight = compiler.compile_parameter(
-        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
-    )
-    return TorchMixingLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity, weight=weight)
-
-
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
-    CategoricalLayer: compile_categorical_layer,
     LogPartitionLayer: compile_log_partition_layer,
+    CategoricalLayer: compile_categorical_layer,
     GaussianLayer: compile_gaussian_layer,
     HadamardLayer: compile_hadamard_layer,
     KroneckerLayer: compile_kronecker_layer,

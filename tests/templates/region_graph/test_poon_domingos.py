@@ -5,10 +5,7 @@ import numpy as np
 import pytest
 
 from cirkit.templates.region_graph import PoonDomingos
-from tests.templates.region_graph.test_region_graph import (
-    check_region_graph_save_load
-)
-
+from tests.templates.region_graph.test_region_graph import check_region_graph_save_load
 
 # @pytest.mark.parametrize(
 #     "shape,delta",

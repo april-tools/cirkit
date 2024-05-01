@@ -1,5 +1,10 @@
 import cirkit.symbolic.functional as SF
-from cirkit.symbolic.layers import PlaceholderParameter, DenseLayer, LogPartitionLayer, HadamardLayer
+from cirkit.symbolic.layers import (
+    DenseLayer,
+    HadamardLayer,
+    LogPartitionLayer,
+    PlaceholderParameter,
+)
 from cirkit.symbolic.params import KroneckerParameter
 from tests.symbolic.test_utils import build_simple_circuit
 

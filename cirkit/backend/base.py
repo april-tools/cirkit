@@ -154,10 +154,6 @@ class AbstractCompiler(ABC):
         ...
 
     @abstractmethod
-    def compile_parameter(self, parameter: AbstractParameter, **kwargs) -> Any:
-        ...
-
-    @abstractmethod
     def save(
         self,
         sym_filepath: Union[IO, os.PathLike, str],

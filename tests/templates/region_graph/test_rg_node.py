@@ -2,7 +2,6 @@ import pytest
 
 from cirkit.templates.region_graph import PartitionNode, RegionNode
 
-
 # def test_region_node() -> None:
 #     node = RegionNode((1, 2))
 #

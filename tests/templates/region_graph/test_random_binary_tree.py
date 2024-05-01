@@ -4,10 +4,7 @@ import math
 import pytest
 
 from cirkit.templates.region_graph import RandomBinaryTree
-from tests.templates.region_graph.test_region_graph import (
-    check_region_graph_save_load
-)
-
+from tests.templates.region_graph.test_region_graph import check_region_graph_save_load
 
 # @pytest.mark.parametrize(
 #     "num_vars,depth,num_repetitions", list(itertools.product([1, 8, 16], [0, 1, 3], [1, 3]))
