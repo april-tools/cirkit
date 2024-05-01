@@ -32,17 +32,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-lint = [
+dev = [
   "black[jupyter]~=23.0",
   "mypy==1.7.1",  # should be specific version for stable typing
   "pylint~=3.0.0",
   "pydocstyle[toml]~=6.3.0",
   "pytest",  # this is required to lint the test files
-  "pylint-per-file-ignores",  # TODO: wait for native support in pylint
-]
-test = [
-  "pytest",
   "pytest-cov",
+  "pylint-per-file-ignores",  # TODO: wait for native support in pylint
+  "scipy>=1.10.0"  # this is required for testing
 ]
 notebooks = [
   "notebook",
