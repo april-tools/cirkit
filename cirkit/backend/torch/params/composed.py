@@ -139,8 +139,8 @@ class TorchOuterSumParameter(TorchBinaryOpParameter):
     def _func(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1: (d1, d2, ..., dk1, ... dn)
         # x2: (d1, d2, ..., dk2, ... dn)
-        x1 = x1.unsqueeze(self.dim)  # (d1, d2, ..., 1, dk1, ..., dn)
-        x2 = x2.unsqueeze(self.dim + 1)  # (d1, d2, ..., dk1, 1, ...., dn)
+        x1 = x1.unsqueeze(self.dim + 1)  # (d1, d2, ..., dk1, 1, ..., dn)
+        x2 = x2.unsqueeze(self.dim)  # (d1, d2, ..., 1, dk1, ...., dn)
         x = x1 + x2  # (d1, d2, ..., dk1, dk2, ..., dn)
         x = x.view(self.shape)  # (d1, d2, ..., dk1 * dk2, ..., dn)
         return x

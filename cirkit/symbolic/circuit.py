@@ -179,7 +179,7 @@ class Circuit:
                 num_units = num_sum_units if rgn.outputs else num_classes
                 (rgn_in,) = rgn.inputs
                 sum_input = rgn_to_layers[rgn_in]
-                sum_sl = sum_factory(rgn.scope, num_units, num_units)
+                sum_sl = sum_factory(rgn.scope, sum_input.num_output_units, num_units)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = [sum_input]
                 out_layers[sum_input].append(sum_sl)
