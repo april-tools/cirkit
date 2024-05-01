@@ -7,7 +7,6 @@ from typing import Dict, Iterable, Optional, Type
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import AbstractLayerOperator, Layer
 from cirkit.symbolic.operators import (
-    DEFAULT_COMMUTATIVE_OPERATORS,
     DEFAULT_OPERATOR_RULES,
     LayerOperatorFunc,
     LayerOperatorSign,
@@ -47,7 +46,7 @@ class OperatorRegistry(AbstractContextManager):
         registry = cls()
         for op, funcs in DEFAULT_OPERATOR_RULES.items():
             for f in funcs:
-                registry.add_rule(op, f, commutative=op in DEFAULT_COMMUTATIVE_OPERATORS)
+                registry.add_rule(op, f)
         return registry
 
     @property
@@ -94,21 +93,16 @@ class OperatorRegistry(AbstractContextManager):
         for s, f in op_rules.items():
             if len(signature) != len(s):
                 continue
-            # TODO: handle more complicated sub-signatures hierarchies obtained via sub-classing layers
+            # TODO: handle more complicated sub-signatures hierarchies obtained via sub-classing layers?
             if all(issubclass(x[0], x[1]) for x in zip(signature, s)):
                 # Cache rule signature for sub-signatures
-                self._register_rule(
-                    op, f, signature, commutative=op in DEFAULT_COMMUTATIVE_OPERATORS
-                )
+                self._rules[op][signature] = f
                 return f
         raise OperatorSignatureNotFound(*signature)
 
-    def add_rule(
-        self,
-        op: AbstractLayerOperator,
-        func: LayerOperatorFunc,
-        commutative: Optional[bool] = None,
-    ):
+    def add_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
+        # TODO do we have commutative operators?
+        # The multiplication (aka kronecker) between layers is NOT commutative
         args = func.__annotations__.copy()
         arg_names = args.keys()
         if "return" not in arg_names or not issubclass(args["return"], CircuitBlock):
@@ -128,24 +122,7 @@ class OperatorRegistry(AbstractContextManager):
             raise ValueError(
                 "The layer operands should be the first arguments of the operator rule function"
             )
-        return self._register_rule(op, func, signature, commutative=commutative)
-
-    def _register_rule(
-        self,
-        op: AbstractLayerOperator,
-        func: LayerOperatorFunc,
-        signature: LayerOperatorSign,
-        commutative: Optional[bool] = None,
-    ):
-        if len(signature) == 2:
-            # Binary operator found (special case as to deal with commutative operators)
-            self._rules[op][signature] = func
-            if commutative:
-                lhs_cls, rhs_cls = signature
-                if lhs_cls != rhs_cls:
-                    self._rules[op][(rhs_cls, lhs_cls)] = lambda rhs, lhs: func(lhs, rhs)
-        else:  # n-ary operator
-            self._rules[op][signature] = func
+        self._rules[op][signature] = func
 
 
 # Context variable holding the current global operator registry.

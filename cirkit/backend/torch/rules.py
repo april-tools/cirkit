@@ -94,14 +94,12 @@ def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> Torc
     stddev = compiler.compile_parameter(
         sl.stddev, init_func=TorchGaussianLayer.get_default_initializer("stddev")
     )
-    lp = compiler.compile_parameter(sl.log_partition) if sl.log_partition is not None else None
     return TorchGaussianLayer(
         sl.num_variables,
         sl.num_output_units,
         num_channels=sl.num_channels,
         mean=mean,
         stddev=stddev,
-        log_partition=lp,
         semiring=compiler.semiring,
     )
 
@@ -225,6 +223,40 @@ def compile_scaled_sigmoid_paramater(
     # TODO: invert scaled sigmoid
     opd = compiler.compile_parameter(p.opd, init_func=init_func)
     return TorchScaledSigmoidParameter(opd, vmin=p.vmin, vmax=p.vmax)
+
+
+# def compile_mean_gaussian_product_parameter(
+#     compiler: "TorchCompiler",
+#     p: MeanGaussianProduct,
+#     init_func: Optional[InitializerFunc] = None,
+# ) -> TorchMeanGaussianProductParameter:
+#     mean1 = compiler.compile_parameter(p.mean1)
+#     mean2 = compiler.compile_parameter(p.mean2)
+#     stddev1 = compiler.compile_parameter(p.stddev1)
+#     stddev2 = compiler.compile_parameter(p.stddev2)
+#     return TorchMeanGaussianProductParameter(mean1, mean2, stddev1, stddev2)
+#
+#
+# def compile_stddev_gaussian_product_parameter(
+#     compiler: "TorchCompiler",
+#     p: StddevGaussianProduct,
+#     init_func: Optional[InitializerFunc] = None,
+# ) -> TorchStddevGaussianProductParameter:
+#     stddev1 = compiler.compile_parameter(p.stddev1)
+#     stddev2 = compiler.compile_parameter(p.stddev2)
+#     return TorchStddevGaussianProductParameter(stddev1, stddev2)
+#
+#
+# def compile_log_partition_gaussian_product_parameter(
+#     compiler: "TorchCompiler",
+#     p: LogPartitionGaussianProduct,
+#     init_func: Optional[InitializerFunc] = None,
+# ) -> TorchLogPartitionGaussianProductParameter:
+#     mean1 = compiler.compile_parameter(p.mean1)
+#     mean2 = compiler.compile_parameter(p.mean2)
+#     stddev1 = compiler.compile_parameter(p.stddev1)
+#     stddev2 = compiler.compile_parameter(p.stddev2)
+#     return TorchMeanGaussianProductParameter(mean1, mean2, stddev1, stddev2)
 
 
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]

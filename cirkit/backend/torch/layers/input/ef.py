@@ -170,19 +170,11 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             stddev=lambda t: nn.init.uniform_(t, a=np.log(1e-2), b=0.0).exp_(),
         )
 
-    def log_probs(self, x: Tensor) -> Tensor:
-        y = self.log_score(x)
-        if self.log_partition is None:
-            return y
-        log_z = self.log_partition()
-        return y - log_z
-
-    def log_score(self, x: Tensor) -> Tensor:
+    def _eval_forward(self, x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
         # x: (C, B, D)
         # dist_loc: (D, K, C)
         # dist_stddev: (D, K, C)
-        dist_loc, dist_scale = self.mean(), self.stddev()
-        dist = distributions.Normal(loc=dist_loc, scale=dist_scale)
+        dist = distributions.Normal(loc=loc, scale=scale)
         x = x.permute(1, 2, 0).unsqueeze(dim=2)  # (*B, D, 1, C)
         x = dist.log_prob(x)
         x = torch.sum(x, dim=[1, 3])
@@ -192,4 +184,16 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         #  E.g., they require frequent permutations, squeezes/unsqueezes,
         #        and reductions over obscure combinations of axes for which we
         #        do not know if they will be time/memory efficient in the end
+        return x
+
+    def log_probs(self, x: Tensor) -> Tensor:
+        mean, stddev = self.mean(), self.stddev()
+        x = self._eval_forward(x, mean, stddev)
+        return x
+
+    def log_score(self, x: Tensor) -> Tensor:
+        mean, stddev = self.mean(), self.stddev()
+        x = self._eval_forward(x, mean, stddev)
+        if self.log_partition is not None:
+            x = x + self.log_partition()
         return x

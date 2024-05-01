@@ -17,13 +17,14 @@ from cirkit.symbolic.layers import (
 )
 from cirkit.symbolic.params import (
     ConstantParameter,
+    EntrywiseSumParameter,
     KroneckerParameter,
-    MeanNormalProduct,
+    LogPartitionGaussianProduct,
+    MeanGaussianProduct,
     OuterSumParameter,
-    PartitionGaussianProduct,
     ReduceLSEParameter,
     ReduceSumParameter,
-    VarianceNormalProduct,
+    StddevGaussianProduct,
 )
 from cirkit.utils.scope import Scope
 
@@ -72,17 +73,36 @@ def multiply_categorical_layers(lhs: CategoricalLayer, rhs: CategoricalLayer) ->
 def multiply_gaussian_layers(lhs: GaussianLayer, rhs: GaussianLayer) -> CircuitBlock:
     assert lhs.num_variables == rhs.num_variables
     assert lhs.num_channels == rhs.num_channels
+
+    # Retrieve placeholders
     mean_lhs = PlaceholderParameter(lhs, name="mean")
     mean_rhs = PlaceholderParameter(rhs, name="mean")
-    variance_lhs = PlaceholderParameter(lhs, name="variance")
-    variance_rhs = PlaceholderParameter(rhs, name="variance")
+    stddev_lhs = PlaceholderParameter(lhs, name="stddev")
+    stddev_rhs = PlaceholderParameter(rhs, name="stddev")
+
+    # Build the symbolic log partition function of the product
+    log_partition = LogPartitionGaussianProduct(mean_lhs, mean_rhs, stddev_lhs, stddev_rhs)
+    if lhs.log_partition is not None:
+        log_partition_lhs = PlaceholderParameter(lhs, name="log_partition")
+        if rhs.log_partition is not None:
+            log_partition_rhs = PlaceholderParameter(rhs, name="log_partition")
+            log_partition = EntrywiseSumParameter(
+                log_partition, log_partition_lhs, log_partition_rhs
+            )
+        else:
+            log_partition = EntrywiseSumParameter(log_partition, log_partition_lhs)
+    else:
+        log_partition_rhs = PlaceholderParameter(rhs, name="log_partition")
+        log_partition = EntrywiseSumParameter(log_partition, log_partition_rhs)
+
+    # Build a new gaussian layer
     sl = GaussianLayer(
         lhs.scope | rhs.scope,
         lhs.num_output_units * rhs.num_input_units,
         num_channels=lhs.num_channels,
-        mean=MeanNormalProduct(mean_lhs, mean_rhs, variance_lhs, variance_rhs),
-        stddev=VarianceNormalProduct(variance_lhs, variance_rhs),
-        log_partition=PartitionGaussianProduct(mean_lhs, mean_rhs, variance_lhs, variance_rhs),
+        mean=MeanGaussianProduct(mean_lhs, mean_rhs, stddev_lhs, stddev_rhs),
+        stddev=StddevGaussianProduct(stddev_lhs, stddev_rhs),
+        log_partition=log_partition,
     )
     return CircuitBlock.from_layer(sl)
 
@@ -130,9 +150,6 @@ def multiply_mixing_layers(lhs: MixingLayer, rhs: MixingLayer) -> CircuitBlock:
         ),
     )
     return CircuitBlock.from_layer(sl)
-
-
-DEFAULT_COMMUTATIVE_OPERATORS = [LayerOperation.MULTIPLICATION]
 
 
 class LayerOperatorFunc(Protocol):

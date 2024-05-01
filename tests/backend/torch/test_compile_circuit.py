@@ -72,6 +72,7 @@ def test_compile_integrate_pc_discrete(semiring: str, num_variables: int, normal
         assert False
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "semiring,normalized",
     itertools.product(["lse-sum", "sum-product"], [False, True]),

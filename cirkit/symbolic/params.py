@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
 from numbers import Number
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, List, Tuple
+
+import numpy as np
 
 
 class AbstractParameter(ABC):
@@ -42,6 +44,19 @@ class OpParameter(AbstractParameter, ABC):
 Parameterization = Callable[[AbstractParameter], OpParameter]
 
 
+class StackOpParameter(OpParameter, ABC):
+    def __init__(self, *opds: AbstractParameter, axis: int = -1):
+        assert len(set(opd.shape for opd in opds)) == 1
+        axis = axis if axis >= 0 else axis + len(opds[0].shape)
+        assert 0 <= axis < len(opds[0].shape)
+        self.opds = opds
+        self.axis = axis
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return *self.opds[0].shape[: self.axis], len(self.opds), *self.opds[0].shape[: self.axis]
+
+
 class UnaryOpParameter(OpParameter, ABC):
     def __init__(self, opd: AbstractParameter) -> None:
         self.opd = opd
@@ -51,6 +66,16 @@ class BinaryOpParameter(OpParameter, ABC):
     def __init__(self, opd1: AbstractParameter, opd2: AbstractParameter) -> None:
         self.opd1 = opd1
         self.opd2 = opd2
+
+
+class EntrywiseSumParameter(OpParameter):
+    def __init__(self, *opds: AbstractParameter) -> None:
+        assert len(set(opd.shape for opd in opds)) == 1
+        self.opds = opds
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        return self.opds[0].shape
 
 
 class HadamardParameter(BinaryOpParameter):
@@ -200,58 +225,58 @@ class SoftmaxParameter(EntrywiseReduceOpParameter):
     ...
 
 
-class MeanNormalProduct(AbstractParameter):
+class MeanGaussianProduct(AbstractParameter):
     def __init__(
         self,
         mean1: AbstractParameter,
         mean2: AbstractParameter,
-        variance1: AbstractParameter,
-        variance2: AbstractParameter,
+        stddev1: AbstractParameter,
+        stddev2: AbstractParameter,
     ):
-        assert mean1.shape[0] == mean2.shape[0] == variance1.shape[0] == variance2.shape[0]
-        assert mean1.shape[2] == mean2.shape[2] == variance1.shape[2] == variance2.shape[2]
-        assert mean1.shape[1] == variance1.shape[1] and mean2.shape[1] == variance2.shape[1]
+        assert mean1.shape[0] == mean2.shape[0] == stddev1.shape[0] == stddev2.shape[0]
+        assert mean1.shape[2] == mean2.shape[2] == stddev1.shape[2] == stddev2.shape[2]
+        assert mean1.shape[1] == stddev1.shape[1] and mean2.shape[1] == stddev2.shape[1]
         self.mean1 = mean1
         self.mean2 = mean2
-        self.variance1 = variance1
-        self.variance2 = variance2
+        self.stddev1 = stddev1
+        self.stddev2 = stddev2
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
         return self.mean1.shape[0], self.mean1.shape[1] * self.mean2.shape[1], self.mean1.shape[2]
 
 
-class VarianceNormalProduct(AbstractParameter):
-    def __init__(self, variance1: AbstractParameter, variance2: AbstractParameter):
-        assert variance1.shape[0] == variance2.shape[0]
-        assert variance1.shape[2] == variance2.shape[2]
-        self.variance1 = variance1
-        self.variance2 = variance2
+class StddevGaussianProduct(AbstractParameter):
+    def __init__(self, stddev1: AbstractParameter, stddev2: AbstractParameter):
+        assert stddev1.shape[0] == stddev2.shape[0]
+        assert stddev1.shape[2] == stddev2.shape[2]
+        self.stddev1 = stddev1
+        self.stddev2 = stddev2
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.variance1.shape[0],
-            self.variance1.shape[1] * self.variance2.shape[1],
-            self.variance1.shape[2],
+            self.stddev1.shape[0],
+            self.stddev1.shape[1] * self.stddev2.shape[1],
+            self.stddev1.shape[2],
         )
 
 
-class PartitionGaussianProduct(AbstractParameter):
+class LogPartitionGaussianProduct(AbstractParameter):
     def __init__(
         self,
         mean1: AbstractParameter,
         mean2: AbstractParameter,
-        variance1: AbstractParameter,
-        variance2: AbstractParameter,
+        stddev1: AbstractParameter,
+        stddev2: AbstractParameter,
     ):
-        assert mean1.shape[0] == mean2.shape[0] == variance1.shape[0] == variance2.shape[0]
-        assert mean1.shape[2] == mean2.shape[2] == variance1.shape[2] == variance2.shape[2]
-        assert mean1.shape[1] == variance1.shape[1] and mean2.shape[1] == variance2.shape[1]
+        assert mean1.shape[0] == mean2.shape[0] == stddev1.shape[0] == stddev2.shape[0]
+        assert mean1.shape[2] == mean2.shape[2] == stddev1.shape[2] == stddev2.shape[2]
+        assert mean1.shape[1] == stddev1.shape[1] and mean2.shape[1] == stddev2.shape[1]
         self.mean1 = mean1
         self.mean2 = mean2
-        self.variance1 = variance1
-        self.variance2 = variance2
+        self.stddev1 = stddev1
+        self.stddev2 = stddev2
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:

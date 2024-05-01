@@ -11,6 +11,4 @@ from .composed import TorchSigmoidParameter as TorchSigmoidParameter
 from .composed import TorchSoftmaxParameter as TorchSoftmaxParameter
 from .composed import TorchSquareParameter as TorchSquareParameter
 from .composed import TorchUnaryOpParameter as TorchUnaryOpParameter
-from .ef import TorchCategoricalParameter as EFCategoricalReparam
-from .ef import TorchGaussianMeanProductParameter as EFProductReparam
 from .parameter import TorchParameter as TorchParameter

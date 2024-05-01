@@ -146,7 +146,7 @@ class GaussianLayer(InputLayer):
     @property
     def parameters(self) -> Dict[str, AbstractParameter]:
         params = super().parameters
-        params.update(mean=self.mean, stddev=self.stddev)
+        params.update(mean=self.mean, stddev=self.stddev, log_partition=self.log_partition)
         return params
 
 
