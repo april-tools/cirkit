@@ -74,34 +74,39 @@ def multiply_gaussian_layers(lhs: GaussianLayer, rhs: GaussianLayer) -> CircuitB
     assert lhs.num_variables == rhs.num_variables
     assert lhs.num_channels == rhs.num_channels
 
-    # Retrieve placeholders
-    mean_lhs = PlaceholderParameter(lhs, name="mean")
-    mean_rhs = PlaceholderParameter(rhs, name="mean")
-    stddev_lhs = PlaceholderParameter(lhs, name="stddev")
-    stddev_rhs = PlaceholderParameter(rhs, name="stddev")
-
-    # Build the symbolic log partition function of the product
-    log_partition = LogPartitionGaussianProduct(mean_lhs, mean_rhs, stddev_lhs, stddev_rhs)
-    if lhs.log_partition is not None:
-        log_partition_lhs = PlaceholderParameter(lhs, name="log_partition")
-        if rhs.log_partition is not None:
-            log_partition_rhs = PlaceholderParameter(rhs, name="log_partition")
-            log_partition = EntrywiseSumParameter(
-                log_partition, log_partition_lhs, log_partition_rhs
-            )
-        else:
-            log_partition = EntrywiseSumParameter(log_partition, log_partition_lhs)
+    # Retrieve placeholders and/or aggregators of means and standard deviations
+    if isinstance(lhs.mean, MeanGaussianProduct):
+        assert isinstance(lhs.stddev, StddevGaussianProduct)
+        mean_ls1 = lhs.mean.mean_ls
+        stddev_ls1 = lhs.stddev.stddev_ls
+        log_partition1 = None
     else:
-        log_partition_rhs = PlaceholderParameter(rhs, name="log_partition")
-        log_partition = EntrywiseSumParameter(log_partition, log_partition_rhs)
+        mean_ls1 = [PlaceholderParameter(lhs, name="mean")]
+        stddev_ls1 = [PlaceholderParameter(lhs, name="stddev")]
+        log_partition1 = PlaceholderParameter(lhs, name="log_partition")
+    if isinstance(rhs.mean, MeanGaussianProduct):
+        assert isinstance(rhs.stddev, StddevGaussianProduct)
+        mean_ls2 = rhs.mean.mean_ls
+        stddev_ls2 = rhs.stddev.stddev_ls
+        log_partition2 = None
+    else:
+        mean_ls2 = [PlaceholderParameter(rhs, name="mean")]
+        stddev_ls2 = [PlaceholderParameter(rhs, name="stddev")]
+        log_partition2 = PlaceholderParameter(rhs, name="log_partition")
 
     # Build a new gaussian layer
+    mean_ls = mean_ls1 + mean_ls2
+    stddev_ls = stddev_ls1 + stddev_ls2
+    log_partition = LogPartitionGaussianProduct(mean_ls, stddev_ls)
+    oth_log_partitions = [lp for lp in [log_partition1, log_partition2] if lp is not None]
+    if oth_log_partitions:
+        log_partition = EntrywiseSumParameter(log_partition, *oth_log_partitions)
     sl = GaussianLayer(
         lhs.scope | rhs.scope,
         lhs.num_output_units * rhs.num_input_units,
         num_channels=lhs.num_channels,
-        mean=MeanGaussianProduct(mean_lhs, mean_rhs, stddev_lhs, stddev_rhs),
-        stddev=StddevGaussianProduct(stddev_lhs, stddev_rhs),
+        mean=MeanGaussianProduct(mean_ls, stddev_ls),
+        stddev=StddevGaussianProduct(stddev_ls),
         log_partition=log_partition,
     )
     return CircuitBlock.from_layer(sl)
