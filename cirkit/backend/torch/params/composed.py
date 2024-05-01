@@ -360,7 +360,7 @@ class TorchReduceOpParamter(TorchUnaryOpParameter, ABC):
         return *self.params[0].shape[: self.dim], *self.params[0].shape[self.dim + 1 :]
 
 
-class TorchElementwiseReduceOpParameter(TorchUnaryOpParameter):
+class TorchEntrywiseReduceOpParameter(TorchUnaryOpParameter):
     """The base class for normalized reparameterization."""
 
     # NOTE: This class only serves as the common base of all normalized reparams, but include
@@ -397,7 +397,7 @@ class TorchReduceLSEParameter(TorchReduceOpParamter):
         return torch.logsumexp(x, dim=self.dim)
 
 
-class TorchSoftmaxParameter(TorchElementwiseReduceOpParameter):
+class TorchSoftmaxParameter(TorchEntrywiseReduceOpParameter):
     """Softmax reparameterization.
 
     Range: (0, 1), 0 available if input is masked, 1 available when only one element valid.
@@ -417,7 +417,7 @@ class TorchSoftmaxParameter(TorchElementwiseReduceOpParameter):
         return torch.softmax(x, dim=self.dim)
 
 
-class TorchLogSoftmaxParameter(TorchElementwiseReduceOpParameter):
+class TorchLogSoftmaxParameter(TorchEntrywiseReduceOpParameter):
     """LogSoftmax reparameterization, which is more numarically-stable than log(softmax(...)).
 
     Range: (-inf, 0), -inf available if input is masked, 0 available when only one element valid.
@@ -437,9 +437,7 @@ class TorchLogSoftmaxParameter(TorchElementwiseReduceOpParameter):
         return torch.log_softmax(x, dim=self.dim)
 
 
-class TorchScaledSigmoidParameter(TorchUnaryOpParameter):
-    """Reparameterization for ExpFamily-Normal."""
-
+class TorchScaledSigmoidParameter(TorchEntrywiseReduceOpParameter):
     def __init__(
         self,
         param: AbstractTorchParameter,
@@ -453,13 +451,13 @@ class TorchScaledSigmoidParameter(TorchUnaryOpParameter):
         Args:
             param (Optional[Reparameterization], optional): The input reparam to be composed. If \
                 None, a LeafReparam will be automatically constructed. Defaults to None.
-            vmin (float, optional): The min variance. Defaults to 0.0001.
-            vmax (float, optional): The max variance. Defaults to 10.0.
+            vmin (float, optional): The minimum value. Defaults to 0.0.
+            vmax (float, optional): The maximum value. Defaults to 1.0.
         """
         super().__init__(param, func=self._func)
-        assert 0 <= vmin < vmax, "Must provide 0 <= min_var < max_var."
+        assert 0 <= vmin < vmax, "Must provide 0 <= vmin < vmax."
         self.vmin = vmin
         self.vmax = vmax
 
     def _func(self, x: Tensor) -> Tensor:
-        return torch.sigmoid(x[..., 1, :]) * (self.vmax - self.vmin) + self.vmin
+        return torch.sigmoid(x) * (self.vmax - self.vmin) + self.vmin

@@ -1,7 +1,5 @@
 from typing import TYPE_CHECKING, Dict, Optional
 
-import torch
-
 from cirkit.backend.base import (
     LayerCompilationFunc,
     LayerCompilationSign,
@@ -28,6 +26,7 @@ from cirkit.backend.torch.params.composed import (
     TorchOuterSumParameter,
     TorchReduceLSEParameter,
     TorchReduceSumParameter,
+    TorchScaledSigmoidParameter,
     TorchSoftmaxParameter,
 )
 from cirkit.backend.torch.params.parameter import TorchConstantParameter
@@ -51,6 +50,7 @@ from cirkit.symbolic.params import (
     Parameter,
     ReduceLSEParameter,
     ReduceSumParameter,
+    ScaledSigmoidParameter,
     SoftmaxParameter,
 )
 
@@ -75,7 +75,7 @@ def compile_categorical_layer(
     compiler: "TorchCompiler", sl: CategoricalLayer
 ) -> TorchCategoricalLayer:
     logits = compiler.compile_parameter(
-        sl.logits, init_func=compiler.retrieve_initializer(TorchCategoricalLayer, "logits")
+        sl.logits, init_func=TorchCategoricalLayer.get_default_initializer("logits")
     )
     return TorchCategoricalLayer(
         sl.num_variables,
@@ -89,10 +89,10 @@ def compile_categorical_layer(
 
 def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> TorchGaussianLayer:
     mean = compiler.compile_parameter(
-        sl.mean, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "mean")
+        sl.mean, init_func=TorchGaussianLayer.get_default_initializer("mean")
     )
     stddev = compiler.compile_parameter(
-        sl.stddev, init_func=compiler.retrieve_initializer(TorchGaussianLayer, "stddev")
+        sl.stddev, init_func=TorchGaussianLayer.get_default_initializer("stddev")
     )
     lp = compiler.compile_parameter(sl.log_partition) if sl.log_partition is not None else None
     return TorchGaussianLayer(
@@ -120,7 +120,7 @@ def compile_kronecker_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> To
 
 def compile_dense_layer(compiler: "TorchCompiler", sl: DenseLayer) -> TorchDenseLayer:
     weight = compiler.compile_parameter(
-        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
+        sl.weight, init_func=TorchDenseLayer.get_default_initializer("weight")
     )
     return TorchDenseLayer(
         sl.num_input_units, sl.num_output_units, weight=weight, semiring=compiler.semiring
@@ -129,7 +129,7 @@ def compile_dense_layer(compiler: "TorchCompiler", sl: DenseLayer) -> TorchDense
 
 def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMixingLayer:
     weight = compiler.compile_parameter(
-        sl.weight, init_func=compiler.retrieve_initializer(TorchDenseLayer, "weight")
+        sl.weight, init_func=TorchMixingLayer.get_default_initializer("weight")
     )
     return TorchMixingLayer(
         sl.num_input_units,
@@ -164,21 +164,24 @@ def compile_constant_parameter(
 def compile_exp_parameter(
     compiler: "TorchCompiler", p: ExpParameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchExpParameter:
-    opd = compiler.compile_parameter(p.opd, init_func=lambda t: init_func(t).log_())
+    new_init_func = (lambda t: init_func(t).log_()) if init_func is not None else None
+    opd = compiler.compile_parameter(p.opd, init_func=new_init_func)
     return TorchExpParameter(opd)
 
 
 def compile_softmax_parameter(
     compiler: "TorchCompiler", p: SoftmaxParameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchSoftmaxParameter:
-    opd = compiler.compile_parameter(p.opd, init_func=lambda t: init_func(t).log_())
+    new_init_func = (lambda t: init_func(t).log_()) if init_func is not None else None
+    opd = compiler.compile_parameter(p.opd, init_func=new_init_func)
     return TorchSoftmaxParameter(opd, dim=p.axis)
 
 
 def compile_log_softmax_parameter(
     compiler: "TorchCompiler", p: SoftmaxParameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchLogSoftmaxParameter:
-    opd = compiler.compile_parameter(p.opd, init_func=lambda t: init_func(t).exp_())
+    new_init_func = (lambda t: init_func(t).exp_()) if init_func is not None else None
+    opd = compiler.compile_parameter(p.opd, init_func=new_init_func)
     return TorchLogSoftmaxParameter(opd, dim=p.axis)
 
 
@@ -214,6 +217,16 @@ def compile_kronecker_parameter(
     return TorchKroneckerParameter(opd1, opd2)
 
 
+def compile_scaled_sigmoid_paramater(
+    compiler: "TorchCompiler",
+    p: ScaledSigmoidParameter,
+    init_func: Optional[InitializerFunc] = None,
+) -> TorchScaledSigmoidParameter:
+    # TODO: invert scaled sigmoid
+    opd = compiler.compile_parameter(p.opd, init_func=init_func)
+    return TorchScaledSigmoidParameter(opd, vmin=p.vmin, vmax=p.vmax)
+
+
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     LogPartitionLayer: compile_log_partition_layer,
     CategoricalLayer: compile_categorical_layer,
@@ -234,4 +247,5 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     ReduceLSEParameter: compile_reduce_lse_parameter,
     OuterSumParameter: compile_outer_sum_parameter,
     KroneckerParameter: compile_kronecker_parameter,
+    ScaledSigmoidParameter: compile_scaled_sigmoid_paramater,
 }

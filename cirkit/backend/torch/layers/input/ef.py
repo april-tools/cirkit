@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import Dict, Optional
 
+import numpy as np
 import torch
 from torch import Tensor, distributions, nn
 from torch.nn import functional as F
@@ -103,8 +104,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         self.num_categories = num_categories
         self.logits = logits
 
-    @staticmethod
-    def default_initializers() -> Dict[str, InitializerFunc]:
+    @classmethod
+    def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return dict(logits=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
 
     def _eval_forward(self, x: Tensor, logits: Tensor) -> Tensor:
@@ -151,6 +152,10 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             mean (AbstractTorchParameter): The reparameterization for layer parameters.
             stddev (AbstractTorchParameter): The reparameterization for layer parameters.
         """
+        assert mean.shape == (num_variables, num_output_units, num_channels)
+        assert stddev.shape == (num_variables, num_output_units, num_channels)
+        if log_partition is not None:
+            assert log_partition.shape == (num_output_units,)
         super().__init__(
             num_variables, num_output_units, num_channels=num_channels, semiring=semiring
         )
@@ -158,11 +163,11 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         self.stddev = stddev
         self.log_partition = log_partition
 
-    @staticmethod
-    def default_initializers() -> Dict[str, InitializerFunc]:
+    @classmethod
+    def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return dict(
             mean=lambda t: nn.init.normal_(t, mean=0.0, std=3e-1),
-            stddev=lambda t: nn.init.normal_(t, mean=0.0, std=3e-1),
+            stddev=lambda t: nn.init.uniform_(t, a=np.log(1e-2), b=0.0).exp_(),
         )
 
     def log_probs(self, x: Tensor) -> Tensor:
@@ -173,5 +178,18 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return y - log_z
 
     def log_score(self, x: Tensor) -> Tensor:
-        # (C, B, D)
-        return distributions.Normal(loc=self.mean(), scale=self.stddev()).log_prob(x)
+        # x: (C, B, D)
+        # dist_loc: (D, K, C)
+        # dist_stddev: (D, K, C)
+        dist_loc, dist_scale = self.mean(), self.stddev()
+        dist = distributions.Normal(loc=dist_loc, scale=dist_scale)
+        x = x.permute(1, 2, 0).unsqueeze(dim=2)  # (*B, D, 1, C)
+        x = dist.log_prob(x)
+        x = torch.sum(x, dim=[1, 3])
+        # TODO (LL):
+        #  the current tensor shapes might enable faster inference,
+        #  but it is honestly a mess to work with.
+        #  E.g., they require frequent permutations, squeezes/unsqueezes,
+        #        and reductions over obscure combinations of axes for which we
+        #        do not know if they will be time/memory efficient in the end
+        return x

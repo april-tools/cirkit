@@ -2,7 +2,7 @@ from .base import AbstractTorchParameter as TorchParameter
 from .composed import TorchAffineParameter as TorchAffineParameter
 from .composed import TorchBinaryOpParameter as BinaryReparam
 from .composed import TorchClampParameter as TorchClampParameter
-from .composed import TorchElementwiseReduceOpParameter as TorchReduceOpParameter
+from .composed import TorchEntrywiseReduceOpParameter as TorchReduceOpParameter
 from .composed import TorchExpParameter as TorchExpParameter
 from .composed import TorchKroneckerParameter as KroneckerReparam
 from .composed import TorchLogSoftmaxParameter as TorchLogSoftmaxParameter

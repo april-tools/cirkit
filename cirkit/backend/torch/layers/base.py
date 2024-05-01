@@ -36,9 +36,13 @@ class TorchLayer(nn.Module, ABC):
         self.arity = arity
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
-    @staticmethod
-    def default_initializers() -> Dict[str, InitializerFunc]:
+    @classmethod
+    def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return {}
+
+    @classmethod
+    def get_default_initializer(cls, name: str) -> InitializerFunc:
+        return cls.default_initializers()[name]
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property

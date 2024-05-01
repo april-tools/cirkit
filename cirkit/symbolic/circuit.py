@@ -127,7 +127,7 @@ class Circuit:
         in_layers = defaultdict(list)
         out_layers = defaultdict(list)
 
-        # Retrive connections between layers from connections between circuit blocks
+        # Retrieve connections between layers from connections between circuit blocks
         for b in blocks:
             in_layers[b.input].extend(bi.output for bi in in_blocks[b])
             out_layers[b.output].extend(bo.input for bo in out_blocks[b])

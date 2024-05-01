@@ -3,6 +3,7 @@ import itertools
 import numpy as np
 import pytest
 import torch
+from scipy import integrate
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.compiler import TorchCompiler
@@ -28,7 +29,7 @@ def test_compile_output_shape():
     "semiring,num_variables,normalized",
     itertools.product(["lse-sum", "sum-product"], [1, 2, 5], [False, True]),
 )
-def test_compile_integrate_pc(semiring: str, num_variables: int, normalized: bool):
+def test_compile_integrate_pc_discrete(semiring: str, num_variables: int, normalized: bool):
     compiler = TorchCompiler(semiring=semiring)
     sc = build_simple_pc(num_variables, 4, 3, num_repetitions=3, normalized=normalized)
 
@@ -57,6 +58,7 @@ def test_compile_integrate_pc(semiring: str, num_variables: int, normalized: boo
         else:
             assert False
 
+    # Test the sum of the circuit evaluated over all possible assignments
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
     assert worlds.shape == (2**num_variables, 1, num_variables)
     scores = tc(worlds)
@@ -71,10 +73,63 @@ def test_compile_integrate_pc(semiring: str, num_variables: int, normalized: boo
 
 
 @pytest.mark.parametrize(
+    "semiring,normalized",
+    itertools.product(["lse-sum", "sum-product"], [False, True]),
+)
+def test_compile_integrate_pc_continuous(semiring: str, normalized: bool):
+    compiler = TorchCompiler(semiring=semiring)
+    num_variables = 2
+    sc = build_simple_pc(num_variables, input_layer="gaussian", normalized=normalized)
+
+    int_sc = SF.integrate(sc)
+    int_tc: TensorizedConstantCircuit = compiler.compile(int_sc)
+    assert isinstance(int_tc, TensorizedConstantCircuit)
+    tc: TensorizedCircuit = compiler.get_compiled_circuit(sc)
+    assert isinstance(tc, TensorizedCircuit)
+
+    # Test the partition function value
+    z = int_tc()
+    assert z.shape == (1, 1)
+    z = z.squeeze()
+    if normalized:
+        if semiring == "sum-product":
+            assert isclose(z.item(), 1.0)
+        elif semiring == "lse-sum":
+            assert isclose(z.item(), 0.0)
+        else:
+            assert False
+    else:
+        if semiring == "sum-product":
+            assert z.item() > 0.0 and not isclose(z.item(), 1.0)
+        elif semiring == "lse-sum":
+            assert not isclose(z.item(), 0.0)
+        else:
+            assert False
+
+    # Test the integral of the circuit (using a quadrature rule)
+    if semiring == "sum-product":
+        df = lambda y, x: tc(torch.Tensor([[[x, y]]])).squeeze()
+    elif semiring == "lse-sum":
+        df = lambda y, x: torch.exp(tc(torch.Tensor([[[x, y]]]))).squeeze()
+    else:
+        assert False
+    int_a, int_b = -np.inf, np.inf
+    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b)
+    if normalized:
+        assert np.isclose(ig, 1.0, atol=1e-15)
+    elif semiring == "sum-product":
+        assert np.isclose(ig, z.item(), atol=1e-15)
+    elif semiring == "lse-sum":
+        assert np.isclose(ig, torch.exp(z).item(), atol=1e-15)
+    else:
+        assert False
+
+
+@pytest.mark.parametrize(
     "semiring,normalized,num_variables,num_products",
     itertools.product(["sum-product", "lse-sum"], [False, True], [1, 2, 5], [2, 3]),
 )
-def test_compile_product_integrate_pc(
+def test_compile_product_integrate_pc_discrete(
     semiring: str, normalized: bool, num_variables: int, num_products: int
 ):
     compiler = TorchCompiler(semiring=semiring)
@@ -90,7 +145,8 @@ def test_compile_product_integrate_pc(
     int_sc = SF.integrate(last_sc)
     int_tc = compiler.compile(int_sc)
 
-    z = int_tc()  # compute the partition function
+    # Test the partition function value
+    z = int_tc()
     assert z.shape == (1, 1)
     z = z.squeeze()
     if normalized:
@@ -102,12 +158,13 @@ def test_compile_product_integrate_pc(
             assert False
     else:
         if semiring == "sum-product":
-            assert not isclose(z.item(), 1.0)
+            assert z.item() > 0.0 and not isclose(z.item(), 1.0)
         elif semiring == "lse-sum":
             assert not isclose(z.item(), 0.0)
         else:
             assert False
 
+    # Test the sum of the circuit evaluated over all possible assignments
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
     assert worlds.shape == (2**num_variables, 1, num_variables)
     scores = tc(worlds)
@@ -119,9 +176,7 @@ def test_compile_product_integrate_pc(
         assert isclose(torch.logsumexp(scores, dim=0), z)
     else:
         assert False
-
     each_tc_scores = torch.stack([tci(worlds).squeeze() for tci in tcs], dim=0)
-
     if semiring == "sum-product":
         assert allclose(torch.prod(each_tc_scores, dim=0), scores)
     elif semiring == "lse-sum":

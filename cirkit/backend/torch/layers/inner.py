@@ -136,8 +136,8 @@ class TorchDenseLayer(TorchSumLayer):
         super().__init__(num_input_units, num_output_units, arity=1, semiring=semiring)
         self.weight = weight
 
-    @staticmethod
-    def default_initializers() -> Dict[str, InitializerFunc]:
+    @classmethod
+    def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
 
     def _forward_impl(self, x: Tensor) -> Tensor:
@@ -188,8 +188,8 @@ class TorchMixingLayer(TorchSumLayer):
         super().__init__(num_input_units, num_output_units, arity=arity, semiring=semiring)
         self.weight = weight
 
-    @staticmethod
-    def default_initializers() -> Dict[str, InitializerFunc]:
+    @classmethod
+    def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
 
     def _forward_impl(self, x: Tensor) -> Tensor:

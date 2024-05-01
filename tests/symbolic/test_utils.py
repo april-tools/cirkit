@@ -96,8 +96,8 @@ def build_simple_circuit(
 
 def build_simple_pc(
     num_variables: int,
-    num_input_units: int,
-    num_sum_units: int,
+    num_input_units: int = 2,
+    num_sum_units: int = 2,
     num_repetitions: int = 1,
     seed: int = 42,
     input_layer: str = "categorical",

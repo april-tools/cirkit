@@ -66,9 +66,6 @@ class TorchCompiler(AbstractCompiler):
         func = self.retrieve_parameter_rule(signature)
         return func(self, parameter, init_func=init_func)
 
-    def retrieve_initializer(self, layer_cls: Type[TorchLayer], name: str) -> InitializerFunc:
-        return layer_cls.default_initializers()[name]
-
     def _register_compiled_circuit(
         self, sc: Circuit, tc: AbstractTensorizedCircuit, compiled_layer_ids: Dict[Layer, int]
     ):
