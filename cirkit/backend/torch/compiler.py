@@ -26,7 +26,7 @@ class TorchCompiler(AbstractCompiler):
             DEFAULT_LAYER_COMPILATION_RULES, DEFAULT_PARAMETER_COMPILATION_RULES
         )
         super().__init__(default_registry, fold=fold, einsum=einsum)
-        self._compiled_layers: Dict[Layer, TorchLayer] = {}
+        self._compiled_layers: Dict[Layer, Tuple[TorchLayer, int]] = {}
         self._fold = fold
         self._einsum = einsum
         self._semiring = Semiring.from_name(semiring)
@@ -58,7 +58,7 @@ class TorchCompiler(AbstractCompiler):
         return self._semiring
 
     def retrieve_parameter(self, layer: Layer, name: str) -> AbstractTorchParameter:
-        compiled_layer = self._compiled_layers[layer]
+        compiled_layer = self._compiled_layers[layer][0]
         p = getattr(compiled_layer, name)
         if not isinstance(p, AbstractTorchParameter):
             raise ValueError(
@@ -79,7 +79,10 @@ class TorchCompiler(AbstractCompiler):
         return func(self, layer)
 
     def _register_compiled_circuit(
-        self, sc: Circuit, tc: AbstractTorchCircuit, compiled_layers: Dict[Layer, TorchLayer]
+        self,
+        sc: Circuit,
+        tc: AbstractTorchCircuit,
+        compiled_layers: Dict[Layer, Tuple[TorchLayer, int]],
     ):
         super().register_compiled_circuit(sc, tc)
         self._compiled_layers.update(compiled_layers)
@@ -104,7 +107,6 @@ class TorchCompiler(AbstractCompiler):
                 out_layers[li].append(layer)
             compiled_layers[sl] = layer
 
-        # Construct the tensorized circuit, which is a torch module
         # If the symbolic circuit being compiled has been obtained by integrating
         # another circuit over all the variables it is defined on,
         # then return a 'constant circuit' whose interface does not require inputs
@@ -116,43 +118,51 @@ class TorchCompiler(AbstractCompiler):
             tc_cls = TorchConstantCircuit
         else:
             tc_cls = TorchCircuit
+
+        # Construct the tensorized circuit
+        layers = list(compiled_layers.values())
         tc = tc_cls(
             sc.scope,
             sc.num_channels,
-            layers=list(compiled_layers.values()),
+            layers=layers,
             in_layers=in_layers,
             out_layers=out_layers,
         )
 
         # Apply optimizations
-        tc, compiled_layers = self._optimize_circuit(tc, compiled_layers)
+        tc, fold_compiled_layers = self._optimize_circuit(tc, compiled_layers)
 
         # Register the compiled circuit, as well as the compiled layer infos
-        self._register_compiled_circuit(sc, tc, compiled_layers)
+        self._register_compiled_circuit(sc, tc, fold_compiled_layers)
         return tc
 
     def _optimize_circuit(
         self, tc: TorchCircuit, compiled_layers: Dict[Layer, TorchLayer]
-    ) -> Tuple[TorchCircuit, Dict[Layer, TorchLayer]]:
+    ) -> Tuple[TorchCircuit, Dict[Layer, Tuple[TorchLayer, int]]]:
         # Try to optimize the circuit by using einsums
         if self.is_einsum_enabled:
             tc = self._einsumize_circuit(tc)
+
         # Fold the circuit
         if self.is_fold_enabled:
-            tc = self._fold_circuit(tc, compiled_layers)
-        return tc, compiled_layers
+            tc, fold_compiled_layers = self._fold_circuit(tc, compiled_layers)
+        else:
+            # Without folding, every compiled layer has fold dimension 1.
+            # So, each symbolic layer gets mapped to the 0-slice of such 'improper' folded layer.
+            fold_compiled_layers = {sl: (l, 0) for sl, l in compiled_layers.items()}
+
+        # This function returns both the tensorized circuit and
+        # a map from symbolic layer to (resp. folded) layers (resp. as well with the slice index)
+        return tc, fold_compiled_layers
 
     def _einsumize_circuit(self, tc: AbstractTorchCircuit) -> AbstractTorchCircuit:
         ...
 
     def _fold_circuit(
-        self, tc: AbstractTorchCircuit, compiled_ls: Dict[Layer, TorchLayer]
-    ) -> Tuple[AbstractTorchCircuit, Dict[Layer, TorchLayer]]:
+        self, tc: AbstractTorchCircuit, compiled_layers: Dict[Layer, TorchLayer]
+    ) -> Tuple[AbstractTorchCircuit, Dict[Layer, Tuple[TorchLayer, int]]]:
         # The list of folded layers
         layers: List[TorchLayer] = []
-
-        # A map from symbolic layer to folded compiled layers
-        compiled_layers: Dict[Layer, TorchLayer] = {}
 
         # A useful data structure mapping each unfolded layer to
         # (i) a 'fold_id' (a natural number) pointing to the folded layer it is associated to; and
@@ -214,6 +224,12 @@ class TorchCompiler(AbstractCompiler):
         # but indexing the entries of the folded outputs
         fold_out_layers_idx = [fold_idx[lo] for lo in tc.output_layers]
 
+        # Construct a super useful map from a symbolic layer to a tuple
+        # containing the corresponding folded layer and its slice index within that fold
+        fold_compiled_layers: Dict[Layer, Tuple[TorchLayer, int]] = {
+            sl: (layers[fold_idx[l][0]], fold_idx[l][1]) for sl, l in compiled_layers.items()
+        }
+
         # Instantiate a folded circuit
         folded_tc = type(tc)(
             tc.scope,
@@ -224,12 +240,17 @@ class TorchCompiler(AbstractCompiler):
             fold_in_layers_idx=fold_in_layers_idx,
             fold_out_layers_idx=fold_out_layers_idx,
         )
-        return folded_tc, compiled_ls
+        return folded_tc, fold_compiled_layers
 
     def _group_foldable_layers(self, layers: List[TorchLayer]) -> List[List[TorchLayer]]:
         ...
 
     def _fold_layers_group(self, layers: List[TorchLayer]) -> TorchLayer:
+        ...
+
+    def _fold_parameters_group(
+        self, params: List[AbstractTorchParameter]
+    ) -> AbstractTorchParameter:
         ...
 
     def save(
