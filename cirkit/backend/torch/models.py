@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
-from cirkit.utils.algorithms import topological_ordering
+from cirkit.utils.algorithms import layerwise_topological_ordering, topological_ordering
 from cirkit.utils.scope import Scope
 
 
@@ -113,6 +113,22 @@ class AbstractTorchCircuit(nn.Module):
 
     def layer_outputs(self, l: TorchLayer) -> List[TorchLayer]:
         return self._out_layers[l]
+
+    def layers_topological_ordering(self) -> List[TorchLayer]:
+        ordering = topological_ordering(
+            set(self.output_layers), incomings_fn=lambda sl: self._in_layers[sl]
+        )
+        if ordering is None:
+            raise ValueError("The given symbolic circuit has at least one layers cycle")
+        return ordering
+
+    def layerwise_topological_ordering(self) -> List[List[TorchLayer]]:
+        ordering = layerwise_topological_ordering(
+            set(self.output_layers), incomings_fn=lambda sl: self._in_layers[sl]
+        )
+        if ordering is None:
+            raise ValueError("The given symbolic circuit has at least one layers cycle")
+        return ordering
 
     @property
     def input_layers(self) -> Iterator[TorchInputLayer]:

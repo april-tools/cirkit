@@ -54,3 +54,32 @@ def topological_ordering(
     if sum(num_incomings.values()) != 0:
         return None  # There is at least one cycle, no topological ordering is possible
     return ordering
+
+
+def layerwise_topological_ordering(
+    roots: Set[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
+) -> Optional[List[List[NodeType]]]:
+    num_incomings: Dict[NodeType, int] = defaultdict(int)
+    outgoings: Dict[NodeType, List[NodeType]] = defaultdict(list)
+    for n in bfs(roots, incomings_fn):
+        incomings = incomings_fn(n)
+        num_incomings[n] = len(incomings)
+        for ch in incomings:
+            outgoings[ch].append(n)
+    in_nodes = list(map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items())))
+
+    ordering = [in_nodes]
+    while True:
+        ls = list()
+        for n in ordering[-1]:
+            for i in outgoings[n]:
+                num_incomings[i] -= 1
+                if num_incomings[i] == 0:
+                    ls.append(i)
+        if not ls:
+            break
+        ordering.append(ls)
+
+    if sum(num_incomings.values()) != 0:
+        return None  # There is at least one cycle, no topological ordering is possible
+    return ordering
