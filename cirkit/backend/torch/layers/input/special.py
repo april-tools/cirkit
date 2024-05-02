@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Dict, Optional
 
 from torch import Tensor
 
@@ -42,6 +42,12 @@ class TorchLogPartitionLayer(TorchInputLayer):
             semiring=semiring,
         )
         self.value = value
+
+    @property
+    def params(self) -> Dict[str, AbstractTorchParameter]:
+        params = super().params
+        params.update(value=self.value)
+        return params
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

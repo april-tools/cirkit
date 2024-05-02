@@ -53,19 +53,19 @@ class Layer(ABC):
         }
 
     @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, AbstractParameter]:
         return {}
 
 
 class PlaceholderParameter(AbstractParameter):
     def __init__(self, layer: Layer, name: str):
-        assert name in layer.parameters
+        assert name in layer.params
         self.layer = layer
         self.name = name
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return self.layer.parameters[self.name].shape
+        return self.layer.params[self.name].shape
 
 
 class InputLayer(Layer):
@@ -114,8 +114,8 @@ class CategoricalLayer(InputLayer):
         return config
 
     @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
-        params = super().parameters
+    def params(self) -> Dict[str, AbstractParameter]:
+        params = super().params
         params.update(logits=self.logits)
         return params
 
@@ -144,8 +144,8 @@ class GaussianLayer(InputLayer):
         self.stddev = stddev
 
     @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
-        params = super().parameters
+    def params(self) -> Dict[str, AbstractParameter]:
+        params = super().params
         params.update(mean=self.mean, stddev=self.stddev)
         return params
 
@@ -159,8 +159,8 @@ class LogPartitionLayer(InputLayer):
         self.value = value
 
     @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
-        params = super().parameters
+    def params(self) -> Dict[str, AbstractParameter]:
+        params = super().params
         params.update(value=self.value)
         return params
 
@@ -242,7 +242,7 @@ class DenseLayer(SumLayer):
         }
 
     @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, AbstractParameter]:
         return dict(weight=self.weight)
 
 
@@ -271,7 +271,7 @@ class MixingLayer(SumLayer):
         return {"scope": self.scope, "num_units": self.num_input_units, "arity": self.arity}
 
     @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, AbstractParameter]:
         return dict(weight=self.weight)
 
 
@@ -317,7 +317,7 @@ class GaussianProductLayer(InputLayer):
         self.log_partition = log_partition
 
     @property
-    def parameters(self) -> Dict[str, AbstractParameter]:
-        params = super().parameters
+    def params(self) -> Dict[str, AbstractParameter]:
+        params = super().params
         params.update(mean=self.mean, stddev=self.stddev, log_partition=self.log_partition)
         return params

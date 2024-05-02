@@ -69,7 +69,7 @@ def integrate(
         # Sum/product layers are simply copied
         # Placeholders are used to keep track of referenced parameters
         learnable_parameters = {
-            pname: PlaceholderParameter(sl, pname) for pname in sl.parameters.keys()
+            pname: PlaceholderParameter(sl, pname) for pname in sl.params.keys()
         }
         int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **learnable_parameters))
         map_layers[sl] = int_block

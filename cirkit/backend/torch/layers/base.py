@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import ClassVar, Dict, Optional, Type
+from typing import Any, ClassVar, Dict, Optional, Type
 
 from torch import Tensor, nn
 
+from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.semiring import SemiringCls, SumProductSemiring
 from cirkit.backend.torch.utils import InitializerFunc
 
@@ -45,6 +46,19 @@ class TorchLayer(nn.Module, ABC):
     @classmethod
     def get_default_initializer(cls, name: str) -> InitializerFunc:
         return cls.default_initializers()[name]
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+            "num_folds": self.num_folds,
+        }
+
+    @property
+    def params(self) -> Dict[str, AbstractTorchParameter]:
+        return {}
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property

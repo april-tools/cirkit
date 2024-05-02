@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-from functools import cached_property
-from typing import Callable, Tuple
+from typing import Any, Dict, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -32,6 +31,10 @@ class AbstractTorchParameter(nn.Module, ABC):
     @abstractmethod
     def device(self) -> torch.device:
         """The device of the output parameter."""
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {}
 
     def __call__(self) -> Tensor:
         """Get the reparameterized parameters.

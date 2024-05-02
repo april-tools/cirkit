@@ -1,6 +1,6 @@
 import functools
 from abc import ABC
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import torch
 from torch import Tensor, nn
@@ -160,6 +160,20 @@ class TorchDenseLayer(TorchSumLayer):
     def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
 
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "num_folds": self.num_folds,
+        }
+
+    @property
+    def params(self) -> Dict[str, AbstractTorchParameter]:
+        params = super().params
+        params.update(weight=self.weight)
+        return params
+
     def _forward_impl(self, x: Tensor) -> Tensor:
         return torch.einsum("foi,f...i->f...o", self.weight(), x)  # shape (*B, Ki) -> (*B, Ko).
 
@@ -213,6 +227,12 @@ class TorchMixingLayer(TorchSumLayer):
     @classmethod
     def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
+
+    @property
+    def params(self) -> Dict[str, AbstractTorchParameter]:
+        params = super().params
+        params.update(weight=self.weight)
+        return params
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         return torch.einsum(

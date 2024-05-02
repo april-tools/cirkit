@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -128,6 +128,18 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     def default_initializers(cls) -> Dict[str, InitializerFunc]:
         return dict(logits=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
 
+    @property
+    def config(self) -> Dict[str, Any]:
+        config = super().config
+        config.update(num_categories=self.num_categories)
+        return config
+
+    @property
+    def params(self) -> Dict[str, AbstractTorchParameter]:
+        params = super().params
+        params.update(logits=self.logits)
+        return params
+
     def _eval_forward(self, x: Tensor, logits: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete.
@@ -209,6 +221,12 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             mean=lambda t: nn.init.normal_(t, mean=0.0, std=3e-1),
             stddev=lambda t: nn.init.uniform_(t, a=np.log(1e-2), b=0.0).exp_(),
         )
+
+    @property
+    def params(self) -> Dict[str, AbstractTorchParameter]:
+        params = super().params
+        params.update(mean=self.mean, stddev=self.stddev, log_partition=self.log_partition)
+        return params
 
     def _get_parameters(self) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         # if self.params is None:

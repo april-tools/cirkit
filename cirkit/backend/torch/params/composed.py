@@ -1,7 +1,7 @@
 import functools
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Callable, Generic, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, cast
 from typing_extensions import TypeVarTuple, Unpack  # FUTURE: in typing from 3.11
 
 import torch

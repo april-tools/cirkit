@@ -1,7 +1,8 @@
 from abc import ABC
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from cirkit.backend.torch.layers.base import TorchLayer
+from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
 from cirkit.utils.scope import Scope
 
@@ -44,3 +45,16 @@ class TorchInputLayer(TorchLayer, ABC):
     @property
     def num_channels(self) -> int:
         return self.num_channels
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_folds": self.num_folds,
+        }
+
+    @property
+    def params(self) -> Dict[str, AbstractTorchParameter]:
+        return {}

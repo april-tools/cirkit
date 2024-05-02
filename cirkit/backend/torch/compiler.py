@@ -125,27 +125,34 @@ class TorchCompiler(AbstractCompiler):
         )
 
         # Apply optimizations
-        tc = self._optimize_circuit(tc)
+        tc, compiled_layers = self._optimize_circuit(tc, compiled_layers)
 
         # Register the compiled circuit, as well as the compiled layer infos
         self._register_compiled_circuit(sc, tc, compiled_layers)
         return tc
 
-    def _optimize_circuit(self, tc: TorchCircuit) -> TorchCircuit:
+    def _optimize_circuit(
+        self, tc: TorchCircuit, compiled_layers: Dict[Layer, TorchLayer]
+    ) -> Tuple[TorchCircuit, Dict[Layer, TorchLayer]]:
         # Try to optimize the circuit by using einsums
         if self.is_einsum_enabled:
             tc = self._einsumize_circuit(tc)
         # Fold the circuit
         if self.is_fold_enabled:
-            tc = self._fold_circuit(tc)
-        return tc
+            tc = self._fold_circuit(tc, compiled_layers)
+        return tc, compiled_layers
 
     def _einsumize_circuit(self, tc: AbstractTorchCircuit) -> AbstractTorchCircuit:
         ...
 
-    def _fold_circuit(self, tc: AbstractTorchCircuit) -> AbstractTorchCircuit:
+    def _fold_circuit(
+        self, tc: AbstractTorchCircuit, compiled_ls: Dict[Layer, TorchLayer]
+    ) -> Tuple[AbstractTorchCircuit, Dict[Layer, TorchLayer]]:
         # The list of folded layers
         layers: List[TorchLayer] = []
+
+        # A map from symbolic layer to folded compiled layers
+        compiled_layers: Dict[Layer, TorchLayer] = {}
 
         # A useful data structure mapping each unfolded layer to
         # (i) a 'fold_id' (a natural number) pointing to the folded layer it is associated to; and
@@ -163,18 +170,29 @@ class TorchCompiler(AbstractCompiler):
         in_layers: Dict[TorchLayer, List[TorchLayer]] = {}
         out_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
 
-        # Retrieve the layerwise (aka bottom-up) topological ordering of layers
+        # Retrieve the layer-wise (aka bottom-up) topological ordering of layers
         frontiers_ordering: List[List[TorchLayer]] = tc.layerwise_topological_ordering()
 
-        # Fold layers in each frontier, by firstly finding the layer groups to fold
+        # Fold layers in each inner frontier, by firstly finding the layer groups to fold
         # in each frontier, and then by stacking each group of layers into a folded layer
-        for frontier in frontiers_ordering:
+        for i, frontier in enumerate(frontiers_ordering):
+            # Retrieve the layer groups we can fold
             layer_groups = self._group_foldable_layers(frontier)
+
             # Fold each group of layers
             for group in layer_groups:
                 # Retrieve both the fold indices and within-fold index of the unfolded input layers
                 in_layers: List[List[TorchLayer]] = [tc.layer_inputs(l) for l in group]
-                in_layers_idx = [[fold_idx[li] for li in lsi] for lsi in in_layers]
+
+                # Check if we are folding input layers.
+                # If that is the case, we index the data variables. We can still fold the layers
+                # in such a group of input layers because they will be defined over the same
+                # number of variables. If that is not the case, we retrieve the input index
+                # from one of the useful maps.
+                if i == 0:
+                    in_layers_idx = [list(l.scope) for l in group]
+                else:
+                    in_layers_idx = [[fold_idx[li] for li in lsi] for lsi in in_layers]
 
                 # Fold the layers group
                 folded_layer = self._fold_layers_group(group)
@@ -206,7 +224,7 @@ class TorchCompiler(AbstractCompiler):
             fold_in_layers_idx=fold_in_layers_idx,
             fold_out_layers_idx=fold_out_layers_idx,
         )
-        return folded_tc
+        return folded_tc, compiled_ls
 
     def _group_foldable_layers(self, layers: List[TorchLayer]) -> List[List[TorchLayer]]:
         ...
