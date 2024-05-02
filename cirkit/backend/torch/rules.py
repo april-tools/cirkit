@@ -29,12 +29,18 @@ from cirkit.backend.torch.params.composed import (
     TorchScaledSigmoidParameter,
     TorchSoftmaxParameter,
 )
+from cirkit.backend.torch.params.ef import (
+    TorchLogPartitionGaussianProductParameter,
+    TorchMeanGaussianProductParameter,
+    TorchStddevGaussianProductParameter,
+)
 from cirkit.backend.torch.params.parameter import TorchConstantParameter
 from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
     GaussianLayer,
+    GaussianProductLayer,
     HadamardLayer,
     KroneckerLayer,
     LogPartitionLayer,
@@ -45,13 +51,16 @@ from cirkit.symbolic.params import (
     ConstantParameter,
     ExpParameter,
     KroneckerParameter,
+    LogPartitionGaussianProduct,
     LogSoftmaxParameter,
+    MeanGaussianProduct,
     OuterSumParameter,
     Parameter,
     ReduceLSEParameter,
     ReduceSumParameter,
     ScaledSigmoidParameter,
     SoftmaxParameter,
+    StddevGaussianProduct,
 )
 
 if TYPE_CHECKING:
@@ -134,6 +143,20 @@ def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMix
         sl.num_output_units,
         arity=sl.arity,
         weight=weight,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_gproduct_layer(
+    compiler: "TorchCompiler", sl: GaussianProductLayer
+) -> TorchGaussianLayer:
+    return TorchGaussianLayer(
+        sl.num_variables,
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        mean=compiler.compile_parameter(sl.mean),
+        stddev=compiler.compile_parameter(sl.stddev),
+        log_partition=compiler.compile_parameter(sl.log_partition),
         semiring=compiler.semiring,
     )
 
@@ -225,38 +248,49 @@ def compile_scaled_sigmoid_paramater(
     return TorchScaledSigmoidParameter(opd, vmin=p.vmin, vmax=p.vmax)
 
 
-# def compile_mean_gaussian_product_parameter(
-#     compiler: "TorchCompiler",
-#     p: MeanGaussianProduct,
-#     init_func: Optional[InitializerFunc] = None,
-# ) -> TorchMeanGaussianProductParameter:
-#     mean1 = compiler.compile_parameter(p.mean1)
-#     mean2 = compiler.compile_parameter(p.mean2)
-#     stddev1 = compiler.compile_parameter(p.stddev1)
-#     stddev2 = compiler.compile_parameter(p.stddev2)
-#     return TorchMeanGaussianProductParameter(mean1, mean2, stddev1, stddev2)
-#
-#
-# def compile_stddev_gaussian_product_parameter(
-#     compiler: "TorchCompiler",
-#     p: StddevGaussianProduct,
-#     init_func: Optional[InitializerFunc] = None,
-# ) -> TorchStddevGaussianProductParameter:
-#     stddev1 = compiler.compile_parameter(p.stddev1)
-#     stddev2 = compiler.compile_parameter(p.stddev2)
-#     return TorchStddevGaussianProductParameter(stddev1, stddev2)
-#
-#
-# def compile_log_partition_gaussian_product_parameter(
-#     compiler: "TorchCompiler",
-#     p: LogPartitionGaussianProduct,
-#     init_func: Optional[InitializerFunc] = None,
-# ) -> TorchLogPartitionGaussianProductParameter:
-#     mean1 = compiler.compile_parameter(p.mean1)
-#     mean2 = compiler.compile_parameter(p.mean2)
-#     stddev1 = compiler.compile_parameter(p.stddev1)
-#     stddev2 = compiler.compile_parameter(p.stddev2)
-#     return TorchMeanGaussianProductParameter(mean1, mean2, stddev1, stddev2)
+# def compile_gproduct_parameters(
+#     compiler: "TorchCompiler", p: LogPartitionGaussianProduct
+# ) -> TorchGaussianProductParameters:
+#     compiled_m_ls = [
+#         compiler.compile_parameter(m, init_func=TorchGaussianLayer.get_default_initializer("mean"))
+#         for m in p.mean_ls
+#     ]
+#     compiled_s_ls = [
+#         compiler.compile_parameter(
+#             s, init_func=TorchGaussianLayer.get_default_initializer("stddev")
+#         )
+#         for s in p.stddev_ls
+#     ]
+#     return TorchGaussianProductParameters(compiled_m_ls, compiled_s_ls)
+
+
+def compile_mean_gaussian_product_parameter(
+    compiler: "TorchCompiler",
+    p: MeanGaussianProduct,
+    init_func: Optional[InitializerFunc] = None,
+) -> TorchMeanGaussianProductParameter:
+    mean_ls = [compiler.compile_parameter(m) for m in p.mean_ls]
+    stddev_ls = [compiler.compile_parameter(m) for m in p.stddev_ls]
+    return TorchMeanGaussianProductParameter(mean_ls, stddev_ls)
+
+
+def compile_stddev_gaussian_product_parameter(
+    compiler: "TorchCompiler",
+    p: StddevGaussianProduct,
+    init_func: Optional[InitializerFunc] = None,
+) -> TorchStddevGaussianProductParameter:
+    stddev_ls = [compiler.compile_parameter(m) for m in p.stddev_ls]
+    return TorchStddevGaussianProductParameter(stddev_ls)
+
+
+def compile_log_partition_gaussian_product_parameter(
+    compiler: "TorchCompiler",
+    p: LogPartitionGaussianProduct,
+    init_func: Optional[InitializerFunc] = None,
+) -> TorchLogPartitionGaussianProductParameter:
+    mean_ls = [compiler.compile_parameter(m) for m in p.mean_ls]
+    stddev_ls = [compiler.compile_parameter(m) for m in p.stddev_ls]
+    return TorchLogPartitionGaussianProductParameter(mean_ls, stddev_ls)
 
 
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
@@ -267,6 +301,7 @@ DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc
     KroneckerLayer: compile_kronecker_layer,
     DenseLayer: compile_dense_layer,
     MixingLayer: compile_mixing_layer,
+    GaussianProductLayer: compile_gproduct_layer,
 }
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     Parameter: compile_parameter,
@@ -280,4 +315,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     OuterSumParameter: compile_outer_sum_parameter,
     KroneckerParameter: compile_kronecker_parameter,
     ScaledSigmoidParameter: compile_scaled_sigmoid_paramater,
+    MeanGaussianProduct: compile_mean_gaussian_product_parameter,
+    StddevGaussianProduct: compile_stddev_gaussian_product_parameter,
+    LogPartitionGaussianProduct: compile_log_partition_gaussian_product_parameter,
 }

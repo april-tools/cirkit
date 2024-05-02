@@ -1,81 +1,316 @@
-# pylint: disable=too-few-public-methods
-# DISABLE: For this file we disable the above because all classes trigger it and it's intended.
+from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Tuple
+from typing import Dict, List, Tuple
 
+import numpy as np
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from cirkit.backend.torch.params.base import AbstractTorchParameter
-from cirkit.backend.torch.params.composed import TorchBinaryOpParameter, TorchLogSoftmaxParameter
-
-# This file is for specialized reparams designed specifically for ExpFamilyLayer.
 
 
-# class TorchMeanGaussianProductParameter(TorchBinaryOpParameter):
-#     def __init__(
-#         self,
-#         mean1: AbstractTorchParameter,
-#         mean2: AbstractTorchParameter,
-#         stddev1: AbstractTorchParameter,
-#         stddev2: AbstractTorchParameter
-#     ) -> None:
-#         assert stddev1.shape[0] == stddev2.shape[0]
-#         assert stddev1.shape[2] == stddev2.shape[2]
-#         super().__init__(stddev1, stddev2, func=self._func)
+class TorchMultiParameters(nn.Module, ABC):
+    def __init__(self, **params: List[AbstractTorchParameter]):
+        super().__init__()
+        self.params = params
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        ...
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """The dtype of the output parameter."""
+        ps = [p for rs in self.params.values() for p in rs]
+        dtype = ps[0].dtype
+        assert all(
+            p.dtype == dtype for p in ps
+        ), "The dtype of all composing parameters should be the same."
+        return dtype
+
+    @property
+    def device(self) -> torch.device:
+        """The device of the output parameter."""
+        ps = [p for rs in self.params.values() for p in rs]
+        device = ps[0].device
+        assert all(
+            p.device == device for p in ps
+        ), "The device of all composing parameters should be the same."
+        return device
+
+    @abstractmethod
+    def forward(self) -> Tensor:
+        ...
+
+
+class TorchMeanGaussianProductParameter(TorchMultiParameters):
+    def __init__(
+        self, mean_ls: List[AbstractTorchParameter], stddev_ls: List[AbstractTorchParameter]
+    ) -> None:
+        assert len(mean_ls) > 1 and len(mean_ls) == len(stddev_ls)
+        assert len(set((m.shape[0], m.shape[2]) for m in mean_ls)) == 1
+        assert len(set((s.shape[0], s.shape[2]) for s in stddev_ls)) == 1
+        assert all(
+            m.shape[0] == s.shape[0] and m.shape[2] == s.shape[2]
+            for m, s in zip(mean_ls, stddev_ls)
+        )
+        super().__init__(mean_ls=mean_ls, stddev_ls=stddev_ls)
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        mean_ls = self.params["mean_ls"]
+        cross_dim = np.prod([m.shape[1] for m in mean_ls])
+        return mean_ls[0].shape[0], cross_dim, mean_ls[0].shape[2]
+
+    def forward(self) -> Tensor:
+        # *mean_ls: (D, Ki, C)
+        # *stddev_ls: (D, Ki, C)
+        # return: (D, K1 * ... * Kn, C)
+        # TODO (LL): this code might be numerically unstable and/or infefficient,
+        # - It might be possible to find another more efficient implementation
+        # - We can easily implement the same operations over the log-sum-exp:sum semiring
+        mean_ls: List[AbstractTorchParameter] = self.params["mean_ls"]
+        stddev_ls: List[AbstractTorchParameter] = self.params["stddev_ls"]
+        num_products = len(mean_ls)
+        ms = [m() for m in mean_ls]
+        ss = [s() for s in stddev_ls]
+        vs = [torch.square(s) for s in ss]
+        div_m = None
+        sum_rec_v = None
+        for i in range(num_products):
+            if i == 0:
+                sum_rec_v = torch.reciprocal(vs[0])
+                div_m = ms[0] * sum_rec_v
+                continue
+            oth_rec_v = torch.reciprocal(vs[i])
+            cross_dim = sum_rec_v.shape[1] * oth_rec_v.shape[1]
+            oth_div_m = ms[i] * oth_rec_v
+            sum_rec_v = sum_rec_v.unsqueeze(dim=2) + oth_rec_v.unsqueeze(dim=1)
+            div_m = div_m.unsqueeze(dim=2) + oth_div_m.unsqueeze(dim=1)
+            sum_rec_v = sum_rec_v.view(sum_rec_v.shape[0], cross_dim, sum_rec_v.shape[3])
+            div_m = div_m.view(div_m.shape[0], cross_dim, div_m.shape[3])
+        mean = div_m * torch.reciprocal(sum_rec_v)
+        return mean
+
+
+class TorchStddevGaussianProductParameter(TorchMultiParameters):
+    def __init__(self, stddev_ls: List[AbstractTorchParameter]) -> None:
+        assert len(stddev_ls) > 1
+        assert len(set((s.shape[0], s.shape[2]) for s in stddev_ls)) == 1
+        super().__init__(stddev_ls=stddev_ls)
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        stddev_ls = self.params["stddev_ls"]
+        cross_dim = np.prod([m.shape[1] for m in stddev_ls])
+        return stddev_ls[0].shape[0], cross_dim, stddev_ls[0].shape[2]
+
+    def forward(self) -> Tensor:
+        # *mean_ls: (D, Ki, C)
+        # *stddev_ls: (D, Ki, C)
+        # return: (D, K1 * ... * Kn, C)
+        # TODO (LL): this code might be numerically unstable and/or infefficient,
+        # - It might be possible to find another more efficient implementation
+        # - We can easily implement the same operations over the log-sum-exp:sum semiring
+        stddev_ls: List[AbstractTorchParameter] = self.params["stddev_ls"]
+        num_products = len(stddev_ls)
+        ss = [s() for s in stddev_ls]
+        vs = [torch.square(s) for s in ss]
+        sum_rec_v = None
+        for i in range(num_products):
+            if i == 0:
+                sum_rec_v = torch.reciprocal(vs[0])
+                continue
+            oth_rec_v = torch.reciprocal(vs[i])
+            cross_dim = sum_rec_v.shape[1] * oth_rec_v.shape[1]
+            sum_rec_v = sum_rec_v.unsqueeze(dim=2) + oth_rec_v.unsqueeze(dim=1)
+            sum_rec_v = sum_rec_v.view(sum_rec_v.shape[0], cross_dim, sum_rec_v.shape[3])
+        variance = torch.reciprocal(sum_rec_v)
+        return torch.sqrt(variance)
+
+
+class TorchLogPartitionGaussianProductParameter(TorchMultiParameters):
+    def __init__(
+        self, mean_ls: List[AbstractTorchParameter], stddev_ls: List[AbstractTorchParameter]
+    ) -> None:
+        assert len(mean_ls) > 1 and len(mean_ls) == len(stddev_ls)
+        assert len(set((m.shape[0], m.shape[2]) for m in mean_ls)) == 1
+        assert len(set((s.shape[0], s.shape[2]) for s in stddev_ls)) == 1
+        assert all(
+            m.shape[0] == s.shape[0] and m.shape[2] == s.shape[2]
+            for m, s in zip(mean_ls, stddev_ls)
+        )
+        super().__init__(mean_ls=mean_ls, stddev_ls=stddev_ls)
+
+    @cached_property
+    def shape(self) -> Tuple[int, ...]:
+        mean_ls = self.params["mean_ls"]
+        cross_dim = np.prod([m.shape[1] for m in mean_ls])
+        return (cross_dim,)
+
+    def forward(self) -> Tensor:
+        # *mean_ls: (D, Ki, C)
+        # *stddev_ls: (D, Ki, C)
+        # return: (D, K1 * ... * Kn, C)
+        # TODO (LL): this code might be numerically unstable and/or infefficient,
+        # - It might be possible to find another more efficient implementation
+        # - We can easily implement the same operations over the log-sum-exp:sum semiring
+        mean_ls: List[AbstractTorchParameter] = self.params["mean_ls"]
+        stddev_ls: List[AbstractTorchParameter] = self.params["stddev_ls"]
+        num_products = len(mean_ls)
+        ms = [m() for m in mean_ls]
+        ss = [s() for s in stddev_ls]
+        vs = [torch.square(s) for s in ss]
+        div_m = None
+        div_q = None
+        sum_rec_v = None
+        log_prod_v = None
+        for i in range(num_products):
+            if i == 0:
+                sum_rec_v = torch.reciprocal(vs[0])
+                div_m = ms[0] * sum_rec_v
+                div_q = div_m * ms[0]
+                log_prod_v = torch.log(vs[0])
+                continue
+            oth_rec_v = torch.reciprocal(vs[i])
+            cross_dim = sum_rec_v.shape[1] * oth_rec_v.shape[1]
+            oth_div_m = ms[i] * oth_rec_v
+            oth_div_q = oth_div_m * ms[i]
+            oth_log_prod_v = torch.log(vs[i])
+            sum_rec_v = sum_rec_v.unsqueeze(dim=2) + oth_rec_v.unsqueeze(dim=1)
+            div_m = div_m.unsqueeze(dim=2) + oth_div_m.unsqueeze(dim=1)
+            div_q = div_q.unsqueeze(dim=2) + oth_div_q.unsqueeze(dim=1)
+            log_prod_v = log_prod_v.unsqueeze(dim=2) + oth_log_prod_v.unsqueeze(dim=1)
+            sum_rec_v = sum_rec_v.view(sum_rec_v.shape[0], cross_dim, sum_rec_v.shape[3])
+            div_m = div_m.view(div_m.shape[0], cross_dim, div_m.shape[3])
+            div_q = div_q.view(div_q.shape[0], cross_dim, div_q.shape[3])
+            log_prod_v = log_prod_v.view(log_prod_v.shape[0], cross_dim, log_prod_v.shape[3])
+        variance = torch.reciprocal(sum_rec_v)
+        mean = div_m * variance
+        p0 = (num_products - 1) * np.log(2.0 * np.pi)
+        p1 = torch.log(variance) - log_prod_v
+        p2 = torch.log(div_q - torch.square(mean) * sum_rec_v)
+        log_partition = torch.sum(-0.5 * (p0 - p1 + p2), dim=[0, 2])
+        return log_partition
+
+
+# class TorchMultiParameters(nn.Module, ABC):
+#     def __init__(self, **params: List[AbstractTorchParameter]):
+#         super().__init__()
+#         self.params = params
+#
+#     @abstractmethod
+#     def shape(self, name: str) -> Tuple[int, ...]:
+#         ...
+#
+#     @property
+#     def dtype(self) -> torch.dtype:
+#         """The dtype of the output parameter."""
+#         ps = [p for rs in self.params.values() for p in rs]
+#         dtype = ps[0].dtype
+#         assert all(
+#             p.dtype == dtype for p in ps
+#         ), "The dtype of all composing parameters should be the same."
+#         return dtype
+#
+#     @property
+#     def device(self) -> torch.device:
+#         """The device of the output parameter."""
+#         ps = [p for rs in self.params.values() for p in rs]
+#         device = ps[0].device
+#         assert all(
+#             p.device == device for p in ps
+#         ), "The device of all composing parameters should be the same."
+#         return device
+#
+#     @abstractmethod
+#     def forward(self) -> Dict[str, Tensor]:
+#         ...
+
+
+# class TorchSelectorParameter(AbstractTorchParameter):
+#     def __init__(self, multi_param: TorchMultiParameters, name: str):
+#         super().__init__()
+#         self.multi_param = multi_param
+#         self.name = name
 #
 #     @cached_property
 #     def shape(self) -> Tuple[int, ...]:
-#         return (
-#             self.stddev1.shape[0],
-#             self.stddev1.shape[1] * self.stddev2.shape[1],
-#             self.stddev1.shape[2],
-#         )
+#         return self.multi_param.shape(self.name)
 #
-#     def _func(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
-#         # stddev1: (D, K1, C)
-#         # stddev2: (D, K2, C)
-#         # out: (D, K1 * K2, C), which is the harmonic mean of the two standard deviations
+#     @property
+#     def dtype(self) -> torch.dtype:
+#         return self.multi_param.dtype
 #
-#         # TODO (LL): this code might be numerically unstable,
-#         #            but we can easily implement the log-sum-exp trick to compute the harmonic mean
-#         inv_stddev1 = torch.reciprocal(stddev1)
-#         inv_stddev2 = torch.reciprocal(stddev2)
-#         inv_stddev = inv_stddev1.unsqueeze(dim=2) + inv_stddev2.unsqueeze(dim=1)
-#         inv_stddev = inv_stddev.view(self.shape)
-#         stddev = torch.reciprocal(inv_stddev)
-#         return stddev
+#     @property
+#     def device(self) -> torch.device:
+#         return self.multi_param.device
 #
-#
-#
-# class TorchStddevGaussianProductParameter(TorchBinaryOpParameter):
+#     def forward(self) -> Tensor:
+#         return self.multi_param()[self.name]
+
+
+# class TorchGaussianProductParameters(TorchMultiParameters):
 #     def __init__(
-#         self,
-#         stddev1: AbstractTorchParameter,
-#         stddev2: AbstractTorchParameter
+#         self, mean_ls: List[AbstractTorchParameter], stddev_ls: List[AbstractTorchParameter]
 #     ) -> None:
-#         assert stddev1.shape[0] == stddev2.shape[0]
-#         assert stddev1.shape[2] == stddev2.shape[2]
-#         super().__init__(stddev1, stddev2, func=self._func)
-#
-#     @cached_property
-#     def shape(self) -> Tuple[int, ...]:
-#         return (
-#             self.stddev1.shape[0],
-#             self.stddev1.shape[1] * self.stddev2.shape[1],
-#             self.stddev1.shape[2],
+#         assert len(mean_ls) > 1 and len(mean_ls) == len(stddev_ls)
+#         assert len(set((m.shape[0], m.shape[2]) for m in mean_ls)) == 1
+#         assert len(set((s.shape[0], s.shape[2]) for s in stddev_ls)) == 1
+#         assert all(
+#             m.shape[0] == s.shape[0] and m.shape[2] == s.shape[2]
+#             for m, s in zip(mean_ls, stddev_ls)
 #         )
+#         super().__init__(mean_ls=mean_ls, stddev_ls=stddev_ls)
 #
-#     def _func(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
-#         # stddev1: (D, K1, C)
-#         # stddev2: (D, K2, C)
-#         # out: (D, K1 * K2, C), which is the harmonic mean of the two standard deviations
+#     def shape(self, name: str) -> Tuple[int, ...]:
+#         mean_ls = self.params["mean_ls"]
+#         cross_dim = np.prod([m.shape[1] for m in mean_ls])
+#         if name == "log_partition":
+#             return (cross_dim,)
+#         return mean_ls[0].shape[0], cross_dim, mean_ls[0].shape[2]
 #
-#         # TODO (LL): this code might be numerically unstable,
-#         #            but we can easily implement the log-sum-exp trick to compute the harmonic mean
-#         inv_stddev1 = torch.reciprocal(stddev1)
-#         inv_stddev2 = torch.reciprocal(stddev2)
-#         inv_stddev = inv_stddev1.unsqueeze(dim=2) + inv_stddev2.unsqueeze(dim=1)
-#         inv_stddev = inv_stddev.view(self.shape)
-#         stddev = torch.reciprocal(inv_stddev)
-#         return stddev
+#     def forward(self) -> Dict[str, Tensor]:
+#         # *mean_ls: (D, Ki, C)
+#         # *stddev_ls: (D, Ki, C)
+#         # return: (D, K1 * ... * Kn, C)
+#         # TODO (LL): this code might be numerically unstable and/or infefficient,
+#         # - It might be possible to find another more efficient implementation
+#         # - We can easily implement the same operations over the log-sum-exp:sum semiring
+#         mean_ls: List[AbstractTorchParameter] = self.params["mean_ls"]
+#         stddev_ls: List[AbstractTorchParameter] = self.params["stddev_ls"]
+#         num_products = len(mean_ls)
+#         ms = [m() for m in mean_ls]
+#         ss = [s() for s in stddev_ls]
+#         vs = [torch.square(s) for s in ss]
+#         div_m = None
+#         div_q = None
+#         sum_rec_v = None
+#         log_prod_v = None
+#         for i in range(num_products):
+#             if i == 0:
+#                 sum_rec_v = torch.reciprocal(vs[0])
+#                 div_m = ms[0] * sum_rec_v
+#                 div_q = ms[0] * div_m
+#                 log_prod_v = torch.log(vs[0])
+#                 continue
+#             oth_rec_v = torch.reciprocal(vs[i])
+#             cross_dim = sum_rec_v.shape[1] * oth_rec_v.shape[1]
+#             oth_div_m = ms[i] * oth_rec_v
+#             oth_div_q = ms[i] * oth_div_m
+#             oth_log_prod_v = torch.log(vs[i])
+#             sum_rec_v = sum_rec_v.unsqueeze(dim=2) + oth_rec_v.unsqueeze(dim=1)
+#             div_m = div_m.unsqueeze(dim=2) + oth_div_m.unsqueeze(dim=1)
+#             div_q = div_q.unsqueeze(dim=2) + oth_div_q.unsqueeze(dim=1)
+#             log_prod_v = log_prod_v.unsqueeze(dim=2) + oth_log_prod_v.unsqueeze(dim=1)
+#             sum_rec_v = sum_rec_v.view(sum_rec_v.shape[0], cross_dim, sum_rec_v.shape[3])
+#             div_m = div_m.view(div_m.shape[0], cross_dim, div_m.shape[3])
+#             div_q = div_q.view(div_q.shape[0], cross_dim, div_q.shape[3])
+#             log_prod_v = log_prod_v.view(log_prod_v.shape[0], cross_dim, log_prod_v.shape[3])
+#         variance = torch.reciprocal(sum_rec_v)
+#         mean = div_m * variance
+#         p0 = (num_products - 1) * np.log(2.0 * np.pi)
+#         p1 = torch.log(variance) - log_prod_v
+#         p2 = torch.log(div_q - torch.square(mean) * sum_rec_v)
+#         log_partition = torch.sum(-0.5 * (p0 + p1 + p2), dim=[0, 2])
+#         return dict(mean=mean, stddev=torch.sqrt(variance), log_partition=log_partition)

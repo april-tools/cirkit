@@ -30,6 +30,7 @@ class TorchCompiler(AbstractCompiler):
         )
         super().__init__(default_registry, fold=fold, einsum=einsum)
         self._compiled_layers: Dict[Layer, TorchLayer] = {}
+        self._fold = fold
         self._semiring = Semiring.from_name(semiring)
 
     def compile_pipeline(self, sc: Circuit) -> AbstractTensorizedCircuit:

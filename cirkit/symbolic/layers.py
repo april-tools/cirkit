@@ -1,16 +1,16 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from cirkit.symbolic.params import (
     AbstractParameter,
-    LogSoftmaxParameter,
+    LogPartitionGaussianProduct,
+    MeanGaussianProduct,
     Parameter,
     Parameterization,
-    ReduceLSEParameter,
-    ReduceSumParameter,
     ScaledSigmoidParameter,
+    StddevGaussianProduct,
 )
 from cirkit.utils.scope import Scope
 
@@ -128,7 +128,6 @@ class GaussianLayer(InputLayer):
         num_channels: int,
         mean: Optional[AbstractParameter] = None,
         stddev: Optional[AbstractParameter] = None,
-        log_partition: Optional[AbstractParameter] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
         assert (mean is None and stddev is None) or (
@@ -139,14 +138,15 @@ class GaussianLayer(InputLayer):
             stddev = ScaledSigmoidParameter(
                 Parameter(self.num_variables, num_output_units, num_channels), vmin=1e-4, vmax=10.0
             )
+        else:
+            assert mean.shape == stddev.shape
         self.mean = mean
         self.stddev = stddev
-        self.log_partition = log_partition
 
     @property
     def parameters(self) -> Dict[str, AbstractParameter]:
         params = super().parameters
-        params.update(mean=self.mean, stddev=self.stddev, log_partition=self.log_partition)
+        params.update(mean=self.mean, stddev=self.stddev)
         return params
 
 
@@ -295,3 +295,28 @@ class IndexLayer(SumLayer):
             "num_output_units": self.num_output_units,
             "indices": self.indices,
         }
+
+
+class GaussianProductLayer(InputLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int = 1,
+        *,
+        mean: MeanGaussianProduct,
+        stddev: StddevGaussianProduct,
+        log_partition: LogPartitionGaussianProduct,
+    ):
+        assert mean.shape == stddev.shape
+        assert log_partition.shape == (mean.shape[1],)
+        super().__init__(scope, num_output_units, num_channels)
+        self.mean = mean
+        self.stddev = stddev
+        self.log_partition = log_partition
+
+    @property
+    def parameters(self) -> Dict[str, AbstractParameter]:
+        params = super().parameters
+        params.update(mean=self.mean, stddev=self.stddev, log_partition=self.log_partition)
+        return params

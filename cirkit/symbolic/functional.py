@@ -59,10 +59,7 @@ def integrate(
                     "Multivariate integration of proper subsets of variables is not implemented"
                 )
             # Retrieve the integration rule from the registry and apply it
-            if registry.has_rule(LayerOperation.INTEGRATION, type(sl)):
-                func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
-            else:  # Use a fallback rule that is not a specialized one
-                func = registry.retrieve_rule(LayerOperation.INTEGRATION, InputLayer)
+            func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
             int_block = func(sl)
             map_layers[sl] = int_block
             continue
@@ -127,11 +124,6 @@ def multiply(
             to_multiply.pop()
             continue
         lhs_layer, rhs_layer = pair
-        if type(lhs_layer) != type(rhs_layer):  # pylint: disable=unidiomatic-typecheck
-            raise NotImplementedError(
-                "The multiplication of circuits with different layers or region graphs has not been implemented yet"
-            )
-
         lhs_inputs = lhs_sc.layer_inputs(lhs_layer)
         rhs_inputs = rhs_sc.layer_inputs(rhs_layer)
         if isinstance(lhs_layer, InputLayer):

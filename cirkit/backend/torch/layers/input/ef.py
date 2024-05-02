@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -138,9 +138,12 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         num_output_units: int,
         *,
         num_channels: int = 1,
-        mean: AbstractTorchParameter,
-        stddev: AbstractTorchParameter,
+        mean: AbstractTorchParameter = None,
+        stddev: AbstractTorchParameter = None,
+        # mean: Optional[AbstractTorchParameter] = None,
+        # stddev: Optional[AbstractTorchParameter] = None,
         log_partition: Optional[AbstractTorchParameter] = None,
+        # params: Optional[TorchMultiParameters] = None,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
@@ -152,16 +155,27 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             mean (AbstractTorchParameter): The reparameterization for layer parameters.
             stddev (AbstractTorchParameter): The reparameterization for layer parameters.
         """
-        assert mean.shape == (num_variables, num_output_units, num_channels)
-        assert stddev.shape == (num_variables, num_output_units, num_channels)
-        if log_partition is not None:
-            assert log_partition.shape == (num_output_units,)
+        # assert params is not None or (mean is not None and stddev is not None)
+        mean_stddev_shape = num_variables, num_output_units, num_channels
+        # if mean is not None and stddev is not None:
+        #     assert params is None
+        #     assert mean.shape == stddev.shape == mean_stddev_shape
+        #     if log_partition is not None:
+        #         assert log_partition.shape == (num_output_units,)
+        # else:
+        #     assert mean is None and stddev is None and log_partition is None
+        #     assert params.shape("mean") == params.shape("stddev") == mean_stddev_shape
+        #     assert params.shape("log_partition") == (num_output_units,)
+        #     mean = TorchSelectorParameter(params, "mean")
+        #     stddev = TorchSelectorParameter(params, "stddev")
+        #     log_partition = TorchSelectorParameter(params, "log_partition")
         super().__init__(
             num_variables, num_output_units, num_channels=num_channels, semiring=semiring
         )
         self.mean = mean
         self.stddev = stddev
         self.log_partition = log_partition
+        # self.params = params
 
     @classmethod
     def default_initializers(cls) -> Dict[str, InitializerFunc]:
@@ -169,6 +183,15 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             mean=lambda t: nn.init.normal_(t, mean=0.0, std=3e-1),
             stddev=lambda t: nn.init.uniform_(t, a=np.log(1e-2), b=0.0).exp_(),
         )
+
+    def _get_parameters(self) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        # if self.params is None:
+        #     log_partition = self.log_partition() if self.log_partition else None
+        #     return self.mean(), self.stddev(), log_partition
+        # mstd = self.params()
+        # return mstd["mean"], mstd["stddev"], mstd["log_partition"]
+        log_partition = self.log_partition() if self.log_partition else None
+        return self.mean(), self.stddev(), log_partition
 
     def _eval_forward(self, x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
         # x: (C, B, D)
@@ -187,13 +210,13 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return x
 
     def log_probs(self, x: Tensor) -> Tensor:
-        mean, stddev = self.mean(), self.stddev()
+        mean, stddev, _ = self._get_parameters()
         x = self._eval_forward(x, mean, stddev)
         return x
 
     def log_score(self, x: Tensor) -> Tensor:
-        mean, stddev = self.mean(), self.stddev()
+        mean, stddev, log_partition = self._get_parameters()
         x = self._eval_forward(x, mean, stddev)
-        if self.log_partition is not None:
-            x = x + self.log_partition()
+        if log_partition is not None:
+            x = x + log_partition
         return x

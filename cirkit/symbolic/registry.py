@@ -28,7 +28,7 @@ class OperatorSignatureNotFound(Exception):
         super().__init__()
         self._signature = tuple(signature)
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         signature_repr = ", ".join(map(lambda cls: cls.__name__, self._signature))
         return f"Symbolic operator for signature ({signature_repr}) not found"
 
@@ -90,19 +90,9 @@ class OperatorRegistry(AbstractContextManager):
         known_signatures = op_rules.keys()
         if signature in known_signatures:
             return op_rules[signature]
-        for s, f in op_rules.items():
-            if len(signature) != len(s):
-                continue
-            # TODO: handle more complicated sub-signatures hierarchies obtained via sub-classing layers?
-            if all(issubclass(x[0], x[1]) for x in zip(signature, s)):
-                # Cache rule signature for sub-signatures
-                self._rules[op][signature] = f
-                return f
         raise OperatorSignatureNotFound(*signature)
 
     def add_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
-        # TODO do we have commutative operators?
-        # The multiplication (aka kronecker) between layers is NOT commutative
         args = func.__annotations__.copy()
         arg_names = args.keys()
         if "return" not in arg_names or not issubclass(args["return"], CircuitBlock):

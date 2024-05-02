@@ -225,9 +225,56 @@ class SoftmaxParameter(EntrywiseReduceOpParameter):
     ...
 
 
+# class MeanGaussianProduct(AbstractParameter):
+#     def __init__(self, mean1: AbstractParameter, mean2: AbstractParameter, stddev1: AbstractParameter, stddev2: AbstractParameter):
+#         assert mean1.shape[0] == mean2.shape[0] == stddev1.shape[0] == stddev2.shape[0]
+#         assert mean1.shape[2] == mean2.shape[2] == stddev1.shape[2] == stddev2.shape[2]
+#         assert mean1.shape[1] == stddev1.shape[1] and mean2.shape[1] == stddev2.shape[1]
+#         self.mean1 = mean1
+#         self.mean2 = mean2
+#         self.stddev1 = stddev1
+#         self.stddev2 = stddev2
+#
+#     @cached_property
+#     def shape(self) -> Tuple[int, ...]:
+#         cross_dim = self.mean1.shape[1] * self.mean2.shape[1]
+#         return self.mean1.shape[0], cross_dim, self.mean1.shape[2]
+#
+#
+# class StddevGaussianProduct(AbstractParameter):
+#     def __init__(self, stddev1: AbstractParameter, stddev2: AbstractParameter):
+#         assert stddev1.shape[0] == stddev2.shape[0]
+#         assert stddev1.shape[2] == stddev2.shape[2]
+#         self.stddev1 = stddev1
+#         self.stddev2 = stddev2
+#
+#     @cached_property
+#     def shape(self) -> Tuple[int, ...]:
+#         cross_dim = self.stddev1.shape[1] * self.stddev1.shape[1]
+#         return self.stddev1.shape[0], cross_dim, self.stddev1.shape[2]
+#
+#
+# class LogPartitionGaussianProduct(AbstractParameter):
+#     def __init__(self, mean1: AbstractParameter, mean2: AbstractParameter, stddev1: AbstractParameter, stddev2: AbstractParameter, log_partition1: Optional[AbstractParameter] = None, log_partition2: Optional[AbstractParameter] = None):
+#         assert mean1.shape[0] == mean2.shape[0] == stddev1.shape[0] == stddev2.shape[0]
+#         assert mean1.shape[2] == mean2.shape[2] == stddev1.shape[2] == stddev2.shape[2]
+#         assert mean1.shape[1] == stddev1.shape[1] and mean2.shape[1] == stddev2.shape[1]
+#         self.mean1 = mean1
+#         self.mean2 = mean2
+#         self.stddev1 = stddev1
+#         self.stddev2 = stddev2
+#         self.log_partition1 = log_partition1
+#         self.log_partition2 = log_partition2
+#
+#     @cached_property
+#     def shape(self) -> Tuple[int, ...]:
+#         cross_dim = self.mean1.shape[1] * self.mean2.shape[1]
+#         return (cross_dim,)
+
+
 class MeanGaussianProduct(AbstractParameter):
     def __init__(self, mean_ls: List[AbstractParameter], stddev_ls: List[AbstractParameter]):
-        assert len(mean_ls) > 0 and len(mean_ls) == len(stddev_ls)
+        assert len(mean_ls) > 1 and len(mean_ls) == len(stddev_ls)
         assert len(set((m.shape[0], m.shape[2]) for m in mean_ls)) == 1
         assert len(set((s.shape[0], s.shape[2]) for s in stddev_ls)) == 1
         assert all(
@@ -245,7 +292,7 @@ class MeanGaussianProduct(AbstractParameter):
 
 class StddevGaussianProduct(AbstractParameter):
     def __init__(self, stddev_ls: List[AbstractParameter]):
-        assert len(stddev_ls) > 0
+        assert len(stddev_ls) > 1
         assert len(set((s.shape[0], s.shape[2]) for s in stddev_ls)) == 1
         self.stddev_ls = stddev_ls
 
@@ -257,7 +304,7 @@ class StddevGaussianProduct(AbstractParameter):
 
 class LogPartitionGaussianProduct(AbstractParameter):
     def __init__(self, mean_ls: List[AbstractParameter], stddev_ls: List[AbstractParameter]):
-        assert len(mean_ls) > 0 and len(mean_ls) == len(stddev_ls)
+        assert len(mean_ls) > 1 and len(mean_ls) == len(stddev_ls)
         assert len(set((m.shape[0], m.shape[2]) for m in mean_ls)) == 1
         assert len(set((s.shape[0], s.shape[2]) for s in stddev_ls)) == 1
         assert all(
@@ -269,5 +316,5 @@ class LogPartitionGaussianProduct(AbstractParameter):
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        cross_dim = np.prod([s.shape[1] for s in self.stddev_ls])
+        cross_dim = np.prod([m.shape[1] for m in self.mean_ls])
         return (cross_dim,)
