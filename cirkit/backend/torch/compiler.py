@@ -1,12 +1,9 @@
 import os
 from collections import defaultdict
-from typing import IO, Dict, List, Optional, Tuple, Type, Union
-
-import torch
-from torch import Tensor
+from typing import IO, Dict, List, Optional, Tuple, Union
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
-from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.rules import (
@@ -16,7 +13,7 @@ from cirkit.backend.torch.rules import (
 from cirkit.backend.torch.semiring import Semiring, SemiringCls
 from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
-from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
+from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.params import AbstractParameter
 
 
