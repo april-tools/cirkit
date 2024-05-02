@@ -72,7 +72,7 @@ def compile_log_partition_layer(
 ) -> TorchLogPartitionLayer:
     value = compiler.compile_parameter(sl.value)
     return TorchLogPartitionLayer(
-        sl.num_variables,
+        sl.scope,
         sl.num_output_units,
         num_channels=sl.num_channels,
         value=value,
@@ -87,7 +87,7 @@ def compile_categorical_layer(
         sl.logits, init_func=TorchCategoricalLayer.get_default_initializer("logits")
     )
     return TorchCategoricalLayer(
-        sl.num_variables,
+        sl.scope,
         sl.num_output_units,
         num_channels=sl.num_channels,
         num_categories=sl.num_categories,
@@ -104,7 +104,7 @@ def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> Torc
         sl.stddev, init_func=TorchGaussianLayer.get_default_initializer("stddev")
     )
     return TorchGaussianLayer(
-        sl.num_variables,
+        sl.scope,
         sl.num_output_units,
         num_channels=sl.num_channels,
         mean=mean,
@@ -151,7 +151,7 @@ def compile_gproduct_layer(
     compiler: "TorchCompiler", sl: GaussianProductLayer
 ) -> TorchGaussianLayer:
     return TorchGaussianLayer(
-        sl.num_variables,
+        sl.scope,
         sl.num_output_units,
         num_channels=sl.num_channels,
         mean=compiler.compile_parameter(sl.mean),

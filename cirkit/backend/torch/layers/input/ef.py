@@ -10,6 +10,7 @@ from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
 from cirkit.backend.torch.utils import InitializerFunc
+from cirkit.utils.scope import Scope
 
 
 class TorchExpFamilyLayer(TorchInputLayer):
@@ -30,21 +31,27 @@ class TorchExpFamilyLayer(TorchInputLayer):
 
     def __init__(
         self,
-        num_variables: int,
+        scope: Scope,
         num_output_units: int,
         *,
         num_channels: int = 1,
+        num_folds: int = 1,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
 
         Args:
-            num_variables (int): The number of variables.
+            scope (Scope): The scope the input layer is defined on.
             num_output_units (int): The number of output units.
             num_channels (int): The number of channels. Defaults to 1.
+            num_folds (int): The number of channels. Defaults to 1.
         """
         super().__init__(
-            num_variables, num_output_units, num_channels=num_channels, semiring=semiring
+            scope,
+            num_output_units,
+            num_channels=num_channels,
+            num_folds=num_folds,
+            semiring=semiring,
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -77,10 +84,11 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     # pylint: disable-next=too-many-arguments
     def __init__(
         self,
-        num_variables: int,
+        scope: Scope,
         num_output_units: int,
         *,
         num_channels: int = 1,
+        num_folds: int = 1,
         num_categories: int = 2,
         logits: AbstractTorchParameter,
         semiring: Optional[SemiringCls] = None,
@@ -88,19 +96,31 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         """Init class.
 
         Args:
-            num_variables (int): The number of variables.
+            scope (Scope): The scope the input layer is defined on.
             num_output_units (int): The number of output units.
             num_channels (int): The number of channels.
+            num_folds (int): The number of channels. Defaults to 1.
             num_categories (int): The number of categories for Categorical distribution. Defaults to 2.
             logits (AbstractTorchParameter): The reparameterization for layer parameters.
         """
         assert (
             num_categories > 0
         ), "The number of categories for Categorical distribution must be positive."
-        assert logits.shape == (num_variables, num_output_units, num_channels, num_categories)
-        super().__init__(
-            num_variables, num_output_units, num_channels=num_channels, semiring=semiring
+        assert logits.shape == (
+            num_folds,
+            len(scope),
+            num_output_units,
+            num_channels,
+            num_categories,
         )
+        super().__init__(
+            scope,
+            num_output_units,
+            num_channels=num_channels,
+            num_folds=num_folds,
+            semiring=semiring,
+        )
+        self.num_folds = num_folds
         self.num_categories = num_categories
         self.logits = logits
 
@@ -111,9 +131,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     def _eval_forward(self, x: Tensor, logits: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete.
-        x = F.one_hot(x, self.num_categories)  # (C, *B, D, num_categories)
+        x = F.one_hot(x, self.num_categories)  # (F, C, *B, D, num_categories)
         x = x.to(torch.get_default_dtype())
-        x = torch.einsum("cbdi,dkci->bk", x, logits)
+        x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
         return x
 
     def log_probs(self, x: Tensor) -> Tensor:
@@ -134,10 +154,11 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
     def __init__(
         self,
-        num_variables: int,
+        scope: Scope,
         num_output_units: int,
         *,
         num_channels: int = 1,
+        num_folds: int = 1,
         mean: AbstractTorchParameter = None,
         stddev: AbstractTorchParameter = None,
         # mean: Optional[AbstractTorchParameter] = None,
@@ -149,14 +170,15 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         """Init class.
 
         Args:
-            num_variables (int): The number of variables.
+            scope (Scope): The scope the input layer is defined on.
             num_output_units (int): The number of output units.
             num_channels (int): The number of channels. Defaults to 1.
             mean (AbstractTorchParameter): The reparameterization for layer parameters.
             stddev (AbstractTorchParameter): The reparameterization for layer parameters.
+            num_folds (int): The number of channels. Defaults to 1.
         """
         # assert params is not None or (mean is not None and stddev is not None)
-        mean_stddev_shape = num_variables, num_output_units, num_channels
+        mean_stddev_shape = num_folds, len(scope), num_output_units, num_channels
         # if mean is not None and stddev is not None:
         #     assert params is None
         #     assert mean.shape == stddev.shape == mean_stddev_shape
@@ -170,7 +192,11 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         #     stddev = TorchSelectorParameter(params, "stddev")
         #     log_partition = TorchSelectorParameter(params, "log_partition")
         super().__init__(
-            num_variables, num_output_units, num_channels=num_channels, semiring=semiring
+            scope,
+            num_output_units,
+            num_channels=num_channels,
+            num_folds=num_folds,
+            semiring=semiring,
         )
         self.mean = mean
         self.stddev = stddev
@@ -194,13 +220,13 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return self.mean(), self.stddev(), log_partition
 
     def _eval_forward(self, x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
-        # x: (C, B, D)
-        # dist_loc: (D, K, C)
-        # dist_stddev: (D, K, C)
+        # x: (F, C, B, D)
+        # dist_loc: (F, D, K, C)
+        # dist_stddev: (F, D, K, C)
         dist = distributions.Normal(loc=loc, scale=scale)
-        x = x.permute(1, 2, 0).unsqueeze(dim=2)  # (*B, D, 1, C)
+        x = x.permute(0, 2, 3, 1).unsqueeze(dim=2)  # (F, *B, D, 1, C)
         x = dist.log_prob(x)
-        x = torch.sum(x, dim=[1, 3])
+        x = torch.sum(x, dim=[2, 4])
         # TODO (LL):
         #  the current tensor shapes might enable faster inference,
         #  but it is honestly a mess to work with.

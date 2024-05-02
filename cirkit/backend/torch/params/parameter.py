@@ -13,9 +13,10 @@ from cirkit.backend.torch.params.base import AbstractTorchParameter
 class TorchParameter(AbstractTorchParameter):
     """The leaf in reparameterizations that holds the parameter Tensor."""
 
-    def __init__(self, *shape: int) -> None:
+    def __init__(self, *shape: int, num_folds: int = 1) -> None:
         """Init class."""
         super().__init__()
+        shape = (num_folds, *shape)
         self.ptensor = nn.Parameter(torch.empty(*shape), requires_grad=True)
 
     @property
@@ -60,10 +61,11 @@ class TorchParameter(AbstractTorchParameter):
 
 @final
 class TorchConstantParameter(AbstractTorchParameter):
-    def __init__(self, shape: Tuple[int, ...], value: Number) -> None:
+    def __init__(self, shape: Tuple[int, ...], value: Number, *, num_folds: int = 1) -> None:
         """Init class."""
         super().__init__()
-        self.register_buffer("btensor", tensor=torch.full(shape, fill_value=value))
+        btensor = torch.full(size=(num_folds, *shape), fill_value=value)
+        self.register_buffer("btensor", tensor=btensor)
 
     @property
     def shape(self) -> Tuple[int, ...]:

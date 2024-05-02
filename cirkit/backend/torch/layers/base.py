@@ -11,13 +11,13 @@ from cirkit.backend.torch.utils import InitializerFunc
 class TorchLayer(nn.Module, ABC):
     """The abstract base class for all layers."""
 
-    # DISABLE: reparam is not used in the base class. It's only here for the interface.
     def __init__(
         self,
         num_input_units: int,
         num_output_units: int,
         *,
         arity: int = 1,
+        num_folds: int = 1,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
@@ -26,6 +26,7 @@ class TorchLayer(nn.Module, ABC):
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
             arity (int, optional): The arity of the layer. Defaults to 1.
+            num_folds (int): The number of channels. Defaults to 1.
         """
         super().__init__()
         assert num_input_units > 0, "The number of input units must be positive."
@@ -34,6 +35,7 @@ class TorchLayer(nn.Module, ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
+        self.num_folds = num_folds
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
     @classmethod
@@ -66,10 +68,10 @@ class TorchLayer(nn.Module, ABC):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, Ko).
+            Tensor: The output of this layer, shape (F, *B, Ko).
         """
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
@@ -79,8 +81,8 @@ class TorchLayer(nn.Module, ABC):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, Ko).
+            Tensor: The output of this layer, shape (F, *B, Ko).
         """

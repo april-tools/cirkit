@@ -1,16 +1,13 @@
 import os
+from collections import defaultdict
 from typing import IO, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
-from cirkit.backend.torch.layers import TorchLayer
-from cirkit.backend.torch.models import (
-    AbstractTensorizedCircuit,
-    TensorizedCircuit,
-    TensorizedConstantCircuit,
-)
+from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
@@ -31,9 +28,10 @@ class TorchCompiler(AbstractCompiler):
         super().__init__(default_registry, fold=fold, einsum=einsum)
         self._compiled_layers: Dict[Layer, TorchLayer] = {}
         self._fold = fold
+        self._einsum = einsum
         self._semiring = Semiring.from_name(semiring)
 
-    def compile_pipeline(self, sc: Circuit) -> AbstractTensorizedCircuit:
+    def compile_pipeline(self, sc: Circuit) -> AbstractTorchCircuit:
         # Compile the circuits following the topological ordering of the pipeline.
         ordering = pipeline_topological_ordering({sc})
         for sci in ordering:
@@ -42,10 +40,18 @@ class TorchCompiler(AbstractCompiler):
                 continue
 
             # Compile the circuit
-            self._compile_circuit(sci)
+            tc = self._compile_circuit(sci)
 
         # Return the compiled circuit (i.e., the output of the circuit pipeline)
         return self.get_compiled_circuit(sc)
+
+    @property
+    def is_fold_enabled(self) -> bool:
+        return self._fold
+
+    @property
+    def is_einsum_enabled(self) -> bool:
+        return self._einsum
 
     @property
     def semiring(self) -> SemiringCls:
@@ -67,43 +73,36 @@ class TorchCompiler(AbstractCompiler):
         func = self.retrieve_parameter_rule(signature)
         return func(self, parameter, init_func=init_func)
 
+    def _compile_layer(self, layer: Layer) -> TorchLayer:
+        signature = type(layer)
+        func = self.retrieve_layer_rule(signature)
+        return func(self, layer)
+
     def _register_compiled_circuit(
-        self, sc: Circuit, tc: AbstractTensorizedCircuit, compiled_layer_ids: Dict[Layer, int]
+        self, sc: Circuit, tc: AbstractTorchCircuit, compiled_layers: Dict[Layer, TorchLayer]
     ):
         super().register_compiled_circuit(sc, tc)
-        self._compiled_layers.update({l: tc.layers[i] for l, i in compiled_layer_ids.items()})
+        self._compiled_layers.update(compiled_layers)
 
-    def _compile_circuit(self, sc: Circuit) -> AbstractTensorizedCircuit:
-        # The list of layers
-        layers: List[TorchLayer] = []
+    def _compile_circuit(self, sc: Circuit) -> AbstractTorchCircuit:
+        # A map from symbolic to compiled layers
+        compiled_layers: Dict[Layer, TorchLayer] = {}
 
-        # The bookkeeping data structure
-        bookkeeping: List[Tuple[List[int], Optional[Tensor]]] = []
+        # The inputs and outputs for each layer
+        in_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
+        out_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
 
-        # A useful map from layers to compiled layer ids (i.e., indices to the list of layers)
-        compiled_layer_ids: Dict[Layer, int] = {}
-
-        # Compile layers by following the topological ordering, while constructing the bookkeeping
+        # Compile layers by following the topological ordering
         for sl in sc.layers_topological_ordering():
             # Compile the layer, for any layer types
             layer = self._compile_layer(sl)
 
-            if isinstance(sl, InputLayer):
-                # For input layers, the bookkeeping entry is a tensor index to the input tensor
-                bookkeeping_entry = ([], torch.tensor([list(sl.scope)]))
-            else:
-                # For sum/product layers, the bookkeeping entry consists of the indices to the layer inputs
-                assert isinstance(sl, (SumLayer, ProductLayer))
-                bookkeeping_entry = ([compiled_layer_ids[sli] for sli in sc.layer_inputs(sl)], None)
-            bookkeeping.append(bookkeeping_entry)
-            compiled_layer_ids[sl] = len(layers)
-            layers.append(layer)
-
-        # Append a last bookkeeping entry with the info to extract the output tensor
-        # This is necessary because we might have circuits with multiple outputs
-        output_ids = [compiled_layer_ids[slo] for slo in sc.output_layers]
-        bookkeeping_entry = (output_ids, None)
-        bookkeeping.append(bookkeeping_entry)
+            # Build the connectivity between compiled layers
+            ins = [compiled_layers[sli] for sli in sc.layer_inputs(sl)]
+            in_layers[layer].extend(ins)
+            for li in ins:
+                out_layers[li].append(layer)
+            compiled_layers[sl] = layer
 
         # Construct the tensorized circuit, which is a torch module
         # If the symbolic circuit being compiled has been obtained by integrating
@@ -114,19 +113,106 @@ class TorchCompiler(AbstractCompiler):
             and sc.operation.operator == CircuitOperator.INTEGRATION
             and sc.operation.metadata["scope"] == sc.scope
         ):
-            circuit_cls = TensorizedConstantCircuit
+            tc_cls = TorchConstantCircuit
         else:
-            circuit_cls = TensorizedCircuit
-        circuit = circuit_cls(sc.num_variables, sc.num_channels, layers, bookkeeping)
+            tc_cls = TorchCircuit
+        tc = tc_cls(
+            sc.scope,
+            sc.num_channels,
+            layers=list(compiled_layers.values()),
+            in_layers=in_layers,
+            out_layers=out_layers,
+        )
+
+        # Apply optimizations
+        tc = self._optimize_circuit(tc)
 
         # Register the compiled circuit, as well as the compiled layer infos
-        self._register_compiled_circuit(sc, circuit, compiled_layer_ids)
-        return circuit
+        self._register_compiled_circuit(sc, tc, compiled_layers)
+        return tc
 
-    def _compile_layer(self, layer: Layer) -> TorchLayer:
-        signature = type(layer)
-        func = self.retrieve_layer_rule(signature)
-        return func(self, layer)
+    def _optimize_circuit(self, tc: TorchCircuit) -> TorchCircuit:
+        # Try to optimize the circuit by using einsums
+        if self.is_einsum_enabled:
+            tc = self._einsumize_circuit(tc)
+        # Fold the circuit
+        if self.is_fold_enabled:
+            tc = self._fold_circuit(tc)
+        return tc
+
+    def _einsumize_circuit(self, tc: AbstractTorchCircuit) -> AbstractTorchCircuit:
+        ...
+
+    def _fold_circuit(self, tc: AbstractTorchCircuit) -> AbstractTorchCircuit:
+        # The list of folded layers
+        layers: List[TorchLayer] = []
+
+        # A useful data structure mapping each unfolded layer to
+        # (i) a 'fold_id' (a natural number) pointing to the folded layer it is associated to; and
+        # (ii) a 'slice_idx' (a natural number) within the output of the folded layer,
+        #      which recovers the output of the unfolded layer.
+        fold_idx: Dict[TorchLayer, Tuple[int, int]] = {}
+
+        # A useful data structure mapping each folded layer to
+        # a tensor of indices IDX of size (F, H, 2), where F is the number of layers in the fold,
+        # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair (fold_id, slice_idx),
+        # pointing to the folded layer of id 'fold_id' and to the slice 'slice_idx' within that fold.
+        fold_in_layers_idx: Dict[TorchLayer, List[List[Tuple[int, int]]]] = {}
+
+        # The inputs and outputs for each folded layer
+        in_layers: Dict[TorchLayer, List[TorchLayer]] = {}
+        out_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
+
+        # Retrieve the layerwise (aka bottom-up) topological ordering of layers
+        frontiers_ordering: List[List[TorchLayer]] = tc.layerwise_topological_ordering()
+
+        # Fold layers in each frontier, by firstly finding the layer groups to fold
+        # in each frontier, and then by stacking each group of layers into a folded layer
+        for frontier in frontiers_ordering:
+            layer_groups = self._group_foldable_layers(frontier)
+            # Fold each group of layers
+            for group in layer_groups:
+                # Retrieve both the fold indices and within-fold index of the unfolded input layers
+                in_layers: List[List[TorchLayer]] = [tc.layer_inputs(l) for l in group]
+                in_layers_idx = [[fold_idx[li] for li in lsi] for lsi in in_layers]
+
+                # Fold the layers group
+                folded_layer = self._fold_layers_group(group)
+
+                # Set the input and output folded layers
+                flatten_in_layers = set(li for lsi in in_layers for li in lsi)
+                folded_in_layers = [layers[fold_idx[l][0]] for l in flatten_in_layers]
+                in_layers[folded_layer] = folded_in_layers
+                for fl in folded_in_layers:
+                    out_layers[fl].append(folded_layer)
+
+                # Update the data structures
+                layers.append(folded_layer)
+                for i, l in enumerate(group):
+                    fold_idx[l] = (len(layers), i)
+                fold_in_layers_idx[folded_layer] = in_layers_idx
+
+        # Similar as the 'fold_in_layers_idx' data structure above,
+        # but indexing the entries of the folded outputs
+        fold_out_layers_idx = [fold_idx[lo] for lo in tc.output_layers]
+
+        # Instantiate a folded circuit
+        folded_tc = type(tc)(
+            tc.scope,
+            tc.num_channels,
+            layers,
+            in_layers,
+            out_layers,
+            fold_in_layers_idx=fold_in_layers_idx,
+            fold_out_layers_idx=fold_out_layers_idx,
+        )
+        return folded_tc
+
+    def _group_foldable_layers(self, layers: List[TorchLayer]) -> List[List[TorchLayer]]:
+        ...
+
+    def _fold_layers_group(self, layers: List[TorchLayer]) -> TorchLayer:
+        ...
 
     def save(
         self,

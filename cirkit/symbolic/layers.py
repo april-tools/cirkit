@@ -154,6 +154,7 @@ class LogPartitionLayer(InputLayer):
     def __init__(
         self, scope: Scope, num_output_units: int, num_channels: int, value: AbstractParameter
     ):
+        assert value.shape == (num_output_units,)
         super().__init__(scope, num_output_units, num_channels)
         self.value = value
 

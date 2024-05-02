@@ -7,7 +7,7 @@ from scipy import integrate
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.models import TensorizedCircuit, TensorizedConstantCircuit
+from cirkit.backend.torch.models import TorchCircuit, TorchConstantCircuit
 from tests.floats import allclose, isclose
 from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
 
@@ -16,7 +16,7 @@ def test_compile_output_shape():
     compiler = TorchCompiler()
     num_variables, num_channels = 12, 1
     sc = build_simple_circuit(num_variables, 4, 3, num_repetitions=3)
-    tc: TensorizedCircuit = compiler.compile(sc)
+    tc: TorchCircuit = compiler.compile(sc)
     batch_size = 42
     input_shape = (batch_size, num_channels, num_variables)
     x = torch.zeros(input_shape)
@@ -34,10 +34,10 @@ def test_compile_integrate_pc_discrete(semiring: str, num_variables: int, normal
     sc = build_simple_pc(num_variables, 4, 3, num_repetitions=3, normalized=normalized)
 
     int_sc = SF.integrate(sc)
-    int_tc: TensorizedConstantCircuit = compiler.compile(int_sc)
-    assert isinstance(int_tc, TensorizedConstantCircuit)
-    tc: TensorizedCircuit = compiler.get_compiled_circuit(sc)
-    assert isinstance(tc, TensorizedCircuit)
+    int_tc: TorchConstantCircuit = compiler.compile(int_sc)
+    assert isinstance(int_tc, TorchConstantCircuit)
+    tc: TorchCircuit = compiler.get_compiled_circuit(sc)
+    assert isinstance(tc, TorchCircuit)
 
     # Test the partition function value
     z = int_tc()
@@ -74,10 +74,10 @@ def test_compile_integrate_pc_continuous(semiring: str, normalized: bool):
     sc = build_simple_pc(num_variables, input_layer="gaussian", normalized=normalized)
 
     int_sc = SF.integrate(sc)
-    int_tc: TensorizedConstantCircuit = compiler.compile(int_sc)
-    assert isinstance(int_tc, TensorizedConstantCircuit)
-    tc: TensorizedCircuit = compiler.get_compiled_circuit(sc)
-    assert isinstance(tc, TensorizedCircuit)
+    int_tc: TorchConstantCircuit = compiler.compile(int_sc)
+    assert isinstance(int_tc, TorchConstantCircuit)
+    tc: TorchCircuit = compiler.get_compiled_circuit(sc)
+    assert isinstance(tc, TorchCircuit)
 
     # Test the partition function value
     z = int_tc()
@@ -126,7 +126,7 @@ def test_compile_product_integrate_pc_discrete(
         scs.append(sci)
         tcs.append(tci)
         last_sc = sci if i == 0 else SF.multiply(last_sc, sci)
-    tc: TensorizedCircuit = compiler.compile(last_sc)
+    tc: TorchCircuit = compiler.compile(last_sc)
     int_sc = SF.integrate(last_sc)
     int_tc = compiler.compile(int_sc)
 
@@ -163,37 +163,35 @@ def test_compile_product_integrate_pc_discrete(
         assert False
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "semiring,normalized,num_products",
-    itertools.product(["lse-sum", "sum-product"], [False, True], [2, 3]),
-)
-def test_compile_product_integrate_pc_continuous(
-    semiring: str, normalized: bool, num_products: int
-):
-    # TODO: this is not passing, gaussian product to be fixed
-    return
-    num_variables = 2
-    compiler = TorchCompiler(semiring=semiring)
-    scs, tcs = [], []
-    last_sc = None
-    for i in range(num_products):
-        sci = build_simple_pc(
-            num_variables, 4 + i, 3 + i, input_layer="gaussian", normalized=normalized
-        )
-        tci = compiler.compile(sci)
-        scs.append(sci)
-        tcs.append(tci)
-        last_sc = sci if i == 0 else SF.multiply(last_sc, sci)
-    tc: TensorizedCircuit = compiler.compile(last_sc)
-
-    # Test the product of the circuits evaluated over some randomly-chosen points
-    worlds = torch.randn(64, 1, num_variables)
-    scores = tc(worlds).squeeze()
-    each_tc_scores = torch.stack([tci(worlds).squeeze() for tci in tcs], dim=0)
-    if semiring == "sum-product":
-        assert allclose(torch.prod(each_tc_scores, dim=0), scores)
-    elif semiring == "lse-sum":
-        assert allclose(torch.sum(each_tc_scores, dim=0), scores)
-    else:
-        assert False
+# @pytest.mark.slow
+# @pytest.mark.parametrize(
+#     "semiring,normalized,num_products",
+#     itertools.product(["lse-sum", "sum-product"], [False, True], [2, 3]),
+# )
+# def test_compile_product_integrate_pc_continuous(
+#     semiring: str, normalized: bool, num_products: int
+# ):
+#     num_variables = 2
+#     compiler = TorchCompiler(semiring=semiring)
+#     scs, tcs = [], []
+#     last_sc = None
+#     for i in range(num_products):
+#         sci = build_simple_pc(
+#             num_variables, 4 + i, 3 + i, input_layer="gaussian", normalized=normalized
+#         )
+#         tci = compiler.compile(sci)
+#         scs.append(sci)
+#         tcs.append(tci)
+#         last_sc = sci if i == 0 else SF.multiply(last_sc, sci)
+#     tc: TensorizedCircuit = compiler.compile(last_sc)
+#
+#     # Test the product of the circuits evaluated over some randomly-chosen points
+#     worlds = torch.randn(64, 1, num_variables)
+#     scores = tc(worlds).squeeze()
+#     each_tc_scores = torch.stack([tci(worlds).squeeze() for tci in tcs], dim=0)
+#     if semiring == "sum-product":
+#         assert allclose(torch.prod(each_tc_scores, dim=0), scores)
+#     elif semiring == "lse-sum":
+#         assert allclose(torch.sum(each_tc_scores, dim=0), scores)
+#     else:
+#         assert False

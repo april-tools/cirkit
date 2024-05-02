@@ -123,7 +123,7 @@ class TorchOuterSumParameter(TorchBinaryOpParameter):
             param2 (AbstractTorchParameter): The second input param to be composed.
         """
         assert len(param1.shape) == len(param2.shape)
-        dim = dim if dim >= 0 else dim + len(param1.shape)
+        dim = dim + 1 if dim >= 0 else dim + (len(param1.shape) - 1)
         assert 0 <= dim < len(param1.shape)
         super().__init__(param1, param2, func=self._func)
         self.dim = dim
@@ -353,6 +353,8 @@ class TorchReduceOpParamter(TorchUnaryOpParameter, ABC):
         dim: int = -1,
     ) -> None:
         super().__init__(param, func=func)
+        dim = dim + 1 if dim >= 0 else dim + (len(param.shape) - 1)
+        assert 0 <= dim < len(param.shape)
         self.dim = dim
 
     @cached_property
@@ -374,6 +376,8 @@ class TorchEntrywiseReduceOpParameter(TorchUnaryOpParameter):
         dim: int = -1,
     ) -> None:
         super().__init__(param, func=func)
+        dim = dim + 1 if dim >= 0 else dim + (len(param.shape) - 1)
+        assert 0 <= dim < len(param.shape)
         self.dim = dim
 
     @cached_property

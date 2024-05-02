@@ -35,7 +35,7 @@ def integrate_categorical_layer(
     scope = Scope(scope) if scope is not None else sl.scope
     assert sl.scope == scope
     lp = ReduceSumParameter(
-        ReduceSumParameter(ReduceLSEParameter(PlaceholderParameter(sl, "logits"), axis=-1), axis=2),
+        ReduceSumParameter(ReduceLSEParameter(PlaceholderParameter(sl, "logits"), axis=3), axis=2),
         axis=0,
     )
     sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=lp)
