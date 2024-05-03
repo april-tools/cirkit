@@ -233,10 +233,9 @@ def fold_circuit(
             folded_layer = fold_layers_group(compiler, group)
 
             # Set the input and output folded layers
-            folded_in_layers_idx = sorted(
-                list(set([fold_idx[li][0] for lsi in group_in_layers for li in lsi]))
+            folded_in_layers = list(
+                set(layers[fold_idx[li][0]] for lsi in group_in_layers for li in lsi)
             )
-            folded_in_layers = [layers[k] for k in folded_in_layers_idx]
             in_layers[folded_layer] = folded_in_layers
             for fl in folded_in_layers:
                 out_layers[fl].append(folded_layer)

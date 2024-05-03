@@ -24,12 +24,9 @@ class AbstractTorchCircuit(nn.Module):
         super().__init__()
         self.scope = scope
         self.num_channels = num_channels
-        self._layers = layers
+        self._layers: List[TorchLayer] = nn.ModuleList(layers)
         self._in_layers = in_layers
         self._out_layers = out_layers
-
-        # Sort the layers by topological ordering
-        self._layers: List[TorchLayer] = nn.ModuleList(self.layers_topological_ordering())
 
         # Build up the bookkeeping data structure
         assert (fold_in_layers_idx is None and fold_out_layers_idx is None) or (
