@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Callable, Tuple, Dict, Any
+from typing import Any, Callable, Dict, Tuple
 
 import torch
 from torch import Tensor, nn

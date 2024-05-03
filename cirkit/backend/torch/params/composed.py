@@ -49,7 +49,7 @@ class TorchUnaryOpParameter(TorchOpParameter, ABC):
         return self.opd.device
 
     @property
-    def params(self) -> Dict[str, 'AbstractTorchParameter']:
+    def params(self) -> Dict[str, "AbstractTorchParameter"]:
         """The other parameters this parameter depends on."""
         return dict(opd=self.opd)
 
@@ -141,7 +141,7 @@ class TorchBinaryOpParameter(TorchOpParameter, ABC):
         return self.opd1.device
 
     @property
-    def params(self) -> Dict[str, 'AbstractTorchParameter']:
+    def params(self) -> Dict[str, "AbstractTorchParameter"]:
         """The other parameters this parameter depends on."""
         return dict(opd1=self.opd1, opd2=self.opd2)
 
@@ -160,7 +160,9 @@ class TorchOuterSumParameter(TorchBinaryOpParameter):
         assert opd1.num_folds == opd2.num_folds and len(opd1.shape) == len(opd2.shape)
         dim = dim if dim >= 0 else dim + len(opd1.shape)
         assert 0 <= dim < len(opd1.shape)
-        assert opd1.shape[:dim] == opd2.shape[:dim] and opd1.shape[dim + 1:] == opd2.shape[dim + 1:]
+        assert (
+            opd1.shape[:dim] == opd2.shape[:dim] and opd1.shape[dim + 1 :] == opd2.shape[dim + 1 :]
+        )
         super().__init__(opd1, opd2)
         self.dim = dim
 
@@ -181,7 +183,7 @@ class TorchOuterSumParameter(TorchBinaryOpParameter):
         # x2: (F, d1, d2, ..., dk2, ... dn)
         x1 = x1.unsqueeze(self.dim + 2)  # (F, d1, d2, ..., dk1, 1, ..., dn)
         x2 = x2.unsqueeze(self.dim + 1)  # (F, d1, d2, ..., 1, dk1, ...., dn)
-        x = x1 + x2                      # (F, d1, d2, ..., dk1, dk2, ..., dn)
+        x = x1 + x2  # (F, d1, d2, ..., dk1, dk2, ..., dn)
         x = x.view(self.num_folds, *self.shape)  # (F, d1, d2, ..., dk1 * dk2, ..., dn)
         return x
 
@@ -211,10 +213,7 @@ class TorchKroneckerParameter(TorchBinaryOpParameter):
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return tuple(
-            self.opd1.shape[i] * self.opd2.shape[i]
-            for i in range(len(self.opd1.shape))
-        )
+        return tuple(self.opd1.shape[i] * self.opd2.shape[i] for i in range(len(self.opd1.shape)))
 
     def _forward_impl(self, x1: Tensor, x2: Tensor) -> Tensor:
         return self._batched_kron(x1, x2)

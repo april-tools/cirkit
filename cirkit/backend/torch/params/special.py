@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -9,11 +9,7 @@ from cirkit.backend.torch.params.composed import TorchOpParameter
 
 
 class TorchFoldIdxParameter(TorchOpParameter):
-    def __init__(
-        self,
-        opd: AbstractTorchParameter,
-        fold_idx: int
-    ) -> None:
+    def __init__(self, opd: AbstractTorchParameter, fold_idx: int) -> None:
         assert 0 <= fold_idx < opd.num_folds
         super().__init__(num_folds=1)
         self.opd = opd
@@ -27,7 +23,7 @@ class TorchFoldIdxParameter(TorchOpParameter):
         return self.opd.shape
 
     @property
-    def params(self) -> Dict[str, 'AbstractTorchParameter']:
+    def params(self) -> Dict[str, "AbstractTorchParameter"]:
         """The other parameters this parameter depends on."""
         return dict(opd=self.opd)
 
@@ -52,9 +48,7 @@ class TorchFoldIdxParameter(TorchOpParameter):
 
 class TorchFoldParameter(TorchOpParameter):
     def __init__(
-        self,
-        *opds: AbstractTorchParameter,
-        fold_idx: Optional[Union[int, List[int]]] = None
+        self, *opds: AbstractTorchParameter, fold_idx: Optional[Union[int, List[int]]] = None
     ) -> None:
         assert len(set(opd.shape for opd in opds)) == 1
         if fold_idx is not None:
@@ -74,9 +68,9 @@ class TorchFoldParameter(TorchOpParameter):
         return self.opds[0].shape
 
     @property
-    def params(self) -> Dict[str, 'AbstractTorchParameter']:
+    def params(self) -> Dict[str, "AbstractTorchParameter"]:
         """The other parameters this parameter depends on."""
-        return {f'opd:{i}': opd for i, opd in enumerate(self.opds)}
+        return {f"opd:{i}": opd for i, opd in enumerate(self.opds)}
 
     @property
     def dtype(self) -> torch.dtype:
@@ -102,6 +96,7 @@ class TorchFoldParameter(TorchOpParameter):
         if self.fold_idx is not None:
             return x[self.fold_idx]
         return x
+
     def forward(self) -> Tensor:
         x = torch.cat([opd() for opd in self.opds], dim=0)
         return self._forward_impl(x)

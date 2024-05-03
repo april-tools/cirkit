@@ -34,7 +34,7 @@ class AbstractTorchParameter(nn.Module, ABC):
         return {}
 
     @property
-    def params(self) -> Dict[str, 'AbstractTorchParameter']:
+    def params(self) -> Dict[str, "AbstractTorchParameter"]:
         """The other parameters this parameter might depend on."""
         return {}
 

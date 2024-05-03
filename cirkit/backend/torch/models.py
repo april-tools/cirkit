@@ -82,7 +82,8 @@ class AbstractTorchCircuit(nn.Module):
 
             if isinstance(l, TorchInputLayer):
                 # For input layers, the bookkeeping entry is a tensor index to the input tensor
-                bookkeeping_entry = ([], torch.tensor(in_layers_idx))
+                in_scope_ids = [[si[1] for si in fi] for fi in in_layers_idx]
+                bookkeeping_entry = ([], torch.tensor(in_scope_ids))
             else:
                 # Retrieve the unique fold indices that reference the layer inputs
                 in_layer_ids = list(set(si[0] for fi in in_layers_idx for si in fi))
@@ -182,6 +183,7 @@ class AbstractTorchCircuit(nn.Module):
                 # The layer is an input layer
                 # in_fold_idx has shape (F, D') with D' <= D
                 inputs = x[..., in_fold_idx]  # (B, C, F, D')
+                # print(in_fold_idx.shape, x.shape, inputs.shape)
                 inputs = inputs.permute(2, 1, 0, 3)
             lout = layer(inputs)  # (F, B, K)
             outputs.append(lout)

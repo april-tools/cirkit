@@ -13,11 +13,16 @@ from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
 
 
 @pytest.mark.parametrize(
-    "fold,num_variables,num_input_units,num_sum_units,num_repetitions", itertools.product([False, True], [1, 8], [1, 4], [1, 3], [1]),
+    "fold,num_variables,num_input_units,num_sum_units,num_repetitions",
+    itertools.product([False, True], [1, 8], [1, 4], [1, 3], [1]),
 )
-def test_compile_output_shape(fold: bool, num_variables: int, num_input_units: int, num_sum_units: int, num_repetitions: int):
+def test_compile_output_shape(
+    fold: bool, num_variables: int, num_input_units: int, num_sum_units: int, num_repetitions: int
+):
     compiler = TorchCompiler(fold=fold)
-    sc = build_simple_circuit(num_variables, num_input_units, num_sum_units, num_repetitions=num_repetitions)
+    sc = build_simple_circuit(
+        num_variables, num_input_units, num_sum_units, num_repetitions=num_repetitions
+    )
     tc: TorchCircuit = compiler.compile(sc)
 
     batch_size = 42
@@ -32,7 +37,9 @@ def test_compile_output_shape(fold: bool, num_variables: int, num_input_units: i
     "fold,semiring,num_variables,normalized",
     itertools.product([False, True], ["lse-sum", "sum-product"], [1, 2, 5], [False, True]),
 )
-def test_compile_integrate_pc_discrete(fold: bool, semiring: str, num_variables: int, normalized: bool):
+def test_compile_integrate_pc_discrete(
+    fold: bool, semiring: str, num_variables: int, normalized: bool
+):
     compiler = TorchCompiler(fold=fold, semiring=semiring)
     sc = build_simple_pc(num_variables, 4, 3, num_repetitions=3, normalized=normalized)
 
@@ -114,13 +121,13 @@ def test_compile_integrate_pc_continuous(semiring: str, normalized: bool):
 
 
 @pytest.mark.parametrize(
-    "semiring,normalized,num_variables,num_products",
-    itertools.product(["sum-product", "lse-sum"], [False, True], [1, 2, 5], [2, 3, 4]),
+    "fold,semiring,normalized,num_variables,num_products",
+    itertools.product([False, True], ["sum-product", "lse-sum"], [False, True], [1, 2, 5], [2, 3, 4]),
 )
 def test_compile_product_integrate_pc_discrete(
-    semiring: str, normalized: bool, num_variables: int, num_products: int
+    fold: bool, semiring: str, normalized: bool, num_variables: int, num_products: int
 ):
-    compiler = TorchCompiler(semiring=semiring)
+    compiler = TorchCompiler(fold=fold, semiring=semiring)
     scs, tcs = [], []
     last_sc = None
     for i in range(num_products):
