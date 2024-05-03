@@ -214,7 +214,7 @@ def fold_circuit(
 
         # Fold each group of layers
         for group in layer_groups:
-            # Retrieve both the fold indices and within-fold index of the unfolded input layers
+            # For each layer in the group, retrieve the unfolded input layers
             group_in_layers: List[List[TorchLayer]] = [tc.layer_inputs(l) for l in group]
 
             # Check if we are folding input layers.
@@ -233,8 +233,10 @@ def fold_circuit(
             folded_layer = fold_layers_group(compiler, group)
 
             # Set the input and output folded layers
-            flatten_in_layers = [li for lsi in group_in_layers for li in lsi]
-            folded_in_layers = [layers[fold_idx[l][0]] for l in flatten_in_layers]
+            folded_in_layers_idx = sorted(
+                list(set([fold_idx[li][0] for lsi in group_in_layers for li in lsi]))
+            )
+            folded_in_layers = [layers[k] for k in folded_in_layers_idx]
             in_layers[folded_layer] = folded_in_layers
             for fl in folded_in_layers:
                 out_layers[fl].append(folded_layer)

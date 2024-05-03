@@ -86,7 +86,7 @@ class AbstractTorchCircuit(nn.Module):
                 bookkeeping_entry = ([], torch.tensor(in_scope_ids))
             else:
                 # Retrieve the unique fold indices that reference the layer inputs
-                in_layer_ids = list(set(si[0] for fi in in_layers_idx for si in fi))
+                in_layer_ids = sorted(list(set(si[0] for fi in in_layers_idx for si in fi)))
 
                 # Compute the cumulative indices of the folded inputs
                 cum_folded_layer_ids: List[int] = np.cumsum(
@@ -106,7 +106,7 @@ class AbstractTorchCircuit(nn.Module):
             bookkeeping.append(bookkeeping_entry)
 
         # Append a last bookkeeping entry with the info to extract the (possibly multiple) outputs
-        out_layers_ids = list(set(si[0] for si in fold_out_layers_idx))
+        out_layers_ids = sorted(list(set(si[0] for si in fold_out_layers_idx)))
         cum_folded_layer_ids: List[int] = np.cumsum(
             [0] + [self._layers[li].num_folds for li in out_layers_ids]
         ).tolist()
@@ -172,6 +172,9 @@ class AbstractTorchCircuit(nn.Module):
             in_tensors = [outputs[i] for i in in_layer_ids]
             if in_tensors:
                 if len(in_tensors) > 1:
+                    # for it in in_tensors:
+                    #    print(type(layer), it.shape)
+                    # print()
                     inputs = torch.cat(in_tensors, dim=0)
                 else:
                     (inputs,) = in_tensors
@@ -186,6 +189,8 @@ class AbstractTorchCircuit(nn.Module):
                 # print(in_fold_idx.shape, x.shape, inputs.shape)
                 inputs = inputs.permute(2, 1, 0, 3)
             lout = layer(inputs)  # (F, B, K)
+            print(type(layer), lout.shape)
+            print()
             outputs.append(lout)
 
         # Retrieve the indices of the output tensors

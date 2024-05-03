@@ -16,7 +16,7 @@ from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
 
 @pytest.mark.parametrize(
     "fold,num_variables,num_input_units,num_sum_units,num_repetitions",
-    itertools.product([False, True], [1, 8], [1, 4], [1, 3], [1]),
+    itertools.product([False, True], [1, 12], [1, 4], [1, 3], [1, 3]),
 )
 def test_compile_output_shape(
     fold: bool, num_variables: int, num_input_units: int, num_sum_units: int, num_repetitions: int
