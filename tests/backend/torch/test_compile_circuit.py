@@ -12,13 +12,16 @@ from tests.floats import allclose, isclose
 from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
 
 
-def test_compile_output_shape():
-    compiler = TorchCompiler()
-    num_variables, num_channels = 12, 1
-    sc = build_simple_circuit(num_variables, 4, 3, num_repetitions=3)
+@pytest.mark.parametrize(
+    "fold,num_variables,num_input_units,num_sum_units,num_repetitions", itertools.product([False, True], [1, 8], [1, 4], [1, 3], [1]),
+)
+def test_compile_output_shape(fold: bool, num_variables: int, num_input_units: int, num_sum_units: int, num_repetitions: int):
+    compiler = TorchCompiler(fold=fold)
+    sc = build_simple_circuit(num_variables, num_input_units, num_sum_units, num_repetitions=num_repetitions)
     tc: TorchCircuit = compiler.compile(sc)
+
     batch_size = 42
-    input_shape = (batch_size, num_channels, num_variables)
+    input_shape = (batch_size, 1, num_variables)
     x = torch.zeros(input_shape)
     y = tc(x)
     assert y.shape == (batch_size, 1, 1)
@@ -26,11 +29,11 @@ def test_compile_output_shape():
 
 
 @pytest.mark.parametrize(
-    "semiring,num_variables,normalized",
-    itertools.product(["lse-sum", "sum-product"], [1, 2, 5], [False, True]),
+    "fold,semiring,num_variables,normalized",
+    itertools.product([False, True], ["lse-sum", "sum-product"], [1, 2, 5], [False, True]),
 )
-def test_compile_integrate_pc_discrete(semiring: str, num_variables: int, normalized: bool):
-    compiler = TorchCompiler(semiring=semiring)
+def test_compile_integrate_pc_discrete(fold: bool, semiring: str, num_variables: int, normalized: bool):
+    compiler = TorchCompiler(fold=fold, semiring=semiring)
     sc = build_simple_pc(num_variables, 4, 3, num_repetitions=3, normalized=normalized)
 
     int_sc = SF.integrate(sc)

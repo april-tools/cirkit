@@ -33,7 +33,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
             num_folds (int): The number of channels. Defaults to 1.
             value (Optional[Reparameterization], optional): Ignored. This layer has no params.
         """
-        assert value.shape == (num_folds, num_output_units)
+        assert value.num_folds == num_folds and value.shape == (num_output_units,)
         super().__init__(
             scope,
             num_output_units,
@@ -58,4 +58,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         Returns:
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
-        return self.semiring.from_lse_sum(self.value().expand(*x.shape[1:-1], -1))
+        value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
+        # (F, Ko) -> (F, *B, O)
+        value = value.expand(value.shape[0], *x.shape[2:-1], value.shape[2])
+        return self.semiring.from_lse_sum(value)

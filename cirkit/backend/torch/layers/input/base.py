@@ -44,7 +44,7 @@ class TorchInputLayer(TorchLayer, ABC):
 
     @property
     def num_channels(self) -> int:
-        return self.num_channels
+        return self.arity
 
     @property
     def config(self) -> Dict[str, Any]:

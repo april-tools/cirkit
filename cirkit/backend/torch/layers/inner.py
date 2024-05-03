@@ -150,7 +150,8 @@ class TorchDenseLayer(TorchSumLayer):
             num_folds (int): The number of channels. Defaults to 1.
             weight (AbstractTorchParameter): The reparameterization for layer parameters.
         """
-        assert weight.shape == (num_folds, num_output_units, num_input_units)
+        assert weight.num_folds == num_folds
+        assert weight.shape == (num_output_units, num_input_units)
         super().__init__(
             num_input_units, num_output_units, arity=1, num_folds=num_folds, semiring=semiring
         )
@@ -218,7 +219,8 @@ class TorchMixingLayer(TorchSumLayer):
         assert (
             num_output_units == num_input_units
         ), "The number of input and output units must be the same for MixingLayer."
-        assert weight.shape == (num_folds, num_output_units, arity)
+        assert weight.num_folds == num_folds
+        assert weight.shape == (num_output_units, arity)
         super().__init__(
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )

@@ -141,6 +141,11 @@ class AbstractTorchCircuit(nn.Module):
         return ordering
 
     @property
+    def layers(self) -> Iterator[TorchLayer]:
+        """All layers in the circuit."""
+        return iter(self._layers)
+
+    @property
     def input_layers(self) -> Iterator[TorchInputLayer]:
         """Input layers of the circuit."""
         return (layer for layer in self._layers if isinstance(layer, TorchInputLayer))

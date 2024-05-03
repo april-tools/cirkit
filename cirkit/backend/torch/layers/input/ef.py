@@ -106,8 +106,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         assert (
             num_categories > 0
         ), "The number of categories for Categorical distribution must be positive."
+        assert logits.num_folds == num_folds
         assert logits.shape == (
-            num_folds,
             len(scope),
             num_output_units,
             num_channels,

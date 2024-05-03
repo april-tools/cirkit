@@ -6,21 +6,17 @@ from torch import Tensor, nn
 
 
 class AbstractTorchParameter(nn.Module, ABC):
-    """The abstract base class for all reparameterizations.
+    """The abstract base class for all reparameterizations."""
 
-    NOTE: An instance of this class can be materialized only once, and following materializations \
-          are all no-op. If we do want to a true re-materialize, another instance should be \
-          constructed.
-    """
-
-    def __init__(self) -> None:
+    def __init__(self, *, num_folds: int = 1) -> None:
         """Init class."""
         super().__init__()
+        self.num_folds = num_folds
 
     @property
     @abstractmethod
     def shape(self) -> Tuple[int, ...]:
-        ...
+        """The shape of the output parameter."""
 
     @property
     @abstractmethod
@@ -34,6 +30,12 @@ class AbstractTorchParameter(nn.Module, ABC):
 
     @property
     def config(self) -> Dict[str, Any]:
+        """Configuration flags for the parameter."""
+        return {}
+
+    @property
+    def params(self) -> Dict[str, 'AbstractTorchParameter']:
+        """The other parameters this parameter might depend on."""
         return {}
 
     def __call__(self) -> Tensor:
