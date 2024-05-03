@@ -268,7 +268,9 @@ def fold_circuit(
     return folded_tc, fold_compiled_layers
 
 
-def group_foldable_layers(compiler: TorchCompiler, frontier: List[TorchLayer]) -> List[List[TorchLayer]]:
+def group_foldable_layers(
+    compiler: TorchCompiler, frontier: List[TorchLayer]
+) -> List[List[TorchLayer]]:
     # A dictionary mapping a layer configuration (see below),
     # which uniquely identifies a group of layers that can be folded,
     # into a group of layers.
@@ -319,7 +321,13 @@ def fold_layers_group(compiler: TorchCompiler, layers: List[TorchLayer]) -> Torc
     return fold_layer
 
 
-def fold_parameters_group(compiler: TorchCompiler, params: List[AbstractTorchParameter]) -> AbstractTorchParameter:
+def fold_parameters_group(
+    compiler: TorchCompiler, params: List[AbstractTorchParameter]
+) -> AbstractTorchParameter:
+    # TODO: we need a function like 'group_foldable_layers' above as to
+    #       firstly find groups of parameter sthat can be folded, and then fold them
+    #
+
     # Check all shapes (ignoring the fold dimension) match
     shapes = [p.shape for p in params]
     num_folds = len(params)
@@ -329,7 +337,9 @@ def fold_parameters_group(compiler: TorchCompiler, params: List[AbstractTorchPar
     if issubclass(fold_param_cls, (TorchParameter, TorchConstantParameter)):
         # Catch the case we are folding 'leaf' torch parameters
         assert all(p.requires_grad for p in params)
-        fold_param = fold_param_cls(*shapes[0], num_folds=num_folds, requires_grad=params[0].requires_grad)
+        fold_param = fold_param_cls(
+            *shapes[0], num_folds=num_folds, requires_grad=params[0].requires_grad
+        )
         fold_init_func = lambda t: t.copy_(torch.cat([p() for p in params]))
         fold_param.initialize(fold_init_func)
         return fold_param
@@ -337,9 +347,6 @@ def fold_parameters_group(compiler: TorchCompiler, params: List[AbstractTorchPar
     if issubclass(fold_param_cls, TorchFoldIdxParameter):
         # Catch the case were we are folding slices of other folded parameters
         # This case regularly fires when doing operations over folded circuits
-
-        # TODO: we need a function like 'group_foldable_layers' above as to
-        #       firstly find groups of parameter sthat can be folded, and then fold them
         assert len(set(id(p.opd) for p in params)) == 1
         in_opd = params[0].opd
         fold_idx = [si for p in params for si in p.fold_idx]

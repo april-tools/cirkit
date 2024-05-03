@@ -122,7 +122,9 @@ def test_compile_integrate_pc_continuous(semiring: str, normalized: bool):
 
 @pytest.mark.parametrize(
     "fold,semiring,normalized,num_variables,num_products",
-    itertools.product([False, True], ["sum-product", "lse-sum"], [False, True], [1, 2, 5], [2, 3, 4]),
+    itertools.product(
+        [False, True], ["sum-product", "lse-sum"], [False, True], [1, 2, 5], [2, 3, 4]
+    ),
 )
 def test_compile_product_integrate_pc_discrete(
     fold: bool, semiring: str, normalized: bool, num_variables: int, num_products: int
