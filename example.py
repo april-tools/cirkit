@@ -190,7 +190,7 @@ def lib_extension() -> None:
             return hparams
 
         @property
-        def parameters(self) -> Dict[str, AbstractParameter]:
+        def params(self) -> Dict[str, AbstractParameter]:
             return dict(coeffs=self.coeffs)
 
     # Then, the user must write the actual layer for some backend of choice, e.g., torch
