@@ -42,7 +42,7 @@ class TorchCompiler(AbstractCompiler):
                 continue
 
             # Compile the circuit
-            tc = self._compile_circuit(sci)
+            self._compile_circuit(sci)
 
         # Return the compiled circuit (i.e., the output of the circuit pipeline)
         return self.get_compiled_circuit(sc)
@@ -206,7 +206,7 @@ def fold_circuit(
     # Retrieve the layer-wise (aka bottom-up) topological ordering of layers
     frontiers_ordering: List[List[TorchLayer]] = tc.layerwise_topological_ordering()
 
-    # Fold layers in each inner frontier, by firstly finding the layer groups to fold
+    # Fold layers in each frontier, by firstly finding the layer groups to fold
     # in each frontier, and then by stacking each group of layers into a folded layer
     for i, frontier in enumerate(frontiers_ordering):
         # Retrieve the layer groups we can fold
@@ -316,7 +316,7 @@ def fold_layers_group(compiler: TorchCompiler, layers: List[TorchLayer]) -> Torc
     else:
         fold_layer_params: Dict[str, AbstractTorchParameter] = {}
 
-    # Instantiate a new folded layer, given the list of layers to fold in a group
+    # Instantiate a new folded layer, using the folded layer configuration and the folded parameters
     fold_layer = fold_layer_cls(**fold_layer_conf, **fold_layer_params, semiring=compiler.semiring)
     return fold_layer
 
@@ -325,8 +325,13 @@ def fold_parameters_group(
     compiler: TorchCompiler, params: List[AbstractTorchParameter]
 ) -> AbstractTorchParameter:
     # TODO: we need a function like 'group_foldable_layers' above as to
-    #       firstly find groups of parameter sthat can be folded, and then fold them
-    #
+    #       firstly find groups of parameters that can be folded, and then folds them.
+    #       If we cannot fold some parameters we can still force the folding via slicing+concatenating tensors.
+    #       The intuition about this choice is that the biggest cost at inference time will be the evaluation of
+    #       the layers rather than the evaluation of the parameters. This is because the parameters are an order
+    #       of magnitude smaller than the inputs/outputs of each layer, which instead have the batch dimension(s).
+    #       In other words, it is ok to NOT being able to fold some parameter evaluations, if in the end we can still
+    #       fold the layers.
 
     # Check all shapes (ignoring the fold dimension) match
     shapes = [p.shape for p in params]
