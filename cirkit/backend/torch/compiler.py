@@ -233,7 +233,7 @@ def fold_circuit(
             folded_layer = fold_layers_group(compiler, group)
 
             # Set the input and output folded layers
-            flatten_in_layers = set(li for lsi in group_in_layers for li in lsi)
+            flatten_in_layers = [li for lsi in group_in_layers for li in lsi]
             folded_in_layers = [layers[fold_idx[l][0]] for l in flatten_in_layers]
             in_layers[folded_layer] = folded_in_layers
             for fl in folded_in_layers:
