@@ -18,23 +18,32 @@ class AbstractParameter(ABC):
 
 
 class Parameter(AbstractParameter):
-    def __init__(self, *shape: int):
+    def __init__(self, *shape: int, learnable: bool = True):
         self._shape = tuple(shape)
+        self.learnable = learnable
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return self._shape
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(learnable=self.learnable)
 
 
 class ConstantParameter(AbstractParameter):
-    def __init__(self, shape: Tuple[int, ...], value: Number):
+    def __init__(self, *shape: int, value: Number = 0.0):
         super().__init__()
-        self.value = value
         self._shape = shape
+        self.value = value
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return self._shape
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(value=self.value)
 
 
 class OpParameter(AbstractParameter, ABC):

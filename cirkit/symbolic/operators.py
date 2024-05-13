@@ -47,7 +47,7 @@ def integrate_gaussian_layer(
 ) -> CircuitBlock:
     scope = Scope(scope) if scope is not None else sl.scope
     assert sl.scope == scope
-    lp = ConstantParameter(shape=(sl.num_output_units,), value=0.0)
+    lp = ConstantParameter(sl.num_output_units, value=0.0)
     sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=lp)
     return CircuitBlock.from_layer(sl)
 

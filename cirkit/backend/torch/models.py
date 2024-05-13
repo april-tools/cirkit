@@ -169,9 +169,6 @@ class AbstractTorchCircuit(nn.Module):
             in_tensors = [outputs[i] for i in in_layer_ids]
             if in_tensors:
                 if len(in_tensors) > 1:
-                    # for it in in_tensors:
-                    #    print(type(layer), it.shape)
-                    # print()
                     inputs = torch.cat(in_tensors, dim=0)
                 else:
                     (inputs,) = in_tensors
@@ -183,11 +180,8 @@ class AbstractTorchCircuit(nn.Module):
                 # The layer is an input layer
                 # in_fold_idx has shape (F, D') with D' <= D
                 inputs = x[..., in_fold_idx]  # (B, C, F, D')
-                # print(in_fold_idx.shape, x.shape, inputs.shape)
                 inputs = inputs.permute(2, 1, 0, 3)
             lout = layer(inputs)  # (F, B, K)
-            print(type(layer), lout.shape)
-            print()
             outputs.append(lout)
 
         # Retrieve the indices of the output tensors

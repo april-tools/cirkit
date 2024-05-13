@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, final
 
 import torch
 from torch import Tensor, nn
@@ -7,46 +7,56 @@ from torch import Tensor, nn
 from cirkit.backend.torch.params.base import AbstractTorchParameter
 
 
+@final
 class TorchParameter(AbstractTorchParameter):
     """The leaf in reparameterizations that holds the parameter Tensor."""
 
-    def __init__(self, *shape: int, num_folds: int = 1, requires_grad: bool = True) -> None:
+    def __init__(
+        self,
+        *shape: int,
+        init_func: Callable[[Tensor], Tensor],
+        num_folds: int = 1,
+        requires_grad: bool = True,
+    ) -> None:
         """Init class."""
         super().__init__(num_folds=num_folds)
-        pshape = (num_folds, *shape)
-        self._ptensor = nn.Parameter(torch.empty(*pshape), requires_grad=requires_grad)
+        self._shape = shape
+        self._ptensor = None
+        self.init_func = init_func
+        self.requires_grad = requires_grad
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return tuple(self._ptensor.shape[1:])
+        return self._shape
 
     @property
     def config(self) -> Dict[str, Any]:
         """Configuration flags for the parameter."""
-        return dict(shape=self.shape, num_folds=self.num_folds, requires_grad=self.requires_grad)
+        return dict(shape=self._shape, num_folds=self.num_folds, learnable=self.requires_grad)
 
     @property
     def dtype(self) -> torch.dtype:
         """The dtype of the output parameter."""
+        assert self._ptensor is not None
         return self._ptensor.dtype
 
     @property
     def device(self) -> torch.device:
         """The device of the output parameter."""
+        assert self._ptensor is not None
         return self._ptensor.device
 
     @property
-    def requires_grad(self) -> bool:
-        return self._ptensor.requires_grad
+    def is_initialized(self) -> bool:
+        return self._ptensor is not None
 
     @torch.no_grad()
-    def initialize(self, initializer_: Callable[[Tensor], Tensor]) -> None:
-        """Initialize the internal parameter buffer with the given initializer.
-
-        Args:
-            initializer_ (Callable[[Tensor], Tensor]): The function that initialize a Tensor inplace.
-        """
-        initializer_(self._ptensor)
+    def reset(self) -> None:
+        """Initialize the internal parameter tensor with the given initializer."""
+        if self._ptensor is None:
+            ptensor = torch.empty(self.num_folds, *self._shape)
+            self._ptensor = nn.Parameter(ptensor, requires_grad=self.requires_grad)
+        self.init_func(self._ptensor.data)
 
     def forward(self) -> Tensor:
         """Get the reparameterized parameters.
@@ -54,22 +64,5 @@ class TorchParameter(AbstractTorchParameter):
         Returns:
             Tensor: The parameters after reparameterization.
         """
+        assert self._ptensor is not None
         return self._ptensor
-
-
-class TorchConstantParameter(TorchParameter):
-    def __init__(self, shape: Tuple[int, ...], value: Number, *, num_folds: int = 1) -> None:
-        """Init class."""
-        super().__init__(*shape, num_folds=num_folds, requires_grad=False)
-        self.value = value
-        self.initialize(self._initializer)
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Configuration flags for the parameter."""
-        config = super().config
-        config.update(value=self.value)
-        return config
-
-    def _initializer(self, t: Tensor) -> Tensor:
-        return t.copy_(torch.full(size=t.shape, fill_value=self.value))

@@ -8,10 +8,30 @@ from scipy import integrate
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.models import TorchCircuit, TorchConstantCircuit
+from cirkit.backend.torch.params import TorchParameter
+from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.symbolic.circuit import Circuit
 from tests.floats import allclose, isclose
 from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
 
 # TODO: group common code in some utility functions for testing
+
+
+def copy_folded_parameters(sc: Circuit, compiler: TorchCompiler, fold_compiler: TorchCompiler):
+    def copy_parameters(p1: AbstractTorchParameter, p2: AbstractTorchParameter, i: int):
+        assert type(p1) == type(p2)
+        if isinstance(p1, TorchParameter):
+            p1._ptensor.copy_(p2._ptensor[i].unsqueeze(dim=0))
+            return
+        for pname, pvalue in p1.params.items():
+            copy_parameters(pvalue, p2.params[pname], i)
+
+    # Set the same parameters of the unfolded circuit
+    for sl in sc.layers:
+        l, _ = compiler._compiled_layers[sl]
+        fold_l, fold_idx = fold_compiler._compiled_layers[sl]
+        for pname, pvalue in fold_l.params.items():
+            copy_parameters(l.params[pname], pvalue, fold_idx)
 
 
 @pytest.mark.parametrize(
@@ -82,13 +102,20 @@ def test_compile_integrate_pc_discrete(
 def test_compile_integrate_pc_discrete_folded(semiring: str, num_variables: int, normalized: bool):
     compiler = TorchCompiler(fold=False, semiring=semiring)
     sc = build_simple_pc(num_variables, 4, 3, num_repetitions=3, normalized=normalized)
-    # TODO: rewrite this test using the random contextes we used a while ago
-    torch.random.manual_seed(42)
     tc: TorchCircuit = compiler.compile(sc)
     assert isinstance(tc, TorchCircuit)
     int_sc = SF.integrate(sc)
     int_tc: TorchConstantCircuit = compiler.compile(int_sc)
     assert isinstance(int_tc, TorchConstantCircuit)
+
+    fold_compiler = TorchCompiler(fold=True, semiring=semiring)
+    folded_tc: TorchCircuit = fold_compiler.compile(sc)
+    assert isinstance(folded_tc, TorchCircuit)
+    folded_int_sc = SF.integrate(sc)
+    folded_int_tc: TorchConstantCircuit = fold_compiler.compile(folded_int_sc)
+    assert isinstance(folded_int_tc, TorchConstantCircuit)
+
+    copy_folded_parameters(sc, compiler, fold_compiler)
 
     # Test the partition function value
     z = int_tc()
@@ -112,17 +139,6 @@ def test_compile_integrate_pc_discrete_folded(semiring: str, num_variables: int,
         assert isclose(torch.logsumexp(scores, dim=0), z)
     else:
         assert False
-
-    compiler = TorchCompiler(fold=True, semiring=semiring)
-    sc = build_simple_pc(num_variables, 4, 3, num_repetitions=3, normalized=normalized)
-
-    # TODO: rewrite this test using the random contextes we used a while ago
-    torch.random.manual_seed(42)
-    folded_tc: TorchCircuit = compiler.compile(sc)
-    assert isinstance(folded_tc, TorchCircuit)
-    folded_int_sc = SF.integrate(sc)
-    folded_int_tc: TorchConstantCircuit = compiler.compile(folded_int_sc)
-    assert isinstance(folded_int_tc, TorchConstantCircuit)
 
     # Test the partition function value
     folded_z = folded_int_tc()
@@ -265,8 +281,6 @@ def test_compile_product_integrate_pc_discrete_folded(
     compiler = TorchCompiler(fold=False, semiring=semiring)
     scs, tcs = [], []
     last_sc = None
-    # TODO: rewrite this test using the random contextes we used a while ago
-    torch.random.manual_seed(42)
     for i in range(num_products):
         sci = build_simple_pc(num_variables, 4 + i, 3 + i, normalized=normalized)
         tci = compiler.compile(sci)
@@ -276,6 +290,15 @@ def test_compile_product_integrate_pc_discrete_folded(
     tc: TorchCircuit = compiler.compile(last_sc)
     int_sc = SF.integrate(last_sc)
     int_tc = compiler.compile(int_sc)
+
+    fold_compiler = TorchCompiler(fold=True, semiring=semiring)
+    folded_tc: TorchCircuit = fold_compiler.compile(last_sc)
+    folded_int_sc = SF.integrate(last_sc)
+    folded_int_tc = fold_compiler.compile(folded_int_sc)
+    folded_tcs = []
+    for sci in scs:
+        copy_folded_parameters(sci, compiler, fold_compiler)
+        folded_tcs.append(fold_compiler.get_compiled_circuit(sci))
 
     # Test the partition function value
     z = int_tc()
@@ -310,21 +333,6 @@ def test_compile_product_integrate_pc_discrete_folded(
         assert allclose(torch.sum(each_tc_scores, dim=0), scores)
     else:
         assert False
-
-    compiler = TorchCompiler(fold=True, semiring=semiring)
-    folded_scs, folded_tcs = [], []
-    folded_last_sc = None
-    # TODO: rewrite this test using the random contextes we used a while ago
-    torch.random.manual_seed(42)
-    for i in range(num_products):
-        folded_sci = build_simple_pc(num_variables, 4 + i, 3 + i, normalized=normalized)
-        folded_tci = compiler.compile(folded_sci)
-        folded_scs.append(folded_sci)
-        folded_tcs.append(folded_tci)
-        folded_last_sc = folded_sci if i == 0 else SF.multiply(folded_last_sc, folded_sci)
-    folded_tc: TorchCircuit = compiler.compile(folded_last_sc)
-    folded_int_sc = SF.integrate(folded_last_sc)
-    folded_int_tc = compiler.compile(folded_int_sc)
 
     # Test the partition function value
     folded_z = folded_int_tc()

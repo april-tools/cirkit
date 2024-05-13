@@ -1,5 +1,4 @@
-from abc import ABC
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, final
 
 import torch
 from torch import Tensor
@@ -8,13 +7,12 @@ from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.backend.torch.params.composed import TorchOpParameter
 
 
+@final
 class TorchFoldIdxParameter(TorchOpParameter):
     def __init__(self, opd: AbstractTorchParameter, fold_idx: int) -> None:
         assert 0 <= fold_idx < opd.num_folds
         super().__init__(num_folds=1)
         self.opd = opd
-        if isinstance(fold_idx, int):
-            fold_idx = [fold_idx]
         self.fold_idx = fold_idx
 
     @property
@@ -46,21 +44,16 @@ class TorchFoldIdxParameter(TorchOpParameter):
         return self._forward_impl(self.opd())
 
 
+@final
 class TorchFoldParameter(TorchOpParameter):
-    def __init__(
-        self, *opds: AbstractTorchParameter, fold_idx: Optional[Union[int, List[int]]] = None
-    ) -> None:
+    def __init__(self, *opds: AbstractTorchParameter, fold_idx: List[int]) -> None:
         assert len(set(opd.shape for opd in opds)) == 1
-        if fold_idx is not None:
-            if isinstance(fold_idx, int):
-                fold_idx = [fold_idx]
-            fold_idx = torch.tensor(fold_idx)
-            num_folds = len(fold_idx)
-        else:
-            num_folds = sum(opd.num_folds for opd in opds)
+        num_folds = sum(opd.num_folds for opd in opds)
+        assert len(fold_idx) == num_folds
         super().__init__(num_folds=num_folds)
         self.opds = opds
-        self.fold_idx = fold_idx
+        fold_idx = None if fold_idx == list(range(num_folds)) else torch.tensor(fold_idx)
+        self.register_buffer("_fold_idx", fold_idx)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -92,11 +85,15 @@ class TorchFoldParameter(TorchOpParameter):
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         # x: (F', d1, ..., dn)
-        # return: (F, d1, ..., dn), with possibly F = F'
-        if self.fold_idx is not None:
-            return x[self.fold_idx]
-        return x
+        # return: (F, d1, ..., dn)
+        if self._fold_idx is None:
+            return x
+        return x[self._fold_idx]
 
     def forward(self) -> Tensor:
-        x = torch.cat([opd() for opd in self.opds], dim=0)
+        if len(self.opds) == 1:
+            (opd,) = self.opds
+            x = opd()
+        else:
+            x = torch.cat([opd() for opd in self.opds], dim=0)
         return self._forward_impl(x)

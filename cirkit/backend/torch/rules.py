@@ -34,7 +34,6 @@ from cirkit.backend.torch.params.ef import (
     TorchMeanGaussianProductParameter,
     TorchStddevGaussianProductParameter,
 )
-from cirkit.backend.torch.params.parameter import TorchConstantParameter
 from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.symbolic.layers import (
     CategoricalLayer,
@@ -164,22 +163,19 @@ def compile_gproduct_layer(
 def compile_parameter(
     compiler: "TorchCompiler", p: Parameter, init_func: Optional[InitializerFunc] = None
 ) -> TorchParameter:
-    compiled_p = TorchParameter(*p.shape)
-    if init_func is not None:
-        compiled_p.initialize(init_func)
-    return compiled_p
+    return TorchParameter(*p.shape, init_func=init_func, requires_grad=p.learnable)
+
+
+def compile_constant_parameter(
+    compiler: "TorchCompiler", p: ConstantParameter, init_func: Optional[InitializerFunc] = None
+) -> TorchParameter:
+    return TorchParameter(*p.shape, init_func=lambda t: t.fill_(p.value), requires_grad=False)
 
 
 def compile_placeholder_parameter(
     compiler: "TorchCompiler", p: PlaceholderParameter, init_func: Optional[InitializerFunc] = None
 ) -> AbstractTorchParameter:
     return compiler.retrieve_parameter(p.layer, p.name)
-
-
-def compile_constant_parameter(
-    compiler: "TorchCompiler", p: ConstantParameter, init_func: Optional[InitializerFunc] = None
-) -> TorchParameter:
-    return TorchConstantParameter(p.shape, p.value)
 
 
 def compile_exp_parameter(
@@ -305,8 +301,8 @@ DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc
 }
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     Parameter: compile_parameter,
-    PlaceholderParameter: compile_placeholder_parameter,
     ConstantParameter: compile_constant_parameter,
+    PlaceholderParameter: compile_placeholder_parameter,
     ExpParameter: compile_exp_parameter,
     SoftmaxParameter: compile_softmax_parameter,
     LogSoftmaxParameter: compile_log_softmax_parameter,

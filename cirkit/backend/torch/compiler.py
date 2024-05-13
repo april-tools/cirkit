@@ -1,15 +1,17 @@
+import functools
 import os
 from collections import defaultdict
 from typing import IO, Dict, List, Optional, Tuple, Type, Union
 
+import numpy as np
 import torch
+from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
 from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.params import TorchParameter
 from cirkit.backend.torch.params.base import AbstractTorchParameter
-from cirkit.backend.torch.params.parameter import TorchConstantParameter
 from cirkit.backend.torch.params.special import TorchFoldIdxParameter, TorchFoldParameter
 from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
@@ -136,6 +138,9 @@ class TorchCompiler(AbstractCompiler):
         # Apply optimizations
         tc, fold_compiled_layers = self._optimize_circuit(tc, compiled_layers)
 
+        # Initialize the circuit parameters
+        _initialize_circuit_parameters(self, tc)
+
         # Register the compiled circuit, as well as the compiled layer infos
         self._register_compiled_circuit(sc, tc, fold_compiled_layers)
         return tc
@@ -145,13 +150,13 @@ class TorchCompiler(AbstractCompiler):
     ) -> Tuple[TorchCircuit, Dict[Layer, Tuple[TorchLayer, int]]]:
         # Try to optimize the circuit by using einsums
         if self.is_einsum_enabled:
-            tc, einsum_compiled_layers = einsumize_circuit(self, tc, compiled_layers)
+            tc, einsum_compiled_layers = _einsumize_circuit(self, tc, compiled_layers)
         else:
             einsum_compiled_layers = compiled_layers
 
         # Fold the circuit
         if self.is_fold_enabled:
-            tc, fold_compiled_layers = fold_circuit(self, tc, einsum_compiled_layers)
+            tc, fold_compiled_layers = _fold_circuit(self, tc, einsum_compiled_layers)
         else:
             # Without folding, every compiled layer has fold dimension 1.
             # So, each symbolic layer gets mapped to the 0-slice of such 'improper' folded layer.
@@ -175,13 +180,30 @@ class TorchCompiler(AbstractCompiler):
         ...
 
 
-def einsumize_circuit(
+def _initialize_circuit_parameters(compiler: TorchCompiler, tc: AbstractTorchCircuit) -> None:
+    # A routine that initializes parameters by recursion
+    def initialize_(p: AbstractTorchParameter):
+        if isinstance(p, TorchParameter):
+            if not p.is_initialized:
+                p.reset()
+            return
+        for _, ppvalue in p.params.items():
+            initialize_(ppvalue)
+
+    # For each layer, initialize its parameters, if any
+    for l in tc.layers:
+        for _, pvalue in l.params.items():
+            if pvalue is not None:
+                initialize_(pvalue)
+
+
+def _einsumize_circuit(
     compiler: TorchCompiler, tc: AbstractTorchCircuit, compiled_layers: Dict[Layer, TorchLayer]
 ) -> Tuple[AbstractTorchCircuit, Dict[Layer, TorchLayer]]:
     ...
 
 
-def fold_circuit(
+def _fold_circuit(
     compiler: TorchCompiler, tc: AbstractTorchCircuit, compiled_layers: Dict[Layer, TorchLayer]
 ) -> Tuple[AbstractTorchCircuit, Dict[Layer, Tuple[TorchLayer, int]]]:
     # The list of folded layers
@@ -210,7 +232,7 @@ def fold_circuit(
     # in each frontier, and then by stacking each group of layers into a folded layer
     for i, frontier in enumerate(frontiers_ordering):
         # Retrieve the layer groups we can fold
-        layer_groups = group_foldable_layers(compiler, frontier)
+        layer_groups = _group_foldable_layers(frontier)
 
         # Fold each group of layers
         for group in layer_groups:
@@ -230,7 +252,7 @@ def fold_circuit(
                 in_layers_idx = [[fold_idx[li] for li in lsi] for lsi in group_in_layers]
 
             # Fold the layers group
-            folded_layer = fold_layers_group(compiler, group)
+            folded_layer = _fold_layers_group(compiler, group)
 
             # Set the input and output folded layers
             folded_in_layers = list(
@@ -269,28 +291,52 @@ def fold_circuit(
     return folded_tc, fold_compiled_layers
 
 
-def group_foldable_layers(
-    compiler: TorchCompiler, frontier: List[TorchLayer]
-) -> List[List[TorchLayer]]:
+def _group_foldable_layers(frontier: List[TorchLayer]) -> List[List[TorchLayer]]:
     # A dictionary mapping a layer configuration (see below),
     # which uniquely identifies a group of layers that can be folded,
     # into a group of layers.
-    groups_map: Dict[Tuple[Type[TorchLayer], Tuple[int, ...]], List[TorchLayer]] = defaultdict(list)
+    groups_map = defaultdict(list)
 
     # For each layer, either create a new group or insert it into an existing one
     for l in frontier:
         if isinstance(l, TorchInputLayer):
-            l_conf = type(l), (l.num_variables, l.num_channels, l.num_output_units)
+            l_conf = type(l), l.num_variables, l.num_channels, l.num_output_units
         else:
             assert isinstance(l, TorchInnerLayer)
-            l_conf = type(l), (l.num_input_units, l.num_output_units, l.arity)
+            l_conf = type(l), l.num_input_units, l.num_output_units, l.arity
         # Note that, if no suitable group has been found, this will introduce a new group
         groups_map[l_conf].append(l)
     groups = list(groups_map.values())
     return groups
 
 
-def fold_layers_group(compiler: TorchCompiler, layers: List[TorchLayer]) -> TorchLayer:
+def _group_foldable_parameters(
+    params: List[AbstractTorchParameter],
+) -> Tuple[List[List[AbstractTorchParameter]], List[List[int]]]:
+    # A dictionary mapping a parameter configuration (see below),
+    # which uniquely identifies a group of parameters that can be folded,
+    # into a group of parameters.
+    groups_map = defaultdict(list)
+    groups_idx_map = defaultdict(list)
+
+    # For each layer, either create a new group or insert it into an existing one
+    for i, p in enumerate(params):
+        if isinstance(p, TorchParameter):
+            p_conf = type(p), p.shape, p.requires_grad, None
+        elif isinstance(p, TorchFoldIdxParameter):
+            p_conf = type(p), p.shape, None, id(p.opd)
+        else:
+            p_conf = type(p), p.shape, None, None
+
+        # Note that, if no suitable group has been found, this will introduce a new group
+        groups_map[p_conf].append(p)
+        groups_idx_map[p_conf].append(i)
+    groups = [groups_map[p_conf] for p_conf in groups_map.keys()]
+    idx = [groups_idx_map[p_conf] for p_conf in groups_map.keys()]
+    return groups, idx
+
+
+def _fold_layers_group(compiler: TorchCompiler, layers: List[TorchLayer]) -> TorchLayer:
     # Retrieve the class of the folded layer, as well as the configuration attributes
     fold_layer_cls = type(layers[0])
     fold_layer_conf = layers[0].config
@@ -300,29 +346,20 @@ def fold_layers_group(compiler: TorchCompiler, layers: List[TorchLayer]) -> Torc
     # Retrieve the parameters of each layer
     layer_params: Dict[str, List[AbstractTorchParameter]] = defaultdict(list)
     for l in layers:
-        lparams = l.params
-        for n, p in lparams.items():
+        for n, p in l.params.items():
             layer_params[n].append(p)
 
-    # Fold the parameters, if the layers has any
-    if layer_params:
-        # Just a check that we can fold the parameters, i.e.,
-        # they must have the same length (aka the number of folds).
-        assert set(len(ps) for n, ps in layer_params.items()) == {num_folds}
-
-        # Fold each group of parameters
-        fold_layer_params: Dict[str, AbstractTorchParameter] = {
-            n: fold_parameters_group(compiler, ps) for n, ps in layer_params.items()
-        }
-    else:
-        fold_layer_params: Dict[str, AbstractTorchParameter] = {}
+    # Fold the parameters, if the layers have any
+    fold_layer_params: Dict[str, AbstractTorchParameter] = {
+        n: _fold_parameters(compiler, ps) for n, ps in layer_params.items()
+    }
 
     # Instantiate a new folded layer, using the folded layer configuration and the folded parameters
     fold_layer = fold_layer_cls(**fold_layer_conf, **fold_layer_params, semiring=compiler.semiring)
     return fold_layer
 
 
-def fold_parameters_group(
+def _fold_parameters(
     compiler: TorchCompiler, params: List[AbstractTorchParameter]
 ) -> AbstractTorchParameter:
     # TODO: we need a function like 'group_foldable_layers' above as to
@@ -334,56 +371,71 @@ def fold_parameters_group(
     #       In other words, it is ok to NOT being able to fold some parameter evaluations, if in the end we can still
     #       fold the layers.
 
-    # Check all shapes (ignoring the fold dimension) match
-    shapes = [p.shape for p in params]
-    num_folds = len(params)
-    assert len(set(shapes)) == 1
+    @torch.no_grad()
+    def _fold_copy_tensors(t: Tensor, *, ps: List[TorchParameter]) -> Tensor:
+        assert all(not p.is_initialized for p in ps)
+        for i, p in enumerate(ps):
+            p.init_func(t[i])
+        return t
 
-    fold_param_cls = type(params[0])
-    if issubclass(fold_param_cls, (TorchParameter, TorchConstantParameter)):
-        # Catch the case we are folding 'leaf' torch parameters
-        assert all(p.requires_grad for p in params)
-        fold_param = fold_param_cls(
-            *shapes[0], num_folds=num_folds, requires_grad=params[0].requires_grad
-        )
-        fold_init_func = lambda t: t.copy_(torch.cat([p() for p in params]))
-        fold_param.initialize(fold_init_func)
-        return fold_param
+    # Retrieve the parameter groups we can fold
+    param_groups, param_idx = _group_foldable_parameters(params)
 
-    if issubclass(fold_param_cls, TorchFoldIdxParameter):
-        # Catch the case were we are folding slices of other folded parameters
-        # This case regularly fires when doing operations over folded circuits
-        assert len(set(id(p.opd) for p in params)) == 1
-        in_opd = params[0].opd
-        fold_idx = [si for p in params for si in p.fold_idx]
-        fold_idx = None if fold_idx == list(range(num_folds)) else fold_idx
-        if fold_idx is None:
-            return in_opd
+    # Fold each group of parameters
+    folded_group_params = []
+    folded_group_idx = []
+    for group, idx in zip(param_groups, param_idx):
+        num_folds = len(group)
+        fold_param_cls = type(group[0])
+        fold_shape = group[0].shape
+
+        if issubclass(fold_param_cls, TorchParameter):
+            # Catch the case we are folding torch parameters
+            requires_grad = group[0].requires_grad
+            folded_param = TorchParameter(
+                *fold_shape,
+                init_func=functools.partial(_fold_copy_tensors, ps=group),
+                num_folds=num_folds,
+                requires_grad=requires_grad,
+            )
+        elif issubclass(fold_param_cls, TorchFoldIdxParameter):
+            # Catch the case we are folding parameters obtained via slicing
+            # This case regularly fires when doing operations over circuits
+            # that are compiled into folded tensorized circuits
+            if len(group) == 1:
+                # Catch the case we are not able to fold multiple tensor slicing operations
+                # In such a case, just have the slice as folded parameter (i.e., number of folds = 1)
+                folded_param = group[0]
+            else:
+                # Catch the case we are able to fold multiple tensor slicing operations
+                in_opd = group[0].opd
+                in_opd_idx: List[int] = [p.fold_idx for p in group]
+                fold_idx = None if in_opd_idx == list(range(in_opd.num_folds)) else in_opd_idx
+                folded_param = (
+                    in_opd if fold_idx is None else TorchFoldParameter(in_opd, fold_idx=fold_idx)
+                )
         else:
-            fold_param = TorchFoldParameter(in_opd, fold_idx=fold_idx)
-        return fold_param
+            # Retrieve the operand parameters of every parameter
+            in_gparams: Dict[str, List[AbstractTorchParameter]] = defaultdict(list)
+            for p in group:
+                for n, in_p in p.params.items():
+                    in_gparams[n].append(in_p)
 
-    # Retrieve the input parameters for every parameter
-    in_params: Dict[str, List[AbstractTorchParameter]] = defaultdict(list)
-    for p in params:
-        pparams = p.params
-        for n, in_p in pparams.items():
-            in_params[n].append(in_p)
+            # Recursively fold the operand parameters, if any
+            fold_in_params: Dict[str, AbstractTorchParameter] = {
+                n: _fold_parameters(compiler, in_ps) for n, in_ps in in_gparams.items()
+            }
 
-    # Fold the parameters, if the layers has any
-    if in_params:
-        # Just a check that we can fold the parameters, i.e.,
-        # they must have the same length (aka the number of folds).
-        assert set(len(in_ps) for n, in_ps in in_params.items()) == {num_folds}
+            # Build the folded parameter
+            folded_param = fold_param_cls(**group[0].config, **fold_in_params)
 
-        # Fold each group of input parameters
-        fold_in_params: Dict[str, AbstractTorchParameter] = {
-            n: fold_parameters_group(compiler, in_ps) for n, in_ps in in_params.items()
-        }
-    else:
-        fold_in_params: Dict[str, AbstractTorchParameter] = {}
+        # Append the folded group of parameters
+        folded_group_params.append(folded_param)
+        folded_group_idx.extend(idx)
 
-    # Build the folded parameter
-    fold_param_conf = params[0].config
-    fold_param = fold_param_cls(**fold_param_conf, **fold_in_params)
-    return fold_param
+    # Return the folded parameters
+    if len(folded_group_params) == 1:
+        # Catch the case we only had to fold a single group of parameters
+        return folded_group_params[0]
+    folded_group_rev_idx: List[int] = np.argsort(folded_group_idx).tolist()
+    return TorchFoldParameter(*folded_group_params, fold_idx=folded_group_rev_idx)
