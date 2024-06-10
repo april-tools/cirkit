@@ -6,7 +6,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.layers.base import TorchLayer
-from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.parameters.graph import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
 from cirkit.backend.torch.utils import InitializerFunc
 
@@ -139,7 +139,7 @@ class TorchDenseLayer(TorchSumLayer):
         num_output_units: int,
         *,
         num_folds: int = 1,
-        weight: AbstractTorchParameter,
+        weight: TorchParameter,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
@@ -148,7 +148,7 @@ class TorchDenseLayer(TorchSumLayer):
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units.
             num_folds (int): The number of channels. Defaults to 1.
-            weight (AbstractTorchParameter): The reparameterization for layer parameters.
+            weight (TorchParameter): The reparameterization for layer parameters.
         """
         assert weight.num_folds == num_folds
         assert weight.shape == (num_output_units, num_input_units)
@@ -170,7 +170,7 @@ class TorchDenseLayer(TorchSumLayer):
         }
 
     @property
-    def params(self) -> Dict[str, AbstractTorchParameter]:
+    def params(self) -> Dict[str, TorchParameter]:
         params = super().params
         params.update(weight=self.weight)
         return params
@@ -204,7 +204,7 @@ class TorchMixingLayer(TorchSumLayer):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        weight: AbstractTorchParameter,
+        weight: TorchParameter,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
@@ -214,7 +214,7 @@ class TorchMixingLayer(TorchSumLayer):
             num_output_units (int): The number of output units, must be the same as input.
             arity (int, optional): The arity of the layer. Defaults to 2.
             num_folds (int): The number of channels. Defaults to 1.
-            weight (AbstractTorchParameter): The reparameterization for layer parameters.
+            weight (TorchParameter): The reparameterization for layer parameters.
         """
         assert (
             num_output_units == num_input_units
@@ -231,7 +231,7 @@ class TorchMixingLayer(TorchSumLayer):
         return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
 
     @property
-    def params(self) -> Dict[str, AbstractTorchParameter]:
+    def params(self) -> Dict[str, TorchParameter]:
         params = super().params
         params.update(weight=self.weight)
         return params

@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, ClassVar, Dict, Optional, Type
+from typing import Any, Dict, Optional
 
 from torch import Tensor, nn
 
-from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.parameters.graph import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls, SumProductSemiring
 from cirkit.backend.torch.utils import InitializerFunc
 
@@ -57,13 +57,13 @@ class TorchLayer(nn.Module, ABC):
         }
 
     @property
-    def params(self) -> Dict[str, AbstractTorchParameter]:
+    def params(self) -> Dict[str, TorchParameter]:
         return {}
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property
     def num_parameters(self) -> int:
-        """The number of params."""
+        """The number of parameters."""
         return sum(p.numel() for p in self.parameters())
 
     # Expected to be fixed, so use cached property to avoid recalculation.

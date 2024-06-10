@@ -1,17 +1,8 @@
 from abc import ABC
 from enum import IntEnum, auto
-from functools import cached_property
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, cast
 
-from cirkit.symbolic.params import (
-    AbstractParameter,
-    LogPartitionGaussianProduct,
-    MeanGaussianProduct,
-    Parameter,
-    Parameterization,
-    ScaledSigmoidParameter,
-    StddevGaussianProduct,
-)
+from cirkit.symbolic.parameters import Parameter, Parameterization, TensorParameter
 from cirkit.utils.scope import Scope
 
 AbstractLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
@@ -53,19 +44,8 @@ class Layer(ABC):
         }
 
     @property
-    def params(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, Parameter]:
         return {}
-
-
-class PlaceholderParameter(AbstractParameter):
-    def __init__(self, layer: Layer, name: str):
-        assert name in layer.params
-        self.layer = layer
-        self.name = name
-
-    @cached_property
-    def shape(self) -> Tuple[int, ...]:
-        return self.layer.params[self.name].shape
 
 
 class InputLayer(Layer):
@@ -96,15 +76,16 @@ class CategoricalLayer(InputLayer):
         num_output_units: int,
         num_channels: int,
         num_categories: int = 2,
-        logits: Optional[AbstractParameter] = None,
+        logits: Optional[Parameter] = None,
         logits_param: Optional[Parameterization] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
         if logits is None:
-            logits = Parameter(len(scope), num_output_units, num_channels, num_categories)
-            if logits_param is not None:
-                logits = logits_param(logits)
+            logits = TensorParameter(len(scope), num_output_units, num_channels, num_categories)
+            logits = Parameter.from_leaf(logits) if logits_param is None else logits_param(logits)
+        else:
+            assert logits.shape == (len(scope), num_output_units, num_channels, num_categories)
         self.logits = logits
 
     @property
@@ -114,52 +95,20 @@ class CategoricalLayer(InputLayer):
         return config
 
     @property
-    def params(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, Parameter]:
         params = super().params
         params.update(logits=self.logits)
         return params
 
 
-class GaussianLayer(InputLayer):
-    def __init__(
-        self,
-        scope: Scope,
-        num_output_units: int,
-        num_channels: int,
-        mean: Optional[AbstractParameter] = None,
-        stddev: Optional[AbstractParameter] = None,
-    ):
-        super().__init__(scope, num_output_units, num_channels)
-        assert (mean is None and stddev is None) or (
-            mean is not None and stddev is not None
-        ), "Either both 'mean' and 'variance' has to be specified or none of them"
-        if mean is None and stddev is None:
-            mean = Parameter(self.num_variables, num_output_units, num_channels)
-            stddev = ScaledSigmoidParameter(
-                Parameter(self.num_variables, num_output_units, num_channels), vmin=1e-4, vmax=10.0
-            )
-        else:
-            assert mean.shape == stddev.shape
-        self.mean = mean
-        self.stddev = stddev
-
-    @property
-    def params(self) -> Dict[str, AbstractParameter]:
-        params = super().params
-        params.update(mean=self.mean, stddev=self.stddev)
-        return params
-
-
 class LogPartitionLayer(InputLayer):
-    def __init__(
-        self, scope: Scope, num_output_units: int, num_channels: int, value: AbstractParameter
-    ):
+    def __init__(self, scope: Scope, num_output_units: int, num_channels: int, value: Parameter):
         assert value.shape == (num_output_units,)
         super().__init__(scope, num_output_units, num_channels)
         self.value = value
 
     @property
-    def params(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, Parameter]:
         params = super().params
         params.update(value=self.value)
         return params
@@ -221,14 +170,13 @@ class DenseLayer(SumLayer):
         scope: Scope,
         num_input_units: int,
         num_output_units: int,
-        weight: Optional[AbstractParameter] = None,
+        weight: Optional[Parameter] = None,
         weight_param: Optional[Parameterization] = None,
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1)
         if weight is None:
-            weight = Parameter(num_output_units, num_input_units)
-            if weight_param is not None:
-                weight = weight_param(weight)
+            weight = TensorParameter(num_output_units, num_input_units)
+            weight = Parameter.from_leaf(weight) if weight_param is None else weight_param(weight)
         else:
             assert weight.shape == (num_output_units, num_input_units)
         self.weight = weight
@@ -242,7 +190,7 @@ class DenseLayer(SumLayer):
         }
 
     @property
-    def params(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, Parameter]:
         return dict(weight=self.weight)
 
 
@@ -254,14 +202,13 @@ class MixingLayer(SumLayer):
         scope: Scope,
         num_units: int,
         arity: int,
-        weight: Optional[AbstractParameter] = None,
+        weight: Optional[Parameter] = None,
         weight_param: Optional[Parameterization] = None,
     ):
         super().__init__(scope, num_units, num_units, arity)
         if weight is None:
-            weight = Parameter(num_units, arity)
-            if weight_param is not None:
-                weight = weight_param(weight)
+            weight = TensorParameter(num_units, arity)
+            weight = Parameter.from_leaf(weight) if weight_param is None else weight_param(weight)
         else:
             assert weight.shape == (num_units, arity)
         self.weight = weight
@@ -271,7 +218,7 @@ class MixingLayer(SumLayer):
         return {"scope": self.scope, "num_units": self.num_input_units, "arity": self.arity}
 
     @property
-    def params(self) -> Dict[str, AbstractParameter]:
+    def params(self) -> Dict[str, Parameter]:
         return dict(weight=self.weight)
 
 
@@ -296,28 +243,3 @@ class IndexLayer(SumLayer):
             "num_output_units": self.num_output_units,
             "indices": self.indices,
         }
-
-
-class GaussianProductLayer(InputLayer):
-    def __init__(
-        self,
-        scope: Scope,
-        num_output_units: int,
-        num_channels: int = 1,
-        *,
-        mean: MeanGaussianProduct,
-        stddev: StddevGaussianProduct,
-        log_partition: LogPartitionGaussianProduct,
-    ):
-        assert mean.shape == stddev.shape
-        assert log_partition.shape == (mean.shape[1],)
-        super().__init__(scope, num_output_units, num_channels)
-        self.mean = mean
-        self.stddev = stddev
-        self.log_partition = log_partition
-
-    @property
-    def params(self) -> Dict[str, AbstractParameter]:
-        params = super().params
-        params.update(mean=self.mean, stddev=self.stddev, log_partition=self.log_partition)
-        return params

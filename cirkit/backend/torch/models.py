@@ -1,11 +1,11 @@
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Iterator
 
 import numpy as np
 import torch
 from torch import Tensor, nn
 
+from cirkit.backend.torch.graph import TorchDiAcyclicGraph
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
-from cirkit.utils.algorithms import layerwise_topological_ordering, topological_ordering
 from cirkit.utils.scope import Scope
 
 
@@ -18,17 +18,16 @@ class AbstractTorchCircuit(nn.Module):
         in_layers: Dict[TorchLayer, List[TorchLayer]],
         out_layers: Dict[TorchLayer, List[TorchLayer]],
         *,
+        topologically_ordered: bool = False,
         fold_in_layers_idx: Optional[Dict[TorchLayer, List[List[Tuple[int, int]]]]] = None,
         fold_out_layers_idx: Optional[List[Tuple[int, int]]] = None,
     ) -> None:
         super().__init__()
+        self._graph = TorchDiAcyclicGraph[TorchLayer](layers, in_layers, out_layers, topologically_ordered=topologically_ordered)
         self.scope = scope
         self.num_channels = num_channels
-        self._layers: List[TorchLayer] = nn.ModuleList(layers)
-        self._in_layers = in_layers
-        self._out_layers = out_layers
 
-        # Build up the bookkeeping data structure
+        # Build the bookkeeping data structure
         assert (fold_in_layers_idx is None and fold_out_layers_idx is None) or (
             fold_in_layers_idx is not None and fold_out_layers_idx is not None
         )
@@ -39,6 +38,42 @@ class AbstractTorchCircuit(nn.Module):
                 fold_in_layers_idx, fold_out_layers_idx
             )
 
+    @property
+    def is_topologically_ordered(self) -> bool:
+        return self._graph.is_topologically_ordered
+
+    def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
+        return self._graph.node_inputs(l)
+
+    def node_outputs(self, l: TorchLayer) -> List[TorchLayer]:
+        return self._graph.node_outputs(l)
+
+    @property
+    def layers(self) -> List[TorchLayer]:
+        return self._graph.nodes
+
+    @property
+    def layers_inputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
+        return self._graph.nodes_inputs
+
+    @property
+    def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
+        return self._graph.nodes_outputs
+
+    @property
+    def inputs(self) -> Iterator[TorchInputLayer]:
+        return (l for l in self._graph.inputs if isinstance(l, TorchInputLayer))
+
+    @property
+    def outputs(self) -> Iterator[TorchLayer]:
+        return self._graph.outputs
+
+    def topological_ordering(self) -> Iterator[TorchLayer]:
+        return self._graph.topological_ordering()
+
+    def layerwise_topological_ordering(self) -> Iterator[List[TorchLayer]]:
+        return self._graph.layerwise_topological_ordering()
+
     def _build_unfolded_bookkeeping(self) -> List[Tuple[List[int], Optional[Tensor]]]:
         # The bookkeeping data structure
         bookkeeping: List[Tuple[List[int], Optional[Tensor]]] = []
@@ -47,7 +82,7 @@ class AbstractTorchCircuit(nn.Module):
         layer_ids: Dict[TorchLayer, int] = {}
 
         # Build the bookkeeping data structure
-        for l in self._layers:
+        for l in self.topological_ordering():
             if isinstance(l, TorchInputLayer):
                 # For input layers, the bookkeeping entry is a tensor index to the input tensor
                 bookkeeping_entry = ([], torch.tensor([list(l.scope)]))
@@ -59,8 +94,8 @@ class AbstractTorchCircuit(nn.Module):
 
         # Append a last bookkeeping entry with the info to extract the output tensor
         # This is necessary because we might have circuits with multiple outputs
-        output_ids = [layer_ids[lo] for lo in self.output_layers]
-        bookkeeping_entry = (output_ids, None)
+        out_layers_ids = [layer_ids[lo] for lo in self.outputs]
+        bookkeeping_entry = (out_layers_ids, None)
         bookkeeping.append(bookkeeping_entry)
         return bookkeeping
 
@@ -72,8 +107,11 @@ class AbstractTorchCircuit(nn.Module):
         # The bookkeeping data structure
         bookkeeping: List[Tuple[List[int], Optional[Tensor]]] = []
 
-        # Get the topological ordering of the layers and build the bookkeeping data structure
-        for l in self._layers:
+        # A useful data dictonary mapping layer ids to their number of folds
+        num_folds_map: Dict[int, int] = {}
+
+        # Build the bookkeeping data structure
+        for l in self.topological_ordering():
             # Retrieve the index information from the folded layer
             in_layers_idx = fold_in_layers_idx[l]
 
@@ -86,10 +124,12 @@ class AbstractTorchCircuit(nn.Module):
                 in_layer_ids = sorted(list(set(si[0] for fi in in_layers_idx for si in fi)))
 
                 # Compute the cumulative indices of the folded inputs
-                cum_folded_layer_ids: List[int] = np.cumsum(
-                    [0] + [self._layers[li].num_folds for li in in_layer_ids]
-                ).tolist()
-                cum_folded_layer_ids_map = dict(zip(in_layer_ids, cum_folded_layer_ids))
+                cum_folded_layer_ids_map = dict(
+                    zip(
+                        in_layer_ids,
+                        np.cumsum([0] + [num_folds_map[li] for li in in_layer_ids]).tolist(),
+                    )
+                )
 
                 # Build the bookkeeping entry
                 in_fold_idx: List[List[int]] = []
@@ -100,58 +140,27 @@ class AbstractTorchCircuit(nn.Module):
                     in_fold_idx.append(in_slice_idx)
                 in_fold_idx_t = torch.tensor(in_fold_idx)
                 bookkeeping_entry = (in_layer_ids, in_fold_idx_t)
+            num_folds_map[len(bookkeeping)] = l.num_folds
             bookkeeping.append(bookkeeping_entry)
 
         # Append a last bookkeeping entry with the info to extract the (possibly multiple) outputs
         out_layers_ids = sorted(list(set(si[0] for si in fold_out_layers_idx)))
-        cum_folded_layer_ids: List[int] = np.cumsum(
-            [0] + [self._layers[li].num_folds for li in out_layers_ids]
-        ).tolist()
-        cum_folded_layer_ids_map = dict(zip(out_layers_ids, cum_folded_layer_ids))
-        out_fold_idx: List[int] = []
-        for si in fold_out_layers_idx:
-            out_fold_idx.append(cum_folded_layer_ids_map[si[0]] + si[1])
-        out_fold_idx_t = torch.tensor([out_fold_idx])
+        cum_folded_layer_ids_map = dict(
+            zip(
+                out_layers_ids,
+                np.cumsum([0] + [num_folds_map[li] for li in out_layers_ids]).tolist(),
+            )
+        )
+        out_fold_idx: List[int] = [
+            cum_folded_layer_ids_map[si[0]] + si[1] for si in fold_out_layers_idx
+        ]
+        if out_fold_idx == list(range(len(fold_out_layers_idx))):
+            out_fold_idx_t = None
+        else:
+            out_fold_idx_t = torch.tensor([out_fold_idx])
         bookkeeping_entry = (out_layers_ids, out_fold_idx_t)
         bookkeeping.append(bookkeeping_entry)
         return bookkeeping
-
-    def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
-        return self._in_layers[l]
-
-    def layer_outputs(self, l: TorchLayer) -> List[TorchLayer]:
-        return self._out_layers[l]
-
-    def layers_topological_ordering(self) -> List[TorchLayer]:
-        ordering = topological_ordering(
-            set(self.output_layers), incomings_fn=lambda l: self._in_layers[l]
-        )
-        if ordering is None:
-            raise ValueError("The given tensorized circuit has at least one layers cycle")
-        return ordering
-
-    def layerwise_topological_ordering(self) -> List[List[TorchLayer]]:
-        ordering = layerwise_topological_ordering(
-            set(self.output_layers), incomings_fn=lambda l: self._in_layers[l]
-        )
-        if ordering is None:
-            raise ValueError("The given tensorized circuit has at least one layers cycle")
-        return ordering
-
-    @property
-    def layers(self) -> Iterator[TorchLayer]:
-        """All layers in the circuit."""
-        return iter(self._layers)
-
-    @property
-    def input_layers(self) -> Iterator[TorchInputLayer]:
-        """Input layers of the circuit."""
-        return (layer for layer in self._layers if isinstance(layer, TorchInputLayer))
-
-    @property
-    def output_layers(self) -> Iterator[TorchLayer]:
-        """Output layers in the circuit."""
-        return (layer for layer in self._layers if not self._out_layers[layer])
 
     def _eval_forward(self, x: Tensor) -> Tensor:
         """Invoke the forward function.
@@ -164,7 +173,8 @@ class AbstractTorchCircuit(nn.Module):
         """
         outputs = []  # list of tensors of shape (F, K, B)
 
-        for (in_layer_ids, in_fold_idx), layer in zip(self._bookkeeping[:-1], self._layers):
+        ordering = self.topological_ordering()
+        for (in_layer_ids, in_fold_idx), layer in zip(self._bookkeeping[:-1], ordering):
             # List of input tensors of shape (F', B, K)
             in_tensors = [outputs[i] for i in in_layer_ids]
             if in_tensors:
@@ -185,9 +195,9 @@ class AbstractTorchCircuit(nn.Module):
             outputs.append(lout)
 
         # Retrieve the indices of the output tensors
-        out_layer_indices, out_fold_idx = self._bookkeeping[-1]
+        out_layers_ids, out_fold_idx = self._bookkeeping[-1]
         # List of tensors of shape (F', B, K)
-        out_tensors = [outputs[i] for i in out_layer_indices]
+        out_tensors = [outputs[i] for i in out_layers_ids]
         if len(out_tensors) > 1:
             outputs = torch.cat(out_tensors, dim=0)
         else:

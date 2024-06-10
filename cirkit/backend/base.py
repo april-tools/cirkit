@@ -1,11 +1,13 @@
 import os
 from abc import ABC, abstractmethod
-from typing import IO, Any, Callable, Dict, Optional, Protocol, Type, Union
+from typing import IO, Any, Callable, Dict, Optional, Protocol, Type, TypeVar, Union
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import Layer
-from cirkit.symbolic.params import AbstractParameter
+from cirkit.symbolic.parameters import ParameterNode
+from cirkit.utils.algorithms import BiMap
 
+CompiledCircuit = TypeVar("CompiledCircuit")
 LayerCompilationSign = Type[Layer]
 
 
@@ -14,11 +16,11 @@ class LayerCompilationFunc(Protocol):
         ...
 
 
-ParameterCompilationSign = Type[AbstractParameter]
+ParameterCompilationSign = Type[ParameterNode]
 
 
 class ParameterCompilationFunc(Protocol):
-    def __call__(self, compiler: "AbstractCompiler", p: AbstractParameter, **kwargs) -> Any:
+    def __call__(self, compiler: "AbstractCompiler", p: ParameterNode, **kwargs) -> Any:
         ...
 
 
@@ -30,26 +32,24 @@ class CompilationRuleNotFound(Exception):
 SUPPORTED_BACKENDS = ["torch"]
 
 
-class CompilationContext:
+class CompiledCircuitsMap:
     def __init__(self):
-        self._map: Dict[Circuit, Any] = {}
-        self._inv_map: Dict[Any, Circuit] = {}
+        self._bimap = BiMap[Circuit, CompiledCircuit]()
 
     def is_compiled(self, sc: Circuit) -> bool:
-        return sc in self._map
+        return self._bimap.has_left(sc)
 
-    def has_compiled(self, tc: Any) -> bool:
-        return tc in self._inv_map
+    def has_compiled(self, cc: CompiledCircuit) -> bool:
+        return self._bimap.has_left(cc)
 
-    def get_compiled_circuit(self, sc: Circuit) -> Any:
-        return self._map[sc]
+    def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
+        return self._bimap.get_left(sc)
 
-    def get_symbolic_circuit(self, tc: Any) -> Circuit:
-        return self._inv_map[tc]
+    def get_symbolic_circuit(self, cc: CompiledCircuit) -> Circuit:
+        return self._bimap.get_right(cc)
 
-    def register_compiled_circuit(self, sc: Circuit, tc: Any):
-        self._map[sc] = tc
-        self._inv_map[tc] = sc
+    def register_compiled_circuit(self, sc: Circuit, cc: CompiledCircuit):
+        self._bimap.add(sc, cc)
 
 
 class CompilerRegistry:
@@ -86,7 +86,7 @@ class CompilerRegistry:
         args = func.__annotations__
         arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
         param_cls = args[arg_names[0]]
-        if not issubclass(param_cls, AbstractParameter):
+        if not issubclass(param_cls, ParameterNode):
             raise ValueError("The function is not a symbolic parameter compilation rule")
         self._parameter_rules[param_cls] = func
 
@@ -111,22 +111,22 @@ class AbstractCompiler(ABC):
     def __init__(self, registry: CompilerRegistry, **flags):
         self._registry = registry
         self._flags = flags
-        self._context = CompilationContext()
+        self._compiled_circuits = CompiledCircuitsMap()
 
     def is_compiled(self, sc: Circuit) -> bool:
-        return self._context.is_compiled(sc)
+        return self._compiled_circuits.is_compiled(sc)
 
-    def has_symbolic(self, tc: Any) -> bool:
-        return self._context.has_compiled(tc)
+    def has_symbolic(self, cc: CompiledCircuit) -> bool:
+        return self._compiled_circuits.has_compiled(cc)
 
-    def get_compiled_circuit(self, sc: Circuit) -> Any:
-        return self._context.get_compiled_circuit(sc)
+    def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
+        return self._compiled_circuits.get_compiled_circuit(sc)
 
-    def get_symbolic_circuit(self, tc: Any) -> Circuit:
-        return self._context.get_symbolic_circuit(tc)
+    def get_symbolic_circuit(self, cc: CompiledCircuit) -> Circuit:
+        return self._compiled_circuits.get_symbolic_circuit(cc)
 
-    def register_compiled_circuit(self, sc: Circuit, tc: Any):
-        self._context.register_compiled_circuit(sc, tc)
+    def register_compiled_circuit(self, sc: Circuit, cc: CompiledCircuit):
+        self._compiled_circuits.register_compiled_circuit(sc, cc)
 
     def add_layer_rule(self, func: LayerCompilationFunc):
         self._registry.add_layer_rule(func)
@@ -142,15 +142,13 @@ class AbstractCompiler(ABC):
     ) -> ParameterCompilationFunc:
         return self._registry.retrieve_parameter_rule(signature)
 
-    def compile(self, sc: Circuit) -> Any:
+    def compile(self, sc: Circuit) -> CompiledCircuit:
         if self.is_compiled(sc):
             return self.get_compiled_circuit(sc)
-        tc = self.compile_pipeline(sc)
-        self._context.register_compiled_circuit(sc, tc)
-        return tc
+        return self.compile_pipeline(sc)
 
     @abstractmethod
-    def compile_pipeline(self, sc: Circuit) -> Any:
+    def compile_pipeline(self, sc: Circuit) -> CompiledCircuit:
         ...
 
     @abstractmethod

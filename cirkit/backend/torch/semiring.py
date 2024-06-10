@@ -21,7 +21,7 @@ from torch import Tensor
 from cirkit.backend.torch.utils import flatten_dims, unflatten_dims
 
 Ts = TypeVarTuple("Ts")
-SemiringCls = TypeVar("SemiringClsT", bound=Type["Semiring"])
+SemiringCls = TypeVar("SemiringCls", bound=Type["Semiring"])
 
 
 class Semiring(ABC):

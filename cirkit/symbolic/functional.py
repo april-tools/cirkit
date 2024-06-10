@@ -9,14 +9,7 @@ from cirkit.symbolic.circuit import (
     CircuitOperator,
     StructuralPropertyError,
 )
-from cirkit.symbolic.layers import (
-    InputLayer,
-    Layer,
-    LayerOperation,
-    PlaceholderParameter,
-    ProductLayer,
-    SumLayer,
-)
+from cirkit.symbolic.layers import InputLayer, Layer, LayerOperation, ProductLayer, SumLayer
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
@@ -47,11 +40,11 @@ def integrate(
     map_layers: Dict[Layer, CircuitBlock] = {}
 
     # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
+    blocks: List[CircuitBlock] = []
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
     out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
 
-    ordering = sc.layers_topological_ordering()
-    for sl in ordering:
+    for sl in sc.topological_ordering():
         # Input layers get integrated over
         if isinstance(sl, InputLayer) and sl.scope & scope:
             if not (sl.scope <= scope):
@@ -61,17 +54,17 @@ def integrate(
             # Retrieve the integration rule from the registry and apply it
             func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
             int_block = func(sl)
+            blocks.append(int_block)
             map_layers[sl] = int_block
             continue
         assert isinstance(
             sl, (SumLayer, ProductLayer)
         ), "Symbolic inner layers must be either sum or product layers"
         # Sum/product layers are simply copied
-        # Placeholders are used to keep track of referenced parameters
-        learnable_parameters = {
-            pname: PlaceholderParameter(sl, pname) for pname in sl.params.keys()
-        }
-        int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **learnable_parameters))
+        # Note that this willTo keep track of shared parameters, we use parameter references
+        parameters = {name: p.ref() for name, p in sl.params.items()}
+        int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+        blocks.append(int_block)
         map_layers[sl] = int_block
         int_block_ins = [map_layers[isl] for isl in sc.layer_inputs(sl)]
         in_blocks[int_block] = int_block_ins
@@ -82,7 +75,7 @@ def integrate(
     return Circuit.from_operation(
         sc.scope,
         sc.num_channels,
-        list(map_layers.values()),
+        blocks,
         in_blocks,
         out_blocks,
         operation=CircuitOperation(
@@ -90,6 +83,7 @@ def integrate(
             operands=(sc,),
             metadata=dict(scope=scope),
         ),
+        topologically_ordered=True,
     )
 
 
@@ -109,12 +103,13 @@ def multiply(
     map_layers: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
 
     # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
+    blocks: List[CircuitBlock] = []
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
     out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
-    for lhs_out, rhs_out in itertools.product(lhs_sc.output_layers, rhs_sc.output_layers):
+    for lhs_out, rhs_out in itertools.product(lhs_sc.outputs, rhs_sc.outputs):
         to_multiply.append((lhs_out, rhs_out))
 
     # Using a stack in place of recursion for better memory efficiency and debugging
@@ -153,6 +148,7 @@ def multiply(
         prod_signature = type(lhs_layer), type(rhs_layer)
         func = registry.retrieve_rule(LayerOperation.MULTIPLICATION, *prod_signature)
         prod_block = func(lhs_layer, rhs_layer)
+        blocks.append(prod_block)
         # Make the connections
         prod_block_ins = [map_layers[p] for p in next_to_multiply]
         in_blocks[prod_block] = prod_block_ins
@@ -165,12 +161,13 @@ def multiply(
     return Circuit.from_operation(
         lhs_sc.scope | rhs_sc.scope,
         lhs_sc.num_channels,
-        list(map_layers.values()),
+        blocks,
         in_blocks,
         out_blocks,
         operation=CircuitOperation(
             operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
         ),
+        topologically_ordered=True,
     )
 
 

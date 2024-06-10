@@ -2,7 +2,7 @@ from abc import ABC
 from typing import Any, Dict, Optional
 
 from cirkit.backend.torch.layers.base import TorchLayer
-from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.parameters.graph import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
 from cirkit.utils.scope import Scope
 
@@ -56,5 +56,5 @@ class TorchInputLayer(TorchLayer, ABC):
         }
 
     @property
-    def params(self) -> Dict[str, AbstractTorchParameter]:
+    def params(self) -> Dict[str, TorchParameter]:
         return {}
