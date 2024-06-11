@@ -3,7 +3,7 @@ from collections import defaultdict
 from copy import copy as shallowcopy
 from functools import cached_property
 from numbers import Number
-from typing import Any, Callable, Dict, List, Tuple, final
+from typing import Any, Callable, Dict, List, Tuple, final, Union
 
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
 
@@ -120,9 +120,10 @@ class ReduceOpParameter(UnaryParameterOp, ABC):
 
 class EntrywiseReduceOpParameter(EntrywiseOpParameter, ABC):
     def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
-        assert 0 <= axis < len(in_shape)
         super().__init__(in_shape)
-        self.axis = axis if axis >= 0 else axis + len(in_shape)
+        axis = axis if axis >= 0 else axis + len(in_shape)
+        assert 0 <= axis < len(in_shape)
+        self.axis = axis
 
     @property
     def config(self) -> Dict[str, Any]:
@@ -252,7 +253,9 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return Parameter([p], {}, {}, topologically_ordered=True)
 
     @classmethod
-    def from_sequence(cls, p: "Parameter", *ns: ParameterNode) -> "Parameter":
+    def from_sequence(cls, p: Union[ParameterLeaf, "Parameter"], *ns: ParameterNode) -> "Parameter":
+        if isinstance(p, ParameterLeaf):
+            p = Parameter.from_leaf(p)
         nodes = p.nodes + list(ns)
         in_nodes = dict(p.nodes_inputs)
         out_nodes = dict(p.nodes_outputs)
@@ -265,11 +268,15 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         )
 
     @classmethod
-    def from_unary(cls, p: "Parameter", n: UnaryParameterOp) -> "Parameter":
+    def from_unary(cls, p: Union[ParameterLeaf, "Parameter"], n: UnaryParameterOp) -> "Parameter":
         return Parameter.from_sequence(p, n)
 
     @classmethod
-    def from_binary(cls, p1: "Parameter", p2: "Parameter", n: BinaryParameterOp) -> "Parameter":
+    def from_binary(cls, p1: Union[ParameterLeaf, "Parameter"], p2: Union[ParameterLeaf, "Parameter"], n: BinaryParameterOp) -> "Parameter":
+        if isinstance(p1, ParameterLeaf):
+            p1 = Parameter.from_leaf(p1)
+        if isinstance(p2, ParameterLeaf):
+            p2 = Parameter.from_leaf(p2)
         p_nodes = p1.nodes + p2.nodes + [n]
         in_nodes = {**p1.nodes_inputs, **p2.nodes_inputs}
         out_nodes = {**p1.nodes_outputs, **p2.nodes_outputs}

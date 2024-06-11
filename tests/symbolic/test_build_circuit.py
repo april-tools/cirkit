@@ -1,5 +1,3 @@
-import pytest
-
 from cirkit.symbolic.circuit import Circuit
 from cirkit.templates.region_graph import RandomBinaryTree
 from tests.symbolic.test_utils import (

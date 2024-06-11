@@ -98,15 +98,11 @@ def build_simple_pc(
     normalized: bool = False,
 ):
     if normalized:
-        sum_param = lambda p: Parameter.from_unary(
-            Parameter.from_leaf(p), SoftmaxParameter(p.shape, axis=1)
-        )
+        sum_param = lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape, axis=1))
     else:
-        sum_param = lambda p: Parameter.from_unary(Parameter.from_leaf(p), ExpParameter(p.shape))
+        sum_param = lambda p: Parameter.from_unary(p, ExpParameter(p.shape))
     if normalized:
-        logits_param = lambda p: Parameter.from_unary(
-            Parameter.from_leaf(p), LogSoftmaxParameter(p.shape, axis=3)
-        )
+        logits_param = lambda p: Parameter.from_unary(p, LogSoftmaxParameter(p.shape, axis=3))
     else:
         logits_param = None
     return build_simple_circuit(
