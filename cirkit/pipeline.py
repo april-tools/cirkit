@@ -78,27 +78,27 @@ class PipelineContext(AbstractContextManager):
     def compile(self, sc: Circuit) -> Any:
         return self._compiler.compile(sc)
 
-    def integrate(self, tc: Any, scope: Optional[Iterable[int]] = None) -> Any:
-        if not self._compiler.has_symbolic(tc):
+    def integrate(self, cc: Any, scope: Optional[Iterable[int]] = None) -> Any:
+        if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
-        sc = self._compiler.get_symbolic_circuit(tc)
+        sc = self._compiler.get_symbolic_circuit(cc)
         int_sc = SF.integrate(sc, scope=scope, registry=self._op_registry)
         return self.compile(int_sc)
 
-    def multiply(self, lhs_tc: Any, rhs_tc: Any) -> Any:
-        if not self._compiler.has_symbolic(lhs_tc):
+    def multiply(self, lhs_cc: Any, rhs_cc: Any) -> Any:
+        if not self._compiler.has_symbolic(lhs_cc):
             raise ValueError("The given LHS compiled circuit is not known in this pipeline")
-        if not self._compiler.has_symbolic(rhs_tc):
+        if not self._compiler.has_symbolic(rhs_cc):
             raise ValueError("The given RHS compiled circuit is not known in this pipeline")
-        lhs_sc = self._compiler.get_symbolic_circuit(lhs_tc)
-        rhs_sc = self._compiler.get_symbolic_circuit(rhs_tc)
+        lhs_sc = self._compiler.get_symbolic_circuit(lhs_cc)
+        rhs_sc = self._compiler.get_symbolic_circuit(rhs_cc)
         prod_sc = SF.multiply(lhs_sc, rhs_sc, registry=self._op_registry)
         return self.compile(prod_sc)
 
-    def differentiate(self, tc: Any) -> Any:
-        if not self._compiler.has_symbolic(tc):
+    def differentiate(self, cc: Any) -> Any:
+        if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
-        sc = self._compiler.get_symbolic_circuit(tc)
+        sc = self._compiler.get_symbolic_circuit(cc)
         diff_sc = SF.differentiate(sc, registry=self._op_registry)
         return self.compile(diff_sc)
 
@@ -109,22 +109,22 @@ def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> Any:
     return ctx.compile(sc)
 
 
-def integrate(tc: Any, scope: Optional[Iterable[int]] = None, ctx: Optional[PipelineContext] = None) -> Any:
+def integrate(cc: Any, scope: Optional[Iterable[int]] = None, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
-    return ctx.integrate(tc, scope=scope)
+    return ctx.integrate(cc, scope=scope)
 
 
-def multiply(lhs_tc: Any, rhs_tc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+def multiply(lhs_cc: Any, rhs_cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
-    return ctx.multiply(lhs_tc, rhs_tc)
+    return ctx.multiply(lhs_cc, rhs_cc)
 
 
-def differentiate(tc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+def differentiate(cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
-    return ctx.differentiate(tc)
+    return ctx.differentiate(cc)
 
 
 def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:

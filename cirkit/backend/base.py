@@ -39,8 +39,8 @@ class CompiledCircuitsMap:
     def is_compiled(self, sc: Circuit) -> bool:
         return self._bimap.has_left(sc)
 
-    def has_compiled(self, cc: CompiledCircuit) -> bool:
-        return self._bimap.has_left(cc)
+    def has_symbolic(self, cc: CompiledCircuit) -> bool:
+        return self._bimap.has_right(cc)
 
     def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
         return self._bimap.get_left(sc)
@@ -117,7 +117,7 @@ class AbstractCompiler(ABC):
         return self._compiled_circuits.is_compiled(sc)
 
     def has_symbolic(self, cc: CompiledCircuit) -> bool:
-        return self._compiled_circuits.has_compiled(cc)
+        return self._compiled_circuits.has_symbolic(cc)
 
     def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
         return self._compiled_circuits.get_compiled_circuit(sc)
