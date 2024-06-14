@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.graph import TorchDiAcyclicGraph
+from cirkit.backend.torch.graph import TorchDiAcyclicGraph, build_unfolded_address_book
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.utils.scope import Scope
 

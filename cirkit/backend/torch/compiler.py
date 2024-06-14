@@ -241,8 +241,9 @@ def _einsumize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abs
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
     # Fold the layers in the given circuit, by following the layer-wise topological ordering
-    layers, in_layers, fold_idx, in_fold_idx = fold_graph(
-        ordering=cc.layerwise_topological_ordering(),
+    layers, in_layers, in_fold_idx, out_fold_idx = fold_graph(
+        cc.layerwise_topological_ordering(),
+        outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
         group_foldable_fn=_group_foldable_layers,
         fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
@@ -251,9 +252,6 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
 
     # Retrieve the outputs of each layer
     out_layers = graph_outgoings(layers, incomings_fn=in_layers.get)
-
-    # Index the entries of the folded outputs
-    out_fold_idx = [fold_idx[l] for l in cc.outputs]
 
     # Instantiate a folded circuit
     return type(cc)(
@@ -325,8 +323,9 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
 
     # Fold the nodes in the merged parameter computational graphs,
     # by following the layer-wise topological ordering
-    nodes, in_nodes, fold_idx, in_fold_idx = fold_graph(
-        ordering=ordering,
+    nodes, in_nodes, in_fold_idx, out_fold_idx = fold_graph(
+        ordering,
+        outputs=map(lambda pi: pi.output, parameters),
         incomings_fn=in_nodes.get,
         group_foldable_fn=_group_foldable_parameter_nodes,
         fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler)
@@ -334,9 +333,6 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
 
     # Retrieve the outputs of each parameter node
     out_nodes = graph_outgoings(nodes, incomings_fn=in_nodes.get)
-
-    # Index the entries of the folded outputs
-    out_fold_idx = [fold_idx[pi.output] for pi in parameters]
 
     # Construct the folded parameter's computational graph
     return TorchParameter(
