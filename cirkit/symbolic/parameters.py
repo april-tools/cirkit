@@ -3,7 +3,7 @@ from collections import defaultdict
 from copy import copy as shallowcopy
 from functools import cached_property
 from numbers import Number
-from typing import Any, Callable, Dict, List, Tuple, final, Union
+from typing import Any, Callable, Dict, List, Tuple, Union, final
 
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
 
@@ -272,7 +272,12 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return Parameter.from_sequence(p, n)
 
     @classmethod
-    def from_binary(cls, p1: Union[ParameterLeaf, "Parameter"], p2: Union[ParameterLeaf, "Parameter"], n: BinaryParameterOp) -> "Parameter":
+    def from_binary(
+        cls,
+        p1: Union[ParameterLeaf, "Parameter"],
+        p2: Union[ParameterLeaf, "Parameter"],
+        n: BinaryParameterOp,
+    ) -> "Parameter":
         if isinstance(p1, ParameterLeaf):
             p1 = Parameter.from_leaf(p1)
         if isinstance(p2, ParameterLeaf):

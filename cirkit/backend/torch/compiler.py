@@ -6,6 +6,7 @@ from typing import IO, Dict, List, Optional, Tuple, Union, cast
 from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
+from cirkit.backend.torch.graph import fold_graph
 from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.parameters.graph import (
@@ -22,6 +23,7 @@ from cirkit.backend.torch.semiring import Semiring, SemiringCls
 from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import Parameter, ParameterNode, TensorParameter
+from cirkit.utils.algorithms import graph_outgoings
 
 
 class TorchCompilerState:
@@ -238,84 +240,35 @@ def _einsumize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abs
 
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
-    # A useful data structure mapping each unfolded layer to
-    # (i) a 'fold_id' (a natural number) pointing to the folded layer it is associated to; and
-    # (ii) a 'slice_idx' (a natural number) within the output of the folded layer,
-    #      which recovers the output of the unfolded layer.
-    fold_idx: Dict[TorchLayer, Tuple[int, int]] = {}
+    # Fold the layers in the given circuit, by following the layer-wise topological ordering
+    layers, in_layers, fold_idx, in_fold_idx = fold_graph(
+        ordering=cc.layerwise_topological_ordering(),
+        incomings_fn=cc.layer_inputs,
+        group_foldable_fn=_group_foldable_layers,
+        fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
+        in_fold_idx_fn=lambda g: [[(-1, sc) for sc in l.scope] for l in g]
+    )
 
-    # A useful data structure mapping each folded layer to
-    # a tensor of indices IDX of size (F, H, 2), where F is the number of layers in the fold,
-    # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair (fold_id, slice_idx),
-    # pointing to the folded layer of id 'fold_id' and to the slice 'slice_idx' within that fold.
-    fold_in_layers_idx: Dict[TorchLayer, List[List[Tuple[int, int]]]] = {}
+    # Retrieve the outputs of each layer
+    out_layers = graph_outgoings(layers, incomings_fn=in_layers.get)
 
-    # The list of folded layers
-    layers: List[TorchLayer] = []
-
-    # The inputs and outputs for each folded layer
-    in_layers: Dict[TorchLayer, List[TorchLayer]] = {}
-    out_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
-
-    # Fold layers in each frontier, by firstly finding the layer groups to fold
-    # in each frontier, and then by stacking each group of layers into a folded layer
-    for frontier in cc.layerwise_topological_ordering():
-        # Retrieve the layer groups we can fold
-        layer_groups = _group_foldable_layers(frontier)
-
-        # Fold each group of layers
-        for group in layer_groups:
-            # For each layer in the group, retrieve the unfolded input layers
-            group_in_layers: List[List[TorchLayer]] = [cc.layer_inputs(l) for l in group]
-
-            # Check if we are folding input layers.
-            # If that is the case, we index the data variables. We can still fold the layers
-            # in such a group of input layers because they will be defined over the same
-            # number of variables. If that is not the case, we retrieve the input index
-            # from one of the useful maps.
-            in_layers_idx: List[List[Tuple[int, int]]]
-            is_folding_input = len(group_in_layers[0]) == 0
-            if is_folding_input:
-                in_layers_idx = [[(-1, s) for s in l.scope] for l in group]
-            else:
-                in_layers_idx = [[fold_idx[li] for li in lsi] for lsi in group_in_layers]
-
-            # Fold the layers group
-            folded_layer = _fold_layers_group(compiler, group)
-
-            # Set the input and output folded layers
-            folded_in_layers = list(
-                set(layers[fold_idx[li][0]] for lsi in group_in_layers for li in lsi)
-            )
-            in_layers[folded_layer] = folded_in_layers
-            for fl in folded_in_layers:
-                out_layers[fl].append(folded_layer)
-
-            # Update the data structures
-            for i, l in enumerate(group):
-                fold_idx[l] = (len(layers), i)
-            layers.append(folded_layer)
-            fold_in_layers_idx[folded_layer] = in_layers_idx
-
-    # Similar as the 'fold_in_layers_idx' data structure above,
-    # but indexing the entries of the folded outputs
-    fold_out_layers_idx = [fold_idx[lo] for lo in cc.outputs]
+    # Index the entries of the folded outputs
+    out_fold_idx = [fold_idx[l] for l in cc.outputs]
 
     # Instantiate a folded circuit
-    folded_cc = type(cc)(
+    return type(cc)(
         cc.scope,
         cc.num_channels,
         layers,
         in_layers,
         out_layers,
         topologically_ordered=True,
-        fold_in_layers_idx=fold_in_layers_idx,
-        fold_out_layers_idx=fold_out_layers_idx,
+        in_fold_idx=in_fold_idx,
+        out_fold_idx=out_fold_idx,
     )
-    return folded_cc
 
 
-def _fold_layers_group(compiler: TorchCompiler, layers: List[TorchLayer]) -> TorchLayer:
+def _fold_layers_group(layers: List[TorchLayer], *, compiler: TorchCompiler) -> TorchLayer:
     # Retrieve the class of the folded layer, as well as the configuration attributes
     fold_layer_cls = type(layers[0])
     fold_layer_conf = layers[0].config
@@ -334,10 +287,7 @@ def _fold_layers_group(compiler: TorchCompiler, layers: List[TorchLayer]) -> Tor
     }
 
     # Instantiate a new folded layer, using the folded layer configuration and the folded parameters
-    fold_layer = fold_layer_cls(
-        **fold_layer_conf, **fold_layer_parameters, semiring=compiler.semiring
-    )
-    return fold_layer
+    return fold_layer_cls(**fold_layer_conf, **fold_layer_parameters, semiring=compiler.semiring)
 
 
 def _group_foldable_layers(frontier: List[TorchLayer]) -> List[List[TorchLayer]]:
@@ -360,91 +310,43 @@ def _group_foldable_layers(frontier: List[TorchLayer]) -> List[List[TorchLayer]]
 
 def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) -> TorchParameter:
     # Retrieve:
-    # (i)  the parameter nodes and the output shapes for each of them;
+    # (i)  the parameter nodes and the input to each node;
     # (ii) the layer-wise (aka bottom-up) topological orderings of parameter nodes
     in_nodes: Dict[TorchParameterNode, List[TorchParameterNode]] = {}
-    frontiers_ordering: List[List[TorchParameterNode]] = []
     for pi in parameters:
         in_nodes.update(pi.nodes_inputs)
+    ordering: List[List[TorchParameterNode]] = []
+    for pi in parameters:
         for i, frontier in enumerate(pi.layerwise_topological_ordering()):
-            if i < len(frontiers_ordering):
-                frontiers_ordering[i].extend(frontier)
+            if i < len(ordering):
+                ordering[i].extend(frontier)
                 continue
-            frontiers_ordering.append(frontier)
+            ordering.append(frontier)
 
-    # A useful data structure mapping each unfolded parameter node to
-    # (i) a 'fold_id' (a natural number) pointing to the folded parameter node it is associated to; and
-    # (ii) a 'slice_idx' (a natural number) within the output of the parameter node,
-    #      which recovers the output of the unfolded parameter node.
-    fold_idx: Dict[TorchParameterNode, Tuple[int, int]] = {}
+    # Fold the nodes in the merged parameter computational graphs,
+    # by following the layer-wise topological ordering
+    nodes, in_nodes, fold_idx, in_fold_idx = fold_graph(
+        ordering=ordering,
+        incomings_fn=in_nodes.get,
+        group_foldable_fn=_group_foldable_parameter_nodes,
+        fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler)
+    )
 
-    # A useful data structure mapping each folded parameter node to
-    # a list of F indices IDX, each of size (F, H'), where H' is the number of inputs to that fold.
-    # Each entry i,j,: of IDX is a pair (fold_id, slice_idx), pointing to the folded parameter node
-    # of id 'fold_id' and to the slice 'slice_idx' within that fold.
-    # Note that IDX can be possibly optional. If that is the case, then the folded parameter node is
-    # actually a folded parameter leaf.
-    fold_in_nodes_idx: Dict[TorchParameterNode, Optional[List[List[Tuple[int, int]]]]] = {}
+    # Retrieve the outputs of each parameter node
+    out_nodes = graph_outgoings(nodes, incomings_fn=in_nodes.get)
 
-    # The list of folded parameter nodes
-    folded_nodes: List[TorchParameterNode] = []
-
-    # The inputs and outputs for each folded parameter node
-    in_folded_nodes: Dict[TorchParameterNode, List[TorchParameterNode]] = {}
-    out_folded_nodes: Dict[TorchParameterNode, List[TorchParameterNode]] = defaultdict(list)
-
-    # Fold parameter nodes in each frontier, by firstly finding the parameter node groups to fold
-    # in each frontier, and then by stacking each group of parameter nodes into a folded parameter node
-    for frontier in frontiers_ordering:
-        # Retrieve the parameter node groups we can fold
-        parameter_groups = _group_foldable_parameter_nodes(frontier, in_nodes)
-
-        # Fold each group of parameter nodes
-        for group in parameter_groups:
-            # For each parameter node in the group, retrieve the unfolded input nodes
-            group_in_nodes: List[List[TorchParameterNode]] = [in_nodes.get(p, []) for p in group]
-
-            # Check if we are folding input layers
-            in_nodes_idx: Optional[List[List[Tuple[int, int]]]]
-            is_folding_input = len(group_in_nodes[0]) == 0
-            if is_folding_input:
-                in_nodes_idx = None
-            else:
-                in_nodes_idx = [[fold_idx[pi] for pi in psi] for psi in group_in_nodes]
-
-            # Fold the parameter nodes
-            folded_node = _fold_parameter_nodes_group(compiler, group)
-
-            # Set the input and output folded nodes
-            folded_in_nodes = list(
-                set(folded_nodes[fold_idx[pi][0]] for psi in group_in_nodes for pi in psi)
-            )
-            in_folded_nodes[folded_node] = folded_in_nodes
-            for fp in folded_in_nodes:
-                out_folded_nodes[fp].append(folded_node)
-
-            # Update the data structures
-            for i, p in enumerate(group):
-                fold_idx[p] = (len(folded_nodes), i)
-            folded_nodes.append(folded_node)
-            fold_in_nodes_idx[folded_node] = in_nodes_idx
-
-    # Similar as the 'fold_in_nodes_idx' data structure above,
-    # but indexing the entries of the folded outputs.
-    # This is needed as to retrieve the final folded output, regardless
-    # of how the frontiers have been folded.
-    fold_out_nodes_idx = [fold_idx[pi.output] for pi in parameters]
+    # Index the entries of the folded outputs
+    out_fold_idx = [fold_idx[pi.output] for pi in parameters]
 
     # Construct the folded parameter's computational graph
-    folded_parameter = TorchParameter(
-        folded_nodes,
-        in_folded_nodes,
-        out_folded_nodes,
+    return TorchParameter(
+        nodes,
+        in_nodes,
+        out_nodes,
         topologically_ordered=True,
-        fold_in_nodes_idx=fold_in_nodes_idx,
-        fold_out_nodes_idx=fold_out_nodes_idx,
+        in_fold_idx=in_fold_idx,
+        out_fold_idx=out_fold_idx,
     )
-    return folded_parameter
 
 
 def _fold_init_tensors(t: Tensor, *, ps: List[TorchTensorParameter]) -> Tensor:
@@ -457,7 +359,7 @@ def _fold_init_tensors(t: Tensor, *, ps: List[TorchTensorParameter]) -> Tensor:
 
 
 def _fold_parameter_nodes_group(
-    compiler: TorchCompiler, group: List[TorchParameterNode]
+    group: List[TorchParameterNode], *, compiler: TorchCompiler
 ) -> TorchParameterNode:
     fold_node_cls = type(group[0])
     # Catch the case we are folding tensor parameters
@@ -498,9 +400,7 @@ def _fold_parameter_nodes_group(
     return fold_node_cls(*group[0].in_shapes, num_folds=len(group), **group[0].config)
 
 
-def _group_foldable_parameter_nodes(
-    nodes: List[TorchParameterNode], in_nodes: Dict[TorchParameterNode, List[TorchParameterNode]]
-) -> List[List[TorchParameterNode]]:
+def _group_foldable_parameter_nodes(nodes: List[TorchParameterNode]) -> List[List[TorchParameterNode]]:
     # A dictionary mapping a parameter configuration (see below),
     # which uniquely identifies a group of parameters that can be folded,
     # into a group of parameters.

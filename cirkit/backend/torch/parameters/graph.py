@@ -76,20 +76,20 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
         out_nodes: Dict[TorchParameterNode, List[TorchParameterNode]],
         *,
         topologically_ordered: bool = False,
-        fold_in_nodes_idx: Optional[Dict[TorchParameterNode, List[List[Tuple[int, int]]]]] = None,
-        fold_out_nodes_idx: Optional[List[Tuple[int, int]]] = None,
+        in_fold_idx: Optional[Dict[TorchParameterNode, List[List[Tuple[int, int]]]]] = None,
+        out_fold_idx: Optional[List[Tuple[int, int]]] = None,
     ) -> None:
         super().__init__(nodes, in_nodes, out_nodes, topologically_ordered=topologically_ordered)
 
         # Build the bookkeeping data structure
-        assert (fold_in_nodes_idx is None and fold_out_nodes_idx is None) or (
-            fold_in_nodes_idx is not None and fold_out_nodes_idx is not None
+        assert (in_fold_idx is None and out_fold_idx is None) or (
+                in_fold_idx is not None and out_fold_idx is not None
         )
-        if fold_in_nodes_idx is None:
+        if in_fold_idx is None:
             self._bookkeeping = self._build_unfolded_bookkeeping()
         else:
             self._bookkeeping = self._build_folded_bookkeeping(
-                fold_in_nodes_idx, fold_out_nodes_idx
+                in_fold_idx, out_fold_idx
             )
 
     @property
@@ -128,8 +128,8 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
 
     def _build_folded_bookkeeping(
         self,
-        fold_in_nodes_idx: Dict[TorchParameterNode, List[List[Tuple[int, int]]]],
-        fold_out_nodes_idx: List[Tuple[int, int]],
+        in_fold_idx: Dict[TorchParameterNode, List[List[Tuple[int, int]]]],
+        out_fold_idx: List[Tuple[int, int]],
     ) -> List[Tuple[List[List[int]], List[Optional[Tensor]]]]:
         # The bookkeeping data structure
         bookkeeping: List[Tuple[List[List[int]], Optional[List[Tensor]]]] = []
@@ -141,10 +141,10 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
         # Note that the parameter nodes are already given in a topological ordering
         for p in self.topological_ordering():
             # Retrieve the index information from the folded parameter node
-            in_nodes_idx = fold_in_nodes_idx[p]
+            in_nodes_idx = in_fold_idx[p]
 
             # Catch the case of the folded parameter node being a leaf one
-            if in_nodes_idx is None:
+            if not in_nodes_idx:
                 bookkeeping_entry = ([], None)
                 num_folds_map[len(bookkeeping)] = p.num_folds
                 bookkeeping.append(bookkeeping_entry)
@@ -157,37 +157,37 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
             in_nodes_idx = list(map(list, zip(*in_nodes_idx)))
 
             # Retrieve the unique fold indices that reference the parameter node inputs
-            in_nodes_ids = [sorted(list(set(si[0] for si in in_fi))) for in_fi in in_nodes_idx]
+            bk_in_nodes_ids = [sorted(list(set(si[0] for si in in_fi))) for in_fi in in_nodes_idx]
 
             # Compute the cumulative indices of the folded inputs
             cum_folded_node_ids_maps = [
                 dict(zip(n_ids, np.cumsum([0] + [num_folds_map[pi] for pi in n_ids]).tolist()))
-                for n_ids in in_nodes_ids
+                for n_ids in bk_in_nodes_ids
             ]
 
             # Build the bookkeeping entry
-            in_fold_idx: List[Tensor] = []
+            bk_in_fold_idx: List[Tensor] = []
             for i, in_fi in enumerate(in_nodes_idx):
                 in_slice_idx: List[int] = []
                 for si in in_fi:
                     in_slice_idx.append(cum_folded_node_ids_maps[i][si[0]] + si[1])
                 in_slice_idx_t = torch.tensor(in_slice_idx)
-                in_fold_idx.append(in_slice_idx_t)
-            bookkeeping_entry = (in_nodes_ids, in_fold_idx)
+                bk_in_fold_idx.append(in_slice_idx_t)
+            bookkeeping_entry = (bk_in_nodes_ids, bk_in_fold_idx)
             num_folds_map[len(bookkeeping)] = p.num_folds
             bookkeeping.append(bookkeeping_entry)
 
         # Append a last bookkeeping entry with the info to extract the output
-        out_nodes_ids = sorted(list(set(si[0] for si in fold_out_nodes_idx)))
+        out_nodes_ids = sorted(list(set(si[0] for si in out_fold_idx)))
         cum_folded_nodes_ids_map = dict(
             zip(
                 out_nodes_ids, np.cumsum([0] + [num_folds_map[li] for li in out_nodes_ids]).tolist()
             )
         )
         out_fold_idx: List[int] = [
-            cum_folded_nodes_ids_map[si[0]] + si[1] for si in fold_out_nodes_idx
+            cum_folded_nodes_ids_map[si[0]] + si[1] for si in out_fold_idx
         ]
-        if out_fold_idx == list(range(len(fold_out_nodes_idx))):
+        if out_fold_idx == list(range(len(out_fold_idx))):
             out_fold_idx_t = None
         else:
             out_fold_idx_t = torch.tensor(out_fold_idx)

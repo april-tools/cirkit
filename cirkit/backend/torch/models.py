@@ -19,8 +19,8 @@ class AbstractTorchCircuit(nn.Module):
         out_layers: Dict[TorchLayer, List[TorchLayer]],
         *,
         topologically_ordered: bool = False,
-        fold_in_layers_idx: Optional[Dict[TorchLayer, List[List[Tuple[int, int]]]]] = None,
-        fold_out_layers_idx: Optional[List[Tuple[int, int]]] = None,
+        in_fold_idx: Optional[Dict[TorchLayer, List[List[Tuple[int, int]]]]] = None,
+        out_fold_idx: Optional[List[Tuple[int, int]]] = None,
     ) -> None:
         super().__init__()
         self._graph = TorchDiAcyclicGraph[TorchLayer](layers, in_layers, out_layers, topologically_ordered=topologically_ordered)
@@ -28,14 +28,14 @@ class AbstractTorchCircuit(nn.Module):
         self.num_channels = num_channels
 
         # Build the bookkeeping data structure
-        assert (fold_in_layers_idx is None and fold_out_layers_idx is None) or (
-            fold_in_layers_idx is not None and fold_out_layers_idx is not None
+        assert (in_fold_idx is None and out_fold_idx is None) or (
+                in_fold_idx is not None and out_fold_idx is not None
         )
-        if fold_in_layers_idx is None:
+        if in_fold_idx is None:
             self._bookkeeping = self._build_unfolded_bookkeeping()
         else:
             self._bookkeeping = self._build_folded_bookkeeping(
-                fold_in_layers_idx, fold_out_layers_idx
+                in_fold_idx, out_fold_idx
             )
 
     @property
@@ -101,8 +101,8 @@ class AbstractTorchCircuit(nn.Module):
 
     def _build_folded_bookkeeping(
         self,
-        fold_in_layers_idx: Dict[TorchLayer, List[List[Tuple[int, int]]]],
-        fold_out_layers_idx: List[Tuple[int, int]],
+        in_fold_idx: Dict[TorchLayer, List[List[Tuple[int, int]]]],
+        out_fold_idx: List[Tuple[int, int]],
     ) -> List[Tuple[List[int], Optional[Tensor]]]:
         # The bookkeeping data structure
         bookkeeping: List[Tuple[List[int], Optional[Tensor]]] = []
@@ -113,7 +113,7 @@ class AbstractTorchCircuit(nn.Module):
         # Build the bookkeeping data structure
         for l in self.topological_ordering():
             # Retrieve the index information from the folded layer
-            in_layers_idx = fold_in_layers_idx[l]
+            in_layers_idx = in_fold_idx[l]
 
             if isinstance(l, TorchInputLayer):
                 # For input layers, the bookkeeping entry is a tensor index to the input tensor
@@ -121,30 +121,30 @@ class AbstractTorchCircuit(nn.Module):
                 bookkeeping_entry = ([], torch.tensor(in_scope_ids))
             else:
                 # Retrieve the unique fold indices that reference the layer inputs
-                in_layer_ids = sorted(list(set(si[0] for fi in in_layers_idx for si in fi)))
+                bk_in_layer_ids = sorted(list(set(si[0] for fi in in_layers_idx for si in fi)))
 
                 # Compute the cumulative indices of the folded inputs
                 cum_folded_layer_ids_map = dict(
                     zip(
-                        in_layer_ids,
-                        np.cumsum([0] + [num_folds_map[li] for li in in_layer_ids]).tolist(),
+                        bk_in_layer_ids,
+                        np.cumsum([0] + [num_folds_map[li] for li in bk_in_layer_ids]).tolist(),
                     )
                 )
 
                 # Build the bookkeeping entry
-                in_fold_idx: List[List[int]] = []
+                bk_in_fold_idx: List[List[int]] = []
                 for fi in in_layers_idx:
                     in_slice_idx: List[int] = []
                     for si in fi:
                         in_slice_idx.append(cum_folded_layer_ids_map[si[0]] + si[1])
-                    in_fold_idx.append(in_slice_idx)
-                in_fold_idx_t = torch.tensor(in_fold_idx)
-                bookkeeping_entry = (in_layer_ids, in_fold_idx_t)
+                    bk_in_fold_idx.append(in_slice_idx)
+                bk_in_fold_idx_t = torch.tensor(bk_in_fold_idx)
+                bookkeeping_entry = (bk_in_layer_ids, bk_in_fold_idx_t)
             num_folds_map[len(bookkeeping)] = l.num_folds
             bookkeeping.append(bookkeeping_entry)
 
         # Append a last bookkeeping entry with the info to extract the (possibly multiple) outputs
-        out_layers_ids = sorted(list(set(si[0] for si in fold_out_layers_idx)))
+        out_layers_ids = sorted(list(set(si[0] for si in out_fold_idx)))
         cum_folded_layer_ids_map = dict(
             zip(
                 out_layers_ids,
@@ -152,9 +152,9 @@ class AbstractTorchCircuit(nn.Module):
             )
         )
         out_fold_idx: List[int] = [
-            cum_folded_layer_ids_map[si[0]] + si[1] for si in fold_out_layers_idx
+            cum_folded_layer_ids_map[si[0]] + si[1] for si in out_fold_idx
         ]
-        if out_fold_idx == list(range(len(fold_out_layers_idx))):
+        if out_fold_idx == list(range(len(out_fold_idx))):
             out_fold_idx_t = None
         else:
             out_fold_idx_t = torch.tensor([out_fold_idx])

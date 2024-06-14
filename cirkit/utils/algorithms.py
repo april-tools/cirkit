@@ -7,7 +7,7 @@ NodeType = TypeVar("NodeType")
 
 def graph_outgoings(
     nodes: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
-) -> Dict[NodeType, Sequence[NodeType]]:
+) -> Dict[NodeType, List[NodeType]]:
     outgoings: Dict[NodeType, List[NodeType]] = defaultdict(list)
     for n in nodes:
         incomings = incomings_fn(n)
