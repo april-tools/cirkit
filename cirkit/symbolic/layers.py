@@ -18,7 +18,7 @@ AbstractLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better 
 
 
 class LayerOperation(AbstractLayerOperator):
-    """Types of Symolic operations on layers."""
+    """Types of Symbolic operations on layers."""
 
     def _generate_next_value_(self, start: int, count: int, last_values: list) -> int:
         return -(
@@ -166,7 +166,7 @@ class LogPartitionLayer(InputLayer):
 
 
 class ProductLayer(Layer, ABC):
-    """The abstract base class for Symolic product layers."""
+    """The abstract base class for Symbolic product layers."""
 
     def __init__(self, scope: Scope, num_input_units: int, num_output_units: int, arity: int = 2):
         super().__init__(scope, num_input_units, num_output_units, arity)
@@ -181,7 +181,7 @@ class ProductLayer(Layer, ABC):
 
 
 class HadamardLayer(ProductLayer):
-    """The Symolic Hadamard product layer."""
+    """The Symbolic Hadamard product layer."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
         super().__init__(
@@ -194,7 +194,7 @@ class HadamardLayer(ProductLayer):
 
 
 class KroneckerLayer(ProductLayer):
-    """The Symolic Kronecker product layer."""
+    """The Symbolic Kronecker product layer."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
         super().__init__(
@@ -210,11 +210,11 @@ class KroneckerLayer(ProductLayer):
 
 
 class SumLayer(Layer, ABC):
-    """The abstract base class for Symolic sum layers."""
+    """The abstract base class for Symbolic sum layers."""
 
 
 class DenseLayer(SumLayer):
-    """The Symolic dense sum layer."""
+    """The Symbolic dense sum layer."""
 
     def __init__(
         self,
@@ -247,7 +247,7 @@ class DenseLayer(SumLayer):
 
 
 class MixingLayer(SumLayer):
-    """The Symolic mixing sum layer."""
+    """The Symbolic mixing sum layer."""
 
     def __init__(
         self,
