@@ -6,15 +6,15 @@ from typing import IO, Dict, List, Optional, Tuple, Union, cast
 from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
-from cirkit.backend.torch.graph.folding import fold_graph, FoldAddressBook
+from cirkit.backend.torch.graph.modules import build_folded_graph
 from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
+from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.parameter import (
     TorchParameter,
     TorchParameterNode,
     TorchParameterOp,
 )
-from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
     DEFAULT_PARAMETER_COMPILATION_RULES,
@@ -123,9 +123,7 @@ class TorchCompiler(AbstractCompiler):
         for p in parameter.topological_ordering():
             # Compile the parameter node and make the connections
             compiled_p = self._compile_parameter_node(p)
-            in_compiled_nodes = [
-                compiled_nodes_map[pi] for pi in parameter.node_inputs(p)
-            ]
+            in_compiled_nodes = [compiled_nodes_map[pi] for pi in parameter.node_inputs(p)]
             in_nodes[compiled_p] = in_compiled_nodes
             for pi in in_compiled_nodes:
                 out_nodes[pi].append(compiled_p)
@@ -185,14 +183,14 @@ class TorchCompiler(AbstractCompiler):
             layers=layers,
             in_layers=in_layers,
             out_layers=out_layers,
-            topologically_ordered=True
+            topologically_ordered=True,
         )
 
         # Apply optimizations
         cc = self._optimize_circuit(cc)
 
         # Initialize some stuff
-        cc.initialize_parameters()
+        cc.reset_parameters()
         cc.initialize_address_book()
 
         # Register the compiled circuit, as well as the compiled layer infos
@@ -235,7 +233,7 @@ def _einsumize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abs
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
     # Fold the layers in the given circuit, by following the layer-wise topological ordering
-    layers, in_layers, in_fold_idx, out_fold_idx = fold_graph(
+    layers, in_layers, fold_idx_info = build_folded_graph(
         cc.layerwise_topological_ordering(),
         outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
@@ -248,11 +246,6 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
     out_layers = graph_outgoings(layers, incomings_fn=in_layers.get)
 
     # Instantiate a folded circuit
-    address_book = FoldAddressBook(
-        in_fold_idx=in_fold_idx,
-        out_fold_idx=out_fold_idx,
-        stack_in_tensors=True
-    )
     return type(cc)(
         cc.scope,
         cc.num_channels,
@@ -260,7 +253,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         in_layers,
         out_layers,
         topologically_ordered=True,
-        address_book=address_book
+        fold_idx_info=fold_idx_info,
     )
 
 
@@ -321,28 +314,20 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
 
     # Fold the nodes in the merged parameter computational graphs,
     # by following the layer-wise topological ordering
-    nodes, in_nodes, in_fold_idx, out_fold_idx = fold_graph(
+    nodes, in_nodes, fold_idx_info = build_folded_graph(
         ordering,
         outputs=map(lambda pi: pi.output, parameters),
         incomings_fn=in_nodes.get,
         group_foldable_fn=_group_foldable_parameter_nodes,
-        fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler)
+        fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler),
     )
 
     # Retrieve the outputs of each parameter node
     out_nodes = graph_outgoings(nodes, incomings_fn=in_nodes.get)
 
     # Construct the folded parameter's computational graph
-    address_book = FoldAddressBook(
-        in_fold_idx=in_fold_idx,
-        out_fold_idx=out_fold_idx
-    )
     return TorchParameter(
-        nodes,
-        in_nodes,
-        out_nodes,
-        topologically_ordered=True,
-        address_book=address_book
+        nodes, in_nodes, out_nodes, topologically_ordered=True, fold_idx_info=fold_idx_info
     )
 
 
@@ -397,7 +382,9 @@ def _fold_parameter_nodes_group(
     return fold_node_cls(*group[0].in_shapes, num_folds=len(group), **group[0].config)
 
 
-def _group_foldable_parameter_nodes(nodes: List[TorchParameterNode]) -> List[List[TorchParameterNode]]:
+def _group_foldable_parameter_nodes(
+    nodes: List[TorchParameterNode],
+) -> List[List[TorchParameterNode]]:
     # A dictionary mapping a parameter configuration (see below),
     # which uniquely identifies a group of parameters that can be folded,
     # into a group of parameters.

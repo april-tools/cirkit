@@ -4,13 +4,17 @@ from contextvars import ContextVar, Token
 from types import TracebackType
 from typing import IO, Any, Iterable, Optional, Type, Union
 
-from cirkit.backend.base import SUPPORTED_BACKENDS, AbstractCompiler, LayerCompilationFunc, \
-    ParameterCompilationFunc
 import cirkit.symbolic.functional as SF
-from cirkit.symbolic.registry import OperatorRegistry
-from cirkit.symbolic.operators import LayerOperatorFunc
+from cirkit.backend.base import (
+    SUPPORTED_BACKENDS,
+    AbstractCompiler,
+    LayerCompilationFunc,
+    ParameterCompilationFunc,
+)
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import AbstractLayerOperator
+from cirkit.symbolic.operators import LayerOperatorFunc
+from cirkit.symbolic.registry import OperatorRegistry
 
 
 class PipelineContext(AbstractContextManager):
@@ -31,7 +35,7 @@ class PipelineContext(AbstractContextManager):
         self._token: Optional[Token[PipelineContext]] = None
 
     @classmethod
-    def from_default_backend(cls) -> 'PipelineContext':
+    def from_default_backend(cls) -> "PipelineContext":
         return PipelineContext(backend="torch", fold=True, einsum=True)
 
     def __getitem__(self, sc: Circuit) -> Any:
@@ -109,7 +113,9 @@ def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> Any:
     return ctx.compile(sc)
 
 
-def integrate(cc: Any, scope: Optional[Iterable[int]] = None, ctx: Optional[PipelineContext] = None) -> Any:
+def integrate(
+    cc: Any, scope: Optional[Iterable[int]] = None, ctx: Optional[PipelineContext] = None
+) -> Any:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.integrate(cc, scope=scope)

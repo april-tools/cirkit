@@ -1,11 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+import torch
 from torch import Tensor
 
-from cirkit.backend.torch.graph.modules import TorchRootedDiAcyclicGraph
+from cirkit.backend.torch.graph.modules import (
+    AddressBook,
+    FoldIndexInfo,
+    TorchRootedDiAcyclicGraph,
+    build_fold_index_info,
+)
 from cirkit.backend.torch.graph.nodes import TorchModule
-from cirkit.backend.torch.graph.books import AbstractAddressBook, AddressBook
 
 
 class TorchParameterNode(TorchModule, ABC):
@@ -67,6 +72,41 @@ class TorchParameterOp(TorchParameterNode, ABC):
         ...
 
 
+class ParameterAddressBook(AddressBook):
+    def lookup_module_inputs(
+        self, module_id: int, module_outputs: List[Tensor], *, in_network: Optional[Tensor] = None
+    ) -> Tuple[Tensor, ...]:
+        # Retrieve the input tensor given by other modules
+        entry = self._entries[module_id]
+        in_tensors = tuple(
+            tuple(module_outputs[mid] for mid in mids) for mids in entry.in_module_ids
+        )
+
+        # Catch the case there are no inputs coming from other modules
+        if not in_tensors:
+            return ()
+
+        # Catch the case there are some inputs coming from other modules
+        in_tensors = tuple(torch.cat(ts, dim=0) for ts in in_tensors)
+        in_tensors = tuple(
+            t[in_idx] if in_idx is not None else t
+            for t, in_idx in zip(in_tensors, entry.in_fold_idx)
+        )
+        return in_tensors
+
+    def lookup_output(self, module_outputs: List[Tensor]) -> Tensor:
+        outputs = self.lookup_module_inputs(-1, module_outputs=module_outputs)
+        output = torch.cat(outputs, dim=0)
+        (in_fold_idx,) = self._entries[-1].in_fold_idx
+        if in_fold_idx is not None:
+            output = output[in_fold_idx]
+        return output
+
+    @classmethod
+    def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
+        ...
+
+
 class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
     def __init__(
         self,
@@ -75,15 +115,10 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
         out_nodes: Dict[TorchParameterNode, List[TorchParameterNode]],
         *,
         topologically_ordered: bool = False,
-        address_book: Optional[AbstractAddressBook] = None,
+        fold_idx_info: Optional[FoldIndexInfo] = None,
     ) -> None:
-        if address_book is None:
-            address_book = AddressBook()
-        super().__init__(
-            nodes, in_nodes, out_nodes,
-            topologically_ordered=topologically_ordered,
-            address_book=address_book
-        )
+        super().__init__(nodes, in_nodes, out_nodes, topologically_ordered=topologically_ordered)
+        self._fold_idx_info = fold_idx_info
 
     @property
     def num_folds(self) -> int:
@@ -106,3 +141,6 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
     def forward(self) -> Tensor:
         y = self._eval_forward()  # (F, d1, d2, ..., dk)
         return y
+
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
+        return ParameterAddressBook.from_index_info(fold_idx_info)

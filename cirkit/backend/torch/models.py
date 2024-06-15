@@ -1,12 +1,47 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
-from cirkit.backend.torch.graph.books import AbstractAddressBook, AddressBook
+from cirkit.backend.torch.graph.modules import (
+    AddressBook,
+    FoldIndexInfo,
+    TorchDiAcyclicGraph,
+    build_fold_index_info,
+)
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.utils.scope import Scope
+
+
+class LayerAddressBook(AddressBook):
+    def lookup_module_inputs(
+        self, module_id: int, module_outputs: List[Tensor], *, in_network: Optional[Tensor] = None
+    ) -> Tuple[Tensor, ...]:
+        # Retrieve the input tensors given by other modules
+        entry = self._entries[module_id]
+        (in_module_ids,) = entry.in_module_ids
+        (in_fold_idx,) = entry.in_fold_idx
+        in_tensors = tuple(module_outputs[mid] for mid in in_module_ids)
+
+        # Catch the case there are no inputs coming from other modules
+        if not in_tensors:
+            assert in_fold_idx is not None
+            assert in_network is not None
+            x = self._in_network_fn(in_network, in_fold_idx)
+            return (x,)
+
+        # Catch the case there are some inputs coming from other modules
+        x = torch.cat(in_tensors, dim=0)
+        x = x.unsqueeze(dim=0) if in_fold_idx is None else x[in_fold_idx]
+        return (x,)
+
+    def lookup_output(self, module_outputs: List[Tensor]) -> Tensor:
+        (output,) = self.lookup_module_inputs(-1, module_outputs=module_outputs)
+        return output
+
+    @classmethod
+    def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "LayerAddressBook":
+        ...
 
 
 class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
@@ -19,27 +54,20 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         out_layers: Dict[TorchLayer, List[TorchLayer]],
         *,
         topologically_ordered: bool = False,
-        address_book: Optional[AbstractAddressBook] = None
+        fold_idx_info: Optional[FoldIndexInfo] = None,
     ) -> None:
-        if address_book is None:
-            address_book = AddressBook(
-                in_address_fn=lambda l: list(l.scope),
-                stack_in_tensors=True
-            )
-        super().__init__(
-            layers, in_layers, out_layers,
-            topologically_ordered=topologically_ordered,
-            address_book=address_book
-        )
+        super().__init__(layers, in_layers, out_layers, topologically_ordered=topologically_ordered)
         self.scope = scope
         self.num_channels = num_channels
+        self._fold_idx_info = fold_idx_info
 
-    def initialize_parameters(self) -> None:
+    def reset_parameters(self) -> None:
         # For each layer, initialize its parameters, if any
         for l in self.layers:
             for _, p in l.params.items():
+                if not p.has_address_book:
+                    p.initialize_address_book()
                 p.initialize_()
-                p.initialize_address_book()
 
     def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
         return self.node_inputs(l)
@@ -59,17 +87,20 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
         return self.nodes_outputs
 
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
+        return LayerAddressBook.from_index_info(fold_idx_info)
+
     def _in_index(self, x: Tensor, idx: Tensor) -> Tensor:
         # Index and process the input tensor, before feeding it to the input layers
         # x: (B, C, D)
-        x = x[..., idx]            # (B, C, F, D)
+        x = x[..., idx]  # (B, C, F, D)
         x = x.permute(2, 1, 0, 3)  # (F, C, B, D)
         return x
 
     def _eval_layers(self, x: Tensor) -> Tensor:
         # Evaluate layers
-        y = self._eval_forward(x)         # (1, num_classes, B, K)
-        y = y.squeeze(dim=0)              # (num_classes, B, K)
+        y = self._eval_forward(x)  # (1, num_classes, B, K)
+        y = y.squeeze(dim=0)  # (num_classes, B, K)
         y = y.transpose(0, 1)  # (B, num_classes, K)
         return y
 
