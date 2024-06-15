@@ -6,7 +6,7 @@ from typing import IO, Dict, List, Optional, Tuple, Union, cast
 from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
-from cirkit.backend.torch.graph import fold_graph
+from cirkit.backend.torch.graph import fold_graph, FoldAddressBook
 from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.parameters.graph import (
@@ -247,13 +247,20 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         incomings_fn=cc.layer_inputs,
         group_foldable_fn=_group_foldable_layers,
         fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
-        in_fold_idx_fn=lambda g: [[(-1, sc) for sc in l.scope] for l in g]
+        in_address_fn=lambda l: l.scope,
     )
 
     # Retrieve the outputs of each layer
     out_layers = graph_outgoings(layers, incomings_fn=in_layers.get)
 
     # Instantiate a folded circuit
+    address_book = FoldAddressBook(
+        num_folds_fn=lambda l: l.num_folds,
+        in_process_fn=lambda t: t.permute(2, 1, 0, 3),
+        stack_in_tensors=True,
+        in_fold_idx=in_fold_idx,
+        out_fold_idx=out_fold_idx
+    )
     return type(cc)(
         cc.scope,
         cc.num_channels,
@@ -261,8 +268,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         in_layers,
         out_layers,
         topologically_ordered=True,
-        in_fold_idx=in_fold_idx,
-        out_fold_idx=out_fold_idx,
+        address_book=address_book
     )
 
 
@@ -335,13 +341,17 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
     out_nodes = graph_outgoings(nodes, incomings_fn=in_nodes.get)
 
     # Construct the folded parameter's computational graph
+    address_book = FoldAddressBook(
+        num_folds_fn=lambda p: p.num_folds,
+        in_fold_idx=in_fold_idx,
+        out_fold_idx=out_fold_idx
+    )
     return TorchParameter(
         nodes,
         in_nodes,
         out_nodes,
         topologically_ordered=True,
-        in_fold_idx=in_fold_idx,
-        out_fold_idx=out_fold_idx,
+        address_book=address_book
     )
 
 
