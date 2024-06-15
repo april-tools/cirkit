@@ -78,21 +78,22 @@ class ParameterAddressBook(AddressBook):
     ) -> Tuple[Tensor, ...]:
         # Retrieve the input tensor given by other modules
         entry = self._entries[module_id]
-        in_tensors = tuple(
-            tuple(module_outputs[mid] for mid in mids) for mids in entry.in_module_ids
-        )
+        in_module_ids = entry.in_module_ids
 
         # Catch the case there are no inputs coming from other modules
-        if not in_tensors:
+        if not in_module_ids:
             return ()
 
         # Catch the case there are some inputs coming from other modules
-        in_tensors = tuple(torch.cat(ts, dim=0) for ts in in_tensors)
         in_tensors = tuple(
+            torch.cat(tuple(module_outputs[mid] for mid in mids), dim=0)
+            for mids in entry.in_module_ids
+        )
+        x = tuple(
             t[in_idx] if in_idx is not None else t
             for t, in_idx in zip(in_tensors, entry.in_fold_idx)
         )
-        return in_tensors
+        return x
 
     def lookup_output(self, module_outputs: List[Tensor]) -> Tensor:
         outputs = self.lookup_module_inputs(-1, module_outputs=module_outputs)

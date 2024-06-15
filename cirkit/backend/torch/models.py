@@ -21,16 +21,16 @@ class LayerAddressBook(AddressBook):
         entry = self._entries[module_id]
         (in_module_ids,) = entry.in_module_ids
         (in_fold_idx,) = entry.in_fold_idx
-        in_tensors = tuple(module_outputs[mid] for mid in in_module_ids)
 
         # Catch the case there are no inputs coming from other modules
-        if not in_tensors:
+        if not in_module_ids:
             assert in_fold_idx is not None
             assert in_network is not None
             x = self._in_network_fn(in_network, in_fold_idx)
             return (x,)
 
         # Catch the case there are some inputs coming from other modules
+        in_tensors = tuple(module_outputs[mid] for mid in in_module_ids)
         x = torch.cat(in_tensors, dim=0)
         x = x.unsqueeze(dim=0) if in_fold_idx is None else x[in_fold_idx]
         return (x,)
