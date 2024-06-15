@@ -1,15 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import numpy as np
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.graph.modules import (
+from cirkit.backend.torch.graph.folding import (
     AddressBook,
+    AddressBookEntry,
     FoldIndexInfo,
-    TorchRootedDiAcyclicGraph,
+    build_address_book_entry,
+    build_address_book_stacked_entry,
     build_fold_index_info,
 )
+from cirkit.backend.torch.graph.modules import TorchRootedDiAcyclicGraph
 from cirkit.backend.torch.graph.nodes import TorchModule
 
 
@@ -74,7 +78,7 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
 class ParameterAddressBook(AddressBook):
     def lookup_module_inputs(
-        self, module_id: int, module_outputs: List[Tensor], *, in_network: Optional[Tensor] = None
+        self, module_id: int, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Tuple[Tensor, ...]:
         # Retrieve the input tensor given by other modules
         entry = self._entries[module_id]
@@ -104,23 +108,38 @@ class ParameterAddressBook(AddressBook):
         return output
 
     @classmethod
-    def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
-        ...
+    def from_index_info(
+        cls, ordering: Iterable[TorchParameterNode], fold_idx_info: FoldIndexInfo
+    ) -> "ParameterAddressBook":
+        # The address book entries being built
+        entries: List[AddressBookEntry] = []
+
+        # A useful dictionary mapping module ids to their number of folds
+        num_folds: Dict[int, int] = {}
+
+        # Build the bookkeeping data structure by following the topological ordering
+        for mid, m in enumerate(ordering):
+            # Retrieve the index information of the input modules
+            in_modules_fold_idx = fold_idx_info.in_fold_idx[mid]
+
+            # Catch the case of a folded module having the input of the network as input
+            if in_modules_fold_idx:
+                entry = build_address_book_entry(in_modules_fold_idx, num_folds=num_folds)
+            # Catch the case of a folded module without inputs
+            else:
+                entry = AddressBookEntry([], [])
+
+            num_folds[mid] = m.num_folds
+            entries.append(entry)
+
+        # Append the last bookkeeping entry with the information to compute the output tensor
+        entry = build_address_book_stacked_entry([fold_idx_info.out_fold_idx], num_folds=num_folds)
+        entries.append(entry)
+
+        return ParameterAddressBook(entries)
 
 
 class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
-    def __init__(
-        self,
-        nodes: List[TorchParameterNode],
-        in_nodes: Dict[TorchParameterNode, List[TorchParameterNode]],
-        out_nodes: Dict[TorchParameterNode, List[TorchParameterNode]],
-        *,
-        topologically_ordered: bool = False,
-        fold_idx_info: Optional[FoldIndexInfo] = None,
-    ) -> None:
-        super().__init__(nodes, in_nodes, out_nodes, topologically_ordered=topologically_ordered)
-        self._fold_idx_info = fold_idx_info
-
     @property
     def num_folds(self) -> int:
         return self.output.num_folds
@@ -143,5 +162,14 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
         y = self._eval_forward()  # (F, d1, d2, ..., dk)
         return y
 
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
-        return ParameterAddressBook.from_index_info(fold_idx_info)
+    def _build_address_book(self) -> AddressBook:
+        fold_idx_info = self._fold_idx_info
+        if fold_idx_info is None:
+            fold_idx_info = build_fold_index_info(
+                self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
+            )
+        address_book = ParameterAddressBook.from_index_info(
+            self.topological_ordering(), fold_idx_info
+        )
+        self._fold_idx_info = None
+        return address_book

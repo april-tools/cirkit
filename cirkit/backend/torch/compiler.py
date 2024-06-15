@@ -6,7 +6,7 @@ from typing import IO, Dict, List, Optional, Tuple, Union, cast
 from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
-from cirkit.backend.torch.graph.modules import build_folded_graph
+from cirkit.backend.torch.graph.folding import build_folded_graph
 from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
@@ -233,7 +233,7 @@ def _einsumize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abs
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
     # Fold the layers in the given circuit, by following the layer-wise topological ordering
-    layers, in_layers, fold_idx_info = build_folded_graph(
+    layers, in_layers, out_layers, fold_idx_info = build_folded_graph(
         cc.layerwise_topological_ordering(),
         outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
@@ -241,9 +241,6 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
         in_address_fn=lambda l: l.scope,
     )
-
-    # Retrieve the outputs of each layer
-    out_layers = graph_outgoings(layers, incomings_fn=in_layers.get)
 
     # Instantiate a folded circuit
     return type(cc)(
@@ -314,16 +311,13 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
 
     # Fold the nodes in the merged parameter computational graphs,
     # by following the layer-wise topological ordering
-    nodes, in_nodes, fold_idx_info = build_folded_graph(
+    nodes, in_nodes, out_nodes, fold_idx_info = build_folded_graph(
         ordering,
         outputs=map(lambda pi: pi.output, parameters),
         incomings_fn=in_nodes.get,
         group_foldable_fn=_group_foldable_parameter_nodes,
         fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler),
     )
-
-    # Retrieve the outputs of each parameter node
-    out_nodes = graph_outgoings(nodes, incomings_fn=in_nodes.get)
 
     # Construct the folded parameter's computational graph
     return TorchParameter(
