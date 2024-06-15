@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 from cirkit.backend.torch.layers.inner import TorchDenseLayer, TorchHadamardLayer, TorchInnerLayer
-from cirkit.backend.torch.parameters.graph import TorchParameter
+from cirkit.backend.torch.parameters.parameter import TorchParameter
 
 
 class TorchCPLayer(TorchInnerLayer):

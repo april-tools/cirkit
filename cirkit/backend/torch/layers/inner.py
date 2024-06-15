@@ -6,7 +6,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.layers.base import TorchLayer
-from cirkit.backend.torch.parameters.graph import TorchParameter
+from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
 from cirkit.backend.torch.utils import InitializerFunc
 

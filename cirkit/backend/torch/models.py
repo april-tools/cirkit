@@ -1,15 +1,15 @@
-from typing import Dict, List, Optional, Tuple, Iterator
+from typing import Dict, List, Optional
 
-import numpy as np
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 
-from cirkit.backend.torch.graph import TorchDiAcyclicGraph, AddressBook, AbstractAddressBook
-from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
+from cirkit.backend.torch.graph.books import AbstractAddressBook, AddressBook
+from cirkit.backend.torch.layers import TorchLayer
 from cirkit.utils.scope import Scope
 
 
-class AbstractTorchCircuit(nn.Module):
+class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def __init__(
         self,
         scope: Scope,
@@ -21,62 +21,46 @@ class AbstractTorchCircuit(nn.Module):
         topologically_ordered: bool = False,
         address_book: Optional[AbstractAddressBook] = None
     ) -> None:
-        super().__init__()
         if address_book is None:
             address_book = AddressBook(
                 in_address_fn=lambda l: list(l.scope),
-                in_process_fn=lambda x: x.permute(2, 1, 0, 3),
                 stack_in_tensors=True
             )
-        self._graph = TorchDiAcyclicGraph[TorchLayer](
+        super().__init__(
             layers, in_layers, out_layers,
             topologically_ordered=topologically_ordered,
-            address_book=address_book,
+            address_book=address_book
         )
         self.scope = scope
         self.num_channels = num_channels
 
-    def _eval_forward(self, x: Tensor) -> Tensor:
-        y = self._graph.eval_forward(x)  # (1, num_classes, B, K)
-        y = y.squeeze(dim=0)             # (num_classes, B, K)
+    def _in_index(self, x: Tensor, idx: Tensor) -> Tensor:
+        x = super()._in_index(x, idx)
+        return x.permute(2, 1, 0, 3)
+
+    def _eval_layers(self, x: Tensor) -> Tensor:
+        y = super()._eval_forward(x)      # (1, num_classes, B, K)
+        y = y.squeeze(dim=0)              # (num_classes, B, K)
         y = y.transpose(0, 1)  # (B, num_classes, K)
         return y
 
-    @property
-    def is_topologically_ordered(self) -> bool:
-        return self._graph.is_topologically_ordered
-
     def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
-        return self._graph.node_inputs(l)
+        return self.node_inputs(l)
 
-    def node_outputs(self, l: TorchLayer) -> List[TorchLayer]:
-        return self._graph.node_outputs(l)
+    def layer_outputs(self, l: TorchLayer) -> List[TorchLayer]:
+        return self.node_outputs(l)
 
     @property
     def layers(self) -> List[TorchLayer]:
-        return self._graph.nodes
+        return self.nodes
 
     @property
     def layers_inputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
-        return self._graph.nodes_inputs
+        return self.nodes_inputs
 
     @property
     def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
-        return self._graph.nodes_outputs
-
-    @property
-    def inputs(self) -> Iterator[TorchInputLayer]:
-        return (l for l in self._graph.inputs if isinstance(l, TorchInputLayer))
-
-    @property
-    def outputs(self) -> Iterator[TorchLayer]:
-        return self._graph.outputs
-
-    def topological_ordering(self) -> Iterator[TorchLayer]:
-        return self._graph.topological_ordering()
-
-    def layerwise_topological_ordering(self) -> Iterator[List[TorchLayer]]:
-        return self._graph.layerwise_topological_ordering()
+        return self.nodes_outputs
 
 
 class TorchCircuit(AbstractTorchCircuit):
@@ -98,7 +82,7 @@ class TorchCircuit(AbstractTorchCircuit):
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     def forward(self, x: Tensor) -> Tensor:
-        return self._eval_forward(x)
+        return self._eval_layers(x)
 
 
 class TorchConstantCircuit(AbstractTorchCircuit):
@@ -118,5 +102,5 @@ class TorchConstantCircuit(AbstractTorchCircuit):
 
     def forward(self) -> Tensor:
         x = torch.empty(size=(1, self.num_channels, len(self.scope)))
-        x = self._eval_forward(x)
+        x = self._eval_layers(x)
         return x.squeeze(dim=0)  # squeeze dummy batch dimension

@@ -5,7 +5,7 @@ from typing import Any, Dict, Tuple
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.parameters.graph import TorchParameterOp
+from cirkit.backend.torch.parameters.parameter import TorchParameterOp
 
 
 class TorchUnaryOpParameter(TorchParameterOp, ABC):

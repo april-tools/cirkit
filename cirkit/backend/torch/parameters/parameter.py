@@ -1,18 +1,19 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple, Optional
 
-from torch import Tensor, nn
+from torch import Tensor
 
-from cirkit.backend.torch.graph import TorchRootedDiAcyclicGraph, AddressBook, AbstractAddressBook
+from cirkit.backend.torch.graph.modules import TorchRootedDiAcyclicGraph
+from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.graph.books import AbstractAddressBook, AddressBook
 
 
-class TorchParameterNode(nn.Module, ABC):
+class TorchParameterNode(TorchModule, ABC):
     """The abstract base class for all reparameterizations."""
 
     def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
         """Init class."""
-        super().__init__()
-        self.num_folds = num_folds
+        super().__init__(num_folds=num_folds)
 
     @property
     @abstractmethod
@@ -103,5 +104,5 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
-        y = self.eval_forward()  # (F, d1, d2, ..., dk)
+        y = self._eval_forward()  # (F, d1, d2, ..., dk)
         return y

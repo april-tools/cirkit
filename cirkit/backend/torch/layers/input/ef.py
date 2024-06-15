@@ -7,7 +7,7 @@ from torch import Tensor, distributions, nn
 from torch.nn import functional as F
 
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
-from cirkit.backend.torch.parameters.graph import TorchParameter
+from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
 from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.utils.scope import Scope

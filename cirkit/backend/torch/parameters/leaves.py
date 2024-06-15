@@ -3,7 +3,7 @@ from typing import Optional, Callable, Tuple, Dict, Any, final, Union, List
 import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.parameters.graph import TorchParameterLeaf
+from cirkit.backend.torch.parameters.parameter import TorchParameterLeaf
 
 
 class TorchTensorParameter(TorchParameterLeaf):
