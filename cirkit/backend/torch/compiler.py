@@ -191,8 +191,9 @@ class TorchCompiler(AbstractCompiler):
         # Apply optimizations
         cc = self._optimize_circuit(cc)
 
-        # Initialize the circuit parameters
-        _initialize_circuit_parameters(self, cc)
+        # Initialize some stuff
+        cc.initialize_parameters()
+        cc.initialize_address_book()
 
         # Register the compiled circuit, as well as the compiled layer infos
         self.register_compiled_circuit(sc, cc)
@@ -228,13 +229,6 @@ class TorchCompiler(AbstractCompiler):
         ...
 
 
-def _initialize_circuit_parameters(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> None:
-    # For each layer, initialize its parameters, if any
-    for l in cc.layers:
-        for _, p in l.params.items():
-            p.initialize_()
-
-
 def _einsumize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
     ...
 
@@ -255,9 +249,9 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
 
     # Instantiate a folded circuit
     address_book = FoldAddressBook(
-        stack_in_tensors=True,
         in_fold_idx=in_fold_idx,
-        out_fold_idx=out_fold_idx
+        out_fold_idx=out_fold_idx,
+        stack_in_tensors=True
     )
     return type(cc)(
         cc.scope,

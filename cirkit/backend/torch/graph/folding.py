@@ -20,14 +20,14 @@ class FoldAddressBook(AbstractAddressBook[FoldAddressBookEntry]):
     def __init__(
         self,
         *,
-        stack_in_tensors: bool = False,
         in_fold_idx: Dict[TorchModule, List[List[Tuple[int, int]]]],
-        out_fold_idx: List[Tuple[int, int]]
+        out_fold_idx: List[Tuple[int, int]],
+        stack_in_tensors: bool = False,
     ):
         super().__init__()
-        self._stack_in_tensors = stack_in_tensors
         self._in_fold_idx = in_fold_idx
         self._out_fold_idx = out_fold_idx
+        self._stack_in_tensors = stack_in_tensors
 
     def build(
         self,

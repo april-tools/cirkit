@@ -34,15 +34,12 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self.scope = scope
         self.num_channels = num_channels
 
-    def _in_index(self, x: Tensor, idx: Tensor) -> Tensor:
-        x = super()._in_index(x, idx)
-        return x.permute(2, 1, 0, 3)
-
-    def _eval_layers(self, x: Tensor) -> Tensor:
-        y = super()._eval_forward(x)      # (1, num_classes, B, K)
-        y = y.squeeze(dim=0)              # (num_classes, B, K)
-        y = y.transpose(0, 1)  # (B, num_classes, K)
-        return y
+    def initialize_parameters(self) -> None:
+        # For each layer, initialize its parameters, if any
+        for l in self.layers:
+            for _, p in l.params.items():
+                p.initialize_()
+                p.initialize_address_book()
 
     def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
         return self.node_inputs(l)
@@ -61,6 +58,20 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     @property
     def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
         return self.nodes_outputs
+
+    def _in_index(self, x: Tensor, idx: Tensor) -> Tensor:
+        # Index and process the input tensor, before feeding it to the input layers
+        # x: (B, C, D)
+        x = x[..., idx]            # (B, C, F, D)
+        x = x.permute(2, 1, 0, 3)  # (F, C, B, D)
+        return x
+
+    def _eval_layers(self, x: Tensor) -> Tensor:
+        # Evaluate layers
+        y = self._eval_forward(x)         # (1, num_classes, B, K)
+        y = y.squeeze(dim=0)              # (num_classes, B, K)
+        y = y.transpose(0, 1)  # (B, num_classes, K)
+        return y
 
 
 class TorchCircuit(AbstractTorchCircuit):

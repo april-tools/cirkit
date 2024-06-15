@@ -26,6 +26,10 @@ class TorchDiAcyclicGraph(nn.Module, ABC, DiAcyclicGraph[TorchModuleType]):
         super().__init__()
         super(ABC, self).__init__(modules, in_modules, out_modules, topologically_ordered=topologically_ordered)
         self._address_book = address_book
+
+    def initialize_address_book(self) -> None:
+        if self._address_book.is_built:
+            raise ValueError("The address book has already been built")
         self._address_book.build(
             self.topological_ordering(),
             outputs=self.outputs,
@@ -33,7 +37,7 @@ class TorchDiAcyclicGraph(nn.Module, ABC, DiAcyclicGraph[TorchModuleType]):
         )
 
     def _in_index(self, x: Tensor, idx: Tensor) -> Tensor:
-        return x[..., idx]
+        raise NotImplementedError()
 
     def _eval_forward(self, x: Optional[Tensor] = None) -> Tensor:
         # Evaluate the computational graph by following the topological ordering,
