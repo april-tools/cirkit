@@ -80,6 +80,7 @@ class ParameterAddressBook(AddressBook):
     def lookup(
         self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Iterator[Tuple[Tensor, ...]]:
+        # A useful function combining the modules outputs, and then possibly applying an index
         def select_index(mids: List[int], idx: Optional[Tensor]) -> Tensor:
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
@@ -89,6 +90,7 @@ class ParameterAddressBook(AddressBook):
                 return t[idx]
             return t
 
+        # Loop through the entries and yield inputs
         for entry in self._entries:
             in_module_ids = entry.in_module_ids
 
@@ -96,7 +98,7 @@ class ParameterAddressBook(AddressBook):
             if in_module_ids:
                 x = tuple(
                     select_index(mids, in_idx)
-                    for mids, in_idx in zip(entry.in_module_ids, entry.in_fold_idx)
+                    for mids, in_idx in zip(in_module_ids, entry.in_fold_idx)
                 )
                 yield x
                 continue
@@ -155,8 +157,7 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
-        y = self._eval_forward()  # (F, d1, d2, ..., dk)
-        return y
+        return self._eval_forward()  # (F, d1, d2, ..., dk)
 
     def _build_address_book(self) -> AddressBook:
         fold_idx_info = self._fold_idx_info

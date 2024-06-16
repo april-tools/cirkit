@@ -24,14 +24,8 @@ class AddressBookEntry:
 
 
 class AddressBook(ABC):
-    def __init__(
-        self,
-        entries: List[AddressBookEntry],
-        *,
-        in_graph_fn: Optional[Callable[[Tensor, Tensor], Tensor]] = None,
-    ) -> None:
+    def __init__(self, entries: List[AddressBookEntry]) -> None:
         self._entries = entries
-        self._in_graph_fn = in_graph_fn
 
     def __len__(self) -> int:
         return len(self._entries)

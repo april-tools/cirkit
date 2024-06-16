@@ -16,9 +16,16 @@ from cirkit.utils.scope import Scope
 
 
 class LayerAddressBook(AddressBook):
+    def __init__(
+        self, entries: List[AddressBookEntry], *, in_graph_fn: Callable[[Tensor, Tensor], Tensor]
+    ):
+        super().__init__(entries)
+        self._in_graph_fn = in_graph_fn
+
     def lookup(
         self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Iterator[Tuple[Tensor, ...]]:
+        # Loop through the entries and yield inputs
         for entry in self._entries:
             (in_fold_idx,) = entry.in_fold_idx
 
@@ -34,8 +41,7 @@ class LayerAddressBook(AddressBook):
                 continue
 
             # Catch the case there are no inputs coming from other modules
-            assert in_fold_idx is not None
-            assert in_graph is not None and self._in_graph_fn is not None
+            assert in_graph is not None and in_fold_idx is not None
             x = self._in_graph_fn(in_graph, in_fold_idx)
             yield (x,)
 
@@ -147,16 +153,12 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def _index_input(self, x: Tensor, idx: Tensor) -> Tensor:
         # Index and process the input tensor, before feeding it to the input layers
         # x: (B, C, D)
-        x = x[..., idx]  # (B, C, F, D)
-        x = x.permute(2, 1, 0, 3)  # (F, C, B, D)
-        return x
+        return x[..., idx].permute(2, 1, 0, 3)  # (F, C, B, D)
 
     def _eval_layers(self, x: Tensor) -> Tensor:
         # Evaluate layers
         y = self._eval_forward(x)  # (1, num_classes, B, K)
-        y = y.squeeze(dim=0)  # (num_classes, B, K)
-        y = y.transpose(0, 1)  # (B, num_classes, K)
-        return y
+        return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
 
 
 class TorchCircuit(AbstractTorchCircuit):
