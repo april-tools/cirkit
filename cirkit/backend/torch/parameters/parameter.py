@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
-import numpy as np
 import torch
 from torch import Tensor
 
