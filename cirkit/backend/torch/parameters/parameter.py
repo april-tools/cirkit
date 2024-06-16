@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -77,35 +77,28 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
 
 class ParameterAddressBook(AddressBook):
-    def lookup_module_inputs(
-        self, module_id: int, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
-    ) -> Tuple[Tensor, ...]:
+    def lookup(
+        self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
+    ) -> Iterator[Tuple[Tensor, ...]]:
         # Retrieve the input tensor given by other modules
-        entry = self._entries[module_id]
-        in_module_ids = entry.in_module_ids
+        for i, entry in enumerate(self._entries):
+            in_module_ids = entry.in_module_ids
 
-        # Catch the case there are no inputs coming from other modules
-        if not in_module_ids:
-            return ()
+            # Catch the case there are no inputs coming from other modules
+            if not in_module_ids:
+                yield ()
+                continue
 
-        # Catch the case there are some inputs coming from other modules
-        in_tensors = tuple(
-            torch.cat(tuple(module_outputs[mid] for mid in mids), dim=0)
-            for mids in entry.in_module_ids
-        )
-        x = tuple(
-            t[in_idx] if in_idx is not None else t
-            for t, in_idx in zip(in_tensors, entry.in_fold_idx)
-        )
-        return x
-
-    def lookup_output(self, module_outputs: List[Tensor]) -> Tensor:
-        outputs = self.lookup_module_inputs(-1, module_outputs=module_outputs)
-        output = torch.cat(outputs, dim=0)
-        (in_fold_idx,) = self._entries[-1].in_fold_idx
-        if in_fold_idx is not None:
-            output = output[in_fold_idx]
-        return output
+            # Catch the case there are some inputs coming from other modules
+            in_tensors = tuple(
+                torch.cat(tuple(module_outputs[mid] for mid in mids), dim=0)
+                for mids in entry.in_module_ids
+            )
+            x = tuple(
+                t[in_idx] if in_idx is not None else t
+                for t, in_idx in zip(in_tensors, entry.in_fold_idx)
+            )
+            yield x
 
     @classmethod
     def from_index_info(

@@ -3,7 +3,7 @@ import itertools
 from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, TypeVar
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar
 
 import torch
 from torch import Tensor
@@ -40,13 +40,9 @@ class AddressBook(ABC):
         return len(self._entries)
 
     @abc.abstractmethod
-    def lookup_module_inputs(
-        self, module_id: int, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
-    ) -> Tuple[Tensor, ...]:
-        ...
-
-    @abc.abstractmethod
-    def lookup_output(self, module_outputs: List[Tensor]) -> Tensor:
+    def lookup(
+        self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
+    ) -> Iterator[Tuple[Tensor, ...]]:
         ...
 
 
@@ -105,7 +101,12 @@ def build_folded_graph(
     group_foldable_fn: Callable[[List[TorchModuleType]], List[List[TorchModuleType]]],
     fold_group_fn: Callable[[List[TorchModuleType]], TorchModuleType],
     in_address_fn: Optional[Callable[[TorchModuleType], List[int]]] = None,
-) -> Tuple[List[TorchModuleType], Dict[TorchModuleType, List[TorchModuleType]], Dict[TorchModuleType, List[TorchModuleType]], FoldIndexInfo]:
+) -> Tuple[
+    List[TorchModuleType],
+    Dict[TorchModuleType, List[TorchModuleType]],
+    Dict[TorchModuleType, List[TorchModuleType]],
+    FoldIndexInfo,
+]:
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
     # (ii) a 'slice_idx' (a natural number) within the output of the folded module,

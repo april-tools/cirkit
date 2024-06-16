@@ -45,13 +45,15 @@ class TorchDiAcyclicGraph(nn.Module, ABC, DiAcyclicGraph[TorchModuleType]):
         # and by using the book address information to retrieve the inputs to each
         # (possibly folded) torch module.
         module_outputs: List[Tensor] = []
-        for i, module in enumerate(self.topological_ordering()):
-            inputs = self._address_book.lookup_module_inputs(i, module_outputs, in_graph=x)
+        lookup_iterator = self._address_book.lookup(module_outputs, in_graph=x)
+        for module in self.topological_ordering():
+            inputs = next(lookup_iterator)
             y = module(*inputs)
             module_outputs.append(y)
 
-        # Retrieve the output from the book address
-        return self._address_book.lookup_output(module_outputs)
+        # Retrieve the output tensor from the address book
+        (output,) = next(lookup_iterator)
+        return output
 
 
 class TorchRootedDiAcyclicGraph(TorchDiAcyclicGraph[TorchModuleType]):
