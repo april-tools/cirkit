@@ -1,4 +1,5 @@
 import abc
+import itertools
 from abc import ABC
 from functools import cached_property
 from typing import Dict, List, Optional
@@ -10,7 +11,7 @@ from cirkit.backend.torch.graph.nodes import TorchModuleType
 from cirkit.utils.algorithms import DiAcyclicGraph
 
 
-class TorchDiAcyclicGraph(nn.Module, ABC, DiAcyclicGraph[TorchModuleType]):
+class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
     def __init__(
         self,
         modules: List[TorchModuleType],
@@ -22,7 +23,7 @@ class TorchDiAcyclicGraph(nn.Module, ABC, DiAcyclicGraph[TorchModuleType]):
     ):
         modules: List = nn.ModuleList(modules)  # type: ignore
         super().__init__()
-        super(ABC, self).__init__(
+        super(nn.Module, self).__init__(
             modules, in_modules, out_modules, topologically_ordered=topologically_ordered
         )
         self._address_book: Optional[AddressBook] = None
@@ -46,21 +47,20 @@ class TorchDiAcyclicGraph(nn.Module, ABC, DiAcyclicGraph[TorchModuleType]):
         # and by using the book address information to retrieve the inputs to each
         # (possibly folded) torch module.
         module_outputs: List[Tensor] = []
-        lookup_iterator = self._address_book.lookup(module_outputs, in_graph=x)
-        for module in self.topological_ordering():
-            inputs = next(lookup_iterator)
+        inputs_iterator = self._address_book.lookup(module_outputs, in_graph=x)
+        for module, inputs in itertools.zip_longest(self.topological_ordering(), inputs_iterator):
+            if module is None:
+                (output,) = inputs
+                return output
             y = module(*inputs)
             module_outputs.append(y)
 
-        # Retrieve the output tensor from the address book
-        (output,) = next(lookup_iterator)
-        return output
 
-
-class TorchRootedDiAcyclicGraph(TorchDiAcyclicGraph[TorchModuleType]):
+class TorchRootedDiAcyclicGraph(TorchDiAcyclicGraph[TorchModuleType], ABC):
     @cached_property
     def output(self) -> TorchModuleType:
         outputs = list(self.outputs)
-        if len(outputs) > 1:
+        if len(outputs) != 1:
             raise ValueError("The graph has more than one output node.")
-        return outputs[0]
+        (output,) = outputs
+        return output

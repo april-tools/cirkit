@@ -33,14 +33,15 @@ class TorchParameterNode(TorchModule, ABC):
         """Configuration flags for the parameter."""
         return {}
 
+    @torch.no_grad()
+    def reset_parameters(self) -> None:
+        ...
+
 
 class TorchParameterLeaf(TorchParameterNode, ABC):
     @property
     def is_initialized(self) -> bool:
         return True
-
-    def initialize_(self) -> None:
-        pass
 
     def __call__(self) -> Tensor:
         """Get the reparameterized parameters.
@@ -79,25 +80,29 @@ class ParameterAddressBook(AddressBook):
     def lookup(
         self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Iterator[Tuple[Tensor, ...]]:
-        # Retrieve the input tensor given by other modules
-        for i, entry in enumerate(self._entries):
+        def select_index(mids: List[int], idx: Optional[Tensor]) -> Tensor:
+            if len(mids) == 1:
+                t = module_outputs[mids[0]]
+                return t if idx is None else t[idx]
+            t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
+            if idx is None:
+                return t[idx]
+            return t
+
+        for entry in self._entries:
             in_module_ids = entry.in_module_ids
 
-            # Catch the case there are no inputs coming from other modules
-            if not in_module_ids:
-                yield ()
+            # Catch the case there are some inputs coming from other modules
+            if in_module_ids:
+                x = tuple(
+                    select_index(mids, in_idx)
+                    for mids, in_idx in zip(entry.in_module_ids, entry.in_fold_idx)
+                )
+                yield x
                 continue
 
-            # Catch the case there are some inputs coming from other modules
-            in_tensors = tuple(
-                torch.cat(tuple(module_outputs[mid] for mid in mids), dim=0)
-                for mids in entry.in_module_ids
-            )
-            x = tuple(
-                t[in_idx] if in_idx is not None else t
-                for t, in_idx in zip(in_tensors, entry.in_fold_idx)
-            )
-            yield x
+            # Catch the case there are no inputs coming from other modules
+            yield ()
 
     @classmethod
     def from_index_info(
@@ -140,11 +145,10 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
     def shape(self) -> Tuple[int, ...]:
         return self.output.shape
 
-    def initialize_(self) -> None:
+    def reset_parameters(self) -> None:
         """Reset the input parameters."""
-        # TODO: assuming parameter operators do not have any learnable parameters
-        for p in self.inputs:
-            p.initialize_()
+        for p in self.nodes:
+            p.reset_parameters()
 
     def __call__(self) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.

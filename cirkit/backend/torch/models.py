@@ -19,23 +19,24 @@ class LayerAddressBook(AddressBook):
     def lookup(
         self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Iterator[Tuple[Tensor, ...]]:
-        # Retrieve the input tensors given by other modules
         for entry in self._entries:
             (in_fold_idx,) = entry.in_fold_idx
 
-            # Catch the case there are no inputs coming from other modules
-            if not entry.in_module_ids:
-                assert in_fold_idx is not None
-                assert in_graph is not None and self._in_graph_fn is not None
-                x = self._in_graph_fn(in_graph, in_fold_idx)
+            # Catch the case there are some inputs coming from other modules
+            if entry.in_module_ids:
+                (in_module_ids,) = entry.in_module_ids
+                if len(in_module_ids) == 1:
+                    x = module_outputs[in_module_ids[0]]
+                else:
+                    x = torch.cat([module_outputs[mid] for mid in in_module_ids], dim=0)
+                x = x[in_fold_idx]
                 yield (x,)
                 continue
 
-            # Catch the case there are some inputs coming from other modules
-            (in_module_ids,) = entry.in_module_ids
-            in_tensors = tuple(module_outputs[mid] for mid in in_module_ids)
-            x = torch.cat(in_tensors, dim=0)
-            x = x[in_fold_idx]
+            # Catch the case there are no inputs coming from other modules
+            assert in_fold_idx is not None
+            assert in_graph is not None and self._in_graph_fn is not None
+            x = self._in_graph_fn(in_graph, in_fold_idx)
             yield (x,)
 
     @classmethod
@@ -58,14 +59,14 @@ class LayerAddressBook(AddressBook):
             # Retrieve the index information of the input modules
             in_modules_fold_idx = fold_idx_info.in_fold_idx[mid]
 
+            # Catch the case of a folded module having the output of another module as input
+            if incomings_fn(m):
+                entry = build_address_book_stacked_entry(in_modules_fold_idx, num_folds=num_folds)
             # Catch the case of a folded module having the input of the network as input
-            if len(incomings_fn(m)) == 0:
+            else:
                 input_idx = [[idx[1] for idx in fi] for fi in in_modules_fold_idx]
                 input_idx_t = torch.tensor(input_idx)
                 entry = AddressBookEntry([], [input_idx_t])
-            # Catch the case of a folded module having the output of another module as input
-            else:
-                entry = build_address_book_stacked_entry(in_modules_fold_idx, num_folds=num_folds)
 
             num_folds[mid] = m.num_folds
             entries.append(entry)
@@ -105,7 +106,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             for _, p in l.params.items():
                 if not p.has_address_book:
                     p.initialize_address_book()
-                p.initialize_()
+                p.reset_parameters()
 
     def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
         return self.node_inputs(l)

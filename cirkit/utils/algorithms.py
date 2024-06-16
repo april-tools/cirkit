@@ -153,7 +153,8 @@ class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
         outputs = list(self.outputs)
         if len(outputs) != 1:
             raise ValueError("The graph should have exactly one output node.")
-        return outputs[0]
+        (output,) = outputs
+        return output
 
 
 class BiRootedDiAcyclicGraph(RootedDiAcyclicGraph[NodeType]):
@@ -162,7 +163,8 @@ class BiRootedDiAcyclicGraph(RootedDiAcyclicGraph[NodeType]):
         inputs = list(self.inputs)
         if len(inputs) != 1:
             raise ValueError("The graph should have exactly one input node.")
-        return inputs[0]
+        (input,) = inputs
+        return input
 
 
 BimapLeftType = TypeVar("BimapLeftType")

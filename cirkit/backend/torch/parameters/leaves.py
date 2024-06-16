@@ -58,7 +58,7 @@ class TorchTensorParameter(TorchParameterLeaf):
         return self._ptensor is not None
 
     @torch.no_grad()
-    def initialize_(self) -> None:
+    def reset_parameters(self) -> None:
         """Initialize the internal parameter tensor with the given initializer."""
         if self._ptensor is None:
             shape = (self.num_folds, *self._shape)
@@ -82,14 +82,22 @@ class TorchPointerParameter(TorchParameterLeaf):
     ) -> None:
         if fold_idx is None:
             num_folds = parameter.num_folds
-        else:
-            if isinstance(fold_idx, int):
-                assert 0 <= fold_idx < parameter.num_folds
-                fold_idx = [fold_idx]
+        elif isinstance(fold_idx, int):
+            assert 0 <= fold_idx < parameter.num_folds
+            if fold_idx == 0 and parameter.num_folds == 1:
+                fold_idx = None
+                num_folds = parameter.num_folds
             else:
-                assert isinstance(fold_idx, list)
-                assert all(0 <= i < parameter.num_folds for i in fold_idx)
-            num_folds = len(fold_idx)
+                fold_idx = [fold_idx]
+                num_folds = 1
+        else:
+            assert isinstance(fold_idx, list)
+            assert all(0 <= i < parameter.num_folds for i in fold_idx)
+            if fold_idx == list(range(parameter.num_folds)):
+                fold_idx = None
+                num_folds = parameter.num_folds
+            else:
+                num_folds = len(fold_idx)
         assert not isinstance(parameter, TorchPointerParameter)
         super().__init__(num_folds=num_folds)
         self._parameter = parameter

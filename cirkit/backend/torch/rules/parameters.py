@@ -68,7 +68,6 @@ def compile_reference_parameter(
     # Obtain the other parameter's graph (and its fold index),
     # and wrap it in a pointer parameter node.
     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
-    fold_idx = None if fold_idx == 0 and compiled_p.num_folds == 1 else fold_idx
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
 
 

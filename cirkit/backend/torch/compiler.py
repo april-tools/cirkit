@@ -369,8 +369,7 @@ def _fold_parameter_nodes_group(
         assert all(len(p.fold_idx) == 1 for p in group)
         in_folded_node = group[0].deref()
         in_fold_idx: List[int] = [p.fold_idx[0] for p in group]
-        fold_idx = None if in_fold_idx == list(range(in_folded_node.num_folds)) else in_fold_idx
-        return TorchPointerParameter(in_folded_node, fold_idx=fold_idx)
+        return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)
     return fold_node_cls(*group[0].in_shapes, num_folds=len(group), **group[0].config)
