@@ -3,12 +3,12 @@ import itertools
 from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.graph.nodes import TorchModule, TorchModuleType
 
 
 @dataclass(frozen=True)
@@ -21,9 +21,6 @@ class FoldIndexInfo:
 class AddressBookEntry:
     in_module_ids: List[List[int]]
     in_fold_idx: List[Optional[Tensor]]
-
-
-TorchModuleType = TypeVar("TorchModuleType", bound=TorchModule)
 
 
 class AddressBook(ABC):

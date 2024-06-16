@@ -5,7 +5,8 @@ from typing import Dict, List, Optional
 
 from torch import Tensor, nn
 
-from cirkit.backend.torch.graph.folding import AddressBook, FoldIndexInfo, TorchModuleType
+from cirkit.backend.torch.graph.folding import AddressBook, FoldIndexInfo
+from cirkit.backend.torch.graph.nodes import TorchModuleType
 from cirkit.utils.algorithms import DiAcyclicGraph
 
 
