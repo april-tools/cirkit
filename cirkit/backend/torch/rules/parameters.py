@@ -100,21 +100,21 @@ def compile_outer_sum_parameter(
 
 
 def compile_exp_parameter(
-    compiler: "TorchCompiler", p: ExpParameter, init_func: Optional[InitializerFunc] = None
+    compiler: "TorchCompiler", p: ExpParameter
 ) -> TorchExpParameter:
     (in_shape,) = p.in_shapes
     return TorchExpParameter(in_shape)
 
 
 def compile_log_parameter(
-    compiler: "TorchCompiler", p: LogParameter, init_func: Optional[InitializerFunc] = None
+    compiler: "TorchCompiler", p: LogParameter
 ) -> TorchLogParameter:
     (in_shape,) = p.in_shapes
     return TorchLogParameter(in_shape)
 
 
 def compile_square_parameter(
-    compiler: "TorchCompiler", p: SquareParameter, init_func: Optional[InitializerFunc] = None
+    compiler: "TorchCompiler", p: SquareParameter
 ) -> TorchSquareParameter:
     (in_shape,) = p.in_shapes
     return TorchSquareParameter(in_shape)

@@ -137,7 +137,7 @@ class TorchCompiler(AbstractCompiler):
         return TorchParameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
 
     def compiler_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
-        # Retrieve the rule for the given intializer and compile it
+        # Retrieve the rule for the given initializer and compile it
         signature = type(initializer)
         rule = self.retrieve_initializer_rule(signature)
         return cast(Callable[[Tensor], Tensor], rule(self, initializer))
