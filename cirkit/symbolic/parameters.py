@@ -29,13 +29,11 @@ class ParameterLeaf(ParameterNode, ABC):
 
 
 class TensorParameter(ParameterLeaf):
-    def __init__(
-        self, *shape: int, learnable: bool = True, initializer: Optional[Initializer] = None
-    ):
+    def __init__(self, *shape: int, initializer: Initializer, learnable: bool = True):
         super().__init__()
         self._shape = tuple(shape)
-        self.learnable = learnable
         self.initializer = initializer
+        self.learnable = learnable
 
     def __copy__(self) -> "TensorParameter":
         cls = self.__class__
@@ -47,12 +45,12 @@ class TensorParameter(ParameterLeaf):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(learnable=self.learnable, initializer=self.initializer)
+        return dict(initializer=self.initializer, learnable=self.learnable)
 
 
 class ConstantParameter(TensorParameter):
     def __init__(self, *shape: int, value: Number = 0.0):
-        super().__init__(*shape, learnable=False, initializer=ConstantInitializer(value))
+        super().__init__(*shape, initializer=ConstantInitializer(value), learnable=False)
         self.value = value
 
     def __copy__(self) -> "ConstantParameter":

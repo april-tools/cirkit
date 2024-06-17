@@ -2,7 +2,7 @@ from abc import ABC
 from enum import IntEnum, auto
 from typing import Any, Dict, List, Optional, cast
 
-from cirkit.symbolic.initializers import Initializer
+from cirkit.symbolic.initializers import Initializer, NormalInitializer
 from cirkit.symbolic.parameters import Parameter, Parameterization, TensorParameter
 from cirkit.utils.scope import Scope
 
@@ -84,6 +84,8 @@ class CategoricalLayer(InputLayer):
         super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
         if logits is None:
+            if logits_initializer is None:
+                logits_initializer = NormalInitializer()
             logits = TensorParameter(
                 len(scope),
                 num_output_units,
@@ -187,6 +189,8 @@ class DenseLayer(SumLayer):
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1)
         if weight is None:
+            if initializer is None:
+                initializer = NormalInitializer()
             weight = TensorParameter(num_output_units, num_input_units, initializer=initializer)
             if parameterization is None:
                 weight = Parameter.from_leaf(weight)
@@ -223,6 +227,8 @@ class MixingLayer(SumLayer):
     ):
         super().__init__(scope, num_units, num_units, arity)
         if weight is None:
+            if initializer is None:
+                initializer = NormalInitializer()
             weight = TensorParameter(num_units, arity, initializer=initializer)
             if parameterization is None:
                 weight = Parameter.from_leaf(weight)

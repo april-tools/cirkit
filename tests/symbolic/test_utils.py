@@ -96,7 +96,7 @@ def build_simple_circuit(
         seed=seed,
     )
     if input_layer == "categorical":
-        input_layer = functools.partial(
+        input_factory = functools.partial(
             categorical_layer_factory,
             logits_parameterization=logits_parameterization,
             logits_initializer=logits_initializer,
@@ -107,7 +107,7 @@ def build_simple_circuit(
         rg,
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
-        input_factory=input_layer,
+        input_factory=input_factory,
         sum_factory=functools.partial(
             dense_layer_factory, parameterization=sum_parameterization, initializer=sum_initializer
         ),
@@ -128,13 +128,15 @@ def build_simple_pc(
     normalized: bool = False,
 ):
     if normalized:
-        sum_param = lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape, axis=1))
+        sum_parameterization = lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape, axis=1))
     else:
-        sum_param = lambda p: Parameter.from_unary(p, ExpParameter(p.shape))
+        sum_parameterization = lambda p: Parameter.from_unary(p, ExpParameter(p.shape))
     if normalized:
-        logits_param = lambda p: Parameter.from_unary(p, LogSoftmaxParameter(p.shape, axis=3))
+        logits_parameterization = lambda p: Parameter.from_unary(
+            p, LogSoftmaxParameter(p.shape, axis=3)
+        )
     else:
-        logits_param = None
+        logits_parameterization = None
     return build_simple_circuit(
         num_variables,
         num_input_units,
@@ -142,8 +144,8 @@ def build_simple_pc(
         num_repetitions=num_repetitions,
         seed=seed,
         input_layer=input_layer,
-        sum_parameterization=sum_param,
-        logits_parameterization=logits_param,
+        sum_parameterization=sum_parameterization,
+        logits_parameterization=logits_parameterization,
         sum_initializer=NormalInitializer(0.0, 3e-1),
         logits_initializer=NormalInitializer(0.0, 3e-1),
     )

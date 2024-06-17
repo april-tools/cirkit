@@ -38,7 +38,7 @@ def test_compile_output_shape(
     fold: bool, num_variables: int, num_input_units: int, num_sum_units: int, num_repetitions: int
 ):
     compiler = TorchCompiler(fold=fold)
-    sc = build_simple_circuit(
+    sc = build_simple_pc(
         num_variables, num_input_units, num_sum_units, num_repetitions=num_repetitions
     )
     tc: TorchCircuit = compiler.compile(sc)
@@ -57,7 +57,7 @@ def test_compile_output_shape(
 )
 def test_modules_parameters(fold: bool):
     compiler = TorchCompiler(fold=fold)
-    sc = build_simple_circuit(12, 3, 3)
+    sc = build_simple_pc(12, 3, 3)
     tc: TorchCircuit = compiler.compile(sc)
     modules = list(tc.modules())
     assert len(modules) > 1

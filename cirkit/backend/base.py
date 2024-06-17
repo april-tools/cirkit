@@ -120,7 +120,7 @@ class CompilerRegistry:
     def retrieve_initializer_rule(
         self, signature: InitializerCompilationSign
     ) -> InitializerCompilationFunc:
-        if signature not in InitializerCompilationSign:
+        if signature not in self._initializer_rules:
             raise CompilationRuleNotFound(
                 f"Initializer compilation rule for signature '{signature}' not found"
             )

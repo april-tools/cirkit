@@ -64,6 +64,8 @@ class TorchTensorParameter(TorchParameterLeaf):
             shape = (self.num_folds, *self._shape)
             self._ptensor = nn.Parameter(torch.empty(*shape), requires_grad=self._requires_grad)
             self.initializer_(self._ptensor.data)
+            return
+        self.initializer_(self._ptensor.data)
 
     def forward(self) -> Tensor:
         """Get the reparameterized parameters.
