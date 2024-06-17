@@ -14,14 +14,14 @@ class TorchTensorParameter(TorchParameterLeaf):
         *shape: int,
         num_folds: int = 1,
         requires_grad: bool = True,
-        init_func: Optional[Callable[[Tensor], Tensor]] = None,
+        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
     ) -> None:
         """Init class."""
         super().__init__(num_folds=num_folds)
         self._shape = shape
         self._ptensor: Optional[nn.Parameter] = None
         self._requires_grad = requires_grad
-        self.init_func = nn.init.normal_ if init_func is None else init_func
+        self.initializer_ = nn.init.normal_ if initializer_ is None else initializer_
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -63,7 +63,7 @@ class TorchTensorParameter(TorchParameterLeaf):
         if self._ptensor is None:
             shape = (self.num_folds, *self._shape)
             self._ptensor = nn.Parameter(torch.empty(*shape), requires_grad=self._requires_grad)
-            self.init_func(self._ptensor.data)
+            self.initializer_(self._ptensor.data)
 
     def forward(self) -> Tensor:
         """Get the reparameterized parameters.

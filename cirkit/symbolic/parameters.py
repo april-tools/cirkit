@@ -3,8 +3,9 @@ from collections import defaultdict
 from copy import copy as shallowcopy
 from functools import cached_property
 from numbers import Number
-from typing import Any, Callable, Dict, List, Tuple, Union, final
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, final
 
+from cirkit.symbolic.initializers import ConstantInitializer, Initializer
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
 
 
@@ -28,14 +29,17 @@ class ParameterLeaf(ParameterNode, ABC):
 
 
 class TensorParameter(ParameterLeaf):
-    def __init__(self, *shape: int, learnable: bool = True):
+    def __init__(
+        self, *shape: int, learnable: bool = True, initializer: Optional[Initializer] = None
+    ):
         super().__init__()
         self._shape = tuple(shape)
         self.learnable = learnable
+        self.initializer = initializer
 
     def __copy__(self) -> "TensorParameter":
         cls = self.__class__
-        return cls(*self._shape, learnable=self.learnable)
+        return cls(*self._shape, **self.config)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -43,12 +47,12 @@ class TensorParameter(ParameterLeaf):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(learnable=self.learnable)
+        return dict(learnable=self.learnable, initializer=self.initializer)
 
 
 class ConstantParameter(TensorParameter):
     def __init__(self, *shape: int, value: Number = 0.0):
-        super().__init__(*shape, learnable=False)
+        super().__init__(*shape, learnable=False, initializer=ConstantInitializer(value))
         self.value = value
 
     def __copy__(self) -> "ConstantParameter":

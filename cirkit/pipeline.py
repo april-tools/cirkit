@@ -8,6 +8,7 @@ import cirkit.symbolic.functional as SF
 from cirkit.backend.base import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
+    InitializerCompilationFunc,
     LayerCompilationFunc,
     ParameterCompilationFunc,
 )
@@ -78,6 +79,9 @@ class PipelineContext(AbstractContextManager):
 
     def add_parameter_compilation_rule(self, func: ParameterCompilationFunc):
         self._compiler.add_parameter_rule(func)
+
+    def add_initializer_compilation_rule(self, func: InitializerCompilationFunc):
+        self._compiler.add_initializer_rule(func)
 
     def compile(self, sc: Circuit) -> Any:
         return self._compiler.compile(sc)

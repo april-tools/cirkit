@@ -2,6 +2,7 @@ from abc import ABC
 from enum import IntEnum, auto
 from typing import Any, Dict, List, Optional, cast
 
+from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.parameters import Parameter, Parameterization, TensorParameter
 from cirkit.utils.scope import Scope
 
@@ -77,13 +78,23 @@ class CategoricalLayer(InputLayer):
         num_channels: int,
         num_categories: int = 2,
         logits: Optional[Parameter] = None,
-        logits_param: Optional[Parameterization] = None,
+        logits_parameterization: Optional[Parameterization] = None,
+        logits_initializer: Optional[Initializer] = None,
     ):
         super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
         if logits is None:
-            logits = TensorParameter(len(scope), num_output_units, num_channels, num_categories)
-            logits = Parameter.from_leaf(logits) if logits_param is None else logits_param(logits)
+            logits = TensorParameter(
+                len(scope),
+                num_output_units,
+                num_channels,
+                num_categories,
+                initializer=logits_initializer,
+            )
+            if logits_parameterization is None:
+                logits = Parameter.from_leaf(logits)
+            else:
+                logits = logits_parameterization(logits)
         else:
             assert logits.shape == (len(scope), num_output_units, num_channels, num_categories)
         self.logits = logits
@@ -171,12 +182,16 @@ class DenseLayer(SumLayer):
         num_input_units: int,
         num_output_units: int,
         weight: Optional[Parameter] = None,
-        weight_param: Optional[Parameterization] = None,
+        parameterization: Optional[Parameterization] = None,
+        initializer: Optional[Initializer] = None,
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1)
         if weight is None:
-            weight = TensorParameter(num_output_units, num_input_units)
-            weight = Parameter.from_leaf(weight) if weight_param is None else weight_param(weight)
+            weight = TensorParameter(num_output_units, num_input_units, initializer=initializer)
+            if parameterization is None:
+                weight = Parameter.from_leaf(weight)
+            else:
+                weight = parameterization(weight)
         else:
             assert weight.shape == (num_output_units, num_input_units)
         self.weight = weight
@@ -203,12 +218,16 @@ class MixingLayer(SumLayer):
         num_units: int,
         arity: int,
         weight: Optional[Parameter] = None,
-        weight_param: Optional[Parameterization] = None,
+        parameterization: Optional[Parameterization] = None,
+        initializer: Optional[Initializer] = None,
     ):
         super().__init__(scope, num_units, num_units, arity)
         if weight is None:
-            weight = TensorParameter(num_units, arity)
-            weight = Parameter.from_leaf(weight) if weight_param is None else weight_param(weight)
+            weight = TensorParameter(num_units, arity, initializer=initializer)
+            if parameterization is None:
+                weight = Parameter.from_leaf(weight)
+            else:
+                weight = parameterization(weight)
         else:
             assert weight.shape == (num_units, arity)
         self.weight = weight

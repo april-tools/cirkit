@@ -1,7 +1,4 @@
-import functools
 from typing import TYPE_CHECKING, Dict, Optional
-
-import torch
 
 from cirkit.backend.base import ParameterCompilationFunc, ParameterCompilationSign
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
@@ -47,7 +44,10 @@ if TYPE_CHECKING:
 
 
 def compile_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTensorParameter:
-    compiled_p = TorchTensorParameter(*p.shape, requires_grad=p.learnable)
+    initializer_ = compiler.compiler_initializer(p.initializer)
+    compiled_p = TorchTensorParameter(
+        *p.shape, requires_grad=p.learnable, initializer_=initializer_
+    )
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p
 
@@ -55,9 +55,8 @@ def compile_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTen
 def compile_constant_parameter(
     compiler: "TorchCompiler", p: ConstantParameter
 ) -> TorchTensorParameter:
-    compiled_p = TorchTensorParameter(
-        *p.shape, init_func=functools.partial(torch.fill_, value=p.value), requires_grad=False
-    )
+    initializer_ = compiler.compiler_initializer(p.initializer)
+    compiled_p = TorchTensorParameter(*p.shape, requires_grad=False, initializer_=initializer_)
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p
 
