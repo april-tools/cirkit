@@ -236,16 +236,6 @@ class LogSoftmaxParameter(EntrywiseReduceOpParameter):
 
 
 class Parameter(RootedDiAcyclicGraph[ParameterNode]):
-    def __init__(
-        self,
-        nodes: List[ParameterNode],
-        in_nodes: Dict[ParameterNode, List[ParameterNode]],
-        out_nodes: Dict[ParameterNode, List[ParameterNode]],
-        *,
-        topologically_ordered: bool = False,
-    ) -> None:
-        super().__init__(nodes, in_nodes, out_nodes, topologically_ordered=topologically_ordered)
-
     @property
     def shape(self) -> Tuple[int, ...]:
         return self.output.shape
