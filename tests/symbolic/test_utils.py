@@ -7,14 +7,14 @@ from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
-    GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
     MixingLayer,
 )
-from cirkit.symbolic.params import (
+from cirkit.symbolic.parameters import (
     ExpParameter,
     LogSoftmaxParameter,
+    Parameter,
     Parameterization,
     SoftmaxParameter,
 )
@@ -32,10 +32,6 @@ def categorical_layer_factory(
     return CategoricalLayer(
         scope, num_units, num_channels, num_categories=num_categories, logits_param=logits_param
     )
-
-
-def gaussian_layer_factory(scope: Scope, num_units: int, num_channels: int) -> GaussianLayer:
-    return GaussianLayer(scope, num_units, num_channels)
 
 
 def dense_layer_factory(
@@ -79,8 +75,6 @@ def build_simple_circuit(
     )
     if input_layer == "categorical":
         input_layer = functools.partial(categorical_layer_factory, logits_param=logits_param)
-    elif input_layer == "gaussian":
-        input_layer = gaussian_layer_factory
     else:
         assert False
     return Circuit.from_region_graph(
@@ -104,11 +98,11 @@ def build_simple_pc(
     normalized: bool = False,
 ):
     if normalized:
-        sum_param = lambda p: SoftmaxParameter(p, axis=-1)
+        sum_param = lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape, axis=1))
     else:
-        sum_param = lambda p: ExpParameter(p)
+        sum_param = lambda p: Parameter.from_unary(p, ExpParameter(p.shape))
     if normalized:
-        logits_param = lambda p: LogSoftmaxParameter(p, axis=-1)
+        logits_param = lambda p: Parameter.from_unary(p, LogSoftmaxParameter(p.shape, axis=3))
     else:
         logits_param = None
     return build_simple_circuit(

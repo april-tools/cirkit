@@ -1,15 +1,16 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, ClassVar, Dict, Optional, Type
+from typing import Any, Dict, Optional
 
-from torch import Tensor, nn
+from torch import Tensor
 
-from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls, SumProductSemiring
 from cirkit.backend.torch.utils import InitializerFunc
 
 
-class TorchLayer(nn.Module, ABC):
+class TorchLayer(TorchModule, ABC):
     """The abstract base class for all layers."""
 
     def __init__(
@@ -29,14 +30,13 @@ class TorchLayer(nn.Module, ABC):
             arity (int, optional): The arity of the layer. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.
         """
-        super().__init__()
+        super().__init__(num_folds=num_folds)
         assert num_input_units > 0, "The number of input units must be positive."
         assert num_output_units > 0, "The number of output units must be positive."
         assert arity > 0, "The arity must be positive."
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
-        self.num_folds = num_folds
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
     @classmethod
@@ -57,13 +57,13 @@ class TorchLayer(nn.Module, ABC):
         }
 
     @property
-    def params(self) -> Dict[str, AbstractTorchParameter]:
+    def params(self) -> Dict[str, TorchParameter]:
         return {}
 
     # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property
     def num_parameters(self) -> int:
-        """The number of params."""
+        """The number of parameters."""
         return sum(p.numel() for p in self.parameters())
 
     # Expected to be fixed, so use cached property to avoid recalculation.

@@ -3,7 +3,7 @@ from typing import Dict, Optional
 from torch import Tensor
 
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
-from cirkit.backend.torch.params.base import AbstractTorchParameter
+from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
 from cirkit.utils.scope import Scope
 
@@ -21,7 +21,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         *,
         num_channels: int = 1,
         num_folds: int = 1,
-        value: AbstractTorchParameter,
+        value: TorchParameter,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
@@ -31,9 +31,10 @@ class TorchLogPartitionLayer(TorchInputLayer):
             num_output_units (int): The number of output units.
             num_channels (int): The number of channels. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.
-            value (Optional[Reparameterization], optional): Ignored. This layer has no params.
+            value (Optional[Reparameterization], optional): Ignored. This layer has no parameters.
         """
-        assert value.num_folds == num_folds and value.shape == (num_output_units,)
+        assert value.num_folds == num_folds
+        assert value.shape == (num_output_units,)
         super().__init__(
             scope,
             num_output_units,
@@ -44,7 +45,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         self.value = value
 
     @property
-    def params(self) -> Dict[str, AbstractTorchParameter]:
+    def params(self) -> Dict[str, TorchParameter]:
         params = super().params
         params.update(value=self.value)
         return params

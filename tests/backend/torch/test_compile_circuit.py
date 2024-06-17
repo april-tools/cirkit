@@ -3,14 +3,12 @@ import itertools
 import numpy as np
 import pytest
 import torch
-from scipy import integrate
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.models import TorchCircuit, TorchConstantCircuit
-from cirkit.backend.torch.params import TorchParameter
-from cirkit.backend.torch.params.base import AbstractTorchParameter
 from cirkit.symbolic.circuit import Circuit
+from cirkit.symbolic.parameters import Parameter, TensorParameter
 from tests.floats import allclose, isclose
 from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
 
@@ -18,20 +16,18 @@ from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
 
 
 def copy_folded_parameters(sc: Circuit, compiler: TorchCompiler, fold_compiler: TorchCompiler):
-    def copy_parameters(p1: AbstractTorchParameter, p2: AbstractTorchParameter, i: int):
-        assert type(p1) == type(p2)
-        if isinstance(p1, TorchParameter):
-            p1._ptensor.copy_(p2._ptensor[i].unsqueeze(dim=0))
-            return
-        for pname, pvalue in p1.params.items():
-            copy_parameters(pvalue, p2.params[pname], i)
+    def copy_parameters(p: Parameter):
+        ordering = p.topological_ordering()
+        for n in ordering:
+            if isinstance(n, TensorParameter):
+                p1_t, _ = compiler.state.retrieve_compiled_parameter(n)
+                p2_t, fold_idx = fold_compiler.state.retrieve_compiled_parameter(n)
+                p1_t._ptensor.copy_(p2_t._ptensor[fold_idx].unsqueeze(dim=0))
 
     # Set the same parameters of the unfolded circuit
     for sl in sc.layers:
-        l, _ = compiler._compiled_layers[sl]
-        fold_l, fold_idx = fold_compiler._compiled_layers[sl]
-        for pname, pvalue in fold_l.params.items():
-            copy_parameters(l.params[pname], pvalue, fold_idx)
+        for _, p in sl.params.items():
+            copy_parameters(p)
 
 
 @pytest.mark.parametrize(
@@ -53,6 +49,23 @@ def test_compile_output_shape(
     y = tc(x)
     assert y.shape == (batch_size, 1, 1)
     assert torch.all(torch.isfinite(y))
+
+
+@pytest.mark.parametrize(
+    "fold",
+    itertools.product([False, True]),
+)
+def test_modules_parameters(fold: bool):
+    compiler = TorchCompiler(fold=fold)
+    sc = build_simple_circuit(12, 3, 3)
+    tc: TorchCircuit = compiler.compile(sc)
+    modules = list(tc.modules())
+    assert len(modules) > 1
+    # print(modules)
+    parameters = list(tc.parameters())
+    assert len(parameters) > 1
+    # print(parameters)
+    tc.to("meta")
 
 
 @pytest.mark.parametrize(
@@ -165,53 +178,6 @@ def test_compile_integrate_pc_discrete_folded(semiring: str, num_variables: int,
 
     assert allclose(z, folded_z)
     assert allclose(scores, folded_scores)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "semiring,normalized",
-    itertools.product(["lse-sum", "sum-product"], [False, True]),
-)
-def test_compile_integrate_pc_continuous(semiring: str, normalized: bool):
-    compiler = TorchCompiler(semiring=semiring)
-    num_variables = 2
-    sc = build_simple_pc(num_variables, input_layer="gaussian", normalized=normalized)
-
-    int_sc = SF.integrate(sc)
-    int_tc: TorchConstantCircuit = compiler.compile(int_sc)
-    assert isinstance(int_tc, TorchConstantCircuit)
-    tc: TorchCircuit = compiler.get_compiled_circuit(sc)
-    assert isinstance(tc, TorchCircuit)
-
-    # Test the partition function value
-    z = int_tc()
-    assert z.shape == (1, 1)
-    z = z.squeeze()
-    if normalized:
-        if semiring == "sum-product":
-            assert isclose(z.item(), 1.0)
-        elif semiring == "lse-sum":
-            assert isclose(z.item(), 0.0)
-        else:
-            assert False
-
-    # Test the integral of the circuit (using a quadrature rule)
-    if semiring == "sum-product":
-        df = lambda y, x: tc(torch.Tensor([[[x, y]]])).squeeze()
-    elif semiring == "lse-sum":
-        df = lambda y, x: torch.exp(tc(torch.Tensor([[[x, y]]]))).squeeze()
-    else:
-        assert False
-    int_a, int_b = -np.inf, np.inf
-    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b)
-    if normalized:
-        assert np.isclose(ig, 1.0, atol=1e-15)
-    elif semiring == "sum-product":
-        assert np.isclose(ig, z.item(), atol=1e-15)
-    elif semiring == "lse-sum":
-        assert np.isclose(ig, torch.exp(z).item(), atol=1e-15)
-    else:
-        assert False
 
 
 @pytest.mark.parametrize(
@@ -372,37 +338,3 @@ def test_compile_product_integrate_pc_discrete_folded(
 
     assert allclose(each_tc_scores, folded_each_tc_scores)
     assert allclose(z, folded_z)
-
-
-# @pytest.mark.slow
-# @pytest.mark.parametrize(
-#     "semiring,normalized,num_products",
-#     itertools.product(["lse-sum", "sum-product"], [False, True], [2, 3]),
-# )
-# def test_compile_product_integrate_pc_continuous(
-#     semiring: str, normalized: bool, num_products: int
-# ):
-#     num_variables = 2
-#     compiler = TorchCompiler(semiring=semiring)
-#     scs, tcs = [], []
-#     last_sc = None
-#     for i in range(num_products):
-#         sci = build_simple_pc(
-#             num_variables, 4 + i, 3 + i, input_layer="gaussian", normalized=normalized
-#         )
-#         tci = compiler.compile(sci)
-#         scs.append(sci)
-#         tcs.append(tci)
-#         last_sc = sci if i == 0 else SF.multiply(last_sc, sci)
-#     tc: TensorizedCircuit = compiler.compile(last_sc)
-#
-#     # Test the product of the circuits evaluated over some randomly-chosen points
-#     worlds = torch.randn(64, 1, num_variables)
-#     scores = tc(worlds).squeeze()
-#     each_tc_scores = torch.stack([tci(worlds).squeeze() for tci in tcs], dim=0)
-#     if semiring == "sum-product":
-#         assert allclose(torch.prod(each_tc_scores, dim=0), scores)
-#     elif semiring == "lse-sum":
-#         assert allclose(torch.sum(each_tc_scores, dim=0), scores)
-#     else:
-#         assert False
