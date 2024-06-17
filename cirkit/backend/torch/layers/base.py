@@ -39,14 +39,6 @@ class TorchLayer(TorchModule, ABC):
         self.arity = arity
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
-    @classmethod
-    def default_initializers(cls) -> Dict[str, InitializerFunc]:
-        return {}
-
-    @classmethod
-    def get_default_initializer(cls, name: str) -> InitializerFunc:
-        return cls.default_initializers()[name]
-
     @property
     def config(self) -> Dict[str, Any]:
         return {

@@ -124,10 +124,6 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         self.num_categories = num_categories
         self.logits = logits
 
-    @classmethod
-    def default_initializers(cls) -> Dict[str, InitializerFunc]:
-        return dict(logits=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
-
     @property
     def config(self) -> Dict[str, Any]:
         config = super().config
