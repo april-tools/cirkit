@@ -3,7 +3,7 @@ from collections import defaultdict
 from copy import copy as shallowcopy
 from functools import cached_property
 from numbers import Number
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, final
+from typing import Any, Callable, Dict, List, Tuple, Union, final
 
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
