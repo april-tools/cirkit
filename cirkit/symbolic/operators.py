@@ -14,7 +14,9 @@ from cirkit.symbolic.layers import (
     MixingLayer,
 )
 from cirkit.symbolic.parameters import (
+    ConstantParameter,
     KroneckerParameter,
+    LogParameter,
     OuterSumParameter,
     Parameter,
     ReduceLSEParameter,
@@ -28,21 +30,34 @@ def integrate_categorical_layer(
 ) -> CircuitBlock:
     scope = Scope(scope) if scope is not None else sl.scope
     assert sl.scope == scope
-    reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=3)
-    reduce_sum1 = ReduceSumParameter(reduce_lse.shape, axis=2)
-    reduce_sum2 = ReduceSumParameter(reduce_sum1.shape, axis=0)
-    lp = Parameter.from_sequence(sl.logits.ref(), reduce_lse, reduce_sum1, reduce_sum2)
-    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=lp)
+    if sl.logits is None:
+        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+    else:
+        reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=3)
+        reduce_sum1 = ReduceSumParameter(reduce_lse.shape, axis=2)
+        reduce_sum2 = ReduceSumParameter(reduce_sum1.shape, axis=0)
+        log_partition = Parameter.from_sequence(
+            sl.logits.ref(), reduce_lse, reduce_sum1, reduce_sum2
+        )
+    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
 
 def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) -> CircuitBlock:
     assert sl1.num_variables == sl2.num_variables
     assert sl1.num_channels == sl2.num_channels
+    if sl1.logits is None:
+        sl1_logits = Parameter.from_unary(sl1.probs, LogParameter(sl1.probs.shape))
+    else:
+        sl1_logits = sl1.logits
+    if sl2.logits is None:
+        sl2_logits = Parameter.from_unary(sl2.probs, LogParameter(sl2.probs.shape))
+    else:
+        sl2_logits = sl2.logits
     sl_logits = Parameter.from_binary(
-        sl1.logits.ref(),
-        sl2.logits.ref(),
-        OuterSumParameter(sl1.logits.shape, sl2.logits.shape, axis=1),
+        sl1_logits.ref(),
+        sl2_logits.ref(),
+        OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=1),
     )
     sl = CategoricalLayer(
         sl1.scope | sl2.scope,

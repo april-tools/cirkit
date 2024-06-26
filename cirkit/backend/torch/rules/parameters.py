@@ -99,23 +99,17 @@ def compile_outer_sum_parameter(
     return TorchOuterSumParameter(in_shape1, in_shape2, dim=p.axis)
 
 
-def compile_exp_parameter(
-    compiler: "TorchCompiler", p: ExpParameter
-) -> TorchExpParameter:
+def compile_exp_parameter(compiler: "TorchCompiler", p: ExpParameter) -> TorchExpParameter:
     (in_shape,) = p.in_shapes
     return TorchExpParameter(in_shape)
 
 
-def compile_log_parameter(
-    compiler: "TorchCompiler", p: LogParameter
-) -> TorchLogParameter:
+def compile_log_parameter(compiler: "TorchCompiler", p: LogParameter) -> TorchLogParameter:
     (in_shape,) = p.in_shapes
     return TorchLogParameter(in_shape)
 
 
-def compile_square_parameter(
-    compiler: "TorchCompiler", p: SquareParameter
-) -> TorchSquareParameter:
+def compile_square_parameter(compiler: "TorchCompiler", p: SquareParameter) -> TorchSquareParameter:
     (in_shape,) = p.in_shapes
     return TorchSquareParameter(in_shape)
 

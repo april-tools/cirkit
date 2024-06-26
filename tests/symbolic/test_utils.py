@@ -18,6 +18,7 @@ from cirkit.symbolic.parameters import (
     Parameter,
     Parameterization,
     SoftmaxParameter,
+    TensorParameter,
 )
 from cirkit.templates.region_graph import RandomBinaryTree
 from cirkit.utils.scope import Scope
@@ -28,16 +29,16 @@ def categorical_layer_factory(
     num_units: int,
     num_channels: int,
     num_categories: int = 2,
-    logits_parameterization: Optional[Parameterization] = None,
-    logits_initializer: Optional[Initializer] = None,
+    parameterization: Optional[Parameterization] = None,
+    initializer: Optional[Initializer] = None,
 ) -> CategoricalLayer:
     return CategoricalLayer(
         scope,
         num_units,
         num_channels,
         num_categories=num_categories,
-        logits_parameterization=logits_parameterization,
-        logits_initializer=logits_initializer,
+        parameterization=parameterization,
+        initializer=initializer,
     )
 
 
@@ -98,8 +99,8 @@ def build_simple_circuit(
     if input_layer == "categorical":
         input_factory = functools.partial(
             categorical_layer_factory,
-            logits_parameterization=logits_parameterization,
-            logits_initializer=logits_initializer,
+            parameterization=logits_parameterization,
+            initializer=logits_initializer,
         )
     else:
         assert False

@@ -78,27 +78,33 @@ class CategoricalLayer(InputLayer):
         num_channels: int,
         num_categories: int = 2,
         logits: Optional[Parameter] = None,
-        logits_parameterization: Optional[Parameterization] = None,
-        logits_initializer: Optional[Initializer] = None,
+        probs: Optional[Parameter] = None,
+        parameterization: Optional[Parameterization] = None,
+        initializer: Optional[Initializer] = None,
     ):
+        if logits is not None and probs is not None:
+            raise ValueError("At most one between 'logits' and 'probs' can be specified")
         super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
-        if logits is None:
-            if logits_initializer is None:
-                logits_initializer = NormalInitializer()
+        if logits is None and probs is None:
+            if initializer is None:
+                initializer = NormalInitializer()
             logits = TensorParameter(
                 len(scope),
                 num_output_units,
                 num_channels,
                 num_categories,
-                initializer=logits_initializer,
+                initializer=initializer,
             )
-            if logits_parameterization is None:
+            if parameterization is None:
                 logits = Parameter.from_leaf(logits)
             else:
-                logits = logits_parameterization(logits)
-        else:
+                logits = parameterization(logits)
+        elif logits is not None:
             assert logits.shape == (len(scope), num_output_units, num_channels, num_categories)
+        elif probs is not None:
+            assert probs.shape == (len(scope), num_output_units, num_channels, num_categories)
+        self.probs = probs
         self.logits = logits
 
     @property
@@ -110,7 +116,10 @@ class CategoricalLayer(InputLayer):
     @property
     def params(self) -> Dict[str, Parameter]:
         params = super().params
-        params.update(logits=self.logits)
+        if self.logits is None:
+            params.update(probs=self.probs)
+        else:
+            params.update(logits=self.logits)
         return params
 
 

@@ -37,12 +37,18 @@ def compile_log_partition_layer(
 def compile_categorical_layer(
     compiler: "TorchCompiler", sl: CategoricalLayer
 ) -> TorchCategoricalLayer:
-    logits = compiler.compile_parameter(sl.logits)
+    if sl.logits is None:
+        probs = compiler.compile_parameter(sl.probs)
+        logits = None
+    else:
+        probs = None
+        logits = compiler.compile_parameter(sl.logits)
     return TorchCategoricalLayer(
         sl.scope,
         sl.num_output_units,
         num_channels=sl.num_channels,
         num_categories=sl.num_categories,
+        probs=probs,
         logits=logits,
         semiring=compiler.semiring,
     )

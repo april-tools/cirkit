@@ -45,7 +45,7 @@ def test_compile_output_shape(
 
     batch_size = 42
     input_shape = (batch_size, 1, num_variables)
-    x = torch.zeros(input_shape)
+    x = torch.zeros(input_shape, dtype=torch.int64)
     y = tc(x)
     assert y.shape == (batch_size, 1, 1)
     assert torch.all(torch.isfinite(y))
