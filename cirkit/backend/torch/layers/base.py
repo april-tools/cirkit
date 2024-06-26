@@ -7,7 +7,6 @@ from torch import Tensor
 from cirkit.backend.torch.graph.nodes import TorchModule
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls, SumProductSemiring
-from cirkit.backend.torch.utils import InitializerFunc
 
 
 class TorchLayer(TorchModule, ABC):
@@ -30,22 +29,17 @@ class TorchLayer(TorchModule, ABC):
             arity (int, optional): The arity of the layer. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.
         """
+        if num_input_units <= 0:
+            raise ValueError("The number of input units must be positive")
+        if num_output_units <= 0:
+            raise ValueError("The number of output units must be positive")
+        if arity <= 0:
+            raise ValueError("The arity must be positive")
         super().__init__(num_folds=num_folds)
-        assert num_input_units > 0, "The number of input units must be positive."
-        assert num_output_units > 0, "The number of output units must be positive."
-        assert arity > 0, "The arity must be positive."
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
         self.semiring = semiring if semiring is not None else SumProductSemiring
-
-    @classmethod
-    def default_initializers(cls) -> Dict[str, InitializerFunc]:
-        return {}
-
-    @classmethod
-    def get_default_initializer(cls, name: str) -> InitializerFunc:
-        return cls.default_initializers()[name]
 
     @property
     def config(self) -> Dict[str, Any]:

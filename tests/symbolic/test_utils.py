@@ -4,6 +4,7 @@ from typing import Optional
 import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
+from cirkit.symbolic.initializers import Initializer, NormalInitializer
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
@@ -17,6 +18,7 @@ from cirkit.symbolic.parameters import (
     Parameter,
     Parameterization,
     SoftmaxParameter,
+    TensorParameter,
 )
 from cirkit.templates.region_graph import RandomBinaryTree
 from cirkit.utils.scope import Scope
@@ -27,10 +29,16 @@ def categorical_layer_factory(
     num_units: int,
     num_channels: int,
     num_categories: int = 2,
-    logits_param: Optional[Parameterization] = None,
+    parameterization: Optional[Parameterization] = None,
+    initializer: Optional[Initializer] = None,
 ) -> CategoricalLayer:
     return CategoricalLayer(
-        scope, num_units, num_channels, num_categories=num_categories, logits_param=logits_param
+        scope,
+        num_units,
+        num_channels,
+        num_categories=num_categories,
+        parameterization=parameterization,
+        initializer=initializer,
     )
 
 
@@ -38,15 +46,28 @@ def dense_layer_factory(
     scope: Scope,
     num_input_units: int,
     num_output_units: int,
-    weight_param: Optional[Parameterization] = None,
+    parameterization: Optional[Parameterization] = None,
+    initializer: Optional[Initializer] = None,
 ) -> DenseLayer:
-    return DenseLayer(scope, num_input_units, num_output_units, weight_param=weight_param)
+    return DenseLayer(
+        scope,
+        num_input_units,
+        num_output_units,
+        parameterization=parameterization,
+        initializer=initializer,
+    )
 
 
 def mixing_layer_factory(
-    scope: Scope, num_units: int, arity: int, weight_param: Optional[Parameterization] = None
+    scope: Scope,
+    num_units: int,
+    arity: int,
+    parameterization: Optional[Parameterization] = None,
+    initializer: Optional[Initializer] = None,
 ) -> MixingLayer:
-    return MixingLayer(scope, num_units, arity, weight_param=weight_param)
+    return MixingLayer(
+        scope, num_units, arity, parameterization=parameterization, initializer=initializer
+    )
 
 
 def hadamard_layer_factory(scope: Scope, num_input_units: int, arity: int) -> HadamardLayer:
@@ -64,8 +85,10 @@ def build_simple_circuit(
     num_repetitions: int = 1,
     seed: int = 42,
     input_layer: str = "categorical",
-    sum_param: Optional[Parameterization] = None,
-    logits_param: Optional[Parameterization] = None,
+    sum_parameterization: Optional[Parameterization] = None,
+    logits_parameterization: Optional[Parameterization] = None,
+    sum_initializer: Optional[Initializer] = None,
+    logits_initializer: Optional[Initializer] = None,
 ):
     rg = RandomBinaryTree(
         num_variables,
@@ -74,17 +97,25 @@ def build_simple_circuit(
         seed=seed,
     )
     if input_layer == "categorical":
-        input_layer = functools.partial(categorical_layer_factory, logits_param=logits_param)
+        input_factory = functools.partial(
+            categorical_layer_factory,
+            parameterization=logits_parameterization,
+            initializer=logits_initializer,
+        )
     else:
         assert False
     return Circuit.from_region_graph(
         rg,
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
-        input_factory=input_layer,
-        sum_factory=functools.partial(dense_layer_factory, weight_param=sum_param),
+        input_factory=input_factory,
+        sum_factory=functools.partial(
+            dense_layer_factory, parameterization=sum_parameterization, initializer=sum_initializer
+        ),
         prod_factory=hadamard_layer_factory,
-        mixing_factory=functools.partial(mixing_layer_factory, weight_param=sum_param),
+        mixing_factory=functools.partial(
+            mixing_layer_factory, parameterization=sum_parameterization, initializer=sum_initializer
+        ),
     )
 
 
@@ -98,13 +129,15 @@ def build_simple_pc(
     normalized: bool = False,
 ):
     if normalized:
-        sum_param = lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape, axis=1))
+        sum_parameterization = lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape, axis=1))
     else:
-        sum_param = lambda p: Parameter.from_unary(p, ExpParameter(p.shape))
+        sum_parameterization = lambda p: Parameter.from_unary(p, ExpParameter(p.shape))
     if normalized:
-        logits_param = lambda p: Parameter.from_unary(p, LogSoftmaxParameter(p.shape, axis=3))
+        logits_parameterization = lambda p: Parameter.from_unary(
+            p, LogSoftmaxParameter(p.shape, axis=3)
+        )
     else:
-        logits_param = None
+        logits_parameterization = None
     return build_simple_circuit(
         num_variables,
         num_input_units,
@@ -112,6 +145,8 @@ def build_simple_pc(
         num_repetitions=num_repetitions,
         seed=seed,
         input_layer=input_layer,
-        sum_param=sum_param,
-        logits_param=logits_param,
+        sum_parameterization=sum_parameterization,
+        logits_parameterization=logits_parameterization,
+        sum_initializer=NormalInitializer(0.0, 3e-1),
+        logits_initializer=NormalInitializer(0.0, 3e-1),
     )

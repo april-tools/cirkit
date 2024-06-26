@@ -157,10 +157,6 @@ class TorchDenseLayer(TorchSumLayer):
         )
         self.weight = weight
 
-    @classmethod
-    def default_initializers(cls) -> Dict[str, InitializerFunc]:
-        return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
-
     @property
     def config(self) -> Dict[str, Any]:
         return {
@@ -225,10 +221,6 @@ class TorchMixingLayer(TorchSumLayer):
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )
         self.weight = weight
-
-    @classmethod
-    def default_initializers(cls) -> Dict[str, InitializerFunc]:
-        return dict(weight=lambda t: nn.init.uniform_(t, 0.01, 0.99))
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

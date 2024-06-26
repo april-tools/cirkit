@@ -3,12 +3,15 @@ from abc import ABC, abstractmethod
 from typing import IO, Any, Callable, Dict, Optional, Protocol, Type, TypeVar, Union
 
 from cirkit.symbolic.circuit import Circuit
+from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import ParameterNode
 from cirkit.utils.algorithms import BiMap
 
 CompiledCircuit = TypeVar("CompiledCircuit")
 LayerCompilationSign = Type[Layer]
+ParameterCompilationSign = Type[ParameterNode]
+InitializerCompilationSign = Type[Initializer]
 
 
 class LayerCompilationFunc(Protocol):
@@ -16,11 +19,13 @@ class LayerCompilationFunc(Protocol):
         ...
 
 
-ParameterCompilationSign = Type[ParameterNode]
-
-
 class ParameterCompilationFunc(Protocol):
     def __call__(self, compiler: "AbstractCompiler", p: ParameterNode, **kwargs) -> Any:
+        ...
+
+
+class InitializerCompilationFunc(Protocol):
+    def __call__(self, compiler: "AbstractCompiler", init: Initializer, **kwargs) -> Any:
         ...
 
 
@@ -57,38 +62,44 @@ class CompilerRegistry:
         self,
         layer_rules: Optional[Dict[LayerCompilationSign, LayerCompilationFunc]] = None,
         parameter_rules: Optional[Dict[ParameterCompilationSign, ParameterCompilationFunc]] = None,
+        initializer_rules: Optional[
+            Dict[InitializerCompilationSign, InitializerCompilationFunc]
+        ] = None,
     ):
         self._layer_rules = {} if layer_rules is None else layer_rules
         self._parameter_rules = {} if parameter_rules is None else parameter_rules
+        self._initializer_rules = {} if initializer_rules is None else initializer_rules
 
     @staticmethod
-    def _is_signature_valid(func: Callable) -> bool:
+    def _validate_rule_sign(func: Callable, sym_cls: Type) -> Optional[Type]:
         args = func.__annotations__
         if "return" not in args or "compiler" not in args or len(args) != 3:
-            return False
+            return None
         if not issubclass(args["compiler"], AbstractCompiler):
-            return False
-        return True
+            return None
+        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
+        found_sym_cls = args[arg_names[0]]
+        if not issubclass(found_sym_cls, sym_cls):
+            return None
+        return found_sym_cls
 
     def add_layer_rule(self, func: LayerCompilationFunc):
-        if not self._is_signature_valid(func):
-            raise ValueError("The function is not a symbolic layer compilation rule")
-        args = func.__annotations__
-        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
-        layer_cls = args[arg_names[0]]
-        if not issubclass(layer_cls, Layer):
+        layer_cls: Optional[Type[Layer]] = self._validate_rule_sign(func, Layer)
+        if layer_cls is None:
             raise ValueError("The function is not a symbolic layer compilation rule")
         self._layer_rules[layer_cls] = func
 
     def add_parameter_rule(self, func: ParameterCompilationFunc):
-        if not self._is_signature_valid(func):
-            raise ValueError("The function is not a symbolic parameter compilation rule")
-        args = func.__annotations__
-        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
-        param_cls = args[arg_names[0]]
-        if not issubclass(param_cls, ParameterNode):
+        param_cls: Optional[Type[ParameterNode]] = self._validate_rule_sign(func, ParameterNode)
+        if param_cls is None:
             raise ValueError("The function is not a symbolic parameter compilation rule")
         self._parameter_rules[param_cls] = func
+
+    def add_initializer_rule(self, func: InitializerCompilationFunc):
+        init_cls: Optional[Type[Initializer]] = self._validate_rule_sign(func, Initializer)
+        if init_cls is None:
+            raise ValueError("The function is not a symbolic initializer compilation rule")
+        self._initializer_rules[init_cls] = func
 
     def retrieve_layer_rule(self, signature: LayerCompilationSign) -> LayerCompilationFunc:
         if signature not in self._layer_rules:
@@ -105,6 +116,15 @@ class CompilerRegistry:
                 f"Parameter compilation rule for signature '{signature}' not found"
             )
         return self._parameter_rules[signature]
+
+    def retrieve_initializer_rule(
+        self, signature: InitializerCompilationSign
+    ) -> InitializerCompilationFunc:
+        if signature not in self._initializer_rules:
+            raise CompilationRuleNotFound(
+                f"Initializer compilation rule for signature '{signature}' not found"
+            )
+        return self._initializer_rules[signature]
 
 
 class AbstractCompiler(ABC):
@@ -134,6 +154,9 @@ class AbstractCompiler(ABC):
     def add_parameter_rule(self, func: ParameterCompilationFunc):
         self._registry.add_parameter_rule(func)
 
+    def add_initializer_rule(self, func: InitializerCompilationFunc):
+        self._registry.add_initializer_rule(func)
+
     def retrieve_layer_rule(self, signature: LayerCompilationSign) -> LayerCompilationFunc:
         return self._registry.retrieve_layer_rule(signature)
 
@@ -141,6 +164,11 @@ class AbstractCompiler(ABC):
         self, signature: ParameterCompilationSign
     ) -> ParameterCompilationFunc:
         return self._registry.retrieve_parameter_rule(signature)
+
+    def retrieve_initializer_rule(
+        self, signature: InitializerCompilationSign
+    ) -> InitializerCompilationFunc:
+        return self._registry.retrieve_initializer_rule(signature)
 
     def compile(self, sc: Circuit) -> CompiledCircuit:
         if self.is_compiled(sc):

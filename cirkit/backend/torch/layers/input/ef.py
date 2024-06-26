@@ -66,10 +66,6 @@ class TorchExpFamilyLayer(TorchInputLayer):
         return self.semiring.from_lse_sum(self.log_score(x))
 
     @abstractmethod
-    def log_probs(self, x: Tensor) -> Tensor:
-        ...
-
-    @abstractmethod
     def log_score(self, x: Tensor) -> Tensor:
         ...
 
@@ -90,7 +86,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         num_channels: int = 1,
         num_folds: int = 1,
         num_categories: int = 2,
-        logits: TorchParameter,
+        probs: Optional[TorchParameter] = None,
+        logits: Optional[TorchParameter] = None,
         semiring: Optional[SemiringCls] = None,
     ) -> None:
         """Init class.
@@ -103,16 +100,10 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             num_categories (int): The number of categories for Categorical distribution. Defaults to 2.
             logits (TorchParameter): The reparameterization for layer parameters.
         """
-        assert (
-            num_categories > 0
-        ), "The number of categories for Categorical distribution must be positive."
-        assert logits.num_folds == num_folds
-        assert logits.shape == (
-            len(scope),
-            num_output_units,
-            num_channels,
-            num_categories,
-        )
+        if num_categories <= 0:
+            raise ValueError(
+                "The number of categories for Categorical distribution must be positive"
+            )
         super().__init__(
             scope,
             num_output_units,
@@ -122,11 +113,27 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         )
         self.num_folds = num_folds
         self.num_categories = num_categories
+        if not ((logits is None) ^ (probs is None)):
+            raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
+        if logits is None:
+            assert probs is not None
+            if not self._valid_parameter_shape(probs):
+                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
+        else:
+            if not self._valid_parameter_shape(logits):
+                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
+        self.probs = probs
         self.logits = logits
 
-    @classmethod
-    def default_initializers(cls) -> Dict[str, InitializerFunc]:
-        return dict(logits=lambda t: nn.init.normal_(t, mean=0.0, std=1e-1))
+    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == (
+            len(self.scope),
+            self.num_output_units,
+            self.num_channels,
+            self.num_categories,
+        )
 
     @property
     def config(self) -> Dict[str, Any]:
@@ -137,22 +144,15 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     @property
     def params(self) -> Dict[str, TorchParameter]:
         params = super().params
-        params.update(logits=self.logits)
+        if self.logits is None:
+            params.update(probs=self.probs)
+        else:
+            params.update(logits=self.logits)
         return params
 
-    def _eval_forward(self, x: Tensor, logits: Tensor) -> Tensor:
-        if x.is_floating_point():
-            x = x.long()  # The input to Categorical should be discrete.
+    def log_score(self, x: Tensor) -> Tensor:
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
         x = F.one_hot(x, self.num_categories)  # (F, C, *B, D, num_categories)
         x = x.to(torch.get_default_dtype())
         x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
         return x
-
-    def log_probs(self, x: Tensor) -> Tensor:
-        logits = self.logits()
-        log_z = torch.logsumexp(logits, dim=-1, keepdim=True)
-        return self._eval_forward(x, logits) - log_z
-
-    def log_score(self, x: Tensor) -> Tensor:
-        logits = self.logits()
-        return self._eval_forward(x, logits)

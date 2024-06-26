@@ -1,7 +1,7 @@
 import functools
 import os
 from collections import defaultdict
-from typing import IO, Dict, List, Optional, Tuple, Union, cast
+from typing import IO, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from torch import Tensor
 
@@ -16,14 +16,15 @@ from cirkit.backend.torch.parameters.parameter import (
     TorchParameterOp,
 )
 from cirkit.backend.torch.rules import (
+    DEFAULT_INITIALIZER_COMPILATION_RULES,
     DEFAULT_LAYER_COMPILATION_RULES,
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
 from cirkit.backend.torch.semiring import Semiring, SemiringCls
 from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
+from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import Parameter, ParameterNode, TensorParameter
-from cirkit.utils.algorithms import graph_outgoings
 
 
 class TorchCompilerState:
@@ -71,7 +72,9 @@ class TorchCompilerState:
 class TorchCompiler(AbstractCompiler):
     def __init__(self, semiring: str = "sum-product", fold: bool = False, einsum: bool = False):
         default_registry = CompilerRegistry(
-            DEFAULT_LAYER_COMPILATION_RULES, DEFAULT_PARAMETER_COMPILATION_RULES
+            DEFAULT_LAYER_COMPILATION_RULES,
+            DEFAULT_PARAMETER_COMPILATION_RULES,
+            DEFAULT_INITIALIZER_COMPILATION_RULES,
         )
         super().__init__(default_registry, fold=fold, einsum=einsum)
         self._fold = fold
@@ -132,6 +135,12 @@ class TorchCompiler(AbstractCompiler):
 
         # Build the parameter's computational graph
         return TorchParameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
+
+    def compiler_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
+        # Retrieve the rule for the given initializer and compile it
+        signature = type(initializer)
+        rule = self.retrieve_initializer_rule(signature)
+        return cast(Callable[[Tensor], Tensor], rule(self, initializer))
 
     def _compile_layer(self, layer: Layer) -> TorchLayer:
         signature = type(layer)
@@ -328,9 +337,9 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
 def _fold_init_tensors(t: Tensor, *, ps: List[TorchTensorParameter]) -> Tensor:
     # Initialize a folded tensor by using the initializers of the tensor parameter nodes being folded
     for i, p in enumerate(ps):
-        init_func = p.init_func
-        if init_func is not None:
-            init_func(t[i])
+        initializer_ = p.initializer_
+        if initializer_ is not None:
+            initializer_(t[i])
     return t
 
 
@@ -347,7 +356,7 @@ def _fold_parameter_nodes_group(
             *group[0].shape,
             num_folds=len(group),
             requires_grad=group[0].requires_grad,
-            init_func=functools.partial(_fold_init_tensors, ps=group),
+            initializer_=functools.partial(_fold_init_tensors, ps=group),
         )
         # If we are folding parameter tensors, then update the registry as to maintain the correct
         # mapping between symbolic parameter leaves (which are unfolded) and slices within the folded
