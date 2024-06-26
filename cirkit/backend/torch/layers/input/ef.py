@@ -117,13 +117,15 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
         if logits is None:
             assert probs is not None
-            self._check_parameter_shape(probs)
+            if not self._valid_parameter_shape(probs):
+                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
         else:
-            self._check_parameter_shape(logits)
+            if not self._valid_parameter_shape(logits):
+                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
         self.probs = probs
         self.logits = logits
 
-    def _check_parameter_shape(self, p: TorchParameter) -> bool:
+    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
         return p.shape == (
