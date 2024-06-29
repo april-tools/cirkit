@@ -7,7 +7,7 @@ from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
 from cirkit.backend.torch.graph.folding import build_folded_graph
-from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
+from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.parameter import (
@@ -202,7 +202,7 @@ class TorchCompiler(AbstractCompiler):
         cc.reset_parameters()
         cc.initialize_address_book()
 
-        # Register the compiled circuit, as well as the compiled layer infos
+        # Register the compiled circuit
         self.register_compiled_circuit(sc, cc)
 
         # Signal the end of the circuit compilation to the state
@@ -246,7 +246,6 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         cc.layerwise_topological_ordering(),
         outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
-        group_foldable_fn=_group_foldable_layers,
         fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
         in_address_fn=lambda l: l.scope,
     )
@@ -285,24 +284,6 @@ def _fold_layers_group(layers: List[TorchLayer], *, compiler: TorchCompiler) -> 
     return fold_layer_cls(**fold_layer_conf, **fold_layer_parameters, semiring=compiler.semiring)
 
 
-def _group_foldable_layers(frontier: List[TorchLayer]) -> List[List[TorchLayer]]:
-    # A dictionary mapping a layer configuration (see below),
-    # which uniquely identifies a group of layers that can be folded,
-    # into a group of layers.
-    groups_map: Dict[tuple, List[TorchLayer]] = defaultdict(list)
-
-    # For each layer, either create a new group or insert it into an existing one
-    for l in frontier:
-        if isinstance(l, TorchInputLayer):
-            l_conf = type(l), l.num_variables, l.num_channels, l.num_output_units
-        else:
-            assert isinstance(l, TorchInnerLayer)
-            l_conf = type(l), l.num_input_units, l.num_output_units, l.arity
-        # Note that, if no suitable group has been found, this will introduce a new group
-        groups_map[l_conf].append(l)
-    return list(groups_map.values())
-
-
 def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) -> TorchParameter:
     # Retrieve:
     # (i)  the parameter nodes and the input to each node;
@@ -324,7 +305,6 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
         ordering,
         outputs=map(lambda pi: pi.output, parameters),
         incomings_fn=in_nodes.get,
-        group_foldable_fn=_group_foldable_parameter_nodes,
         fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler),
     )
 
@@ -382,32 +362,3 @@ def _fold_parameter_nodes_group(
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)
     return fold_node_cls(*group[0].in_shapes, num_folds=len(group), **group[0].config)
-
-
-def _group_foldable_parameter_nodes(
-    nodes: List[TorchParameterNode],
-) -> List[List[TorchParameterNode]]:
-    # A dictionary mapping a parameter configuration (see below),
-    # which uniquely identifies a group of parameters that can be folded,
-    # into a group of parameters.
-    groups_map: Dict[tuple, List[TorchParameterNode]] = defaultdict(list)
-
-    # For each parameter node, either create a new group or insert it into an existing one
-    for i, p in enumerate(nodes):
-        if isinstance(p, TorchTensorParameter):
-            p_conf = type(p), p.shape, p.requires_grad
-        elif isinstance(p, TorchPointerParameter):
-            # We fold pointers only if the point to the same parameter tensor
-            p_conf = type(p), p.shape, id(p.deref())
-        else:
-            assert isinstance(p, TorchParameterOp)
-            # We can fold non-leaf parameter nodes only if they have inputs of the same shape.
-            # This implies that the outputs shapes are equal.
-            # Also, they must have equal configuration.
-            in_shapes = p.in_shapes
-            config = tuple(p.config.items())
-            p_conf = type(p), *config, *in_shapes
-
-        # Note that, if no suitable group has been found, this will introduce a new group
-        groups_map[p_conf].append(p)
-    return list(groups_map.values())

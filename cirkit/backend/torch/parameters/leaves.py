@@ -49,6 +49,10 @@ class TorchTensorParameter(TorchParameterLeaf):
             self._ptensor.requires_grad = value
 
     @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.shape, self.requires_grad
+
+    @property
     def config(self) -> Dict[str, Any]:
         """Configuration flags for the parameter."""
         return dict(shape=self._shape, num_folds=self.num_folds, requires_grad=self._requires_grad)
@@ -109,6 +113,10 @@ class TorchPointerParameter(TorchParameterLeaf):
     def shape(self) -> Tuple[int, ...]:
         """The shape of the output parameter."""
         return self._parameter.shape
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.shape, id(self._parameter)
 
     @property
     def config(self) -> Dict[str, Any]:

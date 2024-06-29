@@ -62,6 +62,10 @@ class TorchParameterOp(TorchParameterNode, ABC):
         super().__init__(num_folds=num_folds)
         self.in_shapes = in_shape
 
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *self.in_shapes, *self.config.items()
+
     def __call__(self, *xs: Tensor) -> Tensor:
         """Get the reparameterized parameters.
 

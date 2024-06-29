@@ -1,6 +1,6 @@
 import functools
 from abc import ABC
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -36,6 +36,10 @@ class TorchInnerLayer(TorchLayer, ABC):
         super().__init__(
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.num_input_units, self.num_output_units, self.arity
 
 
 class TorchProductLayer(TorchInnerLayer, ABC):

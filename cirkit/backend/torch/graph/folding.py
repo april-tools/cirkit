@@ -89,7 +89,6 @@ def build_folded_graph(
     *,
     outputs: Iterable[TorchModuleType],
     incomings_fn: Callable[[TorchModuleType], List[TorchModuleType]],
-    group_foldable_fn: Callable[[List[TorchModuleType]], List[List[TorchModuleType]]],
     fold_group_fn: Callable[[List[TorchModuleType]], TorchModuleType],
     in_address_fn: Optional[Callable[[TorchModuleType], List[int]]] = None,
 ) -> Tuple[
@@ -119,7 +118,7 @@ def build_folded_graph(
     # in each frontier, and then by stacking each group of modules into a folded module
     for frontier in ordering:
         # Retrieve the module groups we can fold
-        foldable_groups = group_foldable_fn(frontier)
+        foldable_groups = group_foldable_modules(frontier)
 
         # Fold each group of modules
         for group in foldable_groups:
@@ -161,6 +160,21 @@ def build_folded_graph(
     out_fold_idx = list(map(fold_idx.get, outputs))
 
     return modules, in_modules, out_modules, FoldIndexInfo(in_fold_idx, out_fold_idx)
+
+
+def group_foldable_modules(
+    modules: List[TorchModuleType],
+) -> List[List[TorchModuleType]]:
+    # A dictionary mapping a module fold settings,
+    # which uniquely identifies a group of modules that can be folded,
+    # into a group of modules.
+    groups: Dict[tuple, List[TorchModuleType]] = defaultdict(list)
+
+    # For each module, either create a new group or insert it into an existing one
+    for m in modules:
+        groups[m.fold_settings].append(m)
+
+    return list(groups.values())
 
 
 def build_address_book_stacked_entry(
