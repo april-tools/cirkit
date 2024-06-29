@@ -7,6 +7,7 @@ from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
 from cirkit.backend.torch.graph.folding import build_folded_graph
+from cirkit.backend.torch.initializers import stacked_initializer_
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
@@ -70,15 +71,15 @@ class TorchCompilerState:
 
 
 class TorchCompiler(AbstractCompiler):
-    def __init__(self, semiring: str = "sum-product", fold: bool = False, einsum: bool = False):
+    def __init__(self, semiring: str = "sum-product", fold: bool = False, optimize: bool = False):
         default_registry = CompilerRegistry(
             DEFAULT_LAYER_COMPILATION_RULES,
             DEFAULT_PARAMETER_COMPILATION_RULES,
             DEFAULT_INITIALIZER_COMPILATION_RULES,
         )
-        super().__init__(default_registry, fold=fold, einsum=einsum)
-        self._fold = fold
-        self._einsum = einsum
+        super().__init__(default_registry, fold=fold, optimize=optimize)
+
+        # Retrieve the semiring to use
         self._semiring = Semiring.from_name(semiring)
 
         # The state of the compiler
@@ -103,11 +104,11 @@ class TorchCompiler(AbstractCompiler):
 
     @property
     def is_fold_enabled(self) -> bool:
-        return self._fold
+        return self._flags["fold"]
 
     @property
-    def is_einsum_enabled(self) -> bool:
-        return self._einsum
+    def is_optimize_enabled(self) -> bool:
+        return self._flags["optimize"]
 
     @property
     def state(self) -> TorchCompilerState:
@@ -210,9 +211,9 @@ class TorchCompiler(AbstractCompiler):
         return cc
 
     def _optimize_circuit(self, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
-        if self.is_einsum_enabled:
-            # Optimize the circuit by using einsums
-            opt_cc = _einsumize_circuit(self, cc)
+        if self.is_optimize_enabled:
+            # Optimize the circuit computational graph
+            opt_cc = _optimize_circuit(self, cc)
             del cc
             cc = opt_cc
         if self.is_fold_enabled:
@@ -234,10 +235,6 @@ class TorchCompiler(AbstractCompiler):
         sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]
     ) -> "TorchCompiler":
         ...
-
-
-def _einsumize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
-    ...
 
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
@@ -314,15 +311,6 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
     )
 
 
-def _fold_init_tensors(t: Tensor, *, ps: List[TorchTensorParameter]) -> Tensor:
-    # Initialize a folded tensor by using the initializers of the tensor parameter nodes being folded
-    for i, p in enumerate(ps):
-        initializer_ = p.initializer_
-        if initializer_ is not None:
-            initializer_(t[i])
-    return t
-
-
 def _fold_parameter_nodes_group(
     group: List[TorchParameterNode], *, compiler: TorchCompiler
 ) -> TorchParameterNode:
@@ -336,7 +324,9 @@ def _fold_parameter_nodes_group(
             *group[0].shape,
             num_folds=len(group),
             requires_grad=group[0].requires_grad,
-            initializer_=functools.partial(_fold_init_tensors, ps=group),
+            initializer_=functools.partial(
+                stacked_initializer_, initializers=list(map(lambda p: p.initializer_, group))
+            ),
         )
         # If we are folding parameter tensors, then update the registry as to maintain the correct
         # mapping between symbolic parameter leaves (which are unfolded) and slices within the folded
@@ -362,3 +352,7 @@ def _fold_parameter_nodes_group(
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)
     return fold_node_cls(*group[0].in_shapes, num_folds=len(group), **group[0].config)
+
+
+def _optimize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
+    ...

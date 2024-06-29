@@ -18,7 +18,6 @@ from cirkit.backend.torch.parameters.ops import (
     TorchSoftmaxParameter,
     TorchSquareParameter,
 )
-from cirkit.backend.torch.utils import InitializerFunc
 from cirkit.symbolic.parameters import (
     ConstantParameter,
     ExpParameter,
