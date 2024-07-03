@@ -1,49 +1,12 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import cached_property
 from typing import Any, Dict, Tuple
 
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.parameters.parameter import TorchParameterOp
-
-
-class TorchUnaryOpParameter(TorchParameterOp, ABC):
-    def __init__(self, in_shape: Tuple[int, ...], num_folds: int = 1) -> None:
-        super().__init__(in_shape, num_folds=num_folds)
-
-    def __call__(self, x: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
-        ...
-
-
-class TorchBinaryOpParameter(TorchParameterOp, ABC):
-    def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], num_folds: int = 1
-    ) -> None:
-        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
-
-    def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x1, x2)  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        ...
+from cirkit.backend.torch.parameters.parameter import TorchBinaryOpParameter, TorchUnaryOpParameter
+from cirkit.backend.torch.semiring import LSESumSemiring, SumProductSemiring
 
 
 class TorchEntrywiseOpParameter(TorchUnaryOpParameter, ABC):
@@ -287,3 +250,85 @@ class TorchLogSoftmaxParameter(TorchEntrywiseReduceOpParameter):
 
     def forward(self, x: Tensor) -> Tensor:
         return torch.log_softmax(x, dim=self.dim + 1)
+
+
+class TorchMatMulParameter(TorchBinaryOpParameter):
+    def __init__(
+        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+    ) -> None:
+        assert len(in_shape1) == len(in_shape2) == 2
+        assert in_shape1[1] == in_shape2[0]
+        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.in_shapes[0][0], self.in_shapes[1][1]
+
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
+        # x1: (F, d1, d2)
+        # x2: (F, d2, d3)
+        return torch.matmul(x1, x2)  # (F, d1, d3)
+
+
+class TorchCrossEinsumParameter(TorchBinaryOpParameter):
+    def __init__(
+        self,
+        in_shape1: Tuple[int, ...],
+        in_shape2: Tuple[int, ...],
+        *,
+        num_folds: int = 1,
+        outer_dim: int = 0,
+        reduce_dim: int = -1,
+        lse_sum: bool = False,
+    ) -> None:
+        assert len(in_shape1) == len(in_shape2)
+        outer_dim = outer_dim if outer_dim >= 0 else outer_dim + len(in_shape1)
+        assert 0 <= outer_dim < len(in_shape1)
+        reduce_dim = reduce_dim if reduce_dim >= 0 else reduce_dim + len(in_shape1)
+        in_eq1 = list(range(len(in_shape1)))
+        in_eq2 = in_eq1.copy()
+        in_eq2[outer_dim] = len(in_shape1)
+        out_eq = (
+            in_eq1[:outer_dim] + [in_eq1[outer_dim], in_eq2[outer_dim]] + in_eq1[outer_dim + 1 :]
+        )
+        if reduce_dim < outer_dim:
+            del out_eq[reduce_dim]
+        elif reduce_dim == outer_dim:
+            del out_eq[reduce_dim]
+            del out_eq[reduce_dim + 1]
+        else:
+            del out_eq[reduce_dim + 1]
+        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
+        self.outer_dim = outer_dim
+        self.reduce_dim = reduce_dim
+        if self.reduce_dim == self.outer_dim:
+            shape = *in_shape1[: self.outer_dim], *in_shape1[self.outer_dim + 2 :]
+        else:
+            shape = (
+                list(in_shape1[: self.outer_dim])
+                + [in_shape1[self.outer_dim] * in_shape2[self.outer_dim]]
+                + list(in_shape1[self.outer_dim + 1 :])
+            )
+            del shape[self.reduce_dim]
+            shape = tuple(shape)
+        self._shape = shape
+        self._semiring = LSESumSemiring if lse_sum else SumProductSemiring
+        self._in_eqs = ([...] + in_eq1, [...] + in_eq2)
+        self._out_eq = [...] + out_eq
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self._shape
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(outer_dim=self._outer_dim, reduce_dim=self._reduce_dim)
+
+    def _forward_impl(self, x1: Tensor, x2: Tensor) -> Tensor:
+        y = torch.einsum(x1, self._in_eqs[0], x2, self._in_eqs[1], self.out_eq)
+        if self.reduce_dim == self.outer_dim:
+            return y
+        return y.view(-1, *self._shape)
+
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
+        return self._semiring.sum(self._forward_impl, x1, x2, dim=self.outer_dim, keepdim=True)

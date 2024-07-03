@@ -8,7 +8,7 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.graph.nodes import TorchModule, TorchModuleType
+from cirkit.backend.torch.graph.nodes import AbstractTorchModule, TorchModule
 
 
 @dataclass(frozen=True)
@@ -38,17 +38,17 @@ class AddressBook(ABC):
 
 
 def build_fold_index_info(
-    ordering: Iterable[TorchModuleType],
+    ordering: Iterable[TorchModule],
     *,
-    outputs: Iterable[TorchModuleType],
-    incomings_fn: Callable[[TorchModuleType], List[TorchModuleType]],
-    in_address_fn: Optional[Callable[[TorchModuleType], List[int]]] = None,
+    outputs: Iterable[TorchModule],
+    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    in_address_fn: Optional[Callable[[TorchModule], List[int]]] = None,
 ) -> FoldIndexInfo:
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
     # (ii) a 'slice_idx' (a natural number) within the output of the folded module,
     #      which recovers the output of the unfolded module.
-    fold_idx: Dict[TorchModule, Tuple[int, int]] = {}
+    fold_idx: Dict[AbstractTorchModule, Tuple[int, int]] = {}
 
     # A useful data structure mapping each module id to
     # a tensor of indices IDX of size (F, H, 2), where F is the number of modules in the fold,
@@ -60,7 +60,7 @@ def build_fold_index_info(
     cur_module_id = 0
     for m in ordering:
         # Retrieve the input modules
-        in_modules: List[TorchModule] = incomings_fn(m)
+        in_modules: List[AbstractTorchModule] = incomings_fn(m)
 
         # Check if we are folding input modules
         # If that is the case, we index some other input tensor, if specified.
@@ -85,23 +85,23 @@ def build_fold_index_info(
 
 
 def build_folded_graph(
-    ordering: Iterable[List[TorchModuleType]],
+    ordering: Iterable[List[TorchModule]],
     *,
-    outputs: Iterable[TorchModuleType],
-    incomings_fn: Callable[[TorchModuleType], List[TorchModuleType]],
-    fold_group_fn: Callable[[List[TorchModuleType]], TorchModuleType],
-    in_address_fn: Optional[Callable[[TorchModuleType], List[int]]] = None,
+    outputs: Iterable[TorchModule],
+    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    fold_group_fn: Callable[[List[TorchModule]], TorchModule],
+    in_address_fn: Optional[Callable[[TorchModule], List[int]]] = None,
 ) -> Tuple[
-    List[TorchModuleType],
-    Dict[TorchModuleType, List[TorchModuleType]],
-    Dict[TorchModuleType, List[TorchModuleType]],
+    List[TorchModule],
+    Dict[TorchModule, List[TorchModule]],
+    Dict[TorchModule, List[TorchModule]],
     FoldIndexInfo,
 ]:
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
     # (ii) a 'slice_idx' (a natural number) within the output of the folded module,
     #      which recovers the output of the unfolded module.
-    fold_idx: Dict[TorchModule, Tuple[int, int]] = {}
+    fold_idx: Dict[AbstractTorchModule, Tuple[int, int]] = {}
 
     # A useful data structure mapping each folded module id to
     # a tensor of indices IDX of size (F, H, 2), where F is the number of modules in the fold,
@@ -110,9 +110,9 @@ def build_folded_graph(
     in_fold_idx: Dict[int, List[List[Tuple[int, int]]]] = {}
 
     # The list of folded modules and the inputs/outputs of each folded module
-    modules: List[TorchModule] = []
-    in_modules: Dict[TorchModule, List[TorchModule]] = {}
-    out_modules: Dict[TorchModule, List[TorchModuleType]] = defaultdict(list)
+    modules: List[AbstractTorchModule] = []
+    in_modules: Dict[AbstractTorchModule, List[AbstractTorchModule]] = {}
+    out_modules: Dict[AbstractTorchModule, List[TorchModule]] = defaultdict(list)
 
     # Fold modules in each frontier, by firstly finding the module groups to fold
     # in each frontier, and then by stacking each group of modules into a folded module
@@ -126,7 +126,7 @@ def build_folded_graph(
             folded_module = fold_group_fn(group)
 
             # For each module in the group, retrieve the unfolded input modules
-            in_group_modules: List[List[TorchModule]] = [incomings_fn(m) for m in group]
+            in_group_modules: List[List[AbstractTorchModule]] = [incomings_fn(m) for m in group]
 
             # Set the input modules
             folded_in_modules = list(
@@ -163,12 +163,12 @@ def build_folded_graph(
 
 
 def group_foldable_modules(
-    modules: List[TorchModuleType],
-) -> List[List[TorchModuleType]]:
+    modules: List[TorchModule],
+) -> List[List[TorchModule]]:
     # A dictionary mapping a module fold settings,
     # which uniquely identifies a group of modules that can be folded,
     # into a group of modules.
-    groups: Dict[tuple, List[TorchModuleType]] = defaultdict(list)
+    groups: Dict[tuple, List[TorchModule]] = defaultdict(list)
 
     # For each module, either create a new group or insert it into an existing one
     for m in modules:

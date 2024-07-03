@@ -7,16 +7,16 @@ from typing import Dict, List, Optional
 from torch import Tensor, nn
 
 from cirkit.backend.torch.graph.folding import AddressBook, FoldIndexInfo
-from cirkit.backend.torch.graph.nodes import TorchModuleType
+from cirkit.backend.torch.graph.nodes import TorchModule
 from cirkit.utils.algorithms import DiAcyclicGraph
 
 
-class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
+class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
     def __init__(
         self,
-        modules: List[TorchModuleType],
-        in_modules: Dict[TorchModuleType, List[TorchModuleType]],
-        out_modules: Dict[TorchModuleType, List[TorchModuleType]],
+        modules: List[TorchModule],
+        in_modules: Dict[TorchModule, List[TorchModule]],
+        out_modules: Dict[TorchModule, List[TorchModule]],
         *,
         topologically_ordered: bool = False,
         fold_idx_info: Optional[FoldIndexInfo] = None,
@@ -56,9 +56,9 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
             module_outputs.append(y)
 
 
-class TorchRootedDiAcyclicGraph(TorchDiAcyclicGraph[TorchModuleType], ABC):
+class TorchRootedDiAcyclicGraph(TorchDiAcyclicGraph[TorchModule], ABC):
     @cached_property
-    def output(self) -> TorchModuleType:
+    def output(self) -> TorchModule:
         outputs = list(self.outputs)
         if len(outputs) != 1:
             raise ValueError("The graph has more than one output node.")

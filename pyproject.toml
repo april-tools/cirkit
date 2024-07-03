@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
   "torch~=2.2.0",
   "numpy>=1.24.0",
+  "joblib>=1.2.0",
 ]
 
 [project.optional-dependencies]

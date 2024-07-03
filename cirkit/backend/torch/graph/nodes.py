@@ -4,7 +4,7 @@ from typing import Any, Tuple, TypeVar
 from torch import nn
 
 
-class TorchModule(nn.Module, ABC):
+class AbstractTorchModule(nn.Module, ABC):
     def __init__(self, *, num_folds: int = 1):
         super().__init__()
         self.num_folds = num_folds
@@ -15,4 +15,4 @@ class TorchModule(nn.Module, ABC):
         ...
 
 
-TorchModuleType = TypeVar("TorchModuleType", bound=TorchModule)
+TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)

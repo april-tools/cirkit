@@ -1,4 +1,5 @@
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Type
 
 import torch
 from torch import Tensor
@@ -11,7 +12,9 @@ from cirkit.backend.torch.graph.folding import (
     build_fold_index_info,
 )
 from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
+from cirkit.backend.torch.graph.optimize import GraphOptEntry, GraphOptMatch, GraphOptPatternDefn
 from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.parameters.parameter import ParameterOptMatch, ParameterOptPattern
 from cirkit.utils.scope import Scope
 
 
@@ -202,3 +205,25 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         x = torch.empty(size=(1, self.num_channels, len(self.scope)))
         x = self._eval_layers(x)
         return x.squeeze(dim=0)  # squeeze dummy batch dimension
+
+
+LayerOptEntry = GraphOptEntry[TorchLayer]
+CircuitOptPatternDefn = GraphOptPatternDefn[TorchLayer]
+CircuitOptPattern = Type[CircuitOptPatternDefn]
+CircuitOptMatch = GraphOptMatch[TorchLayer]
+
+
+@dataclass(frozen=True)
+class LayerOptPatternDefn:
+    entry: LayerOptEntry
+    patterns: Dict[str, ParameterOptPattern]
+
+
+LayerOptPattern = Type[LayerOptPatternDefn]
+
+
+@dataclass(frozen=True)
+class LayerOptMatch:
+    pattern: LayerOptPattern
+    entry: TorchLayer
+    matches: Dict[str, ParameterOptMatch]

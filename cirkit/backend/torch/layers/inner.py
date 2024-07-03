@@ -171,12 +171,10 @@ class TorchDenseLayer(TorchSumLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        params = super().params
-        params.update(weight=self.weight)
-        return params
+        return dict(weight=self.weight)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
-        return torch.einsum("foi,f...i->f...o", self.weight(), x)  # shape (*B, Ki) -> (*B, Ko).
+        return torch.einsum("foi,f...i->f...o", self.weight(), x)
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -228,9 +226,7 @@ class TorchMixingLayer(TorchSumLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        params = super().params
-        params.update(weight=self.weight)
-        return params
+        return dict(weight=self.weight)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         return torch.einsum(

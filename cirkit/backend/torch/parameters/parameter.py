@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Type
 
 import torch
 from torch import Tensor
@@ -13,10 +13,16 @@ from cirkit.backend.torch.graph.folding import (
     build_fold_index_info,
 )
 from cirkit.backend.torch.graph.modules import TorchRootedDiAcyclicGraph
-from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.graph.nodes import AbstractTorchModule
+from cirkit.backend.torch.graph.optimize import (
+    GraphOptEntry,
+    GraphOptMatch,
+    GraphOptPattern,
+    GraphOptPatternDefn,
+)
 
 
-class TorchParameterNode(TorchModule, ABC):
+class TorchParameterNode(AbstractTorchModule, ABC):
     """The abstract base class for all reparameterizations."""
 
     def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
@@ -77,6 +83,44 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
     @abstractmethod
     def forward(self, *xs: Tensor) -> Tensor:
+        ...
+
+
+class TorchUnaryOpParameter(TorchParameterOp, ABC):
+    def __init__(self, in_shape: Tuple[int, ...], *, num_folds: int = 1) -> None:
+        super().__init__(in_shape, num_folds=num_folds)
+
+    def __call__(self, x: Tensor) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        ...
+
+
+class TorchBinaryOpParameter(TorchParameterOp, ABC):
+    def __init__(
+        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+    ) -> None:
+        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
+
+    def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x1, x2)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         ...
 
 
@@ -143,6 +187,23 @@ class ParameterAddressBook(AddressBook):
 
 
 class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
+    def __init__(
+        self,
+        nodes: List[TorchParameterNode],
+        in_nodes: Dict[TorchParameterNode, List[TorchParameterNode]],
+        out_nodes: Dict[TorchParameterNode, List[TorchParameterNode]],
+        *,
+        topologically_ordered: bool = False,
+        fold_idx_info: Optional[FoldIndexInfo] = None,
+    ):
+        super().__init__(
+            nodes,
+            in_nodes,
+            out_nodes,
+            topologically_ordered=topologically_ordered,
+            fold_idx_info=fold_idx_info,
+        )
+
     @property
     def num_folds(self) -> int:
         return self.output.num_folds
@@ -150,6 +211,56 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
     @property
     def shape(self) -> Tuple[int, ...]:
         return self.output.shape
+
+    @classmethod
+    def from_sequence(cls, p: "TorchParameter", *ns: TorchParameterNode) -> "TorchParameter":
+        assert not p.has_address_book and not p._fold_idx_info
+        nodes = p.nodes + list(ns)
+        in_nodes = dict(p.nodes_inputs)
+        out_nodes = dict(p.nodes_outputs)
+        for i, n in enumerate(ns):
+            in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.output]
+            out_nodes[n] = [ns[i + 1]] if i + 1 < len(ns) else []
+        out_nodes[p.output] = [ns[0]]
+        return TorchParameter(
+            nodes, in_nodes, out_nodes, topologically_ordered=p.is_topologically_ordered
+        )
+
+    @classmethod
+    def from_unary(cls, p: "TorchParameter", n: TorchUnaryOpParameter) -> "TorchParameter":
+        return TorchParameter.from_sequence(p, n)
+
+    @classmethod
+    def from_binary(
+        cls,
+        p1: "TorchParameter",
+        p2: "TorchParameter",
+        n: TorchBinaryOpParameter,
+    ) -> "TorchParameter":
+        p_nodes = p1.nodes + p2.nodes + [n]
+        in_nodes = {**p1.nodes_inputs, **p2.nodes_inputs}
+        out_nodes = {**p1.nodes_outputs, **p2.nodes_outputs}
+        in_nodes[n] = [p1.output, p2.output]
+        out_nodes[p1.output] = [n]
+        out_nodes[p2.output] = [n]
+        return TorchParameter(
+            p_nodes,
+            in_nodes,
+            out_nodes,
+            topologically_ordered=p1.is_topologically_ordered and p2.is_topologically_ordered,
+        )
+
+    def _build_address_book(self) -> AddressBook:
+        fold_idx_info = self._fold_idx_info
+        if fold_idx_info is None:
+            fold_idx_info = build_fold_index_info(
+                self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
+            )
+        address_book = ParameterAddressBook.from_index_info(
+            self.topological_ordering(), fold_idx_info
+        )
+        self._fold_idx_info = None
+        return address_book
 
     def reset_parameters(self) -> None:
         """Reset the input parameters."""
@@ -163,14 +274,8 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
     def forward(self) -> Tensor:
         return self._eval_forward()  # (F, d1, d2, ..., dk)
 
-    def _build_address_book(self) -> AddressBook:
-        fold_idx_info = self._fold_idx_info
-        if fold_idx_info is None:
-            fold_idx_info = build_fold_index_info(
-                self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
-            )
-        address_book = ParameterAddressBook.from_index_info(
-            self.topological_ordering(), fold_idx_info
-        )
-        self._fold_idx_info = None
-        return address_book
+
+ParameterOptEntry = GraphOptEntry[TorchParameterNode]
+ParameterOptPatternDefn = GraphOptPatternDefn[TorchParameterNode]
+ParameterOptPattern = Type[ParameterOptPatternDefn]
+ParameterOptMatch = GraphOptMatch[TorchParameterNode]

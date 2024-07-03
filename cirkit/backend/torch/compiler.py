@@ -6,10 +6,10 @@ from typing import IO, Callable, Dict, List, Optional, Tuple, Union, cast
 from torch import Tensor
 
 from cirkit.backend.base import AbstractCompiler, CompilerRegistry
+from cirkit.backend.torch.circuits import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
 from cirkit.backend.torch.initializers import stacked_initializer_
 from cirkit.backend.torch.layers import TorchLayer
-from cirkit.backend.torch.models import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.parameter import (
     TorchParameter,
@@ -196,8 +196,9 @@ class TorchCompiler(AbstractCompiler):
             topologically_ordered=True,
         )
 
-        # Apply optimizations
-        cc = self._optimize_circuit(cc)
+        # Post-process the compiled circuit, i.e.,
+        # optionally apply optimizations to it and then fold it
+        cc = self._post_process_circuit(cc)
 
         # Initialize some stuff
         cc.reset_parameters()
@@ -210,7 +211,7 @@ class TorchCompiler(AbstractCompiler):
         self._state.finish_compilation()
         return cc
 
-    def _optimize_circuit(self, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
+    def _post_process_circuit(self, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
         if self.is_optimize_enabled:
             # Optimize the circuit computational graph
             opt_cc = _optimize_circuit(self, cc)

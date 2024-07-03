@@ -5,12 +5,12 @@ import pytest
 import torch
 
 import cirkit.symbolic.functional as SF
+from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.models import TorchCircuit, TorchConstantCircuit
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.parameters import Parameter, TensorParameter
 from tests.floats import allclose, isclose
-from tests.symbolic.test_utils import build_simple_circuit, build_simple_pc
+from tests.symbolic.test_utils import build_simple_pc
 
 # TODO: group common code in some utility functions for testing
 
