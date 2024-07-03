@@ -149,8 +149,10 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         return params
 
     def log_score(self, x: Tensor) -> Tensor:
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        if x.is_floating_point():
+            x = x.long()  # The input to Categorical should be discrete
         x = F.one_hot(x, self.num_categories)  # (F, C, *B, D, num_categories)
         x = x.to(torch.get_default_dtype())
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
         x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
         return x
