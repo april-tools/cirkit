@@ -204,7 +204,8 @@ def build_address_book_entry(
     cum_fold_idx_t: List[Optional[Tensor]] = []
     for i, hi in enumerate(in_fold_idx):
         cum_fold_i_idx: List[int] = [cum_module_ids[i][idx[0]] + idx[1] for idx in hi]
-        useless_fold_idx = cum_fold_i_idx == list(range(len(cum_fold_i_idx)))
+        fold_size = sum(num_folds[idx[0]] for idx in hi)
+        useless_fold_idx = cum_fold_i_idx == list(range(fold_size))
         cum_fold_i_idx_t = None if useless_fold_idx else torch.tensor(cum_fold_i_idx)
         cum_fold_idx_t.append(cum_fold_i_idx_t)
 

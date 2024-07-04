@@ -8,6 +8,7 @@ from cirkit.symbolic.initializers import Initializer, NormalInitializer
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
+    GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
     MixingLayer,
@@ -28,6 +29,7 @@ def categorical_layer_factory(
     scope: Scope,
     num_units: int,
     num_channels: int,
+    *,
     num_categories: int = 2,
     parameterization: Optional[Parameterization] = None,
     initializer: Optional[Initializer] = None,
@@ -42,10 +44,19 @@ def categorical_layer_factory(
     )
 
 
+def gaussian_layer_factory(
+    scope: Scope,
+    num_units: int,
+    num_channels: int,
+) -> GaussianLayer:
+    return GaussianLayer(scope, num_units, num_channels)
+
+
 def dense_layer_factory(
     scope: Scope,
     num_input_units: int,
     num_output_units: int,
+    *,
     parameterization: Optional[Parameterization] = None,
     initializer: Optional[Initializer] = None,
 ) -> DenseLayer:
@@ -62,6 +73,7 @@ def mixing_layer_factory(
     scope: Scope,
     num_units: int,
     arity: int,
+    *,
     parameterization: Optional[Parameterization] = None,
     initializer: Optional[Initializer] = None,
 ) -> MixingLayer:
@@ -102,6 +114,8 @@ def build_simple_circuit(
             parameterization=logits_parameterization,
             initializer=logits_initializer,
         )
+    elif input_layer == "gaussian":
+        input_factory = gaussian_layer_factory
     else:
         assert False
     return Circuit.from_region_graph(
@@ -129,12 +143,12 @@ def build_simple_pc(
     normalized: bool = False,
 ):
     if normalized:
-        sum_parameterization = lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape, axis=1))
+        sum_parameterization = lambda p: Parameter.from_unary(SoftmaxParameter(p.shape, axis=1), p)
     else:
-        sum_parameterization = lambda p: Parameter.from_unary(p, ExpParameter(p.shape))
+        sum_parameterization = lambda p: Parameter.from_unary(ExpParameter(p.shape), p)
     if normalized:
         logits_parameterization = lambda p: Parameter.from_unary(
-            p, LogSoftmaxParameter(p.shape, axis=3)
+            LogSoftmaxParameter(p.shape, axis=3), p
         )
     else:
         logits_parameterization = None

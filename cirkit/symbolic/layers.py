@@ -3,7 +3,12 @@ from enum import IntEnum, auto
 from typing import Any, Dict, List, Optional, cast
 
 from cirkit.symbolic.initializers import Initializer, NormalInitializer
-from cirkit.symbolic.parameters import Parameter, Parameterization, TensorParameter
+from cirkit.symbolic.parameters import (
+    Parameter,
+    Parameterization,
+    ScaledSigmoidParameter,
+    TensorParameter,
+)
 from cirkit.utils.scope import Scope
 
 AbstractLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
@@ -115,11 +120,62 @@ class CategoricalLayer(InputLayer):
 
     @property
     def params(self) -> Dict[str, Parameter]:
-        params = super().params
         if self.logits is None:
-            params.update(probs=self.probs)
+            return dict(probs=self.probs)
+        return dict(logits=self.logits)
+
+
+class GaussianLayer(InputLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int,
+        mean: Optional[Parameter] = None,
+        stddev: Optional[Parameter] = None,
+        log_partition: Optional[Parameter] = None,
+        mean_parameterization: Optional[Parameterization] = None,
+        mean_initializer: Optional[Initializer] = None,
+        stddev_parameterization: Optional[Parameterization] = None,
+        stddev_initializer: Optional[Initializer] = None,
+    ):
+        super().__init__(scope, num_output_units, num_channels)
+        assert (mean is None and stddev is None) or (
+            mean is not None and stddev is not None
+        ), "Either both 'mean' and 'variance' has to be specified or none of them"
+        if mean is None and stddev is None:
+            if mean_initializer is None:
+                mean_initializer = NormalInitializer()
+            if stddev_initializer is None:
+                stddev_initializer = NormalInitializer()
+            mean = TensorParameter(
+                self.num_variables, num_output_units, num_channels, initializer=mean_initializer
+            )
+            stddev = TensorParameter(
+                self.num_variables, num_output_units, num_channels, initializer=stddev_initializer
+            )
+            if mean_parameterization is None:
+                mean = Parameter.from_leaf(mean)
+            else:
+                mean = mean_parameterization(mean)
+            if stddev_parameterization is None:
+                stddev = Parameter.from_unary(
+                    ScaledSigmoidParameter(stddev.shape, vmin=1e-5, vmax=1.5), stddev
+                )
+            else:
+                stddev = stddev_parameterization(stddev)
         else:
-            params.update(logits=self.logits)
+            assert mean.shape == (len(scope), num_output_units, num_channels)
+            assert stddev.shape == (len(scope), num_output_units, num_channels)
+        self.mean = mean
+        self.stddev = stddev
+        self.log_partition = log_partition
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        params = dict(mean=self.mean, stddev=self.stddev)
+        if self.log_partition is not None:
+            params.update(log_partition=self.log_partition)
         return params
 
 

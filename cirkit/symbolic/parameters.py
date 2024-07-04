@@ -1,9 +1,11 @@
+import operator
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from copy import copy as shallowcopy
-from functools import cached_property
+from functools import cached_property, reduce
+from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, List, Tuple, Union, final
+from typing import Any, Callable, Dict, Tuple, Union, final
 
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
@@ -130,6 +132,16 @@ class EntrywiseReduceOpParameter(EntrywiseOpParameter, ABC):
     @property
     def config(self) -> Dict[str, Any]:
         return dict(axis=self.axis)
+
+
+class SumParameter(BinaryParameterOp):
+    def __init__(self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...]) -> None:
+        assert in_shape1 == in_shape2
+        super().__init__(in_shape1, in_shape2)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.in_shapes[0]
 
 
 class HadamardParameter(BinaryParameterOp):
@@ -260,32 +272,34 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         )
 
     @classmethod
-    def from_unary(cls, p: Union[ParameterLeaf, "Parameter"], n: UnaryParameterOp) -> "Parameter":
+    def from_nary(cls, n: ParameterOp, *ps: Union[ParameterLeaf, "Parameter"]) -> "Parameter":
+        ps = tuple(Parameter.from_leaf(p) if isinstance(p, ParameterLeaf) else p for p in ps)
+        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
+        in_nodes = reduce(operator.ior, (p.nodes_inputs for p in ps), {})
+        out_nodes = reduce(operator.ior, (p.nodes_outputs for p in ps), {})
+        in_nodes[n] = list(p.output for p in ps)
+        for p in ps:
+            out_nodes[p.output] = [n]
+        topologically_ordered = all(p.is_topologically_ordered for p in ps)
+        return Parameter(
+            p_nodes,
+            in_nodes,
+            out_nodes,
+            topologically_ordered=topologically_ordered,
+        )
+
+    @classmethod
+    def from_unary(cls, n: UnaryParameterOp, p: Union[ParameterLeaf, "Parameter"]) -> "Parameter":
         return Parameter.from_sequence(p, n)
 
     @classmethod
     def from_binary(
         cls,
+        n: BinaryParameterOp,
         p1: Union[ParameterLeaf, "Parameter"],
         p2: Union[ParameterLeaf, "Parameter"],
-        n: BinaryParameterOp,
     ) -> "Parameter":
-        if isinstance(p1, ParameterLeaf):
-            p1 = Parameter.from_leaf(p1)
-        if isinstance(p2, ParameterLeaf):
-            p2 = Parameter.from_leaf(p2)
-        p_nodes = p1.nodes + p2.nodes + [n]
-        in_nodes = {**p1.nodes_inputs, **p2.nodes_inputs}
-        out_nodes = {**p1.nodes_outputs, **p2.nodes_outputs}
-        in_nodes[n] = [p1.output, p2.output]
-        out_nodes[p1.output] = [n]
-        out_nodes[p2.output] = [n]
-        return Parameter(
-            p_nodes,
-            in_nodes,
-            out_nodes,
-            topologically_ordered=p1.is_topologically_ordered and p2.is_topologically_ordered,
-        )
+        return Parameter.from_nary(n, p1, p2)
 
     def copy(self) -> "Parameter":
         # Build a new symbolic parameter's computational graph, by coping nodes.
@@ -319,3 +333,60 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
 
 Parameterization = Callable[[TensorParameter], Parameter]
+
+
+class GaussianProductMean(ParameterOp):
+    def __init__(
+        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+    ) -> None:
+        assert (
+            in_gaussian1_shape[0] == in_gaussian2_shape[0]
+            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
+        )
+        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] * self.in_shapes[1][1],
+            self.in_shapes[0][2],
+        )
+
+
+class GaussianProductStddev(BinaryParameterOp):
+    def __init__(
+        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+    ) -> None:
+        assert (
+            in_gaussian1_shape[0] == in_gaussian2_shape[0]
+            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
+        )
+        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] * self.in_shapes[1][1],
+            self.in_shapes[0][2],
+        )
+
+
+class GaussianProductLogPartition(ParameterOp):
+    def __init__(
+        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+    ) -> None:
+        assert (
+            in_gaussian1_shape[0] == in_gaussian2_shape[0]
+            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
+        )
+        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] * self.in_shapes[1][1],
+            self.in_shapes[0][2],
+        )

@@ -5,6 +5,7 @@ from cirkit.symbolic.layers import (
     AbstractLayerOperator,
     CategoricalLayer,
     DenseLayer,
+    GaussianLayer,
     HadamardLayer,
     IndexLayer,
     KroneckerLayer,
@@ -15,12 +16,16 @@ from cirkit.symbolic.layers import (
 )
 from cirkit.symbolic.parameters import (
     ConstantParameter,
+    GaussianProductLogPartition,
+    GaussianProductMean,
+    GaussianProductStddev,
     KroneckerParameter,
     LogParameter,
     OuterSumParameter,
     Parameter,
     ReduceLSEParameter,
     ReduceSumParameter,
+    SumParameter,
 )
 from cirkit.utils.scope import Scope
 
@@ -29,7 +34,8 @@ def integrate_categorical_layer(
     sl: CategoricalLayer, scope: Optional[Iterable[int]] = None
 ) -> CircuitBlock:
     scope = Scope(scope) if scope is not None else sl.scope
-    assert sl.scope == scope
+    if sl.scope != scope:
+        raise NotImplementedError()
     if sl.logits is None:
         log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
     else:
@@ -43,27 +49,102 @@ def integrate_categorical_layer(
     return CircuitBlock.from_layer(sl)
 
 
+def integrate_gaussian_layer(
+    sl: GaussianLayer, scope: Optional[Iterable[int]] = None
+) -> CircuitBlock:
+    scope = Scope(scope) if scope is not None else sl.scope
+    if sl.scope != scope:
+        raise NotImplementedError()
+    if sl.log_partition is None:
+        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+    else:
+        reduce_sum1 = ReduceSumParameter(sl.log_partition.shape, axis=2)
+        reduce_sum2 = ReduceSumParameter(reduce_sum1.shape, axis=0)
+        log_partition = Parameter.from_sequence(sl.log_partition.ref(), reduce_sum1, reduce_sum2)
+    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+    return CircuitBlock.from_layer(sl)
+
+
 def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) -> CircuitBlock:
     assert sl1.num_variables == sl2.num_variables
     assert sl1.num_channels == sl2.num_channels
     if sl1.logits is None:
-        sl1_logits = Parameter.from_unary(sl1.probs, LogParameter(sl1.probs.shape))
+        sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs)
     else:
         sl1_logits = sl1.logits
     if sl2.logits is None:
-        sl2_logits = Parameter.from_unary(sl2.probs, LogParameter(sl2.probs.shape))
+        sl2_logits = Parameter.from_unary(LogParameter(sl2.probs.shape), sl2.probs)
     else:
         sl2_logits = sl2.logits
     sl_logits = Parameter.from_binary(
+        OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=1),
         sl1_logits.ref(),
         sl2_logits.ref(),
-        OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=1),
     )
     sl = CategoricalLayer(
         sl1.scope | sl2.scope,
         sl1.num_output_units * sl2.num_output_units,
         num_channels=sl1.num_channels,
         logits=sl_logits,
+    )
+    return CircuitBlock.from_layer(sl)
+
+
+def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitBlock:
+    assert sl1.num_variables == sl2.num_variables
+    assert sl1.num_channels == sl2.num_channels
+
+    gaussian1_shape, gaussian2_shape = sl1.mean.shape, sl2.mean.shape
+    mean = Parameter.from_nary(
+        GaussianProductMean(gaussian1_shape, gaussian2_shape),
+        sl1.mean.ref(),
+        sl2.mean.ref(),
+        sl1.stddev.ref(),
+        sl2.stddev.ref(),
+    )
+    stddev = Parameter.from_binary(
+        GaussianProductStddev(gaussian1_shape, gaussian2_shape),
+        sl1.stddev.ref(),
+        sl2.stddev.ref(),
+    )
+    log_partition = Parameter.from_nary(
+        GaussianProductLogPartition(gaussian1_shape, gaussian2_shape),
+        sl1.mean.ref(),
+        sl2.mean.ref(),
+        sl1.stddev.ref(),
+        sl2.stddev.ref(),
+    )
+
+    if sl1.log_partition is not None or sl2.log_partition is not None:
+        if sl1.log_partition is None:
+            log_partition1 = ConstantParameter(
+                sl1.num_variables, sl1.num_output_units, sl1.num_channels, value=0.0
+            )
+        else:
+            log_partition1 = sl1.log_partition.ref()
+        if sl2.log_partition is None:
+            log_partition2 = ConstantParameter(
+                sl2.num_variables, sl2.num_output_units, sl2.num_channels, value=0.0
+            )
+        else:
+            log_partition2 = sl2.log_partition.ref()
+        log_partition = Parameter.from_binary(
+            SumParameter(log_partition.shape, log_partition.shape),
+            log_partition,
+            Parameter.from_binary(
+                OuterSumParameter(log_partition1.shape, log_partition2.shape, axis=1),
+                log_partition1,
+                log_partition2,
+            ),
+        )
+
+    sl = GaussianLayer(
+        sl1.scope | sl2.scope,
+        sl1.num_output_units * sl2.num_output_units,
+        num_channels=sl1.num_channels,
+        mean=mean,
+        stddev=stddev,
+        log_partition=log_partition,
     )
     return CircuitBlock.from_layer(sl)
 
@@ -91,7 +172,7 @@ def multiply_kronecker_layers(sl1: KroneckerLayer, sl2: KroneckerLayer) -> Circu
 
 def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
     weight = Parameter.from_binary(
-        sl1.weight.ref(), sl2.weight.ref(), KroneckerParameter(sl1.weight.shape, sl2.weight.shape)
+        KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = DenseLayer(
         sl1.scope | sl2.scope,
@@ -104,7 +185,7 @@ def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
 
 def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
     weight = Parameter.from_binary(
-        sl1.weight.ref(), sl2.weight.ref(), KroneckerParameter(sl1.weight.shape, sl2.weight.shape)
+        KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = MixingLayer(
         sl1.scope | sl2.scope,
@@ -121,12 +202,11 @@ class LayerOperatorFunc(Protocol):
 
 
 DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
-    LayerOperation.INTEGRATION: [
-        integrate_categorical_layer,
-    ],
+    LayerOperation.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
     LayerOperation.DIFFERENTIATION: [],
     LayerOperation.MULTIPLICATION: [
         multiply_categorical_layers,
+        multiply_gaussian_layers,
         multiply_hadamard_layers,
         multiply_kronecker_layers,
         multiply_dense_layers,
