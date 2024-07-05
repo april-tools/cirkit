@@ -135,8 +135,8 @@ class ParameterAddressBook(AddressBook):
                 return t if idx is None else t[idx]
             t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
             if idx is None:
-                return t[idx]
-            return t
+                return t
+            return t[idx]
 
         # Loop through the entries and yield inputs
         for entry in self._entries:

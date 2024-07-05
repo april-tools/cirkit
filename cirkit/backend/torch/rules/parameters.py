@@ -4,6 +4,9 @@ from cirkit.backend.base import ParameterCompilationFunc, ParameterCompilationSi
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.ops import (
     TorchExpParameter,
+    TorchGaussianProductLogPartition,
+    TorchGaussianProductMean,
+    TorchGaussianProductStddev,
     TorchHadamardParameter,
     TorchKroneckerParameter,
     TorchLogParameter,
@@ -17,10 +20,14 @@ from cirkit.backend.torch.parameters.ops import (
     TorchSigmoidParameter,
     TorchSoftmaxParameter,
     TorchSquareParameter,
+    TorchSumParameter,
 )
 from cirkit.symbolic.parameters import (
     ConstantParameter,
     ExpParameter,
+    GaussianProductLogPartition,
+    GaussianProductMean,
+    GaussianProductStddev,
     HadamardParameter,
     KroneckerParameter,
     LogParameter,
@@ -35,6 +42,7 @@ from cirkit.symbolic.parameters import (
     SigmoidParameter,
     SoftmaxParameter,
     SquareParameter,
+    SumParameter,
     TensorParameter,
 )
 
@@ -67,6 +75,11 @@ def compile_reference_parameter(
     # and wrap it in a pointer parameter node.
     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+
+def compile_sum_parameter(compiler: "TorchCompiler", p: SumParameter) -> TorchSumParameter:
+    in_shape1, in_shape2 = p.in_shapes
+    return TorchSumParameter(in_shape1, in_shape2)
 
 
 def compile_hadamard_parameter(
@@ -162,10 +175,29 @@ def compile_log_softmax_parameter(
     return TorchLogSoftmaxParameter(in_shape, dim=p.axis)
 
 
+def compile_gaussian_product_mean(
+    compiler: "TorchCompiler", p: GaussianProductMean
+) -> TorchGaussianProductMean:
+    return TorchGaussianProductMean(*p.in_shapes)
+
+
+def compile_gaussian_product_stddev(
+    compiler: "TorchCompiler", p: GaussianProductStddev
+) -> TorchGaussianProductStddev:
+    return TorchGaussianProductStddev(*p.in_shapes)
+
+
+def compile_gaussian_product_log_partition(
+    compiler: "TorchCompiler", p: GaussianProductLogPartition
+) -> TorchGaussianProductLogPartition:
+    return TorchGaussianProductLogPartition(*p.in_shapes)
+
+
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     TensorParameter: compile_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
+    SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,
     KroneckerParameter: compile_kronecker_parameter,
     OuterProductParameter: compile_outer_product_parameter,
@@ -180,4 +212,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     ReduceLSEParameter: compile_reduce_lse_parameter,
     SoftmaxParameter: compile_softmax_parameter,
     LogSoftmaxParameter: compile_log_softmax_parameter,
+    GaussianProductMean: compile_gaussian_product_mean,
+    GaussianProductStddev: compile_gaussian_product_stddev,
+    GaussianProductLogPartition: compile_gaussian_product_log_partition,
 }

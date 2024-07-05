@@ -192,10 +192,13 @@ def build_address_book_stacked_entry(
     )
 
     # Build the bookkeeping entry
+    useless_fold_idx = False
     cum_fold_idx = [[cum_module_ids[idx[0]] + idx[1] for idx in fi] for fi in in_fold_idx]
-    useless_fold_idx = len(cum_fold_idx) == 1 and cum_fold_idx[0] == list(
-        range(len(cum_fold_idx[0]))
-    )
+    if len(cum_fold_idx) == 1:
+        module_id = in_fold_idx[0][0][0]
+        if all(idx[0] == module_id for idx in in_fold_idx[0]):
+            fold_size = num_folds[module_id]
+            useless_fold_idx = cum_fold_idx[0] == list(range(fold_size))
     cum_fold_idx_t = None if useless_fold_idx else torch.tensor(cum_fold_idx)
 
     return AddressBookEntry([in_module_ids], [cum_fold_idx_t])
@@ -218,7 +221,11 @@ def build_address_book_entry(
     cum_fold_idx_t: List[Optional[Tensor]] = []
     for i, hi in enumerate(in_fold_idx):
         cum_fold_i_idx: List[int] = [cum_module_ids[i][idx[0]] + idx[1] for idx in hi]
-        useless_fold_idx = cum_fold_i_idx == list(range(len(cum_fold_i_idx)))
+        useless_fold_idx = False
+        module_id = hi[0][0]
+        if all(idx[0] == module_id for idx in hi):
+            fold_size = num_folds[module_id]
+            useless_fold_idx = cum_fold_i_idx == list(range(fold_size))
         cum_fold_i_idx_t = None if useless_fold_idx else torch.tensor(cum_fold_i_idx)
         cum_fold_idx_t.append(cum_fold_i_idx_t)
 
