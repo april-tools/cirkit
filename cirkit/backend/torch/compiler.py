@@ -21,7 +21,7 @@ from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
-from cirkit.backend.torch.semiring import SemiringImpl, Semiring
+from cirkit.backend.torch.semiring import Semiring, SemiringImpl
 from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
@@ -378,7 +378,9 @@ def _fold_parameter_nodes_group(
         # Catch the case we are able to fold multiple tensor slicing operations
         in_folded_node = group[0].deref()
         in_fold_idx: List[int] = list(
-            chain.from_iterable(list(range(p.num_folds)) if p.fold_idx is None else p.fold_idx for p in group)
+            chain.from_iterable(
+                list(range(p.num_folds)) if p.fold_idx is None else p.fold_idx for p in group
+            )
         )
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
     # We are folding an operator: just set the number of folds and copy the configuration parameters

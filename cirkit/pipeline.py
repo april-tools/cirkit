@@ -8,9 +8,10 @@ import cirkit.symbolic.functional as SF
 from cirkit.backend.base import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
+    CompiledCircuit,
     InitializerCompilationFunc,
     LayerCompilationFunc,
-    ParameterCompilationFunc, CompiledCircuit,
+    ParameterCompilationFunc,
 )
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import AbstractLayerOperator

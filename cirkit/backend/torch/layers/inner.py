@@ -172,7 +172,9 @@ class TorchDenseLayer(TorchSumLayer):
         return params
 
     def _forward_impl(self, x: Tensor) -> Tensor:
-        return torch.einsum("foi,f...i->f...o", self.semiring.cast(self.weight()), x)  # shape (*B, Ki) -> (*B, Ko).
+        return torch.einsum(
+            "foi,f...i->f...o", self.semiring.cast(self.weight()), x
+        )  # shape (*B, Ki) -> (*B, Ko).
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

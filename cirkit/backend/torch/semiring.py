@@ -229,7 +229,6 @@ class SumProductSemiring(SemiringImpl):
             return x
         raise ValueError(f"Cannot map a tensor of type {x.dtype} to the sum-product semiring")
 
-
     @classmethod
     def from_lse_sum(cls, x: Tensor) -> Tensor:
         """Convert a value from log space to the current space.
@@ -455,6 +454,7 @@ class LSESumSemiring(SemiringImpl):
 @final  # type: ignore[misc]
 class ComplexLSESumSemiring(SemiringImpl):
     """The complex log space computation."""
+
     @classmethod
     def cast(cls, x: Tensor) -> Tensor:
         """Cast a tensor to the data type required by the semiring.
