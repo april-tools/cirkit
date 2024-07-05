@@ -160,7 +160,7 @@ class GaussianLayer(InputLayer):
                 mean = mean_parameterization(mean)
             if stddev_parameterization is None:
                 stddev = Parameter.from_unary(
-                    ScaledSigmoidParameter(stddev.shape, vmin=1e-5, vmax=1.5), stddev
+                    ScaledSigmoidParameter(stddev.shape, vmin=1e-5, vmax=1.0), stddev
                 )
             else:
                 stddev = stddev_parameterization(stddev)
