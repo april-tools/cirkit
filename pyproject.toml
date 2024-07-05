@@ -44,7 +44,8 @@ dev = [
 notebooks = [
   "notebook",
   "torchvision~=0.17.0",
-  "matplotlib"
+  "matplotlib",
+  "scikit-learn"
 ]
 
 [project.urls]
