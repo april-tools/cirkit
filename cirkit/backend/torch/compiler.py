@@ -1,6 +1,7 @@
 import functools
 import os
 from collections import defaultdict
+from itertools import chain
 from typing import IO, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from torch import Tensor
@@ -20,7 +21,7 @@ from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
-from cirkit.backend.torch.semiring import Semiring, SemiringCls
+from cirkit.backend.torch.semiring import SemiringImpl, Semiring
 from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
@@ -79,7 +80,7 @@ class TorchCompiler(AbstractCompiler):
         super().__init__(default_registry, fold=fold, einsum=einsum)
         self._fold = fold
         self._einsum = einsum
-        self._semiring = Semiring.from_name(semiring)
+        self._semiring: Semiring = SemiringImpl.from_name(semiring)
 
         # The state of the compiler
         self._state = TorchCompilerState()
@@ -98,7 +99,7 @@ class TorchCompiler(AbstractCompiler):
         return self.get_compiled_circuit(sc)
 
     @property
-    def semiring(self) -> SemiringCls:
+    def semiring(self) -> Semiring:
         return self._semiring
 
     @property
@@ -375,9 +376,10 @@ def _fold_parameter_nodes_group(
             # In such a case, just have the slice as folded parameter (i.e., number of folds = 1)
             return group[0]
         # Catch the case we are able to fold multiple tensor slicing operations
-        assert all(len(p.fold_idx) == 1 for p in group)
         in_folded_node = group[0].deref()
-        in_fold_idx: List[int] = [p.fold_idx[0] for p in group]
+        in_fold_idx: List[int] = list(
+            chain.from_iterable(list(range(p.num_folds)) if p.fold_idx is None else p.fold_idx for p in group)
+        )
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)

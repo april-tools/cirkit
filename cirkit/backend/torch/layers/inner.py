@@ -7,7 +7,7 @@ from torch import Tensor, nn
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.semiring import Semiring
 from cirkit.backend.torch.utils import InitializerFunc
 
 
@@ -23,7 +23,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -56,7 +56,7 @@ class TorchHadamardLayer(TorchProductLayer):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -95,7 +95,7 @@ class TorchKroneckerLayer(TorchProductLayer):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -140,7 +140,7 @@ class TorchDenseLayer(TorchSumLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -172,7 +172,7 @@ class TorchDenseLayer(TorchSumLayer):
         return params
 
     def _forward_impl(self, x: Tensor) -> Tensor:
-        return torch.einsum("foi,f...i->f...o", self.weight(), x)  # shape (*B, Ki) -> (*B, Ko).
+        return torch.einsum("foi,f...i->f...o", self.semiring.cast(self.weight()), x)  # shape (*B, Ki) -> (*B, Ko).
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -201,7 +201,7 @@ class TorchMixingLayer(TorchSumLayer):
         arity: int = 2,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -230,7 +230,7 @@ class TorchMixingLayer(TorchSumLayer):
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         return torch.einsum(
-            "fkh,fh...k->f...k", self.weight(), x
+            "fkh,fh...k->f...k", self.semiring.cast(self.weight()), x
         )  # shape (F, H, *B, K) -> (F, *B, K).
 
     def forward(self, x: Tensor) -> Tensor:

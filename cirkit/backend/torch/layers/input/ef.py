@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.semiring import Semiring
 from cirkit.utils.scope import Scope
 
 
@@ -34,7 +34,7 @@ class TorchExpFamilyLayer(TorchInputLayer):
         *,
         num_channels: int = 1,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -86,7 +86,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         num_categories: int = 2,
         probs: Optional[TorchParameter] = None,
         logits: Optional[TorchParameter] = None,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -171,7 +171,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         mean: Optional[TorchParameter],
         stddev: Optional[TorchParameter],
         log_partition: Optional[TorchParameter] = None,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
