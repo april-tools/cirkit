@@ -1,6 +1,7 @@
 import functools
 import os
 from collections import defaultdict
+from itertools import chain
 from typing import IO, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from torch import Tensor
@@ -21,7 +22,7 @@ from cirkit.backend.torch.rules import (
     DEFAULT_LAYER_COMPILATION_RULES,
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
-from cirkit.backend.torch.semiring import Semiring, SemiringCls
+from cirkit.backend.torch.semiring import Semiring, SemiringImpl
 from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
@@ -78,9 +79,9 @@ class TorchCompiler(AbstractCompiler):
             DEFAULT_INITIALIZER_COMPILATION_RULES,
         )
         super().__init__(default_registry, fold=fold, optimize=optimize)
-
-        # Retrieve the semiring to use
-        self._semiring = Semiring.from_name(semiring)
+        self._fold = fold
+        self._optimize = optimize
+        self._semiring: Semiring = SemiringImpl.from_name(semiring)
 
         # The state of the compiler
         self._state = TorchCompilerState()
@@ -99,7 +100,7 @@ class TorchCompiler(AbstractCompiler):
         return self.get_compiled_circuit(sc)
 
     @property
-    def semiring(self) -> SemiringCls:
+    def semiring(self) -> Semiring:
         return self._semiring
 
     @property
@@ -113,6 +114,11 @@ class TorchCompiler(AbstractCompiler):
     @property
     def state(self) -> TorchCompilerState:
         return self._state
+
+    def compile_layer(self, layer: Layer) -> TorchLayer:
+        signature = type(layer)
+        rule = self.retrieve_layer_rule(signature)
+        return cast(TorchLayer, rule(self, layer))
 
     def compile_parameter(self, parameter: Parameter) -> TorchParameter:
         # A map from symbolic to compiled parameters
@@ -143,11 +149,6 @@ class TorchCompiler(AbstractCompiler):
         rule = self.retrieve_initializer_rule(signature)
         return cast(Callable[[Tensor], Tensor], rule(self, initializer))
 
-    def _compile_layer(self, layer: Layer) -> TorchLayer:
-        signature = type(layer)
-        rule = self.retrieve_layer_rule(signature)
-        return cast(TorchLayer, rule(self, layer))
-
     def _compile_parameter_node(self, node: ParameterNode) -> TorchParameterNode:
         signature = type(node)
         rule = self.retrieve_parameter_rule(signature)
@@ -164,7 +165,7 @@ class TorchCompiler(AbstractCompiler):
         # Compile layers by following the topological ordering
         for sl in sc.topological_ordering():
             # Compile the layer, for any layer types
-            layer = self._compile_layer(sl)
+            layer = self.compile_layer(sl)
 
             # Build the connectivity between compiled layers
             ins = [compiled_layers_map[sli] for sli in sc.layer_inputs(sl)]
@@ -301,7 +302,7 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
     # by following the layer-wise topological ordering
     nodes, in_nodes, out_nodes, fold_idx_info = build_folded_graph(
         ordering,
-        outputs=map(lambda pi: pi.output, parameters),
+        outputs=chain.from_iterable(map(lambda pi: pi.outputs, parameters)),
         incomings_fn=in_nodes.get,
         fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler),
     )
@@ -346,9 +347,12 @@ def _fold_parameter_nodes_group(
             # In such a case, just have the slice as folded parameter (i.e., number of folds = 1)
             return group[0]
         # Catch the case we are able to fold multiple tensor slicing operations
-        assert all(len(p.fold_idx) == 1 for p in group)
         in_folded_node = group[0].deref()
-        in_fold_idx: List[int] = [p.fold_idx[0] for p in group]
+        in_fold_idx: List[int] = list(
+            chain.from_iterable(
+                list(range(p.num_folds)) if p.fold_idx is None else p.fold_idx for p in group
+            )
+        )
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)

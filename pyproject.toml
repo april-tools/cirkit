@@ -46,7 +46,9 @@ notebooks = [
   "notebook",
   "torchvision~=0.17.0",
   "matplotlib",
-  "scikit-learn"
+  "scikit-learn",
+  "pandas",
+  "h5py"
 ]
 
 [project.urls]

@@ -1,12 +1,11 @@
 from abc import ABC
 from typing import Any, Dict, Optional
 
-import torch
 from torch import Tensor
 
 from cirkit.backend.torch.layers.inner import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.semiring import Semiring
 
 
 class TorchSumProductLayer(TorchInnerLayer, ABC):
@@ -34,7 +33,7 @@ class TorchTuckerLayer(TorchSumProductLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -57,12 +56,6 @@ class TorchTuckerLayer(TorchSumProductLayer):
     def params(self) -> Dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
-    def _forward_impl(self, x1: Tensor, x2: Tensor) -> Tensor:
-        # shape (*B, I), (*B, J) -> (*B, O).
-        w = self.weight()
-        w = w.view(-1, self.num_output_units, self.num_input_units, self.num_input_units)
-        return torch.einsum("foij,f...i,f...j->f...o", w, x1, x2)
-
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
@@ -72,7 +65,16 @@ class TorchTuckerLayer(TorchSumProductLayer):
         Returns:
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
-        return self.semiring.sum(self._forward_impl, x[:, 0], x[:, 1], dim=-1, keepdim=True)
+        weight = self.weight().view(
+            -1, self.num_output_units, self.num_input_units, self.num_input_units
+        )
+        return self.semiring.einsum(
+            "foij,f...i,f...j->f...o",
+            operands=(weight,),
+            inputs=(x[:, 0], x[:, 1]),
+            dim=-1,
+            keepdim=True,
+        )
 
 
 class TorchCPLayer(TorchSumProductLayer):
@@ -91,7 +93,7 @@ class TorchCPLayer(TorchSumProductLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -115,9 +117,6 @@ class TorchCPLayer(TorchSumProductLayer):
     def params(self) -> Dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
-    def _forward_impl(self, x: Tensor) -> Tensor:
-        return torch.einsum("foi,f...i->f...o", self.weight(), x)
-
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
@@ -128,4 +127,7 @@ class TorchCPLayer(TorchSumProductLayer):
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
         x = self.semiring.prod(x, dim=1)  # (F, *B, Ki)
-        return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # (F, *B, Ko)
+        weight = self.weight()
+        return self.semiring.einsum(
+            "oij,...i,...j->...o", operands=(weight,), inputs=(x[0], x[1]), dim=-1, keepdim=True
+        )

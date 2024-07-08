@@ -3,7 +3,7 @@ import itertools
 from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -25,10 +25,23 @@ class AddressBookEntry:
 
 class AddressBook(ABC):
     def __init__(self, entries: List[AddressBookEntry]) -> None:
+        super().__init__()
         self._entries = entries
 
     def __len__(self) -> int:
         return len(self._entries)
+
+    def set_device(self, device: Optional[Union[str, torch.device, int]] = None) -> "AddressBook":
+        self._entries = list(
+            map(
+                lambda entry: AddressBookEntry(
+                    entry.in_module_ids,
+                    [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
+                ),
+                self._entries,
+            )
+        )
+        return self
 
     @abc.abstractmethod
     def lookup(
@@ -178,10 +191,10 @@ def group_foldable_modules(
 
 
 def build_address_book_stacked_entry(
-    in_fold_idx: List[List[Tuple[int, int]]], *, num_folds: Dict[int, int]
+    in_fold_idx: List[List[Tuple[int, int]]], *, num_folds: Dict[int, int], output: bool = False
 ) -> AddressBookEntry:
     # Retrieve the unique fold indices that reference the module inputs
-    in_module_ids = list(set(idx[0] for fi in in_fold_idx for idx in fi))
+    in_module_ids = list(dict.fromkeys(idx[0] for fi in in_fold_idx for idx in fi))
 
     # Compute the cumulative indices of the folded inputs
     cum_module_ids = dict(
@@ -192,13 +205,22 @@ def build_address_book_stacked_entry(
     )
 
     # Build the bookkeeping entry
-    useless_fold_idx = False
     cum_fold_idx = [[cum_module_ids[idx[0]] + idx[1] for idx in fi] for fi in in_fold_idx]
+
+    # Check if we are computing the output stacked address book entry
+    # If so, then squeeze the fold dimension that is equal to one
+    if output:
+        assert len(cum_fold_idx) == 1
+        cum_fold_idx_t = torch.tensor(cum_fold_idx[0])
+        return AddressBookEntry([in_module_ids], [cum_fold_idx_t])
+
+    # If we are computing a non-output stacked address book entry,
+    # then check if the fold index would be equivalent to an 'unsqueeze' on dimension 0.
+    # If so, then replace the fold index with None as this would result in a more efficient unsqueeze
+    useless_fold_idx = False
     if len(cum_fold_idx) == 1:
-        module_id = in_fold_idx[0][0][0]
-        if all(idx[0] == module_id for idx in in_fold_idx[0]):
-            fold_size = num_folds[module_id]
-            useless_fold_idx = cum_fold_idx[0] == list(range(fold_size))
+        fold_size = sum(num_folds[mid] for mid in in_module_ids)
+        useless_fold_idx = cum_fold_idx[0] == list(range(fold_size))
     cum_fold_idx_t = None if useless_fold_idx else torch.tensor(cum_fold_idx)
 
     return AddressBookEntry([in_module_ids], [cum_fold_idx_t])
@@ -207,11 +229,13 @@ def build_address_book_stacked_entry(
 def build_address_book_entry(
     in_fold_idx: List[List[Tuple[int, int]]], *, num_folds: Dict[int, int]
 ) -> AddressBookEntry:
-    # Transpose the index information
+    # Transpose the index information, since we will build the
+    # address book information for each operand independently
+    # (this is because the inputs of modules might not stacked, e.g., in the parameter torch graph)
     in_fold_idx = list(map(list, zip(*in_fold_idx)))
 
     # Retrieve the unique fold indices that reference the module inputs
-    in_module_ids = [list(set(idx[0] for idx in hi)) for hi in in_fold_idx]
+    in_module_ids = [list(dict.fromkeys(idx[0] for idx in hi)) for hi in in_fold_idx]
 
     # Compute the cumulative indices of the folded inputs
     cum_module_ids = [
@@ -221,11 +245,14 @@ def build_address_book_entry(
     cum_fold_idx_t: List[Optional[Tensor]] = []
     for i, hi in enumerate(in_fold_idx):
         cum_fold_i_idx: List[int] = [cum_module_ids[i][idx[0]] + idx[1] for idx in hi]
-        useless_fold_idx = False
+        # The following checks whether using the fold index would yield the same tensor
+        # If so, then avoid indexing at all
         module_id = hi[0][0]
         if all(idx[0] == module_id for idx in hi):
             fold_size = num_folds[module_id]
             useless_fold_idx = cum_fold_i_idx == list(range(fold_size))
+        else:
+            useless_fold_idx = False
         cum_fold_i_idx_t = None if useless_fold_idx else torch.tensor(cum_fold_i_idx)
         cum_fold_idx_t.append(cum_fold_i_idx_t)
 

@@ -176,6 +176,10 @@ class AbstractCompiler(ABC):
         return self.compile_pipeline(sc)
 
     @abstractmethod
+    def compile_layer(self, sl: Layer) -> Any:
+        ...
+
+    @abstractmethod
     def compile_pipeline(self, sc: Circuit) -> CompiledCircuit:
         ...
 

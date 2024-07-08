@@ -26,6 +26,7 @@ class CircuitOperator(AbstractCircuitOperator):
             count + 1
         )  # Enumerate negative integers as the user can extend them with non-negative ones
 
+    MERGE = auto()
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
     MULTIPLICATION = auto()
@@ -285,7 +286,7 @@ class Circuit:
         input_factory: Callable[[Scope, int, int], InputLayer],
         sum_factory: Callable[[Scope, int, int], SumLayer],
         prod_factory: Callable[[Scope, int, int], ProductLayer],
-        mixing_factory: Optional[Callable[[Scope, int, int], SumLayer]],
+        mixing_factory: Optional[Callable[[Scope, int, int], SumLayer]] = None,
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
@@ -327,6 +328,10 @@ class Circuit:
             elif (
                 isinstance(rgn, RegionNode) and len(rgn.inputs) > 1
             ):  # Region with multiple partitionings
+                if mixing_factory is None:
+                    raise ValueError(
+                        "A mixing layer factory must be specified to overparameterize multiple region partitionings"
+                    )
                 num_units = num_sum_units if rgn.outputs else num_classes
                 sum_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
                 mix_sl = mixing_factory(rgn.scope, num_units, len(sum_inputs))

@@ -1,12 +1,16 @@
 from abc import ABC
 from functools import cached_property
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.parameters.parameter import TorchBinaryOpParameter, TorchUnaryOpParameter, TorchParameterOp
+from cirkit.backend.torch.parameters.parameter import (
+    TorchBinaryOpParameter,
+    TorchParameterOp,
+    TorchUnaryOpParameter,
+)
 from cirkit.backend.torch.semiring import LSESumSemiring, SumProductSemiring
 
 
@@ -361,12 +365,16 @@ class TorchGaussianProductMean(TorchParameterOp):
         in_gaussian2_shape: Tuple[int, ...],
         *,
         num_folds: int = 1,
+        eps: Optional[float] = None,
     ) -> None:
         assert (
             in_gaussian1_shape[0] == in_gaussian2_shape[0]
             and in_gaussian1_shape[2] == in_gaussian2_shape[2]
         )
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
+        if eps is None:
+            eps = torch.finfo(torch.get_default_dtype()).eps
+        self._eps = eps
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -376,11 +384,15 @@ class TorchGaussianProductMean(TorchParameterOp):
             self.in_shapes[0][2],
         )
 
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(eps=self._eps)
+
     def forward(self, mean1: Tensor, mean2: Tensor, stddev1: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, D, K1, C)
         var2 = torch.square(stddev2)  # (F, D, K2, C)
         inv_var12 = torch.reciprocal(
-            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)
+            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2) + self._eps
         )  # (F, D, K1, K2, C)
         wm1 = mean1.unsqueeze(dim=3) * var2.unsqueeze(dim=2)  # (F, D, K1, K2, C)
         wm2 = mean2.unsqueeze(dim=2) * var1.unsqueeze(dim=3)  # (F, D, K1, K2, C)
@@ -395,12 +407,16 @@ class TorchGaussianProductStddev(TorchBinaryOpParameter):
         in_gaussian2_shape: Tuple[int, ...],
         *,
         num_folds: int = 1,
+        eps: Optional[float] = None,
     ) -> None:
         assert (
             in_gaussian1_shape[0] == in_gaussian2_shape[0]
             and in_gaussian1_shape[2] == in_gaussian2_shape[2]
         )
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
+        if eps is None:
+            eps = torch.finfo(torch.get_default_dtype()).eps
+        self._eps = eps
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -410,12 +426,16 @@ class TorchGaussianProductStddev(TorchBinaryOpParameter):
             self.in_shapes[0][2],
         )
 
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(eps=self._eps)
+
     def forward(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, D, K1, C)
         var2 = torch.square(stddev2)  # (F, D, K2, C)
-        inv_var1 = torch.reciprocal(var1).unsqueeze(dim=3)  # (F, D, K1, 1, C)
-        inv_var2 = torch.reciprocal(var2).unsqueeze(dim=2)  # (F, D, 1, K2, C)
-        var = torch.reciprocal(inv_var1 + inv_var2)  # (F, D, K1, K2, C)
+        inv_var1 = torch.reciprocal(var1 + self._eps).unsqueeze(dim=3)  # (F, D, K1, 1, C)
+        inv_var2 = torch.reciprocal(var2 + self._eps).unsqueeze(dim=2)  # (F, D, 1, K2, C)
+        var = torch.reciprocal(inv_var1 + inv_var2 + self._eps)  # (F, D, K1, K2, C)
         return torch.sqrt(var).view(-1, *self.shape)  # (F, D, K1 * K2print, C)
 
 
@@ -426,6 +446,7 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         in_gaussian2_shape: Tuple[int, ...],
         *,
         num_folds: int = 1,
+        eps: Optional[float] = None,
     ) -> None:
         assert (
             in_gaussian1_shape[0] == in_gaussian2_shape[0]
@@ -433,6 +454,9 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         )
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
         self._log_two_pi = np.log(2.0 * np.pi)
+        if eps is None:
+            eps = torch.finfo(torch.get_default_dtype()).eps
+        self._eps = eps
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -441,6 +465,10 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
             self.in_shapes[0][1] * self.in_shapes[1][1],
             self.in_shapes[0][2],
         )
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(eps=self._eps)
 
     def forward(
         self,
@@ -451,7 +479,7 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
     ) -> Tensor:
         var1 = torch.square(stddev1)  # (F, D, K1, C)
         var2 = torch.square(stddev2)  # (F, D, K1, C)
-        var12 = var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)  # (F, D, K1, K2, C)
+        var12 = var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2) + self._eps  # (F, D, K1, K2, C)
         inv_var12 = torch.reciprocal(var12)
         sq_mahalanobis = torch.square(mean1.unsqueeze(dim=3) - mean2.unsqueeze(dim=2)) * inv_var12
         log_partition = -0.5 * (self._log_two_pi + torch.log(var12) + sq_mahalanobis)

@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.semiring import Semiring
 from cirkit.utils.scope import Scope
 
 
@@ -23,7 +23,7 @@ class TorchInputLayer(TorchLayer, ABC):
         *,
         num_channels: int = 1,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 

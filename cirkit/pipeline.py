@@ -8,12 +8,13 @@ import cirkit.symbolic.functional as SF
 from cirkit.backend.base import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
+    CompiledCircuit,
     InitializerCompilationFunc,
     LayerCompilationFunc,
     ParameterCompilationFunc,
 )
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import AbstractLayerOperator
+from cirkit.symbolic.layers import AbstractLayerOperator, Layer
 from cirkit.symbolic.operators import LayerOperatorFunc
 from cirkit.symbolic.registry import OperatorRegistry
 
@@ -83,8 +84,23 @@ class PipelineContext(AbstractContextManager):
     def add_initializer_compilation_rule(self, func: InitializerCompilationFunc):
         self._compiler.add_initializer_rule(func)
 
-    def compile(self, sc: Circuit) -> Any:
+    def compile_layer(self, sl: Layer) -> Any:
+        return self._compiler.compile_layer(sl)
+
+    def compile(self, sc: Circuit) -> CompiledCircuit:
         return self._compiler.compile(sc)
+
+    def is_compiled(self, sc: Circuit) -> bool:
+        return self._compiler.is_compiled(sc)
+
+    def has_symbolic(self, cc: CompiledCircuit) -> bool:
+        return self._compiler.has_symbolic(cc)
+
+    def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
+        return self._compiler.get_compiled_circuit(sc)
+
+    def get_symbolic_circuit(self, cc: CompiledCircuit) -> Circuit:
+        return self._compiler.get_symbolic_circuit(cc)
 
     def integrate(self, cc: Any, scope: Optional[Iterable[int]] = None) -> Any:
         if not self._compiler.has_symbolic(cc):
