@@ -237,6 +237,7 @@ class ClampParameter(EntrywiseOpParameter):
         vmin: Optional[float] = None,
         vmax: Optional[float] = None,
     ) -> None:
+        assert vmin is not None or vmax is not None
         super().__init__(in_shape)
         self.vmin = vmin
         self.vmax = vmax

@@ -283,6 +283,7 @@ class TorchClampParameter(TorchEntrywiseOpParameter):
         vmin: Optional[float] = None,
         vmax: Optional[float] = None,
     ) -> None:
+        assert vmin is not None or vmax is not None
         super().__init__(in_shape, num_folds=num_folds)
         self.vmin = vmin
         self.vmax = vmax
@@ -297,7 +298,7 @@ class TorchClampParameter(TorchEntrywiseOpParameter):
         return config
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.clamp(x, min=self.vmax, max=self.vmax)
+        return torch.clamp(x, min=self.vmin, max=self.vmax)
 
 
 class TorchReduceSumParameter(TorchReduceOpParamter):
