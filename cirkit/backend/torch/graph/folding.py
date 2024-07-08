@@ -185,7 +185,8 @@ def group_foldable_modules(
 
     # For each module, either create a new group or insert it into an existing one
     for m in modules:
-        groups[m.fold_settings].append(m)
+        m_settings = (type(m), *m.fold_settings)
+        groups[m_settings].append(m)
 
     return list(groups.values())
 
