@@ -12,7 +12,7 @@ from cirkit.backend.torch.graph.folding import (
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
-from cirkit.backend.torch.graph.modules import TorchRootedDiAcyclicGraph
+from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
 from cirkit.backend.torch.graph.nodes import TorchModule
 
 
@@ -138,14 +138,14 @@ class ParameterAddressBook(AddressBook):
         return ParameterAddressBook(entries)
 
 
-class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
+class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     @property
     def num_folds(self) -> int:
-        return self.output.num_folds
+        return sum(n.num_folds for n in self.outputs)
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.output.shape
+        return next(self.outputs).shape
 
     def reset_parameters(self) -> None:
         """Reset the input parameters."""

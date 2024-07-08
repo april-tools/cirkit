@@ -202,5 +202,5 @@ class TorchConstantCircuit(AbstractTorchCircuit):
 
     def forward(self) -> Tensor:
         x = torch.empty(size=(1, self.num_channels, len(self.scope)), device=self.device)
-        x = self._eval_layers(x)  # (O, B, K)
-        return x.squeeze(dim=1)  # (O, K)
+        x = self._eval_layers(x)  # (B, O, K)
+        return x.squeeze(dim=0)  # (O, K)

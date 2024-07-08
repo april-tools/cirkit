@@ -75,13 +75,3 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
                 return output
             y = module(*inputs)
             module_outputs.append(y)
-
-
-class TorchRootedDiAcyclicGraph(TorchDiAcyclicGraph[TorchModuleType], ABC):
-    @cached_property
-    def output(self) -> TorchModuleType:
-        outputs = list(self.outputs)
-        if len(outputs) != 1:
-            raise ValueError("The graph has more than one output node.")
-        (output,) = outputs
-        return output

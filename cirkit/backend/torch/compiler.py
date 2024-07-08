@@ -323,7 +323,7 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
     # by following the layer-wise topological ordering
     nodes, in_nodes, out_nodes, fold_idx_info = build_folded_graph(
         ordering,
-        outputs=map(lambda pi: pi.output, parameters),
+        outputs=chain.from_iterable(map(lambda pi: pi.outputs, parameters)),
         incomings_fn=in_nodes.get,
         group_foldable_fn=_group_foldable_parameter_nodes,
         fold_group_fn=functools.partial(_fold_parameter_nodes_group, compiler=compiler),
