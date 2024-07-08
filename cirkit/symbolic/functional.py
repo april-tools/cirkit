@@ -2,7 +2,7 @@ import functools
 import itertools
 import operator
 from collections import defaultdict
-from typing import Dict, Iterable, List, Optional, Tuple, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from cirkit.symbolic.circuit import (
     Circuit,
@@ -16,10 +16,7 @@ from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def merge(
-    scs: Sequence[Circuit],
-    registry: Optional[OperatorRegistry] = None
-) -> Circuit:
+def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
     # Retrieve the number of channels
     assert len(set(sc.num_channels for sc in scs)) == 1
     num_channels = scs[0].num_channels
@@ -57,10 +54,7 @@ def merge(
         blocks,
         in_blocks,
         out_blocks,
-        operation=CircuitOperation(
-            operator=CircuitOperator.MERGE,
-            operands=tuple(scs)
-        ),
+        operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
         topologically_ordered=topologically_ordered,
     )
 
