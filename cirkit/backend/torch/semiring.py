@@ -13,7 +13,7 @@ from typing import (
     Union,
     cast,
 )
-from typing_extensions import Self, TypeVarTuple, Unpack, final
+from typing_extensions import TypeVarTuple, Unpack, final
 
 import torch
 from torch import Tensor
@@ -25,7 +25,7 @@ Semiring = TypeVar("Semiring", bound=Type["SemiringImpl"])
 
 
 class SemiringImpl(ABC):
-    """The abstract base class for compotational spaces.
+    """The abstract base class for semiring implementations.
 
     Due to numerical precision, the actual units in computational graph may hold values in, e.g., \
     log space, instead of linear space. And therefore, this provides a unified interface for the \
@@ -33,28 +33,34 @@ class SemiringImpl(ABC):
     regardless of the global setting.
     """
 
+    # A registry from semiring string identifiers to semiring class implementations
     _registry: ClassVar[Dict[str, Type["SemiringImpl"]]] = {}
+
+    # A registry of morphisms between semiring class implementations
+    _registry_morphisms: ClassVar[
+        Dict[Tuple[Type["SemiringImpl"], Type["SemiringImpl"]], Callable[[Tensor], Tensor]]
+    ] = {}
 
     @final
     @staticmethod
     def register(name: str) -> Callable[[Semiring], Semiring]:
-        """Register a concrete SemiringImpl implementation by its name.
+        """Register a concrete semiring implementation by its name.
 
         Args:
             name (str): The name to register.
 
         Returns:
-            Callable[[CompSpaceClsT], CompSpaceClsT]: The class decorator to register a subclass.
+            Callable[[Semiring], Semiring]: The class decorator to register a subclass.
         """
 
         def _decorator(cls: Semiring) -> Semiring:
-            """Register a concrete SemiringImpl implementation by its name.
+            """Register a concrete semiring implementation by its name.
 
             Args:
-                cls (CompSpaceClsT): The SemiringImpl subclass to register.
+                cls (Semiring): The semiring subclass to register.
 
             Returns:
-                CompSpaceClsT: The class passed in.
+                Semiring: The class passed in.
             """
             # CAST: getattr gives Any.
             assert cast(
@@ -66,9 +72,37 @@ class SemiringImpl(ABC):
         return _decorator
 
     @final
+    @classmethod
+    def register_map_from(
+        cls, other: Semiring
+    ) -> Callable[[Callable[[Tensor], Tensor]], Callable[[Tensor], Tensor]]:
+        """Register a concrete semiring morphism implementation.
+
+        Args:
+            other: The source semiring.
+
+        Returns:
+            Callable[[Callable[[Tensor], Tensor]], Callable[[Tensor], Tensor]]: The function decorator to register the morphism.
+        """
+
+        def _decorator(func: Callable[[Tensor], Tensor]) -> Callable[[Tensor], Tensor]:
+            """Register a concrete semiring morphism implementation.
+
+            Args:
+                func (Callable[[Tensor], Tensor]): The morphism between semirings to register.
+
+            Returns:
+                Callable[[Tensor], Tensor]: The morphism passed in.
+            """
+            SemiringImpl._registry_morphisms[(other, cls)] = func
+            return func
+
+        return _decorator
+
+    @final
     @staticmethod
-    def list_all_comp_space() -> Iterable[str]:
-        """List all SemiringImpl names registered.
+    def list() -> Iterable[str]:
+        """List all semiring names registered.
 
         Returns:
             Iterable[str]: An iterable over all names available.
@@ -77,14 +111,14 @@ class SemiringImpl(ABC):
 
     @final
     @staticmethod
-    def from_name(name: str) -> Type["SemiringImpl"]:
-        """Get a Semiring by its registered name.
+    def from_name(name: str) -> Semiring:
+        """Get a semiring by its registered name.
 
         Args:
             name (str): The name to probe.
 
         Returns:
-            Type[SemiringImpl]: The retrieved concrete Semiring.
+            Semiring: The retrieved concrete Semiring.
         """
         if name not in SemiringImpl._registry:
             raise IndexError(
@@ -92,92 +126,99 @@ class SemiringImpl(ABC):
             )
         return SemiringImpl._registry[name]
 
-    # TODO: Never should be used. This is known issue: https://github.com/python/mypy/issues/14044
     @final
-    def __new__(cls) -> Self:
+    @classmethod
+    def map_from(cls, x: Tensor, semiring: Semiring) -> Tensor:
+        """Map a tensor from the given semiring to `this` semiring.
+
+        Args:
+            x:
+            semiring:
+
+        Returns:
+
+        """
+        if cls == semiring:
+            return x
+        func: Optional[Callable[[Tensor], Tensor]] = SemiringImpl._registry_morphisms.get(
+            (semiring, cls), None
+        )
+        if func is None:
+            raise NotImplementedError(
+                f"Semiring map from '{semiring.__name__}' to '{cls.__name__}' is not implemented"
+            )
+        return func(x)
+
+    @final
+    def __new__(cls) -> "SemiringImpl":
         """Raise an error when this class is instantiated.
 
         Raises:
             TypeError: When this class is instantiated.
 
         Returns:
-            Self: This method never returns.
+            SemiringImpl: This method never returns.
         """
-        raise TypeError("This class cannot be instantiated.")
+        raise TypeError("This class cannot be instantiated")
+
+    @classmethod
+    def einsum(
+        cls,
+        equation: str,
+        *,
+        operands: Tuple[Tensor, ...],
+        inputs: Tuple[Tensor, ...],
+        dim: Union[int, Sequence[int]],
+        keepdim: bool,
+    ) -> Tensor:
+        operands = tuple(cls.cast(opd) for opd in operands)
+
+        def _einsum_func(*xs: Tensor) -> Tensor:
+            return torch.einsum(equation, *operands, *xs)
+
+        return cls.apply(_einsum_func, *inputs, dim=dim, keepdim=keepdim)
 
     # NOTE: Subclasses should not touch any of the above final static methods but should implement
-    #       all of the following abstract class methods, and subclasses should be @final.
-
-    # TODO: if needed, we can also have to_log, to_lin.
-    @classmethod
-    @abstractmethod
-    def from_lse_sum(cls, x: Tensor) -> Tensor:
-        """Convert a value from log space to the current space.
-
-        Args:
-            x (Tensor): The value in log space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
-
-    @classmethod
-    @abstractmethod
-    def from_sum_product(cls, x: Tensor) -> Tensor:
-        """Convert a value from linear space to the current space.
-
-        Args:
-            x (Tensor): The value in linear space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
+    #       all the following abstract class methods, and subclasses should be @final.
 
     @classmethod
     @abstractmethod
     def cast(cls, x: Tensor) -> Tensor:
-        """Cast a tensor to the data type required by the semiring.
+        """Cast a tensor to the data type required by `this` semiring.
 
         Args:
-            x (Tensor): The tensor.
+            x: The tensor.
 
         Returns:
             Tensor: The tensor converted to the required data type.
         """
 
-    # TODO: it's difficult to bound a variadic to Tensor with TypeVars, we can only use unbounded
-    #       Unpack[TypeVarTuple].
     @classmethod
     @abstractmethod
     def sum(
-        cls,
-        func: Callable[[Unpack[Ts]], Tensor],
-        *xs: Unpack[Ts],
-        dim: Union[int, Sequence[int]],
-        keepdim: bool,
+        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
     ) -> Tensor:
-        """Apply a sum-like functions to the tensor(s).
-
-        The sum units may perform not just plain sum, but also weighted sum or even einsum. In \
-        fact, it can possibly be any function that is linear to the each input. All that kind of \
-        func can be used here.
-
-        It is expected that func always does computation in the linear space, as with numerical \
-        tricks, only relatively significant numbers contribute the final answer, and underflow \
-        will not affect much. However the input/output values may still be in another space, and \
-        needs to be projected here.
+        """
 
         Args:
-            func (Callable[[Unpack[Ts]], Tensor]): The sum-like function to be applied.
-            *xs (Unpack[Ts]): The input tensors. Type expected to be Tensor.
-            dim (Union[int, Sequence[int]]): The dimension(s) along which the values are \
-                correlated and must be scaled together, i.e., the dim(s) to sum along. This should \
-                match the actual operation done by func. The same dim is shared among all inputs.
-            keepdim (bool): Whether the dim is kept as a size-1 dim, should match the actual \
-                operation done by func.
+            x:
+            dim:
+            keepdim:
 
         Returns:
-            Tensor: The sum result.
+
+        """
+
+    @classmethod
+    @abstractmethod
+    def add(cls, *xs: Tensor) -> Tensor:
+        """
+
+        Args:
+            *xs:
+
+        Returns:
+
         """
 
     @classmethod
@@ -200,13 +241,49 @@ class SemiringImpl(ABC):
     @classmethod
     @abstractmethod
     def mul(cls, *xs: Tensor) -> Tensor:
-        """Do the multiply among broadcastable tensors.
+        """Multiply broadcastable tensors.
 
         Args:
             *xs (Tensor): The input tensors, should have broadcastable shapes.
 
         Returns:
             Tensor: The multiply result.
+        """
+
+    # TODO: it's difficult to bound a variadic to Tensor with TypeVars, we can only use unbounded
+    #       Unpack[TypeVarTuple].
+
+    @classmethod
+    @abstractmethod
+    def apply(
+        cls,
+        func: Callable[[Unpack[Ts]], Tensor],
+        *xs: Unpack[Ts],
+        dim: Union[int, Sequence[int]],
+        keepdim: bool,
+    ) -> Tensor:
+        """Apply a sum-like functions to the tensor(s).
+
+        The sum units may perform not just plain sum, but also weighted sum or even einsum. In \
+        fact, it can possibly be any function that is linear to the each input. All that kind of \
+        func can be used here.
+
+        It is expected that func always does computation in the linear space, as with numerical \
+        tricks, only relatively significant numbers contribute the final answer, and underflow \
+        will not affect much. However, the input/output values may still be in another space, and \
+        needs to be projected here.
+
+        Args:
+            func (Callable[[Unpack[Ts]], Tensor]): The sum-like function to be applied.
+            *xs (Unpack[Ts]): The input tensors. Type expected to be Tensor.
+            dim (Union[int, Sequence[int]]): The dimension(s) along which the values are \
+                correlated and must be scaled together, i.e., the dim(s) to sum along. This should \
+                match the actual operation done by func. The same dim is shared among all inputs.
+            keepdim (bool): Whether the dim is kept as a size-1 dim, should match the actual \
+                operation done by func.
+
+        Returns:
+            Tensor: The sum result.
         """
 
 
@@ -225,72 +302,25 @@ class SumProductSemiring(SemiringImpl):
         Returns:
             Tensor: The tensor converted to the required data type.
         """
-        if x.is_floating_point() or x.is_complex():
+        if x.is_floating_point():
             return x
-        raise ValueError(f"Cannot map a tensor of type {x.dtype} to the sum-product semiring")
-
-    @classmethod
-    def from_lse_sum(cls, x: Tensor) -> Tensor:
-        """Convert a value from log space to the current space.
-
-        Args:
-            x (Tensor): The value in log space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
-        return torch.exp(x)
-
-    @classmethod
-    def from_sum_product(cls, x: Tensor) -> Tensor:
-        """Convert a value from linear space to the current space.
-
-        Args:
-            x (Tensor): The value in linear space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
-        return x
+        raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
     def sum(
-        cls,
-        func: Callable[[Unpack[Ts]], Tensor],
-        *xs: Unpack[Ts],
-        dim: Union[int, Sequence[int]],
-        keepdim: bool,
+        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
     ) -> Tensor:
-        """Apply a sum-like functions to the tensor(s).
+        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
+        return x.sum(dim=dim, keepdim=keepdim)
 
-        In linear space, we simply apply func to the inputs, and the dim is ignored.
-
-        Args:
-            func (Callable[[Unpack[Ts]], Tensor]): The sum-like function to be applied.
-            *xs (Unpack[Ts]): The input tensors. Type expected to be Tensor.
-            dim (Union[int, Sequence[int]]): Ignored.
-            keepdim (bool): Ignored.
-
-        Returns:
-            Tensor: The sum result.
-        """
-        return func(*xs)
+    @classmethod
+    def add(cls, *xs: Tensor) -> Tensor:
+        raise functools.reduce(torch.add, xs)
 
     @classmethod
     def prod(
         cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
     ) -> Tensor:
-        """Do the product within a tensor on given dim(s).
-
-        Args:
-            x (Tensor): The input tensor.
-            dim (Optional[Union[int, Sequence[int]]], optional): The dimension(s) to reduce along, \
-                None for all dims. Defaults to None.
-            keepdim (bool, optional): Whether the dim is kept as a size-1 dim. Defaults to False.
-
-        Returns:
-            Tensor: The product result.
-        """
         # prod only accepts one dim and cannot be None.
         dims = dim if isinstance(dim, Sequence) else (dim,) if dim is not None else range(x.ndim)
 
@@ -303,15 +333,17 @@ class SumProductSemiring(SemiringImpl):
 
     @classmethod
     def mul(cls, *xs: Tensor) -> Tensor:
-        """Do the multiply among broadcastable tensors.
-
-        Args:
-            *xs (Tensor): The input tensors, should have broadcastable shapes.
-
-        Returns:
-            Tensor: The multiply result.
-        """
         return functools.reduce(torch.mul, xs)
+
+    @classmethod
+    def apply(
+        cls,
+        func: Callable[[Unpack[Ts]], Tensor],
+        *xs: Unpack[Ts],
+        dim: Union[int, Sequence[int]],
+        keepdim: bool,
+    ) -> Tensor:
+        return func(*xs)
 
 
 @SemiringImpl.register("lse-sum")
@@ -321,75 +353,40 @@ class LSESumSemiring(SemiringImpl):
 
     @classmethod
     def cast(cls, x: Tensor) -> Tensor:
-        """Cast a tensor to the data type required by the semiring.
-
-        Args:
-            x (Tensor): The tensor.
-
-        Returns:
-            Tensor: The tensor converted to the required data type.
-        """
         if x.is_floating_point():
             return x
-        raise ValueError(f"Cannot map a tensor of type {x.dtype} to the lse-sum semiring")
-
-    @classmethod
-    def from_lse_sum(cls, x: Tensor) -> Tensor:
-        """Convert a value from log space to the current space.
-
-        Args:
-            x (Tensor): The value in log space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
-        return x
-
-    @classmethod
-    def from_sum_product(cls, x: Tensor) -> Tensor:
-        """Convert a value from linear space to the current space.
-
-        Args:
-            x (Tensor): The value in linear space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
-        return torch.log(x)
+        raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
     def sum(
+        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+    ) -> Tensor:
+        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
+        return x.logsumexp(dim=dim, keepdim=keepdim)
+
+    @classmethod
+    def add(cls, *xs: Tensor) -> Tensor:
+        return functools.reduce(torch.logaddexp, xs)
+
+    @classmethod
+    def prod(
+        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+    ) -> Tensor:
+        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
+        return x.sum(dim=dim, keepdim=keepdim)
+
+    @classmethod
+    def mul(cls, *xs: Tensor) -> Tensor:
+        return functools.reduce(torch.add, xs)
+
+    @classmethod
+    def apply(
         cls,
         func: Callable[[Unpack[Ts]], Tensor],
         *xs: Unpack[Ts],
         dim: Union[int, Sequence[int]],
         keepdim: bool,
     ) -> Tensor:
-        """Apply a sum-like functions to the tensor(s).
-
-        In log space, we apply the log-func-exp trick, an extension to log-sum-exp.
-
-        The sum units may perform not just plain sum, but also weighted sum or even einsum. In \
-        fact, it can possibly be any function that is linear to the each input. All that kind of \
-        func can be used here.
-
-        It is expected that func always does computation in the linear space, as with numerical \
-        tricks, only relatively significant numbers contribute the final answer, and underflow \
-        will not affect much. However the input/output values may still be in another space, and \
-        needs to be projected here.
-
-        Args:
-            func (Callable[[Unpack[Ts]], Tensor]): The sum-like function to be applied.
-            *xs (Unpack[Ts]): The input tensors. Type expected to be Tensor.
-            dim (Union[int, Sequence[int]]): The dimension(s) along which the values are \
-                correlated and must be scaled together, i.e., the dim(s) to sum along. This should \
-                match the actual operation done by func. The same dim is shared among all inputs.
-            keepdim (bool): Whether the dim is kept as a size-1 dim, should match the actual \
-                operation done by func.
-
-        Returns:
-            Tensor: The sum result.
-        """
         dims = tuple(dim) if isinstance(dim, Sequence) else (dim,)
 
         # NOTE: Due to usage of intermediate results, they need to be instantiated in lists but not
@@ -419,36 +416,6 @@ class LSESumSemiring(SemiringImpl):
 
         return log_func_exp_x
 
-    @classmethod
-    def prod(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
-    ) -> Tensor:
-        """Do the product within a tensor on given dim(s).
-
-        Args:
-            x (Tensor): The input tensor.
-            dim (Optional[Union[int, Sequence[int]]], optional): The dimension(s) to reduce along, \
-                None for all dims. Defaults to None.
-            keepdim (bool, optional): Whether the dim is kept as a size-1 dim. Defaults to False.
-
-        Returns:
-            Tensor: The product result.
-        """
-        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
-        return x.sum(dim=dim, keepdim=keepdim)
-
-    @classmethod
-    def mul(cls, *xs: Tensor) -> Tensor:
-        """Do the multiply among broadcastable tensors.
-
-        Args:
-            *xs (Tensor): The input tensors, should have broadcastable shapes.
-
-        Returns:
-            Tensor: The multiply result.
-        """
-        return functools.reduce(torch.add, xs)
-
 
 @SemiringImpl.register("complex-lse-sum")
 @final  # type: ignore[misc]
@@ -457,87 +424,52 @@ class ComplexLSESumSemiring(SemiringImpl):
 
     @classmethod
     def cast(cls, x: Tensor) -> Tensor:
-        """Cast a tensor to the data type required by the semiring.
-
-        Args:
-            x (Tensor): The tensor.
-
-        Returns:
-            Tensor: The tensor converted to the required data type.
-        """
         if x.is_complex():
             return x
         if x.dtype == torch.float16:
             return x.to(torch.complex32)
-        elif x.dtype == torch.float32:
+        if x.dtype == torch.float32:
             return x.to(torch.complex64)
-        elif x.dtype == torch.float64:
+        if x.dtype == torch.float64:
             return x.to(torch.complex128)
-        raise ValueError(f"Cannot map a tensor of type {x.dtype} to the complex-lse-sum semiring")
-
-    @classmethod
-    def from_lse_sum(cls, x: Tensor) -> Tensor:
-        """Convert a value from log space to the current space.
-
-        Args:
-            x (Tensor): The value in log space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
-        return cls.cast(x)
-
-    @classmethod
-    def from_sum_product(cls, x: Tensor) -> Tensor:
-        """Convert a value from linear space to the current space.
-
-        Args:
-            x (Tensor): The value in linear space.
-
-        Returns:
-            Tensor: The value in the current space.
-        """
-        return torch.log(cls.cast(x))
+        raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
     def sum(
+        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+    ) -> Tensor:
+        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
+        return x.logsumexp(dim=dim, keepdim=keepdim)
+
+    @classmethod
+    def add(cls, *xs: Tensor) -> Tensor:
+        return functools.reduce(torch.logaddexp, xs)
+
+    @classmethod
+    def prod(
+        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+    ) -> Tensor:
+        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
+        return x.sum(dim=dim, keepdim=keepdim)
+
+    @classmethod
+    def mul(cls, *xs: Tensor) -> Tensor:
+        return functools.reduce(torch.add, xs)
+
+    @classmethod
+    def apply(
         cls,
         func: Callable[[Unpack[Ts]], Tensor],
         *xs: Unpack[Ts],
         dim: Union[int, Sequence[int]],
         keepdim: bool,
     ) -> Tensor:
-        """Apply a sum-like functions to the tensor(s).
-
-        In log space, we apply the log-func-exp trick, an extension to log-sum-exp.
-
-        The sum units may perform not just plain sum, but also weighted sum or even einsum. In \
-        fact, it can possibly be any function that is linear to the each input. All that kind of \
-        func can be used here.
-
-        It is expected that func always does computation in the linear space, as with numerical \
-        tricks, only relatively significant numbers contribute the final answer, and underflow \
-        will not affect much. However the input/output values may still be in another space, and \
-        needs to be projected here.
-
-        Args:
-            func (Callable[[Unpack[Ts]], Tensor]): The sum-like function to be applied.
-            *xs (Unpack[Ts]): The input tensors. Type expected to be Tensor.
-            dim (Union[int, Sequence[int]]): The dimension(s) along which the values are \
-                correlated and must be scaled together, i.e., the dim(s) to sum along. This should \
-                match the actual operation done by func. The same dim is shared among all inputs.
-            keepdim (bool): Whether the dim is kept as a size-1 dim, should match the actual \
-                operation done by func.
-
-        Returns:
-            Tensor: The sum result.
-        """
         dims = tuple(dim) if isinstance(dim, Sequence) else (dim,)
 
         # NOTE: Due to usage of intermediate results, they need to be instantiated in lists but not
         #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
-        x = [cls.cast(cast(Tensor, xi)) for xi in xs]
+        x = [cast(Tensor, xi) for xi in xs]
         # We need flatten because max only works on one dim, and then match shape for exp_x.
         max_x = [
             unflatten_dims(
@@ -561,32 +493,40 @@ class ComplexLSESumSemiring(SemiringImpl):
 
         return log_func_exp_x
 
-    @classmethod
-    def prod(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
-    ) -> Tensor:
-        """Do the product within a tensor on given dim(s).
 
-        Args:
-            x (Tensor): The input tensor.
-            dim (Optional[Union[int, Sequence[int]]], optional): The dimension(s) to reduce along, \
-                None for all dims. Defaults to None.
-            keepdim (bool, optional): Whether the dim is kept as a size-1 dim. Defaults to False.
+@SumProductSemiring.register_map_from(LSESumSemiring)
+def _(x: Tensor) -> Tensor:
+    return torch.exp(x)
 
-        Returns:
-            Tensor: The product result.
-        """
-        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
-        return x.sum(dim=dim, keepdim=keepdim)
 
-    @classmethod
-    def mul(cls, *xs: Tensor) -> Tensor:
-        """Do the multiply among broadcastable tensors.
+@SumProductSemiring.register_map_from(ComplexLSESumSemiring)
+def _(x: Tensor) -> Tensor:
+    if torch.all(torch.isreal(x)):
+        return torch.exp(x.real)
+    raise ValueError(
+        f"Cannot map a tensor with non-zero imaginary part to {SumProductSemiring.__name__}"
+    )
 
-        Args:
-            *xs (Tensor): The input tensors, should have broadcastable shapes.
 
-        Returns:
-            Tensor: The multiply result.
-        """
-        return functools.reduce(torch.add, xs)
+@LSESumSemiring.register_map_from(SumProductSemiring)
+def _(x: Tensor) -> Tensor:
+    return torch.log(x)
+
+
+@LSESumSemiring.register_map_from(ComplexLSESumSemiring)
+def _(x: Tensor) -> Tensor:
+    if torch.all(torch.isreal(x)):
+        return x.real
+    raise ValueError(
+        f"Cannot map a tensor with non-zero imaginary part to {LSESumSemiring.__name__}"
+    )
+
+
+@ComplexLSESumSemiring.register_map_from(SumProductSemiring)
+def _(x: Tensor) -> Tensor:
+    return torch.log(ComplexLSESumSemiring.cast(x))
+
+
+@ComplexLSESumSemiring.register_map_from(LSESumSemiring)
+def _(x: Tensor) -> Tensor:
+    return ComplexLSESumSemiring.cast(x)

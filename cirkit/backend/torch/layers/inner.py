@@ -1,14 +1,11 @@
-import functools
 from abc import ABC
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
-import torch
-from torch import Tensor, nn
+from torch import Tensor
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
-from cirkit.backend.torch.utils import InitializerFunc
 
 
 class TorchInnerLayer(TorchLayer, ABC):
@@ -171,11 +168,6 @@ class TorchDenseLayer(TorchSumLayer):
         params.update(weight=self.weight)
         return params
 
-    def _forward_impl(self, x: Tensor) -> Tensor:
-        return torch.einsum(
-            "foi,f...i->f...o", self.semiring.cast(self.weight()), x
-        )  # shape (*B, Ki) -> (*B, Ko).
-
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
@@ -186,7 +178,10 @@ class TorchDenseLayer(TorchSumLayer):
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
         x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).
-        return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # shape (F, *B, Ko).
+        weight = self.weight()
+        return self.semiring.einsum(
+            "foi,f...i->f...o", operands=(weight,), inputs=(x,), dim=-1, keepdim=True
+        )  # shape (F, *B, Ko).
 
 
 class TorchMixingLayer(TorchSumLayer):
@@ -230,11 +225,6 @@ class TorchMixingLayer(TorchSumLayer):
         params.update(weight=self.weight)
         return params
 
-    def _forward_impl(self, x: Tensor) -> Tensor:
-        return torch.einsum(
-            "fkh,fh...k->f...k", self.semiring.cast(self.weight()), x
-        )  # shape (F, H, *B, K) -> (F, *B, K).
-
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
@@ -245,4 +235,7 @@ class TorchMixingLayer(TorchSumLayer):
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
         # shape (F, H, *B, K) -> (F, *B, K).
-        return self.semiring.sum(self._forward_impl, x, dim=1, keepdim=False)
+        weight = self.weight()
+        return self.semiring.einsum(
+            "fkh,fh...k->f...k", operands=(weight,), inputs=(x,), dim=1, keepdim=False
+        )

@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import Semiring
+from cirkit.backend.torch.semiring import LSESumSemiring, Semiring
 from cirkit.utils.scope import Scope
 
 
@@ -61,7 +61,8 @@ class TorchExpFamilyLayer(TorchInputLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, Ko).
         """
-        return self.semiring.from_lse_sum(self.log_unnormalized_likelihood(x))
+        x = self.log_unnormalized_likelihood(x)
+        return self.semiring.map_from(x, LSESumSemiring)
 
     @abstractmethod
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
