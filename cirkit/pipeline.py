@@ -14,7 +14,7 @@ from cirkit.backend.base import (
     ParameterCompilationFunc,
 )
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import AbstractLayerOperator
+from cirkit.symbolic.layers import AbstractLayerOperator, Layer
 from cirkit.symbolic.operators import LayerOperatorFunc
 from cirkit.symbolic.registry import OperatorRegistry
 
@@ -84,7 +84,10 @@ class PipelineContext(AbstractContextManager):
     def add_initializer_compilation_rule(self, func: InitializerCompilationFunc):
         self._compiler.add_initializer_rule(func)
 
-    def compile(self, sc: Circuit) -> Any:
+    def compile_layer(self, sl: Layer) -> Any:
+        return self._compiler.compile_layer(sl)
+
+    def compile(self, sc: Circuit) -> CompiledCircuit:
         return self._compiler.compile(sc)
 
     def is_compiled(self, sc: Circuit) -> bool:

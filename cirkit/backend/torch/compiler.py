@@ -114,6 +114,11 @@ class TorchCompiler(AbstractCompiler):
     def state(self) -> TorchCompilerState:
         return self._state
 
+    def compile_layer(self, layer: Layer) -> TorchLayer:
+        signature = type(layer)
+        rule = self.retrieve_layer_rule(signature)
+        return cast(TorchLayer, rule(self, layer))
+
     def compile_parameter(self, parameter: Parameter) -> TorchParameter:
         # A map from symbolic to compiled parameters
         compiled_nodes_map: Dict[ParameterNode, TorchParameterNode] = {}
@@ -143,11 +148,6 @@ class TorchCompiler(AbstractCompiler):
         rule = self.retrieve_initializer_rule(signature)
         return cast(Callable[[Tensor], Tensor], rule(self, initializer))
 
-    def _compile_layer(self, layer: Layer) -> TorchLayer:
-        signature = type(layer)
-        rule = self.retrieve_layer_rule(signature)
-        return cast(TorchLayer, rule(self, layer))
-
     def _compile_parameter_node(self, node: ParameterNode) -> TorchParameterNode:
         signature = type(node)
         rule = self.retrieve_parameter_rule(signature)
@@ -164,7 +164,7 @@ class TorchCompiler(AbstractCompiler):
         # Compile layers by following the topological ordering
         for sl in sc.topological_ordering():
             # Compile the layer, for any layer types
-            layer = self._compile_layer(sl)
+            layer = self.compile_layer(sl)
 
             # Build the connectivity between compiled layers
             ins = [compiled_layers_map[sli] for sli in sc.layer_inputs(sl)]
