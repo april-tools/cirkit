@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Dict, Optional
 from cirkit.backend.base import ParameterCompilationFunc, ParameterCompilationSign
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.ops import (
+    TorchClampParameter,
     TorchExpParameter,
     TorchGaussianProductLogPartition,
     TorchGaussianProductMean,
@@ -23,6 +24,7 @@ from cirkit.backend.torch.parameters.ops import (
     TorchSumParameter,
 )
 from cirkit.symbolic.parameters import (
+    ClampParameter,
     ConstantParameter,
     ExpParameter,
     GaussianProductLogPartition,
@@ -127,7 +129,7 @@ def compile_square_parameter(compiler: "TorchCompiler", p: SquareParameter) -> T
 
 
 def compile_sigmoid_parameter(
-    compiler: "TorchCompiler", p: ScaledSigmoidParameter
+    compiler: "TorchCompiler", p: SigmoidParameter
 ) -> TorchSigmoidParameter:
     (in_shape,) = p.in_shapes
     return TorchSigmoidParameter(in_shape)
@@ -138,6 +140,11 @@ def compile_scaled_sigmoid_parameter(
 ) -> TorchScaledSigmoidParameter:
     (in_shape,) = p.in_shapes
     return TorchScaledSigmoidParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
+
+
+def compile_clamp_parameter(compiler: "TorchCompiler", p: ClampParameter) -> TorchClampParameter:
+    (in_shape,) = p.in_shapes
+    return TorchClampParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
 
 
 def compile_reduce_sum_parameter(
@@ -207,6 +214,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     SquareParameter: compile_square_parameter,
     SigmoidParameter: compile_sigmoid_parameter,
     ScaledSigmoidParameter: compile_scaled_sigmoid_parameter,
+    ClampParameter: compile_clamp_parameter,
     ReduceSumParameter: compile_reduce_sum_parameter,
     ReduceProductParameter: compile_reduce_product_parameter,
     ReduceLSEParameter: compile_reduce_lse_parameter,
