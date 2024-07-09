@@ -24,9 +24,6 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
     # Retrieve the union of the scopes of the circuits
     scope = functools.reduce(operator.ior, map(lambda sc: sc.scope, scs))
 
-    # Retrieve whether the output circuit will have layers already sorted in topological ordering
-    topologically_ordered = all(map(lambda sc: sc.is_topologically_ordered, scs))
-
     # Mapping the symbolic circuit layers with blocks of circuit layers
     layers_to_block: Dict[Layer, CircuitBlock] = {}
 
@@ -55,7 +52,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
         in_blocks,
         out_blocks,
         operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
-        topologically_ordered=topologically_ordered,
+        topologically_ordered=True,
     )
 
 
