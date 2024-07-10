@@ -413,7 +413,10 @@ def _optimize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abst
         # If so, then just add it to the optimize layer as is
         if match is None:
             layers.append(layer)
-            layer_ins = cc.layer_inputs(layer)
+            layer_ins = [
+                optimized_layers[layer_matches[li]] if li in layer_matches else li
+                for li in cc.layer_inputs(layer)
+            ]
             in_layers[layer] = layer_ins
             for li in layer_ins:
                 out_layers[li].append(layer)
