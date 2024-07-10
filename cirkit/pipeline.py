@@ -38,7 +38,7 @@ class PipelineContext(AbstractContextManager):
 
     @classmethod
     def from_default_backend(cls) -> "PipelineContext":
-        return PipelineContext(backend="torch", semiring='lse-sum', fold=True, optimize=True)
+        return PipelineContext(backend="torch", semiring="lse-sum", fold=True, optimize=True)
 
     def __getitem__(self, sc: Circuit) -> Any:
         return self._compiler.get_compiled_circuit(sc)

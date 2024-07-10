@@ -381,7 +381,42 @@ def _fold_parameter_nodes_group(
     return fold_node_cls(*group[0].in_shapes, num_folds=len(group), **group[0].config)
 
 
-def _optimize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
+def _optimize_circuit(
+    compiler: TorchCompiler, cc: AbstractTorchCircuit, *, max_opt_steps: int = 1
+) -> AbstractTorchCircuit:
+    assert max_opt_steps > 0
+
+    # Each optimization step consists of three kinds of optimizations (see below).
+    # We continue optimizing until no further optimization can be performed
+    # or if we reach a maximum number of optimization steps being performed
+    optimizing = True
+    opt_step = 0
+    while optimizing and opt_step < max_opt_steps:
+        # First optimization step: fuse the parameters node of the parameter graphs of each layer
+        opt_cc, opt_fuse_parameter_nodes = _optimize_fuse_parameter_nodes(compiler, cc)
+        del cc
+        cc = opt_cc
+
+        # Second optimization step: shatter layers in multiple more efficient ones
+        opt_cc, opt_shatter_layers = _optimize_shatter_layers(compiler, cc)
+        del cc
+        cc = opt_cc
+
+        # Third optimization step: fuse multiple layers into a single more efficient one
+        opt_cc, opt_fuse_layers = _optimize_fuse_layers(compiler, cc)
+        del cc
+        cc = opt_cc
+
+        # Update the optimization step and whether we should continue optimizing
+        optimizing = opt_fuse_parameter_nodes or opt_shatter_layers or opt_fuse_layers
+        opt_step += 1
+
+    return cc
+
+
+def _optimize_fuse_layers(
+    compiler: TorchCompiler, cc: AbstractTorchCircuit
+) -> Tuple[AbstractTorchCircuit, bool]:
     # Match optimization patterns
     # matches: list of all matched and grounded optimization rules
     # module_matches: a map from modules to the matches they belong to, if any
@@ -448,6 +483,19 @@ def _optimize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abst
         if match not in match_entries:
             match_entries[match] = layer
 
-    return type(cc)(
+    opt_cc = type(cc)(
         cc.scope, cc.num_channels, layers, in_layers, out_layers, topologically_ordered=True
     )
+    return opt_cc, True
+
+
+def _optimize_fuse_parameter_nodes(
+    compiler: TorchCompiler, cc: AbstractTorchCircuit
+) -> Tuple[AbstractTorchCircuit, bool]:
+    return cc, False
+
+
+def _optimize_shatter_layers(
+    compiler: TorchCompiler, cc: AbstractTorchCircuit
+) -> Tuple[AbstractTorchCircuit, bool]:
+    return cc, False
