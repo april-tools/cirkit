@@ -6,11 +6,23 @@ from typing import IO, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from torch import Tensor
 
-from cirkit.backend.base import AbstractCompiler, CompilerRegistry
+from cirkit.backend.compiler import (
+    AbstractCompiler,
+    CompilerInitializerRegistry,
+    CompilerLayerRegistry,
+    CompilerParameterRegistry,
+)
 from cirkit.backend.torch.circuits import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
+from cirkit.backend.torch.graph.optimize import OptMatchStrategy, match_optimization_patterns
 from cirkit.backend.torch.initializers import stacked_initializer_
 from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.optimizations.layers import (
+    DEFAULT_CIRCUIT_OPT_RULES,
+    DEFAULT_LAYER_OPT_RULES,
+    CircuitOptMatch,
+)
+from cirkit.backend.torch.optimizations.parameters import DEFAULT_PARAMETER_OPT_RULES
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.parameter import (
     TorchParameter,
@@ -73,18 +85,28 @@ class TorchCompilerState:
 
 class TorchCompiler(AbstractCompiler):
     def __init__(self, semiring: str = "sum-product", fold: bool = False, optimize: bool = False):
-        default_registry = CompilerRegistry(
-            DEFAULT_LAYER_COMPILATION_RULES,
-            DEFAULT_PARAMETER_COMPILATION_RULES,
-            DEFAULT_INITIALIZER_COMPILATION_RULES,
+        super().__init__(
+            CompilerLayerRegistry(DEFAULT_LAYER_COMPILATION_RULES),
+            CompilerParameterRegistry(DEFAULT_PARAMETER_COMPILATION_RULES),
+            CompilerInitializerRegistry(DEFAULT_INITIALIZER_COMPILATION_RULES),
+            fold=fold,
+            optimize=optimize,
         )
-        super().__init__(default_registry, fold=fold, optimize=optimize)
-        self._fold = fold
-        self._optimize = optimize
+
+        # The semiring being used at compile time
         self._semiring: Semiring = SemiringImpl.from_name(semiring)
 
         # The state of the compiler
         self._state = TorchCompilerState()
+
+        # The registry of optimization rules
+        # TODO: make these rules extendable from outside
+        #       by wrapping each of them in a compiler registry
+        self._optimization_rules = {
+            "circuit": DEFAULT_CIRCUIT_OPT_RULES,
+            "parameter": DEFAULT_PARAMETER_OPT_RULES,
+            "layer": DEFAULT_LAYER_OPT_RULES,
+        }
 
     def compile_pipeline(self, sc: Circuit) -> AbstractTorchCircuit:
         # Compile the circuits following the topological ordering of the pipeline.
@@ -115,11 +137,6 @@ class TorchCompiler(AbstractCompiler):
     def state(self) -> TorchCompilerState:
         return self._state
 
-    def compile_layer(self, layer: Layer) -> TorchLayer:
-        signature = type(layer)
-        rule = self.retrieve_layer_rule(signature)
-        return cast(TorchLayer, rule(self, layer))
-
     def compile_parameter(self, parameter: Parameter) -> TorchParameter:
         # A map from symbolic to compiled parameters
         compiled_nodes_map: Dict[ParameterNode, TorchParameterNode] = {}
@@ -149,6 +166,11 @@ class TorchCompiler(AbstractCompiler):
         rule = self.retrieve_initializer_rule(signature)
         return cast(Callable[[Tensor], Tensor], rule(self, initializer))
 
+    def _compile_layer(self, layer: Layer) -> TorchLayer:
+        signature = type(layer)
+        rule = self.retrieve_layer_rule(signature)
+        return cast(TorchLayer, rule(self, layer))
+
     def _compile_parameter_node(self, node: ParameterNode) -> TorchParameterNode:
         signature = type(node)
         rule = self.retrieve_parameter_rule(signature)
@@ -165,7 +187,7 @@ class TorchCompiler(AbstractCompiler):
         # Compile layers by following the topological ordering
         for sl in sc.topological_ordering():
             # Compile the layer, for any layer types
-            layer = self.compile_layer(sl)
+            layer = self._compile_layer(sl)
 
             # Build the connectivity between compiled layers
             ins = [compiled_layers_map[sli] for sli in sc.layer_inputs(sl)]
@@ -360,4 +382,69 @@ def _fold_parameter_nodes_group(
 
 
 def _optimize_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
-    ...
+    # Match optimization patterns
+    # matches: list of all matched and grounded optimization rules
+    # module_matches: a map from modules to the matches they belong to, if any
+    circuit_optimization_rules = compiler._optimization_rules["circuit"]
+    matches, layer_matches = match_optimization_patterns(
+        cc, circuit_optimization_rules.keys(), strategy=OptMatchStrategy.LARGEST_MATCH
+    )
+
+    # Run the matched optimization rules and collect the optimized layers
+    optimized_layers: Dict[CircuitOptMatch, TorchLayer] = {}
+    for match in matches:
+        opt_func = circuit_optimization_rules[match.pattern]
+        opt_layer = opt_func(compiler, match)
+        optimized_layers[match] = opt_layer
+
+    # The list of optimized layer and the inputs/outputs of each optimized layer
+    layers: List[TorchLayer] = []
+    in_layers: Dict[TorchLayer, List[TorchLayer]] = {}
+    out_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
+
+    # A map from matches to their entry point unoptimized layers
+    match_entries: Dict[CircuitOptMatch, TorchLayer] = {}
+
+    # Build the optimize circuit by following the topological ordering
+    for layer in cc.topological_ordering():
+        match = layer_matches.get(layer, None)
+
+        # Check if the layer does not belong to any matched pattern
+        # If so, then just add it to the optimize layer as is
+        if match is None:
+            layers.append(layer)
+            layer_ins = cc.layer_inputs(layer)
+            in_layers[layer] = layer_ins
+            for li in layer_ins:
+                out_layers[li].append(layer)
+            continue
+
+        # Check if the layer is the root within the matched pattern
+        # If so, then add the corresponding sub-computational-graph optimization to the
+        # optimized circuit, and build connections
+        if layer == match.entries[0]:
+            opt_layer = optimized_layers[match]
+            match_entry = match_entries[match]
+            layers.append(opt_layer)
+            opt_layer_ins = [
+                optimized_layers[layer_matches[li]] if li in layer_matches else li
+                for li in cc.layer_inputs(match_entry)
+            ]
+            in_layers[opt_layer] = opt_layer_ins
+            for li in opt_layer_ins:
+                out_layers[li].append(opt_layer)
+            continue
+
+        # If the layer belongs to a matched pattern (there can only be a single one by construction),
+        # but it is not the root in that pattern,
+        # then register it as the entry point of the matched sub-computational-graph, if not other entry
+        # point has been registered before
+        # This is necessary as to recover the connectivity between optimized layers
+        # whose roots are far away in the unoptimized computational graph
+        # TODO: generalize this as to cover patterns with multiply entry points
+        if match not in match_entries:
+            match_entries[match] = layer
+
+    return type(cc)(
+        cc.scope, cc.num_channels, layers, in_layers, out_layers, topologically_ordered=True
+    )

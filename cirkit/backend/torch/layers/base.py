@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from torch import Tensor
 
-from cirkit.backend.torch.graph.nodes import AbstractTorchModule
+from cirkit.backend.torch.graph.modules import AbstractTorchModule
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 

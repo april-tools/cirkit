@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict
 import torch
 from torch import nn
 
-from cirkit.backend.base import InitializerCompilationFunc, InitializerCompilationSign
+from cirkit.backend.compiler import InitializerCompilationFunc, InitializerCompilationSign
 from cirkit.backend.torch.initializers import InitializerFunc, dirichlet_
 from cirkit.symbolic.initializers import (
     ConstantInitializer,

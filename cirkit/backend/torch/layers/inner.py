@@ -120,14 +120,14 @@ class TorchKroneckerLayer(TorchProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, Ko).
+            Tensor: The output of this layer, shape (F, *B, Ko).
         """
-        x0 = x[0].unsqueeze(dim=-1)  # shape (*B, Ki, 1).
-        x1 = x[1].unsqueeze(dim=-2)  # shape (*B, 1, Ki).
-        # shape (*B, Ki, Ki) -> (*B, Ko=Ki**2).
+        x0 = x[:, 0].unsqueeze(dim=-1)  # shape (F, *B, Ki, 1).
+        x1 = x[:, 1].unsqueeze(dim=-2)  # shape (F, *B, 1, Ki).
+        # shape (F, *B, Ki, Ki) -> (F, *B, Ko=Ki**2).
         return self.semiring.mul(x0, x1).flatten(start_dim=-2)
 
 

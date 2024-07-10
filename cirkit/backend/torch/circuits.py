@@ -1,20 +1,15 @@
-from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Type
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
+from cirkit.backend.torch.graph.address_book import AddressBook, AddressBookEntry, FoldIndexInfo
 from cirkit.backend.torch.graph.folding import (
-    AddressBook,
-    AddressBookEntry,
-    FoldIndexInfo,
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
 from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
-from cirkit.backend.torch.graph.optimize import GraphOptEntry, GraphOptMatch, GraphOptPatternDefn
 from cirkit.backend.torch.layers import TorchLayer
-from cirkit.backend.torch.parameters.parameter import ParameterOptMatch, ParameterOptPattern
 from cirkit.utils.scope import Scope
 
 
@@ -207,25 +202,3 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         x = torch.empty(size=(1, self.num_channels, len(self.scope)), device=self.device)
         x = self._eval_layers(x)  # (B, O, K)
         return x.squeeze(dim=0)  # (O, K)
-
-
-LayerOptEntry = GraphOptEntry[TorchLayer]
-CircuitOptPatternDefn = GraphOptPatternDefn[TorchLayer]
-CircuitOptPattern = Type[CircuitOptPatternDefn]
-CircuitOptMatch = GraphOptMatch[TorchLayer]
-
-
-@dataclass(frozen=True)
-class LayerOptPatternDefn:
-    entry: LayerOptEntry
-    patterns: Dict[str, ParameterOptPattern]
-
-
-LayerOptPattern = Type[LayerOptPatternDefn]
-
-
-@dataclass(frozen=True)
-class LayerOptMatch:
-    pattern: LayerOptPattern
-    entry: TorchLayer
-    matches: Dict[str, ParameterOptMatch]

@@ -96,6 +96,7 @@ def build_simple_circuit(
     num_sum_units: int,
     num_repetitions: int = 1,
     seed: int = 42,
+    sum_product_layer: str = "cp",
     input_layer: str = "categorical",
     sum_parameterization: Optional[Parameterization] = None,
     logits_parameterization: Optional[Parameterization] = None,
@@ -108,6 +109,12 @@ def build_simple_circuit(
         num_repetitions=num_repetitions,
         seed=seed,
     )
+    if sum_product_layer == "cp":
+        prod_factory = hadamard_layer_factory
+    elif sum_product_layer == "tucker":
+        prod_factory = kronecker_layer_factory
+    else:
+        assert False
     if input_layer == "categorical":
         input_factory = functools.partial(
             categorical_layer_factory,
@@ -126,7 +133,7 @@ def build_simple_circuit(
         sum_factory=functools.partial(
             dense_layer_factory, parameterization=sum_parameterization, initializer=sum_initializer
         ),
-        prod_factory=hadamard_layer_factory,
+        prod_factory=prod_factory,
         mixing_factory=functools.partial(
             mixing_layer_factory, parameterization=sum_parameterization, initializer=sum_initializer
         ),
@@ -139,6 +146,7 @@ def build_simple_pc(
     num_sum_units: int = 2,
     num_repetitions: int = 1,
     seed: int = 42,
+    sum_product_layer: str = "cp",
     input_layer: str = "categorical",
     normalized: bool = False,
 ):
@@ -158,6 +166,7 @@ def build_simple_pc(
         num_sum_units,
         num_repetitions=num_repetitions,
         seed=seed,
+        sum_product_layer=sum_product_layer,
         input_layer=input_layer,
         sum_parameterization=sum_parameterization,
         logits_parameterization=logits_parameterization,

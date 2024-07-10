@@ -1,21 +1,20 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Dict, Generic, Iterator, List, Optional, Type
+from enum import IntEnum, auto
+from typing import Callable, Dict, Generic, Iterable, Iterator, List, Optional, Tuple, Type
 
 from joblib import Parallel, delayed
 
-from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
-from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph, TorchModule
 
 
-@dataclass(frozen=True)
-class GraphOptEntry(Generic[TorchModule]):
-    cls: Type[TorchModule]
+class OptMatchStrategy(IntEnum):
+    LARGEST_MATCH = auto()
 
 
 @dataclass(frozen=True)
 class GraphOptPatternDefn(Generic[TorchModule]):
-    entries: Dict[int, GraphOptEntry[TorchModule]]
+    entries: Dict[int, Type[TorchModule]]
     output: bool = False
 
 
@@ -27,15 +26,19 @@ class GraphOptMatch(Generic[TorchModule]):
     pattern: GraphOptPattern[TorchModule]
     entries: Dict[int, TorchModule]
 
+    def __hash__(self):
+        return hash(id(self))
+
 
 def match_optimization_patterns(
     graph: TorchDiAcyclicGraph[TorchModule],
-    patterns: List[GraphOptPattern[TorchModule]],
+    patterns: Iterable[GraphOptPattern[TorchModule]],
     *,
     num_jobs: int = 1,
-) -> Dict[TorchModule, List[GraphOptMatch[TorchModule]]]:
+    strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
+) -> Tuple[List[GraphOptMatch[TorchModule]], Dict[TorchModule, GraphOptMatch[TorchModule]]]:
     # A map from modules to the list of found matches they belong to
-    matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]] = defaultdict(list)
+    module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]] = defaultdict(list)
 
     # For each given pattern, match it on the graph
     for pattern in patterns:
@@ -43,47 +46,58 @@ def match_optimization_patterns(
         for match in _match_pattern_graph(graph, pattern, num_jobs=num_jobs):
             # For each module found in a match, update the map from modules to found matches
             for matched_module in match.entries.values():
-                matches[matched_module].append(match)
+                module_matches[matched_module].append(match)
 
-    return matches
+    # Prioritize the matched patterns
+    prioritized_module_matches = _prioritize_optimization_strategy(
+        graph, module_matches, strategy=strategy, in_place=True
+    )
+
+    # Extract all the matches that are still active
+    prioritized_matches = list(set(prioritized_module_matches.values()))
+
+    return prioritized_matches, prioritized_module_matches
 
 
-def prioritize_optimization_strategy(
+def _prioritize_optimization_strategy(
     graph: TorchDiAcyclicGraph[TorchModule],
-    matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]],
+    module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]],
     *,
-    strategy: str = "largest-match",
+    strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
+    in_place: bool = True,
 ) -> Dict[TorchModule, GraphOptMatch[TorchModule]]:
-    matches = matches.copy()
-    prioritized_matches: Dict[TorchModule, GraphOptMatch[TorchModule]] = {}
+    if not in_place:
+        module_matches = module_matches.copy()
+    prioritized_module_matches: Dict[TorchModule, GraphOptMatch[TorchModule]] = {}
 
     # Follow the topological ordering of the computational graph and prune
     # pattern matches, according to the given prioritization strategy
     for module in graph.topological_ordering():
-        module_matches = matches[module]
-        if len(module_matches) <= 1:
+        matches = module_matches[module]
+        if not matches:
             continue
+        if len(matches) == 1:
+            prioritized_module_matches[module] = matches[0]
 
         # Sort the matches based on the given strategy
-        sorted_module_matches = _sort_matches_priority(module_matches, strategy=strategy)
+        sorted_matches = _sort_matches_priority(matches, strategy=strategy)
 
         # Prune the 'excess' pattern matches
-        for match in sorted_module_matches[1:]:
+        for match in sorted_matches[1:]:
             for mid, m in match.entries:
-                matches[m].remove(match)
-        prioritized_matches[module] = sorted_module_matches[0]
+                module_matches[m].remove(match)
+        prioritized_module_matches[module] = sorted_matches[0]
 
-    return prioritized_matches
+    return prioritized_module_matches
 
 
 def _sort_matches_priority(
-    matches: List[GraphOptMatch[TorchModule]], *, strategy: str = "largest"
+    matches: List[GraphOptMatch[TorchModule]],
+    *,
+    strategy: OptMatchStrategy,
 ) -> List[GraphOptMatch[TorchModule]]:
-    if strategy not in ["largest"]:
-        raise ValueError(f"Unknown prioritization strategy named '{strategy}'")
-    if strategy == "largest-match":
+    if strategy == OptMatchStrategy.LARGEST_MATCH:
         return sorted(matches, key=lambda m: len(m.entries), reverse=True)
-
     assert False
 
 
@@ -115,11 +129,10 @@ def _match_pattern_rooted(
     # Start matching the pattern from the root
     # TODO: generalize to match DAGs or binary trees
     for mid in range(num_entries):
-        mcls = pattern_entries[mid].cls
-        if not issubclass(module, mcls):
+        if not isinstance(module, pattern_entries[mid]):
             return None
         in_modules = incomings_fn(module)
-        if len(in_modules) > 1 or (not in_modules and mid < num_entries - 1):
+        if len(in_modules) > 1 and mid != num_entries - 1:
             return None
         match_entries[mid] = module
         if mid != num_entries - 1:

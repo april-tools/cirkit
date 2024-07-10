@@ -1,20 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Type
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
+from cirkit.backend.torch.graph.address_book import AddressBook, AddressBookEntry, FoldIndexInfo
 from cirkit.backend.torch.graph.folding import (
-    AddressBook,
-    AddressBookEntry,
-    FoldIndexInfo,
     build_address_book_entry,
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
-from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
-from cirkit.backend.torch.graph.nodes import AbstractTorchModule
-from cirkit.backend.torch.graph.optimize import GraphOptEntry, GraphOptMatch, GraphOptPatternDefn
+from cirkit.backend.torch.graph.modules import AbstractTorchModule, TorchDiAcyclicGraph
 
 
 class TorchParameterNode(AbstractTorchModule, ABC):
@@ -251,9 +247,3 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
 
     def forward(self) -> Tensor:
         return self._eval_forward()  # (F, d1, d2, ..., dk)
-
-
-ParameterOptEntry = GraphOptEntry[TorchParameterNode]
-ParameterOptPatternDefn = GraphOptPatternDefn[TorchParameterNode]
-ParameterOptPattern = Type[ParameterOptPatternDefn]
-ParameterOptMatch = GraphOptMatch[TorchParameterNode]

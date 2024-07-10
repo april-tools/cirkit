@@ -1,14 +1,27 @@
 import abc
 import itertools
-from abc import ABC
-from typing import Dict, List, Optional, Union, cast
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union, cast
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.graph.folding import AddressBook, FoldIndexInfo
-from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.graph.address_book import AddressBook, FoldIndexInfo
 from cirkit.utils.algorithms import DiAcyclicGraph
+
+
+class AbstractTorchModule(nn.Module, ABC):
+    def __init__(self, *, num_folds: int = 1):
+        super().__init__()
+        self.num_folds = num_folds
+
+    @property
+    @abstractmethod
+    def fold_settings(self) -> Tuple[Any, ...]:
+        ...
+
+
+TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)
 
 
 class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):

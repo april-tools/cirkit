@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Dict, Optional
 
-from cirkit.backend.base import ParameterCompilationFunc, ParameterCompilationSign
+from cirkit.backend.compiler import ParameterCompilationFunc, ParameterCompilationSign
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.ops import (
     TorchClampParameter,
