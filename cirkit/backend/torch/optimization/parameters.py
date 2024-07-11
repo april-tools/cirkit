@@ -1,6 +1,11 @@
-from typing import TYPE_CHECKING, Callable, Dict, Type, cast
+from typing import TYPE_CHECKING, Dict, cast
 
-from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDefn
+from cirkit.backend.torch.optimization.registry import (
+    ParameterOptApplyFunc,
+    ParameterOptMatch,
+    ParameterOptPattern,
+    ParameterOptPatternDefn,
+)
 from cirkit.backend.torch.parameters.ops import (
     TorchLogParameter,
     TorchLogSoftmaxParameter,
@@ -8,18 +13,9 @@ from cirkit.backend.torch.parameters.ops import (
     TorchReduceLSEParameter,
     TorchSoftmaxParameter,
 )
-from cirkit.backend.torch.parameters.parameter import TorchParameterNode
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
-
-ParameterOptPatternDefn = GraphOptPatternDefn[TorchParameterNode]
-
-ParameterOptPattern = Type[ParameterOptPatternDefn]
-
-ParameterOptMatch = GraphOptMatch[TorchParameterNode]
-
-ParameterOptApplyFunc = Callable[["TorchCompiler", ParameterOptMatch], TorchParameterNode]
 
 
 class LogSoftmaxPattern(ParameterOptPatternDefn):

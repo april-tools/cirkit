@@ -1,7 +1,5 @@
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Dict, Tuple, Type, cast
+from typing import TYPE_CHECKING, Dict, Tuple, cast
 
-from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDefn
 from cirkit.backend.torch.layers import (
     TorchDenseLayer,
     TorchHadamardLayer,
@@ -10,39 +8,22 @@ from cirkit.backend.torch.layers import (
     TorchTuckerLayer,
 )
 from cirkit.backend.torch.layers.sum_product import TorchCPLayer
-from cirkit.backend.torch.optimizations.parameters import ParameterOptMatch, ParameterOptPattern
+from cirkit.backend.torch.optimization.registry import (
+    CircuitOptApplyFunc,
+    CircuitOptMatch,
+    CircuitOptPattern,
+    CircuitOptPatternDefn,
+    LayerOptApplyFunc,
+    LayerOptMatch,
+    LayerOptPattern,
+    LayerOptPatternDefn,
+    ParameterOptPattern,
+)
 from cirkit.backend.torch.parameters.ops import TorchKroneckerParameter, TorchMatMulParameter
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
-
-
-CircuitOptPatternDefn = GraphOptPatternDefn[TorchLayer]
-
-CircuitOptPattern = Type[CircuitOptPatternDefn]
-
-CircuitOptMatch = GraphOptMatch[TorchLayer]
-
-
-@dataclass(frozen=True)
-class LayerOptPatternDefn:
-    cls: Type[TorchLayer]
-    patterns: Dict[str, ParameterOptPattern]
-
-
-LayerOptPattern = Type[LayerOptPatternDefn]
-
-
-@dataclass(frozen=True)
-class LayerOptMatch:
-    pattern: LayerOptPattern
-    entry: TorchLayer
-    matches: Dict[str, ParameterOptMatch]
-
-
-CircuitOptApplyFunc = Callable[["TorchCompiler", CircuitOptMatch], TorchLayer]
-LayerOptApplyFunc = Callable[["TorchCompiler", LayerOptMatch], Tuple[TorchLayer]]
 
 
 class DenseCompositionPattern(CircuitOptPatternDefn):

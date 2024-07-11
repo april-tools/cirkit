@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Generic, Optional, Type, TypeVar
+from typing import Dict, Generic, List, Optional, Type, TypeVar
 
 RegistrySign = TypeVar("RegistrySign")
 RegistryFunc = TypeVar("RegistryFunc")
@@ -23,6 +23,10 @@ class CompilerRegistry(Generic[RegistrySign, RegistryFunc], ABC):
     @abstractmethod
     def _validate_rule_signature(cls, func: RegistryFunc) -> Optional[RegistrySign]:
         ...
+
+    @property
+    def signatures(self) -> List[RegistrySign]:
+        return list(self._rules)
 
     def add_rule(self, func: RegistryFunc) -> None:
         sigature = self._validate_rule_signature(func)

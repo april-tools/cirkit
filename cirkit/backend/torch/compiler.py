@@ -12,23 +12,25 @@ from cirkit.backend.compiler import (
     CompilerLayerRegistry,
     CompilerParameterRegistry,
 )
+from cirkit.backend.registry import CompilerRegistry
 from cirkit.backend.torch.circuits import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
-from cirkit.backend.torch.graph.optimize import (
-    OptMatchStrategy,
-    match_optimization_patterns,
-    optimize_graph,
-)
+from cirkit.backend.torch.graph.optimize import GraphOptPattern, optimize_graph
 from cirkit.backend.torch.initializers import stacked_initializer_
 from cirkit.backend.torch.layers import TorchLayer
-from cirkit.backend.torch.optimizations.layers import (
+from cirkit.backend.torch.optimization.layers import (
     DEFAULT_CIRCUIT_OPT_RULES,
     DEFAULT_LAYER_OPT_RULES,
-    CircuitOptMatch,
 )
-from cirkit.backend.torch.optimizations.parameters import (
-    DEFAULT_PARAMETER_OPT_RULES,
+from cirkit.backend.torch.optimization.parameters import DEFAULT_PARAMETER_OPT_RULES
+from cirkit.backend.torch.optimization.registry import (
+    CircuitOptApplyFunc,
+    CircuitOptMatch,
+    CircuitOptRegistry,
+    LayerOptRegistry,
+    ParameterOptApplyFunc,
     ParameterOptMatch,
+    ParameterOptRegistry,
 )
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.parameter import (
@@ -107,12 +109,10 @@ class TorchCompiler(AbstractCompiler):
         self._state = TorchCompilerState()
 
         # The registry of optimization rules
-        # TODO: make these rules extendable from outside
-        #       by wrapping each of them in a compiler registry
-        self._optimization_rules = {
-            "circuit": DEFAULT_CIRCUIT_OPT_RULES,
-            "parameter": DEFAULT_PARAMETER_OPT_RULES,
-            "layer": DEFAULT_LAYER_OPT_RULES,
+        self._optimization_registry = {
+            "circuit": CircuitOptRegistry(DEFAULT_CIRCUIT_OPT_RULES),
+            "parameter": ParameterOptRegistry(DEFAULT_PARAMETER_OPT_RULES),
+            "layer": LayerOptRegistry(DEFAULT_LAYER_OPT_RULES),
         }
 
     def compile_pipeline(self, sc: Circuit) -> AbstractTorchCircuit:
@@ -172,6 +172,13 @@ class TorchCompiler(AbstractCompiler):
         signature = type(initializer)
         rule = self.retrieve_initializer_rule(signature)
         return cast(Callable[[Tensor], Tensor], rule(self, initializer))
+
+    def retrieve_optimization_registry(self, kind: str) -> CompilerRegistry:
+        return cast(CompilerRegistry, self._optimization_registry[kind])
+
+    def retrieve_optimization_rule(self, kind: str, pattern: GraphOptPattern) -> Callable:
+        registry = self.retrieve_optimization_registry(kind)
+        return registry.retrieve_rule(pattern)
 
     def _compile_layer(self, layer: Layer) -> TorchLayer:
         signature = type(layer)
@@ -425,14 +432,17 @@ def _optimize_fuse_layers(
     compiler: TorchCompiler, cc: AbstractTorchCircuit
 ) -> Tuple[AbstractTorchCircuit, bool]:
     def fuse_layers(match: CircuitOptMatch) -> TorchLayer:
-        func = compiler._optimization_rules["circuit"][match.pattern]
+        func = cast(
+            CircuitOptApplyFunc, compiler.retrieve_optimization_rule("circuit", match.pattern)
+        )
         return func(compiler, match)
 
+    patterns = compiler.retrieve_optimization_registry("circuit").signatures
     optimize_result = optimize_graph(
         cc.topological_ordering(),
         cc.outputs,
         incomings_fn=cc.layer_inputs,
-        patterns=compiler._optimization_rules["circuit"].keys(),
+        patterns=patterns,
         optimize_fn=fuse_layers,
     )
     if optimize_result is None:
@@ -448,11 +458,14 @@ def _optimize_fuse_parameter_nodes(
     compiler: TorchCompiler, cc: AbstractTorchCircuit
 ) -> Tuple[AbstractTorchCircuit, bool]:
     def fuse_parameter_nodes(match: ParameterOptMatch) -> TorchParameterNode:
-        func = compiler._optimization_rules["parameter"][match.pattern]
+        func = cast(
+            ParameterOptApplyFunc, compiler.retrieve_optimization_rule("parameter", match.pattern)
+        )
         return func(compiler, match)
 
     # Loop through all the layers
     has_been_optimized = False
+    patterns = compiler.retrieve_optimization_registry("parameter").signatures
     for layer in cc.layers:
         # Retrieve the parameter computational graphs of the layer
         for pname, pgraph in layer.params.items():
@@ -461,7 +474,7 @@ def _optimize_fuse_parameter_nodes(
                 pgraph.topological_ordering(),
                 pgraph.outputs,
                 incomings_fn=pgraph.node_inputs,
-                patterns=compiler._optimization_rules["parameter"].keys(),
+                patterns=patterns,
                 optimize_fn=fuse_parameter_nodes,
             )
 
