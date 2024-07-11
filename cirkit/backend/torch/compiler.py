@@ -14,7 +14,11 @@ from cirkit.backend.compiler import (
 )
 from cirkit.backend.torch.circuits import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
-from cirkit.backend.torch.graph.optimize import OptMatchStrategy, match_optimization_patterns
+from cirkit.backend.torch.graph.optimize import (
+    OptMatchStrategy,
+    match_optimization_patterns,
+    optimize_graph,
+)
 from cirkit.backend.torch.initializers import stacked_initializer_
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.optimizations.layers import (
@@ -22,7 +26,10 @@ from cirkit.backend.torch.optimizations.layers import (
     DEFAULT_LAYER_OPT_RULES,
     CircuitOptMatch,
 )
-from cirkit.backend.torch.optimizations.parameters import DEFAULT_PARAMETER_OPT_RULES
+from cirkit.backend.torch.optimizations.parameters import (
+    DEFAULT_PARAMETER_OPT_RULES,
+    ParameterOptMatch,
+)
 from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
 from cirkit.backend.torch.parameters.parameter import (
     TorchParameter,
@@ -417,81 +424,63 @@ def _optimize_circuit(
 def _optimize_fuse_layers(
     compiler: TorchCompiler, cc: AbstractTorchCircuit
 ) -> Tuple[AbstractTorchCircuit, bool]:
-    # Match optimization patterns
-    # matches: list of all matched and grounded optimization rules
-    # module_matches: a map from modules to the matches they belong to, if any
-    circuit_optimization_rules = compiler._optimization_rules["circuit"]
-    matches, layer_matches = match_optimization_patterns(
-        cc, circuit_optimization_rules.keys(), strategy=OptMatchStrategy.LARGEST_MATCH
+    def fuse_layers(match: CircuitOptMatch) -> TorchLayer:
+        func = compiler._optimization_rules["circuit"][match.pattern]
+        return func(compiler, match)
+
+    optimize_result = optimize_graph(
+        cc.topological_ordering(),
+        cc.outputs,
+        incomings_fn=cc.layer_inputs,
+        patterns=compiler._optimization_rules["circuit"].keys(),
+        optimize_fn=fuse_layers,
     )
-
-    # Run the matched optimization rules and collect the optimized layers
-    optimized_layers: Dict[CircuitOptMatch, TorchLayer] = {}
-    for match in matches:
-        opt_func = circuit_optimization_rules[match.pattern]
-        opt_layer = opt_func(compiler, match)
-        optimized_layers[match] = opt_layer
-
-    # The list of optimized layer and the inputs/outputs of each optimized layer
-    layers: List[TorchLayer] = []
-    in_layers: Dict[TorchLayer, List[TorchLayer]] = {}
-    out_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
-
-    # A map from matches to their entry point unoptimized layers
-    match_entries: Dict[CircuitOptMatch, TorchLayer] = {}
-
-    # Build the optimize circuit by following the topological ordering
-    for layer in cc.topological_ordering():
-        match = layer_matches.get(layer, None)
-
-        # Check if the layer does not belong to any matched pattern
-        # If so, then just add it to the optimize layer as is
-        if match is None:
-            layers.append(layer)
-            layer_ins = [
-                optimized_layers[layer_matches[li]] if li in layer_matches else li
-                for li in cc.layer_inputs(layer)
-            ]
-            in_layers[layer] = layer_ins
-            for li in layer_ins:
-                out_layers[li].append(layer)
-            continue
-
-        # Check if the layer is the root within the matched pattern
-        # If so, then add the corresponding sub-computational-graph optimization to the
-        # optimized circuit, and build connections
-        if layer == match.entries[0]:
-            opt_layer = optimized_layers[match]
-            match_entry = match_entries[match]
-            layers.append(opt_layer)
-            opt_layer_ins = [
-                optimized_layers[layer_matches[li]] if li in layer_matches else li
-                for li in cc.layer_inputs(match_entry)
-            ]
-            in_layers[opt_layer] = opt_layer_ins
-            for li in opt_layer_ins:
-                out_layers[li].append(opt_layer)
-            continue
-
-        # If the layer belongs to a matched pattern (there can only be a single one by construction),
-        # but it is not the root in that pattern,
-        # then register it as the entry point of the matched sub-computational-graph, if not other entry
-        # point has been registered before
-        # This is necessary as to recover the connectivity between optimized layers
-        # whose roots are far away in the unoptimized computational graph
-        # TODO: generalize this as to cover patterns with multiply entry points
-        if match not in match_entries:
-            match_entries[match] = layer
-
-    opt_cc = type(cc)(
+    if optimize_result is None:
+        return cc, False
+    layers, in_layers, out_layers = optimize_result
+    cc = type(cc)(
         cc.scope, cc.num_channels, layers, in_layers, out_layers, topologically_ordered=True
     )
-    return opt_cc, True
+    return cc, True
 
 
 def _optimize_fuse_parameter_nodes(
     compiler: TorchCompiler, cc: AbstractTorchCircuit
 ) -> Tuple[AbstractTorchCircuit, bool]:
+    def fuse_parameter_nodes(match: ParameterOptMatch) -> TorchParameterNode:
+        func = compiler._optimization_rules["parameter"][match.pattern]
+        return func(compiler, match)
+
+    # Loop through all the layers
+    has_been_optimized = False
+    for layer in cc.layers:
+        # Retrieve the parameter computational graphs of the layer
+        for pname, pgraph in layer.params.items():
+            # Optimize the parameter computational graph!
+            optimize_result = optimize_graph(
+                pgraph.topological_ordering(),
+                pgraph.outputs,
+                incomings_fn=pgraph.node_inputs,
+                patterns=compiler._optimization_rules["parameter"].keys(),
+                optimize_fn=fuse_parameter_nodes,
+            )
+
+            # Check if no optimization is possible
+            if optimize_result is None:
+                continue
+            nodes, in_nodes, out_nodes = optimize_result
+
+            # Build the optimized computational graph
+            pgraph = type(pgraph)(nodes, in_nodes, out_nodes, topologically_ordered=True)
+
+            # Update the parameter computational graph assigned to the layer
+            assert hasattr(layer, pname)
+            setattr(layer, pname, pgraph)
+            has_been_optimized = True
+
+    # Check whether no parameter optimization has been possible
+    if has_been_optimized:
+        return cc, True
     return cc, False
 
 

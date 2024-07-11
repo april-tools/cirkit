@@ -19,7 +19,7 @@ ParameterOptPattern = Type[ParameterOptPatternDefn]
 
 ParameterOptMatch = GraphOptMatch[TorchParameterNode]
 
-ParameterOptApplyFunc = Callable[["TorchCompiler", ParameterOptPattern], TorchParameterNode]
+ParameterOptApplyFunc = Callable[["TorchCompiler", ParameterOptMatch], TorchParameterNode]
 
 
 class LogSoftmaxPattern(ParameterOptPatternDefn):

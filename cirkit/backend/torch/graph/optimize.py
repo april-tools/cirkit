@@ -5,7 +5,7 @@ from typing import Callable, Dict, Generic, Iterable, Iterator, List, Optional, 
 
 from joblib import Parallel, delayed
 
-from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph, TorchModule
+from cirkit.backend.torch.graph.modules import TorchModule
 
 
 class OptMatchStrategy(IntEnum):
@@ -31,11 +31,13 @@ class GraphOptMatch(Generic[TorchModule]):
 
 
 def match_optimization_patterns(
-    graph: TorchDiAcyclicGraph[TorchModule],
-    patterns: Iterable[GraphOptPattern[TorchModule]],
+    ordering: Iterable[TorchModule],
+    outputs: Iterable[TorchModule],
     *,
-    num_jobs: int = 1,
+    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    patterns: Iterable[GraphOptPattern[TorchModule]],
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
+    num_jobs: int = 1,
 ) -> Tuple[List[GraphOptMatch[TorchModule]], Dict[TorchModule, GraphOptMatch[TorchModule]]]:
     # A map from modules to the list of found matches they belong to
     module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]] = defaultdict(list)
@@ -43,14 +45,16 @@ def match_optimization_patterns(
     # For each given pattern, match it on the graph
     for pattern in patterns:
         # Get an iterator of matches, for a given pattern
-        for match in _match_pattern_graph(graph, pattern, num_jobs=num_jobs):
+        for match in _match_pattern_graph(
+            ordering, outputs, incomings_fn=incomings_fn, pattern=pattern, num_jobs=num_jobs
+        ):
             # For each module found in a match, update the map from modules to found matches
             for matched_module in match.entries.values():
                 module_matches[matched_module].append(match)
 
     # Prioritize the matched patterns
     prioritized_module_matches = _prioritize_optimization_strategy(
-        graph, module_matches, strategy=strategy, in_place=True
+        ordering, module_matches=module_matches, strategy=strategy, in_place=True
     )
 
     # Extract all the matches that are still active
@@ -59,10 +63,97 @@ def match_optimization_patterns(
     return prioritized_matches, prioritized_module_matches
 
 
-def _prioritize_optimization_strategy(
-    graph: TorchDiAcyclicGraph[TorchModule],
-    module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]],
+def optimize_graph(
+    ordering: Iterable[TorchModule],
+    outputs: Iterable[TorchModule],
     *,
+    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    patterns: Iterable[GraphOptPattern],
+    optimize_fn: Callable[[GraphOptMatch], TorchModule],
+    strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
+) -> Optional[
+    Tuple[
+        List[TorchModule],
+        Dict[TorchModule, List[TorchModule]],
+        Dict[TorchModule, List[TorchModule]],
+    ]
+]:
+    ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
+    outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
+
+    # Match optimization patterns
+    # matches: list of all matched and grounded optimization rules
+    # module_matches: a map from modules to the matches they belong to, if any
+    matches, module_matches = match_optimization_patterns(
+        ordering, outputs, incomings_fn=incomings_fn, patterns=patterns, strategy=strategy
+    )
+
+    # Check if no matches have been found. If so, then just return None
+    if not matches:
+        return None
+
+    # Run the matched optimization rules and collect the optimized modules
+    opt_modules: Dict[GraphOptMatch, TorchModule] = {}
+    for match in matches:
+        opt_modules[match] = optimize_fn(match)
+
+    # The list of optimized layer and the inputs/outputs of each optimized module
+    modules: List[TorchModule] = []
+    in_modules: Dict[TorchModule, List[TorchModule]] = {}
+    out_modules: Dict[TorchModule, List[TorchModule]] = defaultdict(list)
+
+    # A map from matches to their entry point unoptimized modules
+    match_entries: Dict[GraphOptMatch, TorchModule] = {}
+
+    # Build the optimize graph by following the topological ordering
+    for module in ordering:
+        match = module_matches.get(module, None)
+
+        # Check if the layer does not belong to any matched pattern
+        # If so, then just add it to the optimize layer as is
+        if match is None:
+            modules.append(module)
+            module_ins = [
+                opt_modules[module_matches[mi]] if mi in module_matches else mi
+                for mi in incomings_fn(module)
+            ]
+            in_modules[module] = module_ins
+            for mi in module_ins:
+                out_modules[mi].append(module)
+            continue
+
+        # Check if the module is the root within the matched pattern
+        # If so, then add the corresponding sub-computational-graph optimization to the
+        # optimized graph, and build connections
+        if module == match.entries[0]:
+            opt_module = opt_modules[match]
+            modules.append(opt_module)
+            module_ins = [
+                opt_modules[module_matches[mi]] if mi in module_matches else mi
+                for mi in incomings_fn(match_entries[match])
+            ]
+            in_modules[opt_module] = module_ins
+            for mi in module_ins:
+                out_modules[mi].append(opt_module)
+            continue
+
+        # If the module belongs to a matched pattern (there can only be a single one by construction),
+        # but it is not the root in that pattern,
+        # then register it as the entry point of the matched sub-computational-graph, if not other entry
+        # point has been registered before
+        # This is necessary as to recover the connectivity between optimized modules
+        # whose roots are far away in the unoptimized computational graph
+        # TODO: generalize this as to cover patterns with multiply entry points
+        if match not in match_entries:
+            match_entries[match] = module
+
+    return modules, in_modules, out_modules
+
+
+def _prioritize_optimization_strategy(
+    ordering: Iterable[TorchModule],
+    *,
+    module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]],
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
     in_place: bool = True,
 ) -> Dict[TorchModule, GraphOptMatch[TorchModule]]:
@@ -72,7 +163,7 @@ def _prioritize_optimization_strategy(
 
     # Follow the topological ordering of the computational graph and prune
     # pattern matches, according to the given prioritization strategy
-    for module in graph.topological_ordering():
+    for module in ordering:
         matches = module_matches[module]
         if not matches:
             continue
@@ -102,16 +193,18 @@ def _sort_matches_priority(
 
 
 def _match_pattern_graph(
-    graph: TorchDiAcyclicGraph[TorchModule],
-    pattern: GraphOptPattern[TorchModule],
+    nodes: Iterable[TorchModule],
+    outputs: Iterable[TorchModule],
     *,
+    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    pattern: GraphOptPattern[TorchModule],
     num_jobs: int = 1,
 ) -> Iterator[GraphOptMatch[TorchModule]]:
     # Tries to match a pattern by rooting it in all the modules of the computational graph
     # This can be parallelized through joblib
-    modules = list(graph.outputs) if pattern.output else graph.nodes
+    modules = outputs if pattern.output else nodes
     optional_matches = Parallel(n_jobs=num_jobs, backend="threading")(
-        delayed(_match_pattern_rooted)(m, pattern, incomings_fn=graph.node_inputs) for m in modules
+        delayed(_match_pattern_rooted)(m, pattern, incomings_fn=incomings_fn) for m in modules
     )
     return filter(lambda match: match is not None, optional_matches)
 
