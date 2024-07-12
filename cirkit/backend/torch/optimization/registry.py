@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import Callable, Dict, List, Optional, Tuple, Type
 
 from cirkit.backend.compiler import AbstractCompiler
@@ -40,6 +41,14 @@ class LayerOptMatch(GraphOptMatch[TorchLayer]):
     @property
     def pentries(self) -> List[Dict[str, List[ParameterOptMatch]]]:
         return self._pentries
+
+    @cached_property
+    def size(self) -> int:
+        size = super().size
+        for pentry in self._pentries:
+            for pmatches in pentry.values():
+                size += sum(match.size for match in pmatches)
+        return size
 
 
 LayerOptApplyFunc = Callable[["TorchCompiler", LayerOptMatch], Tuple[TorchLayer, ...]]

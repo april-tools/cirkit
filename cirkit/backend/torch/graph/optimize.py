@@ -1,5 +1,6 @@
 from collections import defaultdict
 from enum import IntEnum, auto
+from functools import cached_property
 from typing import (
     Callable,
     Dict,
@@ -47,6 +48,10 @@ class GraphOptMatch(Generic[TorchModule]):
     @property
     def entries(self) -> List[TorchModule]:
         return self._entries
+
+    @property
+    def size(self) -> int:
+        return len(self._entries)
 
 
 class PatternMatcherFunc(Protocol):
@@ -246,7 +251,7 @@ def _sort_matches_priority(
     strategy: OptMatchStrategy,
 ) -> List[GraphOptMatch[TorchModule]]:
     if strategy == OptMatchStrategy.LARGEST_MATCH:
-        return sorted(matches, key=lambda m: len(m.entries), reverse=True)
+        return sorted(matches, key=lambda m: m.size, reverse=True)
     assert False
 
 

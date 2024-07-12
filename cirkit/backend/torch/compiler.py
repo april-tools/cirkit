@@ -256,7 +256,7 @@ class TorchCompiler(AbstractCompiler):
     def _post_process_circuit(self, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
         if self.is_optimize_enabled:
             # Optimize the circuit computational graph
-            opt_cc = _optimize_circuit(self, cc)
+            opt_cc = _optimize_circuit(self, cc, max_opt_steps=5)
             del cc
             cc = opt_cc
         if self.is_fold_enabled:
@@ -447,7 +447,7 @@ def _optimize_parameter_nodes(
     for layer in cc.layers:
         # Retrieve the parameter computational graphs of the layer
         for pname, pgraph in layer.params.items():
-            # Optimize the parameter computational graph!
+            # Optimize the parameter computational graph
             optimize_result = optimize_graph(
                 pgraph.topological_ordering(),
                 pgraph.outputs,

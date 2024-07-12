@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from torch import Tensor
 
@@ -14,9 +14,9 @@ class TorchTensorDotLayer(TorchSumLayer):
         self,
         num_input_units: int,
         num_output_units: int,
+        num_batch_units: int,
         *,
         num_folds: int = 1,
-        num_batch_units: int,
         weight: TorchParameter,
         semiring: Optional[Semiring] = None,
     ) -> None:
@@ -45,9 +45,13 @@ class TorchTensorDotLayer(TorchSumLayer):
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
-            "num_folds": self.num_folds,
             "num_batch_units": self.num_batch_units,
+            "num_folds": self.num_folds,
         }
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.num_batch_units
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

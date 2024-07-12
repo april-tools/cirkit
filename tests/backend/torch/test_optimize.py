@@ -151,3 +151,50 @@ def test_optimize_tensordot():
     assert optimized_scores.shape == (2**num_variables, 1, 1)
 
     assert allclose(unoptimized_scores, optimized_scores)
+
+
+def test_optimize_tensordot_squaring():
+    num_variables = 6
+    sci = build_simple_pc(num_variables, 3, 2)
+    sc = SF.multiply(sci, sci)
+
+    unoptimized_compiler = TorchCompiler(fold=True, semiring="lse-sum", optimize=False)
+    unoptimized_tc: TorchCircuit = unoptimized_compiler.compile(sc)
+    unoptimized_tci = unoptimized_compiler.get_compiled_circuit(sci)
+
+    optimized_compiler = TorchCompiler(fold=True, semiring="lse-sum", optimize=True)
+    optimized_tc: TorchCircuit = optimized_compiler.compile(sc)
+    optimized_tci = optimized_compiler.get_compiled_circuit(sci)
+
+    assert all(
+        isinstance(l, (TorchCategoricalLayer, TorchHadamardLayer, TorchDenseLayer))
+        for l in unoptimized_tc.layers
+    )
+    assert all(
+        isinstance(l, (TorchCategoricalLayer, TorchHadamardLayer, TorchTensorDotLayer))
+        for l in optimized_tc.layers
+    )
+
+    pnames = [
+        ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),
+        ("_nodes.1.logits._nodes.0._ptensor", "_nodes.1.logits._nodes.0._ptensor"),
+        ("_nodes.2.weight._nodes.0._ptensor", "_nodes.2.weight._nodes.0._ptensor"),
+        ("_nodes.4.weight._nodes.0._ptensor", "_nodes.3.weight._nodes.0._ptensor"),
+        ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
+    ]
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tci.load_state_dict(
+            {optimized_pname: unoptimized_tci.state_dict()[unoptimized_pname]}, strict=False
+        )
+
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
+    assert worlds.shape == (2**num_variables, 1, num_variables)
+
+    unoptimized_scores = unoptimized_tc(worlds)
+    assert unoptimized_scores.shape == (2**num_variables, 1, 1)
+
+    optimized_scores = optimized_tc(worlds)
+    assert optimized_scores.shape == (2**num_variables, 1, 1)
+
+    assert allclose(unoptimized_scores, optimized_scores)
