@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict, Tuple, cast
+from typing import TYPE_CHECKING, Dict, List, Tuple, Type, cast
 
 from cirkit.backend.torch.layers import (
     TorchDenseLayer,
@@ -7,108 +7,140 @@ from cirkit.backend.torch.layers import (
     TorchLayer,
     TorchTuckerLayer,
 )
+from cirkit.backend.torch.layers.optimized import TorchTensorDotLayer
 from cirkit.backend.torch.layers.sum_product import TorchCPLayer
+from cirkit.backend.torch.optimization.parameters import KroneckerOutParameterPattern
 from cirkit.backend.torch.optimization.registry import (
-    CircuitOptApplyFunc,
-    CircuitOptMatch,
-    CircuitOptPattern,
-    CircuitOptPatternDefn,
     LayerOptApplyFunc,
     LayerOptMatch,
     LayerOptPattern,
-    LayerOptPatternDefn,
     ParameterOptPattern,
 )
-from cirkit.backend.torch.parameters.ops import TorchKroneckerParameter, TorchMatMulParameter
+from cirkit.backend.torch.parameters.ops import TorchMatMulParameter
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
-class DenseCompositionPattern(CircuitOptPatternDefn):
-    entries = {
-        0: TorchDenseLayer,
-        1: TorchDenseLayer,
-    }
+class DenseCompositionPattern(LayerOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchLayer]]:
+        return [TorchDenseLayer, TorchDenseLayer]
 
 
-class TuckerPattern(CircuitOptPatternDefn):
-    entries = {
-        0: TorchDenseLayer,
-        1: TorchKroneckerLayer,
-    }
+class TuckerPattern(LayerOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchLayer]]:
+        return [TorchDenseLayer, TorchKroneckerLayer]
 
 
-class CandecompPattern(CircuitOptPatternDefn):
-    entries = {
-        0: TorchDenseLayer,
-        1: TorchHadamardLayer,
-    }
+class CandecompPattern(LayerOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchLayer]]:
+        return [TorchDenseLayer, TorchHadamardLayer]
 
 
-class KroneckerOutputPattern(ParameterOptPattern):
-    entries = {0: TorchKroneckerParameter}
-    output = True
+class DenseKroneckerPattern(LayerOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchLayer]]:
+        return [TorchLayer]
+
+    @classmethod
+    def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
+        return [{"weight": KroneckerOutParameterPattern}]
 
 
-class DenseKroneckerPattern(LayerOptPatternDefn):
-    cls = TorchDenseLayer
-    patterns = {"weight": KroneckerOutputPattern}
-
-
-def apply_dense_composition(compiler: "TorchCompiler", match: CircuitOptMatch) -> TorchDenseLayer:
+def apply_dense_composition(
+    compiler: "TorchCompiler", match: LayerOptMatch
+) -> Tuple[TorchDenseLayer]:
     dense1 = cast(TorchDenseLayer, match.entries[0])
     dense2 = cast(TorchDenseLayer, match.entries[1])
     weight = TorchParameter.from_binary(
-        dense1.weight, dense2.weight, TorchMatMulParameter(dense1.weight.shape, dense2.weight.shape)
+        TorchMatMulParameter(dense1.weight.shape, dense2.weight.shape), dense1.weight, dense2.weight
     )
-    return TorchDenseLayer(
+    dense = TorchDenseLayer(
         dense2.num_input_units, dense1.num_output_units, weight=weight, semiring=compiler.semiring
     )
+    return (dense,)
 
 
-def apply_tucker(compiler: "TorchCompiler", match: CircuitOptMatch) -> TorchTuckerLayer:
+def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchTuckerLayer]:
     dense = cast(TorchDenseLayer, match.entries[0])
     kronecker = cast(TorchKroneckerLayer, match.entries[1])
-    return TorchTuckerLayer(
+    tucker = TorchTuckerLayer(
         kronecker.num_input_units,
         dense.num_output_units,
         kronecker.arity,
         weight=dense.weight,
         semiring=compiler.semiring,
     )
+    return (tucker,)
 
 
-def apply_candecomp(compiler: "TorchCompiler", match: CircuitOptMatch) -> TorchCPLayer:
+def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchCPLayer]:
     dense = cast(TorchDenseLayer, match.entries[0])
     hadamard = cast(TorchHadamardLayer, match.entries[1])
-    return TorchCPLayer(
+    cp = TorchCPLayer(
         hadamard.num_input_units,
         dense.num_output_units,
         hadamard.arity,
         weight=dense.weight,
         semiring=compiler.semiring,
     )
+    return (cp,)
 
 
 def apply_dense_kronecker(
     compiler: "TorchCompiler", match: LayerOptMatch
-) -> Tuple[TorchLayer, ...]:
-    dense = cast(TorchDenseLayer, match.entry)
-    weight = dense.weight
-    kronecker = match.matches["weight"].entries[0]
-    weight1_output, weight2_output = weight.node_inputs(kronecker)
-    # Take the sub-graphs from 'weight' rooted in 'weight1_output' and 'weight2_output',
-    # then copy them, and assign them to two distinct dense layers
-    raise NotImplementedError()
+) -> Tuple[TorchTensorDotLayer, TorchTensorDotLayer]:
+    # Retrieve the matched dense layer and the inputs to the kronecker parameter node
+    dense = cast(TorchDenseLayer, match.entries[0])
+    kronecker = match.pentries[0]["weight"].entries[0]
+    weight1_output, weight2_output = dense.weight.node_inputs(kronecker)
+
+    # Build new torch parameter computational graphs by taking
+    # the sub-computational graph rooted at the inputs of the kronecker parameter node
+    weight1, weight2 = dense.weight.extract_subgraphs(weight1_output, weight2_output)
+
+    # Instantiate two tensor dot layers, whose composition is equivalent to the
+    # dense layer parameterized by a kronecker product of two matrices
+    tdot1 = TorchTensorDotLayer(
+        dense.num_input_units,
+        dense.num_output_units,
+        num_batch_units=weight2.shape[1],
+        weight=weight1,
+    )
+    tdot2 = TorchTensorDotLayer(
+        dense.num_input_units,
+        dense.num_output_units,
+        num_batch_units=weight1.shape[0],
+        weight=weight2,
+    )
+    return tdot1, tdot2
 
 
-DEFAULT_CIRCUIT_OPT_RULES: Dict[CircuitOptPattern, CircuitOptApplyFunc] = {  # type: ignore[misc]
+DEFAULT_LAYER_FUSE_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
     DenseCompositionPattern: apply_dense_composition,
     TuckerPattern: apply_tucker,
     CandecompPattern: apply_candecomp,
 }
-DEFAULT_LAYER_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
+DEFAULT_LAYER_SHATTER_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
     DenseKroneckerPattern: apply_dense_kronecker
 }

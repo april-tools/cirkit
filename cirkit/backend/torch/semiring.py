@@ -166,15 +166,15 @@ class SemiringImpl(ABC):
         cls,
         equation: str,
         *,
-        operands: Tuple[Tensor, ...],
         inputs: Tuple[Tensor, ...],
+        operands: Tuple[Tensor, ...],
         dim: Union[int, Sequence[int]],
         keepdim: bool,
     ) -> Tensor:
         operands = tuple(cls.cast(opd) for opd in operands)
 
         def _einsum_func(*xs: Tensor) -> Tensor:
-            return torch.einsum(equation, *operands, *xs)
+            return torch.einsum(equation, *xs, *operands)
 
         return cls.apply(_einsum_func, *inputs, dim=dim, keepdim=keepdim)
 

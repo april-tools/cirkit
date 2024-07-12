@@ -182,7 +182,7 @@ class TorchDenseLayer(TorchSumLayer):
         x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).
         weight = self.weight()
         return self.semiring.einsum(
-            "foi,f...i->f...o", operands=(weight,), inputs=(x,), dim=-1, keepdim=True
+            "f...i,foi->f...o", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, *B, Ko).
 
 
@@ -237,5 +237,5 @@ class TorchMixingLayer(TorchSumLayer):
         # shape (F, H, *B, K) -> (F, *B, K).
         weight = self.weight()
         return self.semiring.einsum(
-            "fkh,fh...k->f...k", operands=(weight,), inputs=(x,), dim=1, keepdim=False
+            "fh...k,fkh->f...k", inputs=(x,), operands=(weight,), dim=1, keepdim=False
         )

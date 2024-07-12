@@ -1,5 +1,10 @@
+import operator
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from collections import defaultdict
+from copy import copy as shallowcopy
+from functools import reduce
+from itertools import chain
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -10,54 +15,23 @@ from cirkit.backend.torch.graph.folding import (
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
-from cirkit.backend.torch.graph.modules import AbstractTorchModule, TorchDiAcyclicGraph
-
-
-class TorchParameterNode(AbstractTorchModule, ABC):
-    """The abstract base class for all reparameterizations."""
-
-    def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
-        """Init class."""
-        super().__init__(num_folds=num_folds)
-
-    @property
-    @abstractmethod
-    def shape(self) -> Tuple[int, ...]:
-        ...
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Configuration flags for the parameter."""
-        return {}
-
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        ...
-
-
-class TorchParameterLeaf(TorchParameterNode, ABC):
-    @property
-    def is_initialized(self) -> bool:
-        return True
-
-    def __call__(self) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self) -> Tensor:
-        ...
+from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
+from cirkit.backend.torch.parameters.leaves import (
+    TorchParameterLeaf,
+    TorchParameterNode,
+    TorchPointerParameter,
+    TorchTensorParameter,
+)
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
     def __init__(self, *in_shape: Tuple[int, ...], num_folds: int = 1):
         super().__init__(num_folds=num_folds)
         self.in_shapes = in_shape
+
+    def __copy__(self) -> "TorchParameterOp":
+        cls = self.__class__
+        return cls(*self.in_shapes, **self.config)
 
     @property
     def fold_settings(self) -> Tuple[Any, ...]:
@@ -187,8 +161,15 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         return next(self.outputs).shape
 
     @classmethod
-    def from_sequence(cls, p: "TorchParameter", *ns: TorchParameterNode) -> "TorchParameter":
-        assert not p.has_address_book and not p._fold_idx_info
+    def from_leaf(cls, p: TorchParameterLeaf) -> "TorchParameter":
+        return TorchParameter([p], {}, {}, topologically_ordered=True)
+
+    @classmethod
+    def from_sequence(
+        cls, p: Union[TorchParameterLeaf, "TorchParameter"], *ns: TorchParameterNode
+    ) -> "TorchParameter":
+        if isinstance(p, TorchParameterLeaf):
+            p = TorchParameter.from_leaf(p)
         nodes = p.nodes + list(ns)
         in_nodes = dict(p.nodes_inputs)
         out_nodes = dict(p.nodes_outputs)
@@ -201,28 +182,67 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         )
 
     @classmethod
-    def from_unary(cls, p: "TorchParameter", n: TorchUnaryOpParameter) -> "TorchParameter":
+    def from_nary(
+        cls, n: TorchParameterOp, *ps: Union[TorchParameterLeaf, "TorchParameter"]
+    ) -> "TorchParameter":
+        ps = tuple(
+            TorchParameter.from_leaf(p) if isinstance(p, TorchParameterLeaf) else p for p in ps
+        )
+        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
+        in_nodes = reduce(operator.ior, (p.nodes_inputs for p in ps), {})
+        out_nodes = reduce(operator.ior, (p.nodes_outputs for p in ps), {})
+        in_nodes[n] = list(p.output for p in ps)
+        for p in ps:
+            out_nodes[p.output] = [n]
+        topologically_ordered = all(p.is_topologically_ordered for p in ps)
+        return TorchParameter(
+            p_nodes,
+            in_nodes,
+            out_nodes,
+            topologically_ordered=topologically_ordered,
+        )
+
+    @classmethod
+    def from_unary(
+        cls, n: TorchUnaryOpParameter, p: Union[TorchParameterLeaf, "TorchParameter"]
+    ) -> "TorchParameter":
         return TorchParameter.from_sequence(p, n)
 
     @classmethod
     def from_binary(
         cls,
-        p1: "TorchParameter",
-        p2: "TorchParameter",
         n: TorchBinaryOpParameter,
+        p1: Union[TorchParameterLeaf, "TorchParameter"],
+        p2: Union[TorchParameterLeaf, "TorchParameter"],
     ) -> "TorchParameter":
-        p_nodes = p1.nodes + p2.nodes + [n]
-        in_nodes = {**p1.nodes_inputs, **p2.nodes_inputs}
-        out_nodes = {**p1.nodes_outputs, **p2.nodes_outputs}
-        in_nodes[n] = [p1.output, p2.output]
-        out_nodes[p1.output] = [n]
-        out_nodes[p2.output] = [n]
-        return TorchParameter(
-            p_nodes,
-            in_nodes,
-            out_nodes,
-            topologically_ordered=p1.is_topologically_ordered and p2.is_topologically_ordered,
-        )
+        return TorchParameter.from_nary(n, p1, p2)
+
+    def extract_subgraphs(self, *roots: TorchParameterNode) -> List["TorchParameter"]:
+        nodes_ptensor = set()
+
+        def replace_ref_or_copy(n: TorchParameterNode) -> TorchParameterNode:
+            if isinstance(n, TorchTensorParameter):
+                if n in nodes_ptensor:
+                    return TorchPointerParameter(n)
+                nodes_ptensor.add(n)
+            return shallowcopy(n)
+
+        pgraphs = []
+        for r in roots:
+            nodes_map = {}
+            in_nodes = {}
+            out_nodes = defaultdict(list)
+            for n in self.topological_ordering([r]):
+                new_n = replace_ref_or_copy(n)
+                nodes_map[n] = new_n
+                in_new_nodes = [nodes_map[ni] for ni in self.node_inputs(n)]
+                in_nodes[new_n] = in_new_nodes
+                for ni in in_new_nodes:
+                    out_nodes[ni].append(new_n)
+            nodes = [nodes_map[n] for n in nodes_map.keys()]
+            pgraph = TorchParameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
+            pgraphs.append(pgraph)
+        return pgraphs
 
     def _build_address_book(self) -> AddressBook:
         fold_idx_info = self._fold_idx_info

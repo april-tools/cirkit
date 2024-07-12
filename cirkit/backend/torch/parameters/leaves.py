@@ -1,9 +1,54 @@
+from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, final
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.parameters.parameter import TorchParameterLeaf
+from cirkit.backend.torch.graph.modules import AbstractTorchModule
+
+
+class TorchParameterNode(AbstractTorchModule, ABC):
+    """The abstract base class for all reparameterizations."""
+
+    def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
+        """Init class."""
+        super().__init__(num_folds=num_folds)
+
+    @abstractmethod
+    def __copy__(self) -> "TorchParameterNode":
+        ...
+
+    @property
+    @abstractmethod
+    def shape(self) -> Tuple[int, ...]:
+        ...
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {}
+
+    @torch.no_grad()
+    def reset_parameters(self) -> None:
+        ...
+
+
+class TorchParameterLeaf(TorchParameterNode, ABC):
+    @property
+    def is_initialized(self) -> bool:
+        return True
+
+    def __call__(self) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__()  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self) -> Tensor:
+        ...
 
 
 class TorchTensorParameter(TorchParameterLeaf):
@@ -22,6 +67,10 @@ class TorchTensorParameter(TorchParameterLeaf):
         self._ptensor: Optional[nn.Parameter] = None
         self._requires_grad = requires_grad
         self.initializer_ = nn.init.normal_ if initializer_ is None else initializer_
+
+    def __copy__(self) -> "TorchTensorParameter":
+        cls = self.__class__
+        return cls(**self.config)
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -55,7 +104,12 @@ class TorchTensorParameter(TorchParameterLeaf):
     @property
     def config(self) -> Dict[str, Any]:
         """Configuration flags for the parameter."""
-        return dict(shape=self._shape, num_folds=self.num_folds, requires_grad=self._requires_grad)
+        return dict(
+            shape=self._shape,
+            num_folds=self.num_folds,
+            requires_grad=self._requires_grad,
+            initializer_=self.initializer_,
+        )
 
     @property
     def is_initialized(self) -> bool:
@@ -108,6 +162,10 @@ class TorchPointerParameter(TorchParameterLeaf):
         super().__init__(num_folds=num_folds)
         self._parameter = parameter
         self._fold_idx = fold_idx
+
+    def __copy__(self) -> "TorchPointerParameter":
+        cls = self.__class__
+        return cls(self._parameter, **self.config)
 
     @property
     def shape(self) -> Tuple[int, ...]:

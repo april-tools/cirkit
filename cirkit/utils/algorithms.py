@@ -138,9 +138,12 @@ class DiAcyclicGraph(Graph[NodeType]):
     def is_topologically_ordered(self) -> bool:
         return self._topologically_ordered
 
-    def topological_ordering(self) -> Iterator[NodeType]:
-        if self.is_topologically_ordered:
+    def topological_ordering(
+        self, roots: Optional[Iterable[NodeType]] = None
+    ) -> Iterator[NodeType]:
+        if self.is_topologically_ordered and roots is None:
             return iter(self.nodes)
+        nodes = self._nodes if roots is None else bfs(roots, self.node_inputs)
         return topological_ordering(self._nodes, self.node_inputs, self.node_outputs)
 
     def layerwise_topological_ordering(self) -> Iterator[List[NodeType]]:

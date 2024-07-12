@@ -69,7 +69,7 @@ class TorchTuckerLayer(TorchSumProductLayer):
             -1, self.num_output_units, self.num_input_units, self.num_input_units
         )
         return self.semiring.einsum(
-            "foij,f...i,f...j->f...o",
+            "f...i,f...j,foij->f...o",
             operands=(weight,),
             inputs=(x[:, 0], x[:, 1]),
             dim=-1,
@@ -129,5 +129,5 @@ class TorchCPLayer(TorchSumProductLayer):
         x = self.semiring.prod(x, dim=1)  # (F, *B, Ki)
         weight = self.weight()
         return self.semiring.einsum(
-            "oij,...i,...j->...o", operands=(weight,), inputs=(x[0], x[1]), dim=-1, keepdim=True
+            "f...i,foi->f...o", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )

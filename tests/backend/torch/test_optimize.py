@@ -5,6 +5,10 @@ import torch
 
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
+from cirkit.backend.torch.layers.optimized import TorchTensorDotLayer
+from cirkit.backend.torch.parameters.leaves import TorchTensorParameter
+from cirkit.backend.torch.parameters.parameter import TorchParameter
+from cirkit.backend.torch.semiring import LSESumSemiring
 from tests.floats import allclose
 from tests.symbolic.test_utils import build_simple_pc
 
@@ -58,3 +62,13 @@ def test_optimize_tucker(fold: bool):
     assert optimized_scores.shape == (2**num_variables, 1, 1)
 
     assert allclose(unoptimized_scores, optimized_scores)
+
+
+def test_optimize_dense_kronecker():
+    weight = TorchTensorParameter(3, 4)
+    weight = TorchParameter([weight], {}, {}, topologically_ordered=True)
+    weight.reset_parameters()
+    weight.initialize_address_book()
+    tdot = TorchTensorDotLayer(48, 36, num_batch_units=12, weight=weight, semiring=LSESumSemiring)
+    x = torch.randn(1, 42, 48)
+    y = tdot(x)

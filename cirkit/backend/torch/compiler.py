@@ -19,25 +19,26 @@ from cirkit.backend.torch.graph.optimize import GraphOptPattern, optimize_graph
 from cirkit.backend.torch.initializers import stacked_initializer_
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.optimization.layers import (
-    DEFAULT_CIRCUIT_OPT_RULES,
-    DEFAULT_LAYER_OPT_RULES,
+    DEFAULT_LAYER_FUSE_OPT_RULES,
+    DEFAULT_LAYER_SHATTER_OPT_RULES,
 )
 from cirkit.backend.torch.optimization.parameters import DEFAULT_PARAMETER_OPT_RULES
 from cirkit.backend.torch.optimization.registry import (
-    CircuitOptApplyFunc,
-    CircuitOptMatch,
-    CircuitOptRegistry,
+    LayerOptApplyFunc,
+    LayerOptMatch,
+    LayerOptPattern,
     LayerOptRegistry,
     ParameterOptApplyFunc,
     ParameterOptMatch,
+    ParameterOptPattern,
     ParameterOptRegistry,
 )
-from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
-from cirkit.backend.torch.parameters.parameter import (
-    TorchParameter,
+from cirkit.backend.torch.parameters.leaves import (
     TorchParameterNode,
-    TorchParameterOp,
+    TorchPointerParameter,
+    TorchTensorParameter,
 )
+from cirkit.backend.torch.parameters.parameter import TorchParameter, TorchParameterOp
 from cirkit.backend.torch.rules import (
     DEFAULT_INITIALIZER_COMPILATION_RULES,
     DEFAULT_LAYER_COMPILATION_RULES,
@@ -110,9 +111,9 @@ class TorchCompiler(AbstractCompiler):
 
         # The registry of optimization rules
         self._optimization_registry = {
-            "circuit": CircuitOptRegistry(DEFAULT_CIRCUIT_OPT_RULES),
             "parameter": ParameterOptRegistry(DEFAULT_PARAMETER_OPT_RULES),
-            "layer": LayerOptRegistry(DEFAULT_LAYER_OPT_RULES),
+            "layer_fuse": LayerOptRegistry(DEFAULT_LAYER_FUSE_OPT_RULES),
+            "layer_shatter": LayerOptRegistry(DEFAULT_LAYER_SHATTER_OPT_RULES),
         }
 
     def compile_pipeline(self, sc: Circuit) -> AbstractTorchCircuit:
@@ -431,19 +432,21 @@ def _optimize_circuit(
 def _optimize_fuse_layers(
     compiler: TorchCompiler, cc: AbstractTorchCircuit
 ) -> Tuple[AbstractTorchCircuit, bool]:
-    def fuse_layers(match: CircuitOptMatch) -> TorchLayer:
+    def fuse_layers(match: LayerOptMatch) -> TorchLayer:
         func = cast(
-            CircuitOptApplyFunc, compiler.retrieve_optimization_rule("circuit", match.pattern)
+            LayerOptApplyFunc, compiler.retrieve_optimization_rule("layer_fuse", match.pattern)
         )
-        return func(compiler, match)
+        (layer,) = func(compiler, match)
+        return layer
 
-    patterns = compiler.retrieve_optimization_registry("circuit").signatures
+    patterns = compiler.retrieve_optimization_registry("layer_fuse").signatures
     optimize_result = optimize_graph(
         cc.topological_ordering(),
         cc.outputs,
+        patterns,
         incomings_fn=cc.layer_inputs,
-        patterns=patterns,
-        optimize_fn=fuse_layers,
+        pattern_matcher_fn=_match_layer_pattern,
+        match_optimizer_fn=fuse_layers,
     )
     if optimize_result is None:
         return cc, False
@@ -473,9 +476,10 @@ def _optimize_fuse_parameter_nodes(
             optimize_result = optimize_graph(
                 pgraph.topological_ordering(),
                 pgraph.outputs,
+                patterns,
                 incomings_fn=pgraph.node_inputs,
-                patterns=patterns,
-                optimize_fn=fuse_parameter_nodes,
+                pattern_matcher_fn=_match_parameter_nodes_pattern,
+                match_optimizer_fn=fuse_parameter_nodes,
             )
 
             # Check if no optimization is possible
@@ -501,3 +505,53 @@ def _optimize_shatter_layers(
     compiler: TorchCompiler, cc: AbstractTorchCircuit
 ) -> Tuple[AbstractTorchCircuit, bool]:
     return cc, False
+
+
+def _match_parameter_nodes_pattern(
+    node: TorchParameterNode,
+    pattern: ParameterOptPattern,
+    *,
+    incomings_fn: Callable[[TorchParameterNode], List[TorchParameterNode]],
+) -> Optional[ParameterOptMatch]:
+    pattern_entries = pattern.entries()
+    num_entries = len(pattern_entries)
+    matched_nodes = []
+
+    # Start matching the pattern from the root
+    # TODO: generalize to match DAGs or binary trees
+    for nid in range(num_entries):
+        if not isinstance(node, pattern_entries[nid]):
+            return None
+        in_nodes = incomings_fn(node)
+        if len(in_nodes) > 1 and nid != num_entries - 1:
+            return None
+        matched_nodes.append(node)
+        if nid != num_entries - 1:
+            (node,) = in_nodes
+
+    return ParameterOptMatch(pattern, matched_nodes)
+
+
+def _match_layer_pattern(
+    layer: TorchLayer,
+    pattern: LayerOptPattern,
+    *,
+    incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
+) -> Optional[LayerOptMatch]:
+    pattern_entries = pattern.entries()
+    num_entries = len(pattern_entries)
+    matched_layers = []
+
+    # Start matching the pattern from the root
+    # TODO: generalize to match DAGs or binary trees
+    for lid in range(num_entries):
+        if not isinstance(layer, pattern_entries[lid]):
+            return None
+        in_nodes = incomings_fn(layer)
+        if len(in_nodes) > 1 and lid != num_entries - 1:
+            return None
+        matched_layers.append(layer)
+        if lid != num_entries - 1:
+            (layer,) = in_nodes
+
+    return LayerOptMatch(pattern, matched_layers, [{} for _ in range(num_entries)])

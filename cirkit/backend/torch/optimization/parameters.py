@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict, cast
+from typing import TYPE_CHECKING, Dict, List, Type, cast
 
 from cirkit.backend.torch.optimization.registry import (
     ParameterOptApplyFunc,
@@ -6,7 +6,9 @@ from cirkit.backend.torch.optimization.registry import (
     ParameterOptPattern,
     ParameterOptPatternDefn,
 )
+from cirkit.backend.torch.parameters.leaves import TorchParameterNode
 from cirkit.backend.torch.parameters.ops import (
+    TorchKroneckerParameter,
     TorchLogParameter,
     TorchLogSoftmaxParameter,
     TorchOuterSumParameter,
@@ -19,17 +21,33 @@ if TYPE_CHECKING:
 
 
 class LogSoftmaxPattern(ParameterOptPatternDefn):
-    entries = {
-        0: TorchLogParameter,
-        1: TorchSoftmaxParameter,
-    }
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchParameterNode]]:
+        return [TorchLogParameter, TorchSoftmaxParameter]
 
 
 class ReduceLSEOuterSumPattern(ParameterOptPatternDefn):
-    entries = {
-        0: TorchReduceLSEParameter,
-        1: TorchOuterSumParameter,
-    }
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchParameterNode]]:
+        return [TorchReduceLSEParameter, TorchOuterSumParameter]
+
+
+class KroneckerOutParameterPattern(ParameterOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return True
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchParameterNode]]:
+        return [TorchKroneckerParameter]
 
 
 def apply_log_softmax(

@@ -13,7 +13,7 @@ from cirkit.utils.algorithms import RootedDiAcyclicGraph
 
 class ParameterNode(ABC):
     @abstractmethod
-    def __copy__(self) -> "ParameterLeaf":
+    def __copy__(self) -> "ParameterNode":
         ...
 
     @property
@@ -328,8 +328,8 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
     def copy(self) -> "Parameter":
         # Build a new symbolic parameter's computational graph, by coping nodes.
-        def replace_copy(p: ParameterNode) -> ParameterNode:
-            return shallowcopy(p)
+        def replace_copy(n: ParameterNode) -> ParameterNode:
+            return shallowcopy(n)
 
         return self._process_nodes(replace_copy)
 
@@ -337,8 +337,8 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         # Build a new symbolic parameter's computational graph, where the parameter tensors
         # become references to the tensors of the 'self' parameter's computational graph.
         # All the other nodes are new objects.
-        def replace_ref_or_copy(p: ParameterNode) -> ParameterNode:
-            return ReferenceParameter(p) if isinstance(p, TensorParameter) else shallowcopy(p)
+        def replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
+            return ReferenceParameter(n) if isinstance(n, TensorParameter) else shallowcopy(n)
 
         return self._process_nodes(replace_ref_or_copy)
 
@@ -346,14 +346,14 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         nodes_map = {}
         in_nodes = {}
         out_nodes = defaultdict(list)
-        for p in self.topological_ordering():
-            new_p = process_fn(p)
-            nodes_map[p] = new_p
-            in_new_nodes = [nodes_map[in_p] for in_p in self.node_inputs(p)]
-            in_nodes[new_p] = in_new_nodes
-            for in_p in in_new_nodes:
-                out_nodes[in_p].append(new_p)
-        nodes = [nodes_map[p] for p in nodes_map.keys()]
+        for n in self.topological_ordering():
+            new_n = process_fn(n)
+            nodes_map[n] = new_n
+            in_new_nodes = [nodes_map[ni] for ni in self.node_inputs(n)]
+            in_nodes[new_n] = in_new_nodes
+            for ni in in_new_nodes:
+                out_nodes[ni].append(new_n)
+        nodes = [nodes_map[n] for n in nodes_map.keys()]
         return Parameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
 
 
