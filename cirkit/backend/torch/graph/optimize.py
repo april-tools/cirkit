@@ -138,6 +138,13 @@ def optimize_graph(
                 out_modules[mi].append(module)
             continue
 
+        # If the module belongs to a matched pattern (there can only be a single one by construction),
+        # but it is not the root in that pattern,
+        # then register it as the entry point of the matched sub-computational-graph, if not other entry
+        # point has been registered before.
+        if match not in match_entry_points:
+            match_entry_points[match] = module
+
         # Check if the module is the root within the matched pattern
         # If so, then add the corresponding sub-computational-graph optimization to the
         # optimized graph, and build the connections
@@ -158,13 +165,6 @@ def optimize_graph(
             # Set the root model of the match as the exit point of the matched pattern
             match_exit_points[match] = opt_modules[-1]
             continue
-
-        # If the module belongs to a matched pattern (there can only be a single one by construction),
-        # but it is not the root in that pattern,
-        # then register it as the entry point of the matched sub-computational-graph, if not other entry
-        # point has been registered before.
-        if match not in match_entry_points:
-            match_entry_points[match] = module
 
     return modules, in_modules, out_modules
 

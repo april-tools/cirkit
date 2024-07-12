@@ -144,7 +144,8 @@ class DiAcyclicGraph(Graph[NodeType]):
         if self.is_topologically_ordered and roots is None:
             return iter(self.nodes)
         nodes = self._nodes if roots is None else bfs(roots, self.node_inputs)
-        return topological_ordering(self._nodes, self.node_inputs, self.node_outputs)
+        outcomings_fn = self.node_outputs if roots is None else None
+        return topological_ordering(nodes, self.node_inputs, outcomings_fn)
 
     def layerwise_topological_ordering(self) -> Iterator[List[NodeType]]:
         return layerwise_topological_ordering(self._nodes, self.node_inputs, self.node_outputs)

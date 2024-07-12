@@ -136,12 +136,12 @@ def apply_dense_kronecker(
     # dense layer parameterized by a kronecker product of two matrices
     tdot1 = TorchTensorDotLayer(
         dense.num_input_units,
-        dense.num_output_units,
+        weight1.shape[0] * weight2.shape[1],
         num_batch_units=weight2.shape[1],
         weight=weight1,
     )
     tdot2 = TorchTensorDotLayer(
-        dense.num_input_units,
+        weight1.shape[0] * weight2.shape[1],
         dense.num_output_units,
         num_batch_units=weight1.shape[0],
         weight=weight2,

@@ -232,7 +232,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
             nodes_map = {}
             in_nodes = {}
             out_nodes = defaultdict(list)
-            for n in self.topological_ordering([r]):
+            for n in self.topological_ordering(roots=[r]):
                 new_n = replace_ref_or_copy(n)
                 nodes_map[n] = new_n
                 in_new_nodes = [nodes_map[ni] for ni in self.node_inputs(n)]
