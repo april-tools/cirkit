@@ -139,12 +139,14 @@ def apply_tensordot(
         weight1.shape[0] * weight2.shape[1],
         num_batch_units=weight2.shape[1],
         weight=weight1,
+        semiring=dense.semiring,
     )
     tdot2 = TorchTensorDotLayer(
         weight1.shape[0] * weight2.shape[1],
         dense.num_output_units,
         num_batch_units=weight1.shape[0],
         weight=weight2,
+        semiring=dense.semiring,
     )
     return tdot1, tdot2
 
