@@ -1,5 +1,4 @@
 from collections import defaultdict
-from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import (
     Callable,
@@ -65,7 +64,7 @@ class MatchOptimizerFunc(Protocol):
     def __call__(
         self,
         match: GraphOptMatch[TorchModule],
-    ) -> TorchModule:
+    ) -> Tuple[TorchModule, ...]:
         ...
 
 
@@ -85,6 +84,8 @@ def optimize_graph(
         Dict[TorchModule, List[TorchModule]],
     ]
 ]:
+    # TODO: generalize this as to cover patterns with multiply entry or exit points? (much more difficult)
+
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
     outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
 
@@ -105,9 +106,9 @@ def optimize_graph(
         return None
 
     # Run the matched optimization rules and collect the optimized modules
-    opt_modules: Dict[GraphOptMatch, TorchModule] = {}
+    match_opt_modules: Dict[GraphOptMatch, Tuple[TorchModule, ...]] = {}
     for match in matches:
-        opt_modules[match] = match_optimizer_fn(match)
+        match_opt_modules[match] = match_optimizer_fn(match)
 
     # The list of optimized layer and the inputs/outputs of each optimized module
     modules: List[TorchModule] = []
@@ -115,7 +116,10 @@ def optimize_graph(
     out_modules: Dict[TorchModule, List[TorchModule]] = defaultdict(list)
 
     # A map from matches to their entry point unoptimized modules
-    match_entries: Dict[GraphOptMatch, TorchModule] = {}
+    match_entry_points: Dict[GraphOptMatch, TorchModule] = {}
+
+    # A map from matches to their exit point unoptimized modules
+    match_exit_points: Dict[GraphOptMatch, TorchModule] = {}
 
     # Build the optimize graph by following the topological ordering
     for module in ordering:
@@ -126,7 +130,7 @@ def optimize_graph(
         if match is None:
             modules.append(module)
             module_ins = [
-                opt_modules[module_matches[mi]] if mi in module_matches else mi
+                match_exit_points[module_matches[mi]] if mi in module_matches else mi
                 for mi in incomings_fn(module)
             ]
             in_modules[module] = module_ins
@@ -136,28 +140,31 @@ def optimize_graph(
 
         # Check if the module is the root within the matched pattern
         # If so, then add the corresponding sub-computational-graph optimization to the
-        # optimized graph, and build connections
+        # optimized graph, and build the connections
         if module == match.entries[0]:
-            opt_module = opt_modules[match]
-            modules.append(opt_module)
-            module_ins = [
-                opt_modules[module_matches[mi]] if mi in module_matches else mi
-                for mi in incomings_fn(match_entries[match])
-            ]
-            in_modules[opt_module] = module_ins
-            for mi in module_ins:
-                out_modules[mi].append(opt_module)
+            opt_modules = match_opt_modules[match]
+            modules.extend(opt_modules)
+            for i, om in enumerate(opt_modules):
+                if i == 0:
+                    om_module_ins = [
+                        match_exit_points[module_matches[mi]] if mi in module_matches else mi
+                        for mi in incomings_fn(match_entry_points[match])
+                    ]
+                else:
+                    om_module_ins = [opt_modules[i - 1]]
+                in_modules[om] = om_module_ins
+                for mi in om_module_ins:
+                    out_modules[mi].append(om)
+            # Set the root model of the match as the exit point of the matched pattern
+            match_exit_points[match] = opt_modules[-1]
             continue
 
         # If the module belongs to a matched pattern (there can only be a single one by construction),
         # but it is not the root in that pattern,
         # then register it as the entry point of the matched sub-computational-graph, if not other entry
-        # point has been registered before
-        # This is necessary as to recover the connectivity between optimized modules
-        # whose roots are far away in the unoptimized computational graph
-        # TODO: generalize this as to cover patterns with multiply entry points
-        if match not in match_entries:
-            match_entries[match] = module
+        # point has been registered before.
+        if match not in match_entry_points:
+            match_entry_points[match] = module
 
     return modules, in_modules, out_modules
 

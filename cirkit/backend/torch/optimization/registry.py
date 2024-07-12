@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Callable, ClassVar, Dict, List, Optional, Tuple, Type
+from typing import Callable, Dict, List, Optional, Tuple, Type
 
 from cirkit.backend.compiler import AbstractCompiler
 from cirkit.backend.registry import CompilerRegistry
@@ -10,7 +9,9 @@ from cirkit.backend.torch.parameters.leaves import TorchParameterNode
 ParameterOptPatternDefn = GraphOptPatternDefn[TorchParameterNode]
 ParameterOptPattern = Type[ParameterOptPatternDefn]
 ParameterOptMatch = GraphOptMatch[TorchParameterNode]
-ParameterOptApplyFunc = Callable[["TorchCompiler", ParameterOptMatch], TorchParameterNode]
+ParameterOptApplyFunc = Callable[
+    ["TorchCompiler", ParameterOptMatch], Tuple[TorchParameterNode, ...]
+]
 
 
 class LayerOptPatternDefn(GraphOptPatternDefn[TorchLayer]):
@@ -31,13 +32,13 @@ class LayerOptMatch(GraphOptMatch[TorchLayer]):
         self,
         pattern: LayerOptPattern,
         entries: List[TorchLayer],
-        pentries: List[Dict[str, ParameterOptMatch]],
+        pentries: List[Dict[str, List[ParameterOptMatch]]],
     ):
         super().__init__(pattern, entries)
         self._pentries = pentries
 
     @property
-    def pentries(self) -> List[Dict[str, ParameterOptMatch]]:
+    def pentries(self) -> List[Dict[str, List[ParameterOptMatch]]]:
         return self._pentries
 
 

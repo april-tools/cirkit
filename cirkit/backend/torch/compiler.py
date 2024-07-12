@@ -15,7 +15,11 @@ from cirkit.backend.compiler import (
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.backend.torch.circuits import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
-from cirkit.backend.torch.graph.optimize import GraphOptPattern, optimize_graph
+from cirkit.backend.torch.graph.optimize import (
+    GraphOptPattern,
+    match_optimization_patterns,
+    optimize_graph,
+)
 from cirkit.backend.torch.initializers import stacked_initializer_
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.optimization.layers import (
@@ -407,18 +411,18 @@ def _optimize_circuit(
     optimizing = True
     opt_step = 0
     while optimizing and opt_step < max_opt_steps:
-        # First optimization step: fuse the parameters node of the parameter graphs of each layer
-        opt_cc, opt_fuse_parameter_nodes = _optimize_fuse_parameter_nodes(compiler, cc)
+        # First optimization step: optimize the parameters node of the parameter graphs of each layer
+        opt_cc, opt_fuse_parameter_nodes = _optimize_parameter_nodes(compiler, cc)
         del cc
         cc = opt_cc
 
         # Second optimization step: shatter layers in multiple more efficient ones
-        opt_cc, opt_shatter_layers = _optimize_shatter_layers(compiler, cc)
+        opt_cc, opt_shatter_layers = _optimize_layers(compiler, cc, shatter=True)
         del cc
         cc = opt_cc
 
         # Third optimization step: fuse multiple layers into a single more efficient one
-        opt_cc, opt_fuse_layers = _optimize_fuse_layers(compiler, cc)
+        opt_cc, opt_fuse_layers = _optimize_layers(compiler, cc, shatter=False)
         del cc
         cc = opt_cc
 
@@ -429,41 +433,12 @@ def _optimize_circuit(
     return cc
 
 
-def _optimize_fuse_layers(
+def _optimize_parameter_nodes(
     compiler: TorchCompiler, cc: AbstractTorchCircuit
 ) -> Tuple[AbstractTorchCircuit, bool]:
-    def fuse_layers(match: LayerOptMatch) -> TorchLayer:
-        func = cast(
-            LayerOptApplyFunc, compiler.retrieve_optimization_rule("layer_fuse", match.pattern)
-        )
-        (layer,) = func(compiler, match)
-        return layer
-
-    patterns = compiler.retrieve_optimization_registry("layer_fuse").signatures
-    optimize_result = optimize_graph(
-        cc.topological_ordering(),
-        cc.outputs,
-        patterns,
-        incomings_fn=cc.layer_inputs,
-        pattern_matcher_fn=_match_layer_pattern,
-        match_optimizer_fn=fuse_layers,
-    )
-    if optimize_result is None:
-        return cc, False
-    layers, in_layers, out_layers = optimize_result
-    cc = type(cc)(
-        cc.scope, cc.num_channels, layers, in_layers, out_layers, topologically_ordered=True
-    )
-    return cc, True
-
-
-def _optimize_fuse_parameter_nodes(
-    compiler: TorchCompiler, cc: AbstractTorchCircuit
-) -> Tuple[AbstractTorchCircuit, bool]:
-    def fuse_parameter_nodes(match: ParameterOptMatch) -> TorchParameterNode:
-        func = cast(
-            ParameterOptApplyFunc, compiler.retrieve_optimization_rule("parameter", match.pattern)
-        )
+    def match_optimizer(match: ParameterOptMatch) -> Tuple[TorchParameterNode, ...]:
+        rule = compiler.retrieve_optimization_rule("parameter", match.pattern)
+        func = cast(ParameterOptApplyFunc, rule)
         return func(compiler, match)
 
     # Loop through all the layers
@@ -479,7 +454,7 @@ def _optimize_fuse_parameter_nodes(
                 patterns,
                 incomings_fn=pgraph.node_inputs,
                 pattern_matcher_fn=_match_parameter_nodes_pattern,
-                match_optimizer_fn=fuse_parameter_nodes,
+                match_optimizer_fn=match_optimizer,
             )
 
             # Check if no optimization is possible
@@ -501,10 +476,36 @@ def _optimize_fuse_parameter_nodes(
     return cc, False
 
 
-def _optimize_shatter_layers(
-    compiler: TorchCompiler, cc: AbstractTorchCircuit
+def _optimize_layers(
+    compiler: TorchCompiler, cc: AbstractTorchCircuit, *, shatter: bool = False
 ) -> Tuple[AbstractTorchCircuit, bool]:
-    return cc, False
+    def match_optimizer_shatter(match: LayerOptMatch) -> Tuple[TorchLayer, ...]:
+        rule = compiler.retrieve_optimization_rule("layer_shatter", match.pattern)
+        func = cast(LayerOptApplyFunc, rule)
+        return func(compiler, match)
+
+    def match_optimizer_fuse(match: LayerOptMatch) -> Tuple[TorchLayer, ...]:
+        rule = compiler.retrieve_optimization_rule("layer_fuse", match.pattern)
+        func = cast(LayerOptApplyFunc, rule)
+        return func(compiler, match)
+
+    registry = compiler.retrieve_optimization_registry("layer_shatter" if shatter else "layer_fuse")
+    match_optimizer = match_optimizer_shatter if shatter else match_optimizer_fuse
+    optimize_result = optimize_graph(
+        cc.topological_ordering(),
+        cc.outputs,
+        registry.signatures,
+        incomings_fn=cc.layer_inputs,
+        pattern_matcher_fn=_match_layer_pattern,
+        match_optimizer_fn=match_optimizer,
+    )
+    if optimize_result is None:
+        return cc, False
+    layers, in_layers, out_layers = optimize_result
+    cc = type(cc)(
+        cc.scope, cc.num_channels, layers, in_layers, out_layers, topologically_ordered=True
+    )
+    return cc, True
 
 
 def _match_parameter_nodes_pattern(
@@ -538,20 +539,42 @@ def _match_layer_pattern(
     *,
     incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
 ) -> Optional[LayerOptMatch]:
+    ppatterns = pattern.ppatterns()
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
     matched_layers = []
+    matched_parameters = []
 
     # Start matching the pattern from the root
     # TODO: generalize to match DAGs or binary trees
     for lid in range(num_entries):
+        # First, attempt to match the layer
         if not isinstance(layer, pattern_entries[lid]):
             return None
         in_nodes = incomings_fn(layer)
         if len(in_nodes) > 1 and lid != num_entries - 1:
             return None
+
+        # Second, attempt to match the patterns specified for its parameters
+        lpmatches = {}
+        for pname, ppattern in ppatterns[lid].items():
+            pgraph = layer.params[pname]
+            matches, _ = match_optimization_patterns(
+                pgraph.topological_ordering(),
+                pgraph.outputs,
+                [ppattern],
+                incomings_fn=pgraph.node_inputs,
+                pattern_matcher_fn=_match_parameter_nodes_pattern,
+            )
+            if not matches:
+                return None
+            lpmatches[pname] = matches
+        matched_parameters.append(lpmatches)
+
+        # We got a match with the layer and its parameters.
+        # Next, try to match its input sub-graph.
         matched_layers.append(layer)
         if lid != num_entries - 1:
             (layer,) = in_nodes
 
-    return LayerOptMatch(pattern, matched_layers, [{} for _ in range(num_entries)])
+    return LayerOptMatch(pattern, matched_layers, matched_parameters)

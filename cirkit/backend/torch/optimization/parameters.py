@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict, List, Type, cast
+from typing import TYPE_CHECKING, Dict, List, Tuple, Type, cast
 
 from cirkit.backend.torch.optimization.registry import (
     ParameterOptApplyFunc,
@@ -52,9 +52,10 @@ class KroneckerOutParameterPattern(ParameterOptPattern):
 
 def apply_log_softmax(
     compiler: "TorchCompiler", match: ParameterOptMatch
-) -> TorchLogSoftmaxParameter:
+) -> Tuple[TorchLogSoftmaxParameter]:
     softmax = cast(TorchSoftmaxParameter, match.entries[1])
-    return TorchLogSoftmaxParameter(softmax.in_shapes[0], dim=softmax.dim)
+    log_softmax = TorchLogSoftmaxParameter(softmax.in_shapes[0], dim=softmax.dim)
+    return (log_softmax,)
 
 
 DEFAULT_PARAMETER_OPT_RULES: Dict[

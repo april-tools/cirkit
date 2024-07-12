@@ -32,6 +32,10 @@ class DenseCompositionPattern(LayerOptPattern):
     def entries(cls) -> List[Type[TorchLayer]]:
         return [TorchDenseLayer, TorchDenseLayer]
 
+    @classmethod
+    def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
+        return [{} for _ in cls.entries()]
+
 
 class TuckerPattern(LayerOptPattern):
     @classmethod
@@ -41,6 +45,10 @@ class TuckerPattern(LayerOptPattern):
     @classmethod
     def entries(cls) -> List[Type[TorchLayer]]:
         return [TorchDenseLayer, TorchKroneckerLayer]
+
+    @classmethod
+    def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
+        return [{} for _ in cls.entries()]
 
 
 class CandecompPattern(LayerOptPattern):
@@ -52,6 +60,10 @@ class CandecompPattern(LayerOptPattern):
     def entries(cls) -> List[Type[TorchLayer]]:
         return [TorchDenseLayer, TorchHadamardLayer]
 
+    @classmethod
+    def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
+        return [{} for _ in cls.entries()]
+
 
 class DenseKroneckerPattern(LayerOptPattern):
     @classmethod
@@ -60,7 +72,7 @@ class DenseKroneckerPattern(LayerOptPattern):
 
     @classmethod
     def entries(cls) -> List[Type[TorchLayer]]:
-        return [TorchLayer]
+        return [TorchDenseLayer]
 
     @classmethod
     def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
@@ -112,7 +124,8 @@ def apply_dense_kronecker(
 ) -> Tuple[TorchTensorDotLayer, TorchTensorDotLayer]:
     # Retrieve the matched dense layer and the inputs to the kronecker parameter node
     dense = cast(TorchDenseLayer, match.entries[0])
-    kronecker = match.pentries[0]["weight"].entries[0]
+    weight_patterns = match.pentries[0]["weight"]
+    kronecker = weight_patterns[0].entries[0]
     weight1_output, weight2_output = dense.weight.node_inputs(kronecker)
 
     # Build new torch parameter computational graphs by taking
