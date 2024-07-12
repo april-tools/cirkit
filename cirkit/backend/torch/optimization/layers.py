@@ -119,7 +119,7 @@ def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[To
     return (cp,)
 
 
-def apply_dense_kronecker(
+def apply_tensordot(
     compiler: "TorchCompiler", match: LayerOptMatch
 ) -> Tuple[TorchTensorDotLayer, TorchTensorDotLayer]:
     # Retrieve the matched dense layer and the inputs to the kronecker parameter node
@@ -155,5 +155,5 @@ DEFAULT_LAYER_FUSE_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # ty
     CandecompPattern: apply_candecomp,
 }
 DEFAULT_LAYER_SHATTER_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
-    DenseKroneckerPattern: apply_dense_kronecker
+    DenseKroneckerPattern: apply_tensordot
 }
