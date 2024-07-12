@@ -218,7 +218,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         mean = self.mean().unsqueeze(dim=1)  # (F, 1, D, K, C)
         stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, D, K, C)
-        x = x.permute(0, 2, 3, 1).unsqueeze(dim=2)  # (F, B, D, 1, C)
+        x = x.permute(0, 2, 3, 1).unsqueeze(dim=3)  # (F, B, D, 1, C)
         x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, D, K, C)
         x = torch.sum(x, dim=[2, 4])  # (F, B, K)
         if self.log_partition is not None:

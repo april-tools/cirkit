@@ -151,10 +151,13 @@ def test_optimize_tensordot():
     assert optimized_scores.shape == (2**num_variables, 1, 1)
 
     assert allclose(unoptimized_scores, optimized_scores)
+    assert allclose(unoptimized_scores, unoptimized_tc1(worlds) + unoptimized_tc2(worlds))
+    assert allclose(optimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds))
+    assert allclose(unoptimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds))
 
 
 def test_optimize_tensordot_squaring():
-    num_variables = 6
+    num_variables = 12
     sci = build_simple_pc(num_variables, 3, 2)
     sc = SF.multiply(sci, sci)
 
@@ -181,6 +184,7 @@ def test_optimize_tensordot_squaring():
         ("_nodes.2.weight._nodes.0._ptensor", "_nodes.2.weight._nodes.0._ptensor"),
         ("_nodes.4.weight._nodes.0._ptensor", "_nodes.3.weight._nodes.0._ptensor"),
         ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
+        ("_nodes.8.weight._nodes.0._ptensor", "_nodes.5.weight._nodes.0._ptensor"),
     ]
 
     for unoptimized_pname, optimized_pname in pnames:
@@ -198,3 +202,6 @@ def test_optimize_tensordot_squaring():
     assert optimized_scores.shape == (2**num_variables, 1, 1)
 
     assert allclose(unoptimized_scores, optimized_scores)
+    assert allclose(unoptimized_scores, 2.0 * unoptimized_tci(worlds))
+    assert allclose(optimized_scores, 2.0 * optimized_tci(worlds))
+    assert allclose(unoptimized_scores, 2.0 * optimized_tci(worlds))

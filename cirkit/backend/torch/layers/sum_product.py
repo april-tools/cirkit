@@ -126,7 +126,7 @@ class TorchCPLayer(TorchSumProductLayer):
         Returns:
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
-        x = self.semiring.prod(x, dim=1)  # (F, *B, Ki)
+        x = self.semiring.prod(x, dim=1, keepdim=False)  # (F, *B, Ki)
         weight = self.weight()
         return self.semiring.einsum(
             "f...i,foi->f...o", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
