@@ -106,9 +106,10 @@ class TorchCPLayer(TorchSumProductLayer):
         assert weight.num_folds == num_folds
         assert weight.shape == (num_output_units, num_input_units)
         super().__init__(
-            num_input_units=num_input_units,
-            num_output_units=num_output_units,
+            num_input_units,
+            num_output_units,
             arity=arity,
+            num_folds=num_folds,
             semiring=semiring,
         )
         self.weight = weight
@@ -126,7 +127,7 @@ class TorchCPLayer(TorchSumProductLayer):
         Returns:
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
-        x = self.semiring.prod(x, dim=1)  # (F, *B, Ki)
+        x = self.semiring.prod(x, dim=1, keepdim=False)  # (F, *B, Ki)
         weight = self.weight()
         return self.semiring.einsum(
             "f...i,foi->f...o", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
