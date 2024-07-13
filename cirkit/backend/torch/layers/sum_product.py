@@ -106,9 +106,10 @@ class TorchCPLayer(TorchSumProductLayer):
         assert weight.num_folds == num_folds
         assert weight.shape == (num_output_units, num_input_units)
         super().__init__(
-            num_input_units=num_input_units,
-            num_output_units=num_output_units,
+            num_input_units,
+            num_output_units,
             arity=arity,
+            num_folds=num_folds,
             semiring=semiring,
         )
         self.weight = weight
