@@ -356,7 +356,7 @@ class TorchGaussianProductMean(TorchParameterOp):
         var1 = torch.square(stddev1)  # (F, D, K1, C)
         var2 = torch.square(stddev2)  # (F, D, K2, C)
         inv_var12 = torch.reciprocal(
-            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2) + self._eps
+            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)
         )  # (F, D, K1, K2, C)
         wm1 = mean1.unsqueeze(dim=3) * var2.unsqueeze(dim=2)  # (F, D, K1, K2, C)
         wm2 = mean2.unsqueeze(dim=2) * var1.unsqueeze(dim=3)  # (F, D, K1, K2, C)
