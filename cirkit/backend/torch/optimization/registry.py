@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import Callable, Dict, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Protocol, Tuple, Type
 
 from cirkit.backend.compiler import AbstractCompiler
 from cirkit.backend.registry import CompilerRegistry
@@ -7,12 +7,20 @@ from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDe
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.leaves import TorchParameterNode
 
+if TYPE_CHECKING:
+    from cirkit.backend.torch.compiler import TorchCompiler
+
+
 ParameterOptPatternDefn = GraphOptPatternDefn[TorchParameterNode]
 ParameterOptPattern = Type[ParameterOptPatternDefn]
 ParameterOptMatch = GraphOptMatch[TorchParameterNode]
-ParameterOptApplyFunc = Callable[
-    ["TorchCompiler", ParameterOptMatch], Tuple[TorchParameterNode, ...]
-]
+
+
+class ParameterOptApplyFunc(Protocol):
+    def __call__(
+        self, compiler: "TorchCompiler", match: ParameterOptMatch
+    ) -> Tuple[TorchLayer, ...]:
+        ...
 
 
 class LayerOptPatternDefn(GraphOptPatternDefn[TorchLayer]):
@@ -51,7 +59,9 @@ class LayerOptMatch(GraphOptMatch[TorchLayer]):
         return size
 
 
-LayerOptApplyFunc = Callable[["TorchCompiler", LayerOptMatch], Tuple[TorchLayer, ...]]
+class LayerOptApplyFunc(Protocol):
+    def __call__(self, compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchLayer, ...]:
+        ...
 
 
 class ParameterOptRegistry(CompilerRegistry[ParameterOptPattern, ParameterOptApplyFunc]):
