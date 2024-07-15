@@ -14,8 +14,6 @@ from typing import (
     Type,
 )
 
-from joblib import Parallel, delayed
-
 from cirkit.backend.torch.graph.modules import TorchModule
 
 
@@ -182,21 +180,19 @@ def match_optimization_patterns(
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-    num_jobs: int = 1,
 ) -> Tuple[List[GraphOptMatch[TorchModule]], Dict[TorchModule, GraphOptMatch[TorchModule]]]:
+    ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
+    outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
+
     # A map from modules to the list of found matches they belong to
     module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]] = defaultdict(list)
 
     # For each given pattern, match it on the graph
     for pattern in patterns:
         # Get an iterator of matches, for a given pattern
+        modules = outputs if pattern.is_output() else ordering
         for match in _match_pattern_graph(
-            ordering,
-            outputs,
-            pattern,
-            incomings_fn=incomings_fn,
-            pattern_matcher_fn=pattern_matcher_fn,
-            num_jobs=num_jobs,
+            modules, pattern, incomings_fn=incomings_fn, pattern_matcher_fn=pattern_matcher_fn
         ):
             # For each module found in a match, update the map from modules to found matches
             for matched_module in match.entries:
@@ -256,18 +252,14 @@ def _sort_matches_priority(
 
 
 def _match_pattern_graph(
-    nodes: Iterable[TorchModule],
-    outputs: Iterable[TorchModule],
+    modules: Iterable[TorchModule],
     pattern: GraphOptPattern[TorchModule],
     *,
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
-    num_jobs: int = 1,
 ) -> Iterator[GraphOptMatch[TorchModule]]:
     # Tries to match a pattern by rooting it in all the modules of the computational graph
-    # This can be parallelized through joblib
-    modules = outputs if pattern.is_output() else nodes
-    optional_matches = Parallel(n_jobs=num_jobs, backend="threading")(
-        delayed(pattern_matcher_fn)(m, pattern, incomings_fn=incomings_fn) for m in modules
+    optional_matches = map(
+        lambda m: pattern_matcher_fn(m, pattern, incomings_fn=incomings_fn), modules
     )
     return filter(lambda match: match is not None, optional_matches)

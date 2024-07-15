@@ -401,7 +401,7 @@ def _fold_parameter_nodes_group(
 
 
 def _optimize_circuit(
-    compiler: TorchCompiler, cc: AbstractTorchCircuit, *, max_opt_steps: int = 1
+    compiler: TorchCompiler, cc: AbstractTorchCircuit, *, max_opt_steps: int = 5
 ) -> AbstractTorchCircuit:
     assert max_opt_steps > 0
 
