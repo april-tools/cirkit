@@ -66,7 +66,7 @@ def build_folded_graph(
 ) -> Tuple[
     List[TorchModule],
     Dict[TorchModule, List[TorchModule]],
-    Dict[TorchModule, List[TorchModule]],
+    List[TorchModule],
     FoldIndexInfo,
 ]:
     # A useful data structure mapping each unfolded module to
@@ -81,10 +81,9 @@ def build_folded_graph(
     # pointing to the folded module of id 'fold_id' and to the slice 'slice_idx' within that fold.
     in_fold_idx: Dict[int, List[List[Tuple[int, int]]]] = {}
 
-    # The list of folded modules and the inputs/outputs of each folded module
+    # The list of folded modules and the inputs of each folded module
     modules: List[AbstractTorchModule] = []
     in_modules: Dict[AbstractTorchModule, List[AbstractTorchModule]] = {}
-    out_modules: Dict[AbstractTorchModule, List[TorchModule]] = defaultdict(list)
 
     # Fold modules in each frontier, by firstly finding the module groups to fold
     # in each frontier, and then by stacking each group of modules into a folded module
@@ -105,8 +104,6 @@ def build_folded_graph(
                 set(modules[fold_idx[mi][0]] for msi in in_group_modules for mi in msi)
             )
             in_modules[folded_module] = folded_in_modules
-            for mi in folded_in_modules:
-                out_modules[mi].append(folded_module)
 
             # Check if we are folding input modules
             # If that is the case, we index some other input tensor, if specified.
@@ -129,9 +126,12 @@ def build_folded_graph(
             modules.append(folded_module)
 
     # Instantiate the information on how aggregate the outputs in a single tensor
-    out_fold_idx = list(map(fold_idx.get, outputs))
+    out_fold_idx = [fold_idx[m] for m in outputs]
 
-    return modules, in_modules, out_modules, FoldIndexInfo(in_fold_idx, out_fold_idx)
+    # Construct the sequence of folded output modules
+    outputs = list(dict.fromkeys(modules[fi[0]] for fi in out_fold_idx))
+
+    return modules, in_modules, outputs, FoldIndexInfo(in_fold_idx, out_fold_idx)
 
 
 def group_foldable_modules(
@@ -191,7 +191,7 @@ def build_address_book_entry(
 ) -> AddressBookEntry:
     # Transpose the index information, since we will build the
     # address book information for each operand independently
-    # (this is because the inputs of modules might not stacked, e.g., in the parameter torch graph)
+    # (this is because the inputs of modules might not be stacked, e.g., in the parameter torch graph)
     in_fold_idx = list(map(list, zip(*in_fold_idx)))
 
     # Retrieve the unique fold indices that reference the module inputs

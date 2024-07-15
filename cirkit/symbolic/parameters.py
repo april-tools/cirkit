@@ -1,6 +1,5 @@
 import operator
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from copy import copy as shallowcopy
 from functools import cached_property, reduce
 from itertools import chain
@@ -8,7 +7,7 @@ from numbers import Number
 from typing import Any, Callable, Dict, Optional, Tuple, Union, final
 
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
-from cirkit.utils.algorithms import RootedDiAcyclicGraph
+from cirkit.utils.algorithms import RootedDiAcyclicGraph, topologically_process_nodes
 
 
 class ParameterNode(ABC):
@@ -279,7 +278,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
     @classmethod
     def from_leaf(cls, p: ParameterLeaf) -> "Parameter":
-        return Parameter([p], {}, {}, topologically_ordered=True)
+        return Parameter([p], {}, [p], topologically_ordered=True)
 
     @classmethod
     def from_sequence(cls, p: Union[ParameterLeaf, "Parameter"], *ns: ParameterNode) -> "Parameter":
@@ -287,13 +286,10 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
             p = Parameter.from_leaf(p)
         nodes = p.nodes + list(ns)
         in_nodes = dict(p.nodes_inputs)
-        out_nodes = dict(p.nodes_outputs)
         for i, n in enumerate(ns):
             in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.output]
-            out_nodes[n] = [ns[i + 1]] if i + 1 < len(ns) else []
-        out_nodes[p.output] = [ns[0]]
         return Parameter(
-            nodes, in_nodes, out_nodes, topologically_ordered=p.is_topologically_ordered
+            nodes, in_nodes, [ns[-1]], topologically_ordered=p.is_topologically_ordered
         )
 
     @classmethod
@@ -301,15 +297,12 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         ps = tuple(Parameter.from_leaf(p) if isinstance(p, ParameterLeaf) else p for p in ps)
         p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
         in_nodes = reduce(operator.ior, (p.nodes_inputs for p in ps), {})
-        out_nodes = reduce(operator.ior, (p.nodes_outputs for p in ps), {})
         in_nodes[n] = list(p.output for p in ps)
-        for p in ps:
-            out_nodes[p.output] = [n]
         topologically_ordered = all(p.is_topologically_ordered for p in ps)
         return Parameter(
             p_nodes,
             in_nodes,
-            out_nodes,
+            [n],
             topologically_ordered=topologically_ordered,
         )
 
@@ -343,18 +336,10 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return self._process_nodes(replace_ref_or_copy)
 
     def _process_nodes(self, process_fn: Callable[[ParameterNode], ParameterNode]) -> "Parameter":
-        nodes_map = {}
-        in_nodes = {}
-        out_nodes = defaultdict(list)
-        for n in self.topological_ordering():
-            new_n = process_fn(n)
-            nodes_map[n] = new_n
-            in_new_nodes = [nodes_map[ni] for ni in self.node_inputs(n)]
-            in_nodes[new_n] = in_new_nodes
-            for ni in in_new_nodes:
-                out_nodes[ni].append(new_n)
-        nodes = [nodes_map[n] for n in nodes_map.keys()]
-        return Parameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
+        nodes, in_nodes, outputs = topologically_process_nodes(
+            self.topological_ordering(), self.outputs, process_fn, incomings_fn=self.node_inputs
+        )
+        return Parameter(nodes, in_nodes, outputs, topologically_ordered=True)
 
 
 Parameterization = Callable[[TensorParameter], Parameter]

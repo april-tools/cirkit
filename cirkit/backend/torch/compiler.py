@@ -153,10 +153,9 @@ class TorchCompiler(AbstractCompiler):
         # A map from symbolic to compiled parameters
         compiled_nodes_map: Dict[ParameterNode, TorchParameterNode] = {}
 
-        # The parameter nodes, and their inputs and outputs
+        # The parameter nodes, and their inputs
         nodes: List[TorchParameterNode] = []
         in_nodes: Dict[TorchParameterNode, List[TorchParameterNode]] = {}
-        out_nodes: Dict[TorchParameterNode, List[TorchParameterNode]] = defaultdict(list)
 
         # Compile the parameter by following the topological ordering
         for p in parameter.topological_ordering():
@@ -164,13 +163,12 @@ class TorchCompiler(AbstractCompiler):
             compiled_p = self._compile_parameter_node(p)
             in_compiled_nodes = [compiled_nodes_map[pi] for pi in parameter.node_inputs(p)]
             in_nodes[compiled_p] = in_compiled_nodes
-            for pi in in_compiled_nodes:
-                out_nodes[pi].append(compiled_p)
             compiled_nodes_map[p] = compiled_p
             nodes.append(compiled_p)
 
         # Build the parameter's computational graph
-        return TorchParameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
+        outputs = [compiled_nodes_map[parameter.output]]
+        return TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
 
     def compiler_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
         # Retrieve the rule for the given initializer and compile it
@@ -199,9 +197,8 @@ class TorchCompiler(AbstractCompiler):
         # A map from symbolic to compiled layers
         compiled_layers_map: Dict[Layer, TorchLayer] = {}
 
-        # The inputs and outputs for each layer
+        # The inputs of each layer
         in_layers: Dict[TorchLayer, List[TorchLayer]] = {}
-        out_layers: Dict[TorchLayer, List[TorchLayer]] = defaultdict(list)
 
         # Compile layers by following the topological ordering
         for sl in sc.topological_ordering():
@@ -211,8 +208,6 @@ class TorchCompiler(AbstractCompiler):
             # Build the connectivity between compiled layers
             ins = [compiled_layers_map[sli] for sli in sc.layer_inputs(sl)]
             in_layers[layer] = ins
-            for li in ins:
-                out_layers[li].append(layer)
             compiled_layers_map[sl] = layer
 
         # If the symbolic circuit being compiled has been obtained by integrating
@@ -227,6 +222,9 @@ class TorchCompiler(AbstractCompiler):
         else:
             cc_cls = TorchCircuit
 
+        # Construct the sequence of output layers
+        outputs = [compiled_layers_map[sl] for sl in sc.outputs]
+
         # Construct the tensorized circuit
         layers = [compiled_layers_map[sl] for sl in compiled_layers_map.keys()]
         cc = cc_cls(
@@ -234,7 +232,7 @@ class TorchCompiler(AbstractCompiler):
             sc.num_channels,
             layers=layers,
             in_layers=in_layers,
-            out_layers=out_layers,
+            outputs=outputs,
             topologically_ordered=True,
         )
 
@@ -282,7 +280,7 @@ class TorchCompiler(AbstractCompiler):
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
     # Fold the layers in the given circuit, by following the layer-wise topological ordering
-    layers, in_layers, out_layers, fold_idx_info = build_folded_graph(
+    layers, in_layers, outputs, fold_idx_info = build_folded_graph(
         cc.layerwise_topological_ordering(),
         outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
@@ -296,7 +294,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         cc.num_channels,
         layers,
         in_layers,
-        out_layers,
+        outputs,
         topologically_ordered=True,
         fold_idx_info=fold_idx_info,
     )
@@ -341,7 +339,7 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
 
     # Fold the nodes in the merged parameter computational graphs,
     # by following the layer-wise topological ordering
-    nodes, in_nodes, out_nodes, fold_idx_info = build_folded_graph(
+    nodes, in_nodes, outputs, fold_idx_info = build_folded_graph(
         ordering,
         outputs=chain.from_iterable(map(lambda pi: pi.outputs, parameters)),
         incomings_fn=in_nodes.get,
@@ -350,7 +348,7 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
 
     # Construct the folded parameter's computational graph
     return TorchParameter(
-        nodes, in_nodes, out_nodes, topologically_ordered=True, fold_idx_info=fold_idx_info
+        nodes, in_nodes, outputs, topologically_ordered=True, fold_idx_info=fold_idx_info
     )
 
 
@@ -460,10 +458,10 @@ def _optimize_parameter_nodes(
             # Check if no optimization is possible
             if optimize_result is None:
                 continue
-            nodes, in_nodes, out_nodes = optimize_result
+            nodes, in_nodes, outputs = optimize_result
 
             # Build the optimized computational graph
-            pgraph = type(pgraph)(nodes, in_nodes, out_nodes, topologically_ordered=True)
+            pgraph = type(pgraph)(nodes, in_nodes, outputs, topologically_ordered=True)
 
             # Update the parameter computational graph assigned to the layer
             assert hasattr(layer, pname)
@@ -501,10 +499,8 @@ def _optimize_layers(
     )
     if optimize_result is None:
         return cc, False
-    layers, in_layers, out_layers = optimize_result
-    cc = type(cc)(
-        cc.scope, cc.num_channels, layers, in_layers, out_layers, topologically_ordered=True
-    )
+    layers, in_layers, outputs = optimize_result
+    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs, topologically_ordered=True)
     return cc, True
 
 

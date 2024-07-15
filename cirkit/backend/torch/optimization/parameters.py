@@ -20,6 +20,16 @@ if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
+class KroneckerOutParameterPattern(ParameterOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return True
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchParameterNode]]:
+        return [TorchKroneckerParameter]
+
+
 class LogSoftmaxPattern(ParameterOptPatternDefn):
     @classmethod
     def is_output(cls) -> bool:
@@ -40,16 +50,6 @@ class ReduceLSEOuterSumPattern(ParameterOptPatternDefn):
         return [TorchReduceLSEParameter, TorchOuterSumParameter]
 
 
-class KroneckerOutParameterPattern(ParameterOptPattern):
-    @classmethod
-    def is_output(cls) -> bool:
-        return True
-
-    @classmethod
-    def entries(cls) -> List[Type[TorchParameterNode]]:
-        return [TorchKroneckerParameter]
-
-
 def apply_log_softmax(
     compiler: "TorchCompiler", match: ParameterOptMatch
 ) -> Tuple[TorchLogSoftmaxParameter]:
@@ -61,5 +61,7 @@ def apply_log_softmax(
 DEFAULT_PARAMETER_OPT_RULES: Dict[
     ParameterOptPattern, ParameterOptApplyFunc
 ] = {  # type: ignore[misc]
-    LogSoftmaxPattern: apply_log_softmax
+    LogSoftmaxPattern: apply_log_softmax,
+    # TODO: implement this neat optimization with einsums on the lse-sum semiring
+    # ReduceLSEOuterSumPattern: apply_lse_outer_sum_einsum
 }

@@ -1,18 +1,32 @@
-from collections import defaultdict, deque
+from collections import deque
 from functools import cached_property
-from typing import Callable, Dict, Generic, Iterable, Iterator, List, Optional, Sequence, TypeVar
+from typing import (
+    Callable,
+    Dict,
+    Generic,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 NodeType = TypeVar("NodeType")
 
 
-def graph_outgoings(
+def graph_nodes_outgoings(
     nodes: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
 ) -> Dict[NodeType, List[NodeType]]:
-    outgoings: Dict[NodeType, List[NodeType]] = defaultdict(list)
+    outgoings: Dict[NodeType, List[NodeType]] = {}
     for n in nodes:
         incomings = incomings_fn(n)
         for ch in incomings:
-            outgoings[ch].append(n)
+            if ch in outgoings:
+                outgoings[ch].append(n)
+            else:
+                outgoings[ch] = [n]
     return outgoings
 
 
@@ -39,7 +53,7 @@ def topological_ordering(
     if outcomings_fn is None:
         if isinstance(nodes, Iterator):
             nodes = list(nodes)
-        outgoings = graph_outgoings(nodes, incomings_fn)
+        outgoings = graph_nodes_outgoings(nodes, incomings_fn)
         outcomings_fn = lambda n: outgoings.get(n, [])
     num_incomings: Dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
     inputs = map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items()))
@@ -63,7 +77,7 @@ def layerwise_topological_ordering(
     if outcomings_fn is None:
         if isinstance(nodes, Iterator):
             nodes = list(nodes)
-        outgoings = graph_outgoings(nodes, incomings_fn)
+        outgoings = graph_nodes_outgoings(nodes, incomings_fn)
         outcomings_fn = lambda n: outgoings.get(n, [])
     num_incomings: Dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
     inputs = list(map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items())))
@@ -84,16 +98,35 @@ def layerwise_topological_ordering(
         raise ValueError("The graph has at least one cycle. No topological ordering exists.")
 
 
+def topologically_process_nodes(
+    ordering: Iterable[NodeType],
+    outputs: Iterable[NodeType],
+    process_fn: Callable[[NodeType], NodeType],
+    *,
+    incomings_fn: Callable[[NodeType], Sequence[NodeType]],
+) -> Tuple[List[NodeType], Dict[NodeType, List[NodeType]], List[NodeType]]:
+    nodes_map = {}
+    in_nodes = {}
+    for n in ordering:
+        new_n = process_fn(n)
+        nodes_map[n] = new_n
+        in_nodes[new_n] = [nodes_map[ni] for ni in incomings_fn(n)]
+    nodes = [nodes_map[n] for n in nodes_map.keys()]
+    outputs = [nodes_map[n] for n in outputs]
+    return nodes, in_nodes, outputs
+
+
 class Graph(Generic[NodeType]):
     def __init__(
         self,
         nodes: List[NodeType],
         in_nodes: Dict[NodeType, List[NodeType]],
-        out_nodes: Dict[NodeType, List[NodeType]],
+        outputs: List[NodeType],
     ):
         self._nodes = nodes
         self._in_nodes = in_nodes
-        self._out_nodes = out_nodes
+        self._outputs = outputs
+        self._out_nodes = graph_nodes_outgoings(nodes, self.node_inputs)
 
     def node_inputs(self, n: NodeType) -> List[NodeType]:
         return self._in_nodes.get(n, [])
@@ -119,7 +152,7 @@ class Graph(Generic[NodeType]):
 
     @property
     def outputs(self) -> Iterator[NodeType]:
-        return (n for n in self._nodes if not self.node_outputs(n))
+        return iter(self._outputs)
 
 
 class DiAcyclicGraph(Graph[NodeType]):
@@ -127,11 +160,11 @@ class DiAcyclicGraph(Graph[NodeType]):
         self,
         nodes: List[NodeType],
         in_nodes: Dict[NodeType, List[NodeType]],
-        out_nodes: Dict[NodeType, List[NodeType]],
+        outputs: List[NodeType],
         *,
         topologically_ordered: bool = False,
     ):
-        super().__init__(nodes, in_nodes, out_nodes)
+        super().__init__(nodes, in_nodes, outputs)
         self._topologically_ordered = topologically_ordered
 
     @property

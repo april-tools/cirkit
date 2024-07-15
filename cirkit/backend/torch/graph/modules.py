@@ -29,7 +29,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         self,
         modules: List[TorchModule],
         in_modules: Dict[TorchModule, List[TorchModule]],
-        out_modules: Dict[TorchModule, List[TorchModule]],
+        outputs: List[TorchModule],
         *,
         topologically_ordered: bool = False,
         fold_idx_info: Optional[FoldIndexInfo] = None,
@@ -37,7 +37,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         modules: List = nn.ModuleList(modules)  # type: ignore
         super().__init__()
         super(nn.Module, self).__init__(
-            modules, in_modules, out_modules, topologically_ordered=topologically_ordered
+            modules, in_modules, outputs, topologically_ordered=topologically_ordered
         )
         self._address_book: Optional[AddressBook] = None
         self._fold_idx_info = fold_idx_info

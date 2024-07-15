@@ -161,7 +161,7 @@ class TorchPointerParameter(TorchParameterLeaf):
         assert not isinstance(parameter, TorchPointerParameter)
         super().__init__(num_folds=num_folds)
         self._parameter = parameter
-        self._fold_idx = fold_idx
+        self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
 
     def __copy__(self) -> "TorchPointerParameter":
         cls = self.__class__
@@ -178,17 +178,19 @@ class TorchPointerParameter(TorchParameterLeaf):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(fold_idx=self._fold_idx)
+        return dict(fold_idx=self.fold_idx)
 
     def deref(self) -> TorchTensorParameter:
         return self._parameter
 
     @property
-    def fold_idx(self) -> Optional[int]:
-        return self._fold_idx
+    def fold_idx(self) -> Optional[List[int]]:
+        if self._fold_idx is None:
+            return None
+        return self._fold_idx.cpu().tolist()
 
     def forward(self) -> Tensor:
         x = self._parameter()
         if self._fold_idx is None:
             return x
-        return x[self.fold_idx]
+        return x[self._fold_idx]

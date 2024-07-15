@@ -91,7 +91,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         num_channels: int,
         layers: List[TorchLayer],
         in_layers: Dict[TorchLayer, List[TorchLayer]],
-        out_layers: Dict[TorchLayer, List[TorchLayer]],
+        outputs: List[TorchLayer],
         *,
         topologically_ordered: bool = False,
         fold_idx_info: Optional[FoldIndexInfo] = None,
@@ -99,7 +99,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         super().__init__(
             layers,
             in_layers,
-            out_layers,
+            outputs,
             topologically_ordered=topologically_ordered,
             fold_idx_info=fold_idx_info,
         )

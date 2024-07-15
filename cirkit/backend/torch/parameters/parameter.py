@@ -4,7 +4,7 @@ from collections import defaultdict
 from copy import copy as shallowcopy
 from functools import reduce
 from itertools import chain
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -22,6 +22,7 @@ from cirkit.backend.torch.parameters.leaves import (
     TorchPointerParameter,
     TorchTensorParameter,
 )
+from cirkit.utils.algorithms import topologically_process_nodes
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
@@ -160,64 +161,8 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def shape(self) -> Tuple[int, ...]:
         return next(self.outputs).shape
 
-    @classmethod
-    def from_leaf(cls, p: TorchParameterLeaf) -> "TorchParameter":
-        return TorchParameter([p], {}, {}, topologically_ordered=True)
-
-    @classmethod
-    def from_sequence(
-        cls, p: Union[TorchParameterLeaf, "TorchParameter"], *ns: TorchParameterNode
-    ) -> "TorchParameter":
-        if isinstance(p, TorchParameterLeaf):
-            p = TorchParameter.from_leaf(p)
-        nodes = p.nodes + list(ns)
-        in_nodes = dict(p.nodes_inputs)
-        out_nodes = dict(p.nodes_outputs)
-        for i, n in enumerate(ns):
-            in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.output]
-            out_nodes[n] = [ns[i + 1]] if i + 1 < len(ns) else []
-        out_nodes[p.output] = [ns[0]]
-        return TorchParameter(
-            nodes, in_nodes, out_nodes, topologically_ordered=p.is_topologically_ordered
-        )
-
-    @classmethod
-    def from_nary(
-        cls, n: TorchParameterOp, *ps: Union[TorchParameterLeaf, "TorchParameter"]
-    ) -> "TorchParameter":
-        ps = tuple(
-            TorchParameter.from_leaf(p) if isinstance(p, TorchParameterLeaf) else p for p in ps
-        )
-        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
-        in_nodes = reduce(operator.ior, (p.nodes_inputs for p in ps), {})
-        out_nodes = reduce(operator.ior, (p.nodes_outputs for p in ps), {})
-        in_nodes[n] = list(p.output for p in ps)
-        for p in ps:
-            out_nodes[p.output] = [n]
-        topologically_ordered = all(p.is_topologically_ordered for p in ps)
-        return TorchParameter(
-            p_nodes,
-            in_nodes,
-            out_nodes,
-            topologically_ordered=topologically_ordered,
-        )
-
-    @classmethod
-    def from_unary(
-        cls, n: TorchUnaryOpParameter, p: Union[TorchParameterLeaf, "TorchParameter"]
-    ) -> "TorchParameter":
-        return TorchParameter.from_sequence(p, n)
-
-    @classmethod
-    def from_binary(
-        cls,
-        n: TorchBinaryOpParameter,
-        p1: Union[TorchParameterLeaf, "TorchParameter"],
-        p2: Union[TorchParameterLeaf, "TorchParameter"],
-    ) -> "TorchParameter":
-        return TorchParameter.from_nary(n, p1, p2)
-
     def extract_subgraphs(self, *roots: TorchParameterNode) -> List["TorchParameter"]:
+        # The set of torch tensor nodes being observed
         nodes_ptensor = set()
 
         def replace_ref_or_copy(n: TorchParameterNode) -> TorchParameterNode:
@@ -227,20 +172,19 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
                 nodes_ptensor.add(n)
             return shallowcopy(n)
 
+        # Extract parameter sub-computational graphs that are rooted by the provided roots
+        # If the sub-computational graphs would share torch tensor parameters (that are not pointers),
+        # then parameter sharing is ensured by introducing torch parameter pointers, based on the
+        # order specified by the roots.
         pgraphs = []
         for r in roots:
-            nodes_map = {}
-            in_nodes = {}
-            out_nodes = defaultdict(list)
-            for n in self.topological_ordering(roots=[r]):
-                new_n = replace_ref_or_copy(n)
-                nodes_map[n] = new_n
-                in_new_nodes = [nodes_map[ni] for ni in self.node_inputs(n)]
-                in_nodes[new_n] = in_new_nodes
-                for ni in in_new_nodes:
-                    out_nodes[ni].append(new_n)
-            nodes = [nodes_map[n] for n in nodes_map.keys()]
-            pgraph = TorchParameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
+            nodes, in_nodes, outputs = topologically_process_nodes(
+                self.topological_ordering(roots=[r]),
+                [r],
+                replace_ref_or_copy,
+                incomings_fn=self.node_inputs,
+            )
+            pgraph = TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
             pgraphs.append(pgraph)
         return pgraphs
 

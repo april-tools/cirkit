@@ -80,13 +80,7 @@ def optimize_graph(
     pattern_matcher_fn: PatternMatcherFunc,
     match_optimizer_fn: MatchOptimizerFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-) -> Optional[
-    Tuple[
-        List[TorchModule],
-        Dict[TorchModule, List[TorchModule]],
-        Dict[TorchModule, List[TorchModule]],
-    ]
-]:
+) -> Optional[Tuple[List[TorchModule], Dict[TorchModule, List[TorchModule]], List[TorchModule],]]:
     # TODO: generalize this as to cover patterns with multiply entry or exit points? (much more difficult)
 
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
@@ -113,10 +107,9 @@ def optimize_graph(
     for match in matches:
         match_opt_modules[match] = match_optimizer_fn(match)
 
-    # The list of optimized layer and the inputs/outputs of each optimized module
+    # The list of optimized layer and the inputs of each optimized module
     modules: List[TorchModule] = []
     in_modules: Dict[TorchModule, List[TorchModule]] = {}
-    out_modules: Dict[TorchModule, List[TorchModule]] = defaultdict(list)
 
     # A map from matches to their entry point unoptimized modules
     match_entry_points: Dict[GraphOptMatch, TorchModule] = {}
@@ -132,13 +125,10 @@ def optimize_graph(
         # If so, then just add it to the optimize layer as is
         if match is None:
             modules.append(module)
-            module_ins = [
+            in_modules[module] = [
                 match_exit_points[module_matches[mi]] if mi in module_matches else mi
                 for mi in incomings_fn(module)
             ]
-            in_modules[module] = module_ins
-            for mi in module_ins:
-                out_modules[mi].append(module)
             continue
 
         # If the module belongs to a matched pattern (there can only be a single one by construction),
@@ -156,20 +146,22 @@ def optimize_graph(
             modules.extend(opt_modules)
             for i, om in enumerate(opt_modules):
                 if i == 0:
-                    om_module_ins = [
+                    in_modules[om] = [
                         match_exit_points[module_matches[mi]] if mi in module_matches else mi
                         for mi in incomings_fn(match_entry_points[match])
                     ]
                 else:
-                    om_module_ins = [opt_modules[i - 1]]
-                in_modules[om] = om_module_ins
-                for mi in om_module_ins:
-                    out_modules[mi].append(om)
+                    in_modules[om] = [opt_modules[i - 1]]
             # Set the root model of the match as the exit point of the matched pattern
             match_exit_points[match] = opt_modules[-1]
             continue
 
-    return modules, in_modules, out_modules
+    # Retrieve the sequence of output modules of the computational graph
+    opt_outputs = [
+        match_exit_points[module_matches[m]] if m in module_matches else m for m in outputs
+    ]
+
+    return modules, in_modules, opt_outputs
 
 
 def match_optimization_patterns(

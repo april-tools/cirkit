@@ -16,25 +16,9 @@ from cirkit.backend.torch.optimization.registry import (
     LayerOptPattern,
     ParameterOptPattern,
 )
-from cirkit.backend.torch.parameters.ops import TorchMatMulParameter
-from cirkit.backend.torch.parameters.parameter import TorchParameter
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
-
-
-class DenseCompositionPattern(LayerOptPattern):
-    @classmethod
-    def is_output(cls) -> bool:
-        return False
-
-    @classmethod
-    def entries(cls) -> List[Type[TorchLayer]]:
-        return [TorchDenseLayer, TorchDenseLayer]
-
-    @classmethod
-    def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
-        return [{} for _ in cls.entries()]
 
 
 class TuckerPattern(LayerOptPattern):
@@ -77,20 +61,6 @@ class DenseKroneckerPattern(LayerOptPattern):
     @classmethod
     def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
         return [{"weight": KroneckerOutParameterPattern}]
-
-
-def apply_dense_composition(
-    compiler: "TorchCompiler", match: LayerOptMatch
-) -> Tuple[TorchDenseLayer]:
-    dense1 = cast(TorchDenseLayer, match.entries[0])
-    dense2 = cast(TorchDenseLayer, match.entries[1])
-    weight = TorchParameter.from_binary(
-        TorchMatMulParameter(dense1.weight.shape, dense2.weight.shape), dense1.weight, dense2.weight
-    )
-    dense = TorchDenseLayer(
-        dense2.num_input_units, dense1.num_output_units, weight=weight, semiring=compiler.semiring
-    )
-    return (dense,)
 
 
 def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchTuckerLayer]:
@@ -152,7 +122,6 @@ def apply_tensordot(
 
 
 DEFAULT_LAYER_FUSE_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
-    DenseCompositionPattern: apply_dense_composition,
     TuckerPattern: apply_tucker,
     CandecompPattern: apply_candecomp,
 }
