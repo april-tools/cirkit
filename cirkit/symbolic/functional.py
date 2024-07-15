@@ -146,7 +146,6 @@ def multiply(
     # For each new circuit block, keep track of its inputs
     blocks: List[CircuitBlock] = []
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    output_blocks: List[CircuitBlock] = []
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
