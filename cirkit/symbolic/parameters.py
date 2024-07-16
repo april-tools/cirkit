@@ -264,6 +264,10 @@ class ClampParameter(EntrywiseParameterOp):
         return config
 
 
+class ConjugateParameter(EntrywiseParameterOp):
+    ...
+
+
 class ReduceSumParameter(ReduceParameterOp):
     ...
 

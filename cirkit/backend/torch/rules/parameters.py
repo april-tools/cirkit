@@ -24,7 +24,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchSoftmaxParameter,
     TorchSquareParameter,
     TorchSumParameter,
-    TorchTensorParameter,
+    TorchTensorParameter, TorchConjugateParameter,
 )
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.parameters import (
@@ -49,7 +49,7 @@ from cirkit.symbolic.parameters import (
     SoftmaxParameter,
     SquareParameter,
     SumParameter,
-    TensorParameter,
+    TensorParameter, ConjugateParameter,
 )
 
 if TYPE_CHECKING:
@@ -168,6 +168,11 @@ def compile_clamp_parameter(compiler: "TorchCompiler", p: ClampParameter) -> Tor
     return TorchClampParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
 
 
+def compile_conjugate_parameter(compiler: "TorchCompiler", p: ClampParameter) -> TorchConjugateParameter:
+    (in_shape,) = p.in_shapes
+    return TorchConjugateParameter(in_shape)
+
+
 def compile_reduce_sum_parameter(
     compiler: "TorchCompiler", p: ReduceSumParameter
 ) -> TorchReduceSumParameter:
@@ -236,6 +241,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     SigmoidParameter: compile_sigmoid_parameter,
     ScaledSigmoidParameter: compile_scaled_sigmoid_parameter,
     ClampParameter: compile_clamp_parameter,
+    ConjugateParameter: compile_conjugate_parameter,
     ReduceSumParameter: compile_reduce_sum_parameter,
     ReduceProductParameter: compile_reduce_product_parameter,
     ReduceLSEParameter: compile_reduce_lse_parameter,

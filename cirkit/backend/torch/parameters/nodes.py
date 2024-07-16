@@ -536,6 +536,20 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
         return torch.clamp(x, min=self.vmin, max=self.vmax)
 
 
+class TorchConjugateParameter(TorchEntrywiseParameterOp):
+    """Conjugate parameterization."""
+
+    def __init__(
+        self,
+        in_shape: Tuple[int, ...],
+        num_folds: int = 1
+    ) -> None:
+        super().__init__(in_shape, num_folds=num_folds)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.conj(x)
+
+
 class TorchReduceSumParameter(TorchReduceParamterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.sum(x, dim=self.dim + 1)

@@ -30,6 +30,7 @@ class CircuitOperator(AbstractCircuitOperator):
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
     MULTIPLICATION = auto()
+    CONJUGATION = auto()
 
 
 @dataclass(frozen=True)

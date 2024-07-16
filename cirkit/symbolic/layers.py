@@ -25,6 +25,7 @@ class LayerOperation(AbstractLayerOperator):
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
     MULTIPLICATION = auto()
+    CONJUGATION = auto()
 
 
 class Layer(ABC):

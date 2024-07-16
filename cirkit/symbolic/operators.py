@@ -25,7 +25,7 @@ from cirkit.symbolic.parameters import (
     Parameter,
     ReduceLSEParameter,
     ReduceSumParameter,
-    SumParameter,
+    SumParameter, ConjugateParameter,
 )
 from cirkit.utils.scope import Scope
 
@@ -149,6 +149,27 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
     return CircuitBlock.from_layer(sl)
 
 
+def conjugate_categorical_layer(
+    sl: CategoricalLayer
+) -> CircuitBlock:
+    sl = CategoricalLayer(
+        sl.scope, sl.num_output_units, sl.num_channels,
+        num_categories=sl.num_categories,
+        *sl.params
+    )
+    return CircuitBlock.from_layer(sl)
+
+
+def conjugate_gaussian_layer(
+    sl: GaussianLayer
+) -> CircuitBlock:
+    sl = GaussianLayer(
+        sl.scope, sl.num_output_units, sl.num_channels,
+        *sl.params
+    )
+    return CircuitBlock.from_layer(sl)
+
+
 def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitBlock:
     sl = HadamardLayer(
         sl1.scope | sl2.scope,
@@ -196,6 +217,22 @@ def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
     return CircuitBlock.from_layer(sl)
 
 
+def conjugate_dense_layer(sl: DenseLayer) -> CircuitBlock:
+    weight = Parameter.from_unary(
+        ConjugateParameter(sl.weight.shape), sl.weight.ref()
+    )
+    sl = DenseLayer(sl.scope, sl.num_input_units, sl.num_output_units, weight=weight)
+    return CircuitBlock.from_layer(sl)
+
+
+def conjugate_mixing_layer(sl: MixingLayer) -> CircuitBlock:
+    weight = Parameter.from_unary(
+        ConjugateParameter(sl.weight.shape), sl.weight.ref()
+    )
+    sl = MixingLayer(sl.scope, sl.num_input_units, sl.arity, weight=weight)
+    return CircuitBlock.from_layer(sl)
+
+
 class LayerOperatorFunc(Protocol):
     def __call__(self, *sl: Layer, **kwargs) -> CircuitBlock:
         ...
@@ -212,6 +249,12 @@ DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
         multiply_dense_layers,
         multiply_mixing_layers,
     ],
+    LayerOperation.CONJUGATION: [
+        conjugate_categorical_layer,
+        conjugate_gaussian_layer,
+        conjugate_dense_layer,
+        conjugate_mixing_layer
+    ]
 }
 LayerOperatorSign = Tuple[Type[Layer], ...]
 LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
