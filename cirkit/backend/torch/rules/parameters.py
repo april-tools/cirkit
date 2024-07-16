@@ -5,6 +5,7 @@ import torch
 from cirkit.backend.compiler import ParameterCompilationFunc, ParameterCompilationSign
 from cirkit.backend.torch.parameters.nodes import (
     TorchClampParameter,
+    TorchConjugateParameter,
     TorchExpParameter,
     TorchGaussianProductLogPartition,
     TorchGaussianProductMean,
@@ -24,11 +25,12 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchSoftmaxParameter,
     TorchSquareParameter,
     TorchSumParameter,
-    TorchTensorParameter, TorchConjugateParameter,
+    TorchTensorParameter,
 )
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.parameters import (
     ClampParameter,
+    ConjugateParameter,
     ConstantParameter,
     ExpParameter,
     GaussianProductLogPartition,
@@ -49,7 +51,7 @@ from cirkit.symbolic.parameters import (
     SoftmaxParameter,
     SquareParameter,
     SumParameter,
-    TensorParameter, ConjugateParameter,
+    TensorParameter,
 )
 
 if TYPE_CHECKING:
@@ -168,7 +170,9 @@ def compile_clamp_parameter(compiler: "TorchCompiler", p: ClampParameter) -> Tor
     return TorchClampParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
 
 
-def compile_conjugate_parameter(compiler: "TorchCompiler", p: ClampParameter) -> TorchConjugateParameter:
+def compile_conjugate_parameter(
+    compiler: "TorchCompiler", p: ClampParameter
+) -> TorchConjugateParameter:
     (in_shape,) = p.in_shapes
     return TorchConjugateParameter(in_shape)
 

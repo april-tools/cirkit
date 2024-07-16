@@ -539,11 +539,7 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
 class TorchConjugateParameter(TorchEntrywiseParameterOp):
     """Conjugate parameterization."""
 
-    def __init__(
-        self,
-        in_shape: Tuple[int, ...],
-        num_folds: int = 1
-    ) -> None:
+    def __init__(self, in_shape: Tuple[int, ...], num_folds: int = 1) -> None:
         super().__init__(in_shape, num_folds=num_folds)
 
     def forward(self, x: Tensor) -> Tensor:
