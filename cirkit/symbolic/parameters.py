@@ -25,11 +25,11 @@ class ParameterNode(ABC):
         return {}
 
 
-class ParameterLeaf(ParameterNode, ABC):
+class ParameterInput(ParameterNode, ABC):
     ...
 
 
-class TensorParameter(ParameterLeaf):
+class TensorParameter(ParameterInput):
     def __init__(self, *shape: int, initializer: Initializer, learnable: bool = True):
         super().__init__()
         self._shape = tuple(shape)
@@ -64,7 +64,7 @@ class ConstantParameter(TensorParameter):
 
 
 @final
-class ReferenceParameter(ParameterLeaf):
+class ReferenceParameter(ParameterInput):
     def __init__(self, parameter: TensorParameter):
         super().__init__()
         self._parameter = parameter
@@ -100,13 +100,13 @@ class BinaryParameterOp(ParameterOp, ABC):
         super().__init__(in_shape1, in_shape2)
 
 
-class EntrywiseOpParameter(UnaryParameterOp, ABC):
+class EntrywiseParameterOp(UnaryParameterOp, ABC):
     @property
     def shape(self) -> Tuple[int, ...]:
         return self.in_shapes[0]
 
 
-class ReduceOpParameter(UnaryParameterOp, ABC):
+class ReduceParameterOp(UnaryParameterOp, ABC):
     def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
         assert 0 <= axis < len(in_shape)
         super().__init__(in_shape)
@@ -121,7 +121,7 @@ class ReduceOpParameter(UnaryParameterOp, ABC):
         return dict(axis=self.axis)
 
 
-class EntrywiseReduceOpParameter(EntrywiseOpParameter, ABC):
+class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
     def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
         super().__init__(in_shape)
         axis = axis if axis >= 0 else axis + len(in_shape)
@@ -165,7 +165,7 @@ class KroneckerParameter(BinaryParameterOp):
         )
 
 
-class OuterOpParameter(BinaryParameterOp):
+class OuterParameterOp(BinaryParameterOp):
     def __init__(
         self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, axis: int = -1
     ) -> None:
@@ -187,35 +187,35 @@ class OuterOpParameter(BinaryParameterOp):
         return dict(axis=self.axis)
 
 
-class OuterProductParameter(OuterOpParameter):
+class OuterProductParameter(OuterParameterOp):
     ...
 
 
-class OuterSumParameter(OuterOpParameter):
+class OuterSumParameter(OuterParameterOp):
     ...
 
 
-class ExpParameter(EntrywiseOpParameter):
+class ExpParameter(EntrywiseParameterOp):
     ...
 
 
-class LogParameter(EntrywiseOpParameter):
+class LogParameter(EntrywiseParameterOp):
     ...
 
 
-class SquareParameter(EntrywiseOpParameter):
+class SquareParameter(EntrywiseParameterOp):
     ...
 
 
-class SoftplusParameter(EntrywiseOpParameter):
+class SoftplusParameter(EntrywiseParameterOp):
     ...
 
 
-class SigmoidParameter(EntrywiseOpParameter):
+class SigmoidParameter(EntrywiseParameterOp):
     ...
 
 
-class ScaledSigmoidParameter(EntrywiseOpParameter):
+class ScaledSigmoidParameter(EntrywiseParameterOp):
     def __init__(self, in_shape: Tuple[int, ...], vmin: float, vmax: float):
         super().__init__(in_shape)
         self.vmin = vmin
@@ -226,7 +226,7 @@ class ScaledSigmoidParameter(EntrywiseOpParameter):
         return dict(vmin=self.vmin, vmax=self.vmax)
 
 
-class ClampParameter(EntrywiseOpParameter):
+class ClampParameter(EntrywiseParameterOp):
     """Exp reparameterization."""
 
     def __init__(
@@ -251,23 +251,23 @@ class ClampParameter(EntrywiseOpParameter):
         return config
 
 
-class ReduceSumParameter(ReduceOpParameter):
+class ReduceSumParameter(ReduceParameterOp):
     ...
 
 
-class ReduceProductParameter(ReduceOpParameter):
+class ReduceProductParameter(ReduceParameterOp):
     ...
 
 
-class ReduceLSEParameter(ReduceOpParameter):
+class ReduceLSEParameter(ReduceParameterOp):
     ...
 
 
-class SoftmaxParameter(EntrywiseReduceOpParameter):
+class SoftmaxParameter(EntrywiseReduceParameterOp):
     ...
 
 
-class LogSoftmaxParameter(EntrywiseReduceOpParameter):
+class LogSoftmaxParameter(EntrywiseReduceParameterOp):
     ...
 
 
@@ -277,12 +277,14 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return self.output.shape
 
     @classmethod
-    def from_leaf(cls, p: ParameterLeaf) -> "Parameter":
+    def from_leaf(cls, p: ParameterInput) -> "Parameter":
         return Parameter([p], {}, [p], topologically_ordered=True)
 
     @classmethod
-    def from_sequence(cls, p: Union[ParameterLeaf, "Parameter"], *ns: ParameterNode) -> "Parameter":
-        if isinstance(p, ParameterLeaf):
+    def from_sequence(
+        cls, p: Union[ParameterInput, "Parameter"], *ns: ParameterNode
+    ) -> "Parameter":
+        if isinstance(p, ParameterInput):
             p = Parameter.from_leaf(p)
         nodes = p.nodes + list(ns)
         in_nodes = dict(p.nodes_inputs)
@@ -293,8 +295,8 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         )
 
     @classmethod
-    def from_nary(cls, n: ParameterOp, *ps: Union[ParameterLeaf, "Parameter"]) -> "Parameter":
-        ps = tuple(Parameter.from_leaf(p) if isinstance(p, ParameterLeaf) else p for p in ps)
+    def from_nary(cls, n: ParameterOp, *ps: Union[ParameterInput, "Parameter"]) -> "Parameter":
+        ps = tuple(Parameter.from_leaf(p) if isinstance(p, ParameterInput) else p for p in ps)
         p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
         in_nodes = reduce(operator.ior, (p.nodes_inputs for p in ps), {})
         in_nodes[n] = list(p.output for p in ps)
@@ -307,15 +309,15 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         )
 
     @classmethod
-    def from_unary(cls, n: UnaryParameterOp, p: Union[ParameterLeaf, "Parameter"]) -> "Parameter":
+    def from_unary(cls, n: UnaryParameterOp, p: Union[ParameterInput, "Parameter"]) -> "Parameter":
         return Parameter.from_sequence(p, n)
 
     @classmethod
     def from_binary(
         cls,
         n: BinaryParameterOp,
-        p1: Union[ParameterLeaf, "Parameter"],
-        p2: Union[ParameterLeaf, "Parameter"],
+        p1: Union[ParameterInput, "Parameter"],
+        p2: Union[ParameterInput, "Parameter"],
     ) -> "Parameter":
         return Parameter.from_nary(n, p1, p2)
 

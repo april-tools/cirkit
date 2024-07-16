@@ -1,8 +1,7 @@
 from typing import TYPE_CHECKING, Dict, Optional
 
 from cirkit.backend.compiler import ParameterCompilationFunc, ParameterCompilationSign
-from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
-from cirkit.backend.torch.parameters.ops import (
+from cirkit.backend.torch.parameters.nodes import (
     TorchClampParameter,
     TorchExpParameter,
     TorchGaussianProductLogPartition,
@@ -14,6 +13,7 @@ from cirkit.backend.torch.parameters.ops import (
     TorchLogSoftmaxParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
+    TorchPointerParameter,
     TorchReduceLSEParameter,
     TorchReduceProductParameter,
     TorchReduceSumParameter,
@@ -22,6 +22,7 @@ from cirkit.backend.torch.parameters.ops import (
     TorchSoftmaxParameter,
     TorchSquareParameter,
     TorchSumParameter,
+    TorchTensorParameter,
 )
 from cirkit.symbolic.parameters import (
     ClampParameter,

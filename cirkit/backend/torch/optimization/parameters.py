@@ -6,12 +6,12 @@ from cirkit.backend.torch.optimization.registry import (
     ParameterOptPattern,
     ParameterOptPatternDefn,
 )
-from cirkit.backend.torch.parameters.leaves import TorchParameterNode
-from cirkit.backend.torch.parameters.ops import (
+from cirkit.backend.torch.parameters.nodes import (
     TorchKroneckerParameter,
     TorchLogParameter,
     TorchLogSoftmaxParameter,
     TorchOuterSumParameter,
+    TorchParameterNode,
     TorchReduceLSEParameter,
     TorchSoftmaxParameter,
 )

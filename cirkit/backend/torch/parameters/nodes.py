@@ -1,25 +1,276 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, final
 
 import numpy as np
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
-from cirkit.backend.torch.parameters.parameter import (
-    TorchBinaryOpParameter,
-    TorchParameterOp,
-    TorchUnaryOpParameter,
-)
+from cirkit.backend.torch.graph.modules import AbstractTorchModule
 
 
-class TorchEntrywiseOpParameter(TorchUnaryOpParameter, ABC):
+class TorchParameterNode(AbstractTorchModule, ABC):
+    """The abstract base class for all reparameterizations."""
+
+    def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
+        """Init class."""
+        super().__init__(num_folds=num_folds)
+
+    @abstractmethod
+    def __copy__(self) -> "TorchParameterNode":
+        ...
+
+    @property
+    @abstractmethod
+    def shape(self) -> Tuple[int, ...]:
+        ...
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {}
+
+    @torch.no_grad()
+    def reset_parameters(self) -> None:
+        ...
+
+
+class TorchParameterInput(TorchParameterNode, ABC):
+    @property
+    def is_initialized(self) -> bool:
+        return True
+
+    def __call__(self) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__()  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self) -> Tensor:
+        ...
+
+
+@final
+class TorchTensorParameter(TorchParameterInput):
+    """The leaf in reparameterizations that holds the parameter Tensor."""
+
+    def __init__(
+        self,
+        *shape: int,
+        num_folds: int = 1,
+        requires_grad: bool = True,
+        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
+    ) -> None:
+        """Init class."""
+        super().__init__(num_folds=num_folds)
+        self._shape = shape
+        self._ptensor: Optional[nn.Parameter] = None
+        self._requires_grad = requires_grad
+        self.initializer_ = nn.init.normal_ if initializer_ is None else initializer_
+
+    def __copy__(self) -> "TorchTensorParameter":
+        cls = self.__class__
+        return cls(**self.config)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self._shape
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """The dtype of the output parameter."""
+        assert self._ptensor is not None
+        return self._ptensor.dtype
+
+    @property
+    def device(self) -> torch.device:
+        assert self._ptensor is not None
+        return self._ptensor.device
+
+    @property
+    def requires_grad(self) -> bool:
+        return self._requires_grad
+
+    @requires_grad.setter
+    def requires_grad(self, value: bool) -> None:
+        self._requires_grad = value
+        if self._ptensor is not None:
+            self._ptensor.requires_grad = value
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.shape, self.requires_grad
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        """Configuration flags for the parameter."""
+        return dict(
+            shape=self._shape,
+            num_folds=self.num_folds,
+            requires_grad=self._requires_grad,
+            initializer_=self.initializer_,
+        )
+
+    @property
+    def is_initialized(self) -> bool:
+        return self._ptensor is not None
+
+    @torch.no_grad()
+    def reset_parameters(self) -> None:
+        """Initialize the internal parameter tensor with the given initializer."""
+        if self._ptensor is None:
+            shape = (self.num_folds, *self._shape)
+            self._ptensor = nn.Parameter(torch.empty(*shape), requires_grad=self._requires_grad)
+            self.initializer_(self._ptensor.data)
+            return
+        self.initializer_(self._ptensor.data)
+
+    def forward(self) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        assert self._ptensor is not None
+        return self._ptensor
+
+
+@final
+class TorchPointerParameter(TorchParameterInput):
+    def __init__(
+        self, parameter: TorchTensorParameter, *, fold_idx: Optional[Union[int, List[int]]] = None
+    ) -> None:
+        if fold_idx is None:
+            num_folds = parameter.num_folds
+        elif isinstance(fold_idx, int):
+            assert 0 <= fold_idx < parameter.num_folds
+            if fold_idx == 0 and parameter.num_folds == 1:
+                fold_idx = None
+                num_folds = parameter.num_folds
+            else:
+                fold_idx = [fold_idx]
+                num_folds = 1
+        else:
+            assert isinstance(fold_idx, list)
+            assert all(0 <= i < parameter.num_folds for i in fold_idx)
+            if fold_idx == list(range(parameter.num_folds)):
+                fold_idx = None
+                num_folds = parameter.num_folds
+            else:
+                num_folds = len(fold_idx)
+        assert not isinstance(parameter, TorchPointerParameter)
+        super().__init__(num_folds=num_folds)
+        self._parameter = parameter
+        self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
+
+    def __copy__(self) -> "TorchPointerParameter":
+        cls = self.__class__
+        return cls(self._parameter, **self.config)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        """The shape of the output parameter."""
+        return self._parameter.shape
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.shape, id(self._parameter)
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(fold_idx=self.fold_idx)
+
+    def deref(self) -> TorchTensorParameter:
+        return self._parameter
+
+    @property
+    def fold_idx(self) -> Optional[List[int]]:
+        if self._fold_idx is None:
+            return None
+        return self._fold_idx.cpu().tolist()
+
+    def forward(self) -> Tensor:
+        x = self._parameter()
+        if self._fold_idx is None:
+            return x
+        return x[self._fold_idx]
+
+
+class TorchParameterOp(TorchParameterNode, ABC):
+    def __init__(self, *in_shape: Tuple[int, ...], num_folds: int = 1):
+        super().__init__(num_folds=num_folds)
+        self.in_shapes = in_shape
+
+    def __copy__(self) -> "TorchParameterOp":
+        cls = self.__class__
+        return cls(*self.in_shapes, **self.config)
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *self.in_shapes, *self.config.items()
+
+    def __call__(self, *xs: Tensor) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(*xs)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, *xs: Tensor) -> Tensor:
+        ...
+
+
+class TorchUnaryParameterOp(TorchParameterOp, ABC):
+    def __init__(self, in_shape: Tuple[int, ...], *, num_folds: int = 1) -> None:
+        super().__init__(in_shape, num_folds=num_folds)
+
+    def __call__(self, x: Tensor) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        ...
+
+
+class TorchBinaryParameterOp(TorchParameterOp, ABC):
+    def __init__(
+        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+    ) -> None:
+        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
+
+    def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x1, x2)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
+        ...
+
+
+class TorchEntrywiseParameterOp(TorchUnaryParameterOp, ABC):
     @property
     def shape(self) -> Tuple[int, ...]:
         return self.in_shapes[0]
 
 
-class TorchReduceOpParamter(TorchUnaryOpParameter, ABC):
+class TorchReduceParamterOp(TorchUnaryParameterOp, ABC):
     """The base class for normalized reparameterization."""
 
     # NOTE: This class only serves as the common base of all normalized reparams, but include
@@ -45,7 +296,7 @@ class TorchReduceOpParamter(TorchUnaryOpParameter, ABC):
         return dict(dim=self.dim)
 
 
-class TorchEntrywiseReduceOpParameter(TorchEntrywiseOpParameter, ABC):
+class TorchEntrywiseReduceParameterOp(TorchEntrywiseParameterOp, ABC):
     """The base class for normalized reparameterization."""
 
     # NOTE: This class only serves as the common base of all normalized reparams, but include
@@ -69,7 +320,7 @@ class TorchEntrywiseReduceOpParameter(TorchEntrywiseOpParameter, ABC):
         return config
 
 
-class TorchSumParameter(TorchBinaryOpParameter):
+class TorchSumParameter(TorchBinaryParameterOp):
     def __init__(
         self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
     ) -> None:
@@ -84,7 +335,7 @@ class TorchSumParameter(TorchBinaryOpParameter):
         return x1 + x2
 
 
-class TorchHadamardParameter(TorchBinaryOpParameter):
+class TorchHadamardParameter(TorchBinaryParameterOp):
     """Hadamard product reparameterization."""
 
     def __init__(
@@ -101,7 +352,7 @@ class TorchHadamardParameter(TorchBinaryOpParameter):
         return x1 * x2
 
 
-class TorchKroneckerParameter(TorchBinaryOpParameter):
+class TorchKroneckerParameter(TorchBinaryParameterOp):
     """Kronecker product reparameterization."""
 
     def __init__(
@@ -119,7 +370,7 @@ class TorchKroneckerParameter(TorchBinaryOpParameter):
         return self._batched_kron(x1, x2)
 
 
-class TorchOuterProductParameter(TorchBinaryOpParameter):
+class TorchOuterProductParameter(TorchBinaryParameterOp):
     def __init__(
         self,
         in_shape1: Tuple[int, ...],
@@ -160,7 +411,7 @@ class TorchOuterProductParameter(TorchBinaryOpParameter):
         return x
 
 
-class TorchOuterSumParameter(TorchBinaryOpParameter):
+class TorchOuterSumParameter(TorchBinaryParameterOp):
     def __init__(
         self,
         in_shape1: Tuple[int, ...],
@@ -201,33 +452,33 @@ class TorchOuterSumParameter(TorchBinaryOpParameter):
         return x
 
 
-class TorchExpParameter(TorchEntrywiseOpParameter):
+class TorchExpParameter(TorchEntrywiseParameterOp):
     """Exp reparameterization."""
 
     def forward(self, x: Tensor) -> Tensor:
         return torch.exp(x)
 
 
-class TorchLogParameter(TorchEntrywiseOpParameter):
+class TorchLogParameter(TorchEntrywiseParameterOp):
     """Log reparameterization."""
 
     def forward(self, x: Tensor) -> Tensor:
         return torch.log(x)
 
 
-class TorchSquareParameter(TorchEntrywiseOpParameter):
+class TorchSquareParameter(TorchEntrywiseParameterOp):
     """Square reparameterization."""
 
     def forward(self, x: Tensor) -> Tensor:
         return torch.square(x)
 
 
-class TorchSigmoidParameter(TorchEntrywiseOpParameter):
+class TorchSigmoidParameter(TorchEntrywiseParameterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.sigmoid(x)
 
 
-class TorchScaledSigmoidParameter(TorchEntrywiseOpParameter):
+class TorchScaledSigmoidParameter(TorchEntrywiseParameterOp):
     def __init__(
         self, in_shape: Tuple[int, ...], *, vmin: float, vmax: float, num_folds: int = 1
     ) -> None:
@@ -246,7 +497,7 @@ class TorchScaledSigmoidParameter(TorchEntrywiseOpParameter):
         return torch.sigmoid(x) * (self.vmax - self.vmin) + self.vmin
 
 
-class TorchClampParameter(TorchEntrywiseOpParameter):
+class TorchClampParameter(TorchEntrywiseParameterOp):
     """Exp reparameterization."""
 
     def __init__(
@@ -275,22 +526,22 @@ class TorchClampParameter(TorchEntrywiseOpParameter):
         return torch.clamp(x, min=self.vmin, max=self.vmax)
 
 
-class TorchReduceSumParameter(TorchReduceOpParamter):
+class TorchReduceSumParameter(TorchReduceParamterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.sum(x, dim=self.dim + 1)
 
 
-class TorchReduceProductParameter(TorchReduceOpParamter):
+class TorchReduceProductParameter(TorchReduceParamterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.prod(x, dim=self.dim + 1)
 
 
-class TorchReduceLSEParameter(TorchReduceOpParamter):
+class TorchReduceLSEParameter(TorchReduceParamterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.logsumexp(x, dim=self.dim + 1)
 
 
-class TorchSoftmaxParameter(TorchEntrywiseReduceOpParameter):
+class TorchSoftmaxParameter(TorchEntrywiseReduceParameterOp):
     """Softmax reparameterization.
 
     Range: (0, 1), 0 available if input is masked, 1 available when only one element valid.
@@ -301,7 +552,7 @@ class TorchSoftmaxParameter(TorchEntrywiseReduceOpParameter):
         return torch.softmax(x, dim=self.dim + 1)
 
 
-class TorchLogSoftmaxParameter(TorchEntrywiseReduceOpParameter):
+class TorchLogSoftmaxParameter(TorchEntrywiseReduceParameterOp):
     """Log-Softmax reparameterization.
 
     Range: (-inf, 0).
@@ -312,7 +563,7 @@ class TorchLogSoftmaxParameter(TorchEntrywiseReduceOpParameter):
         return torch.log_softmax(x, dim=self.dim + 1)
 
 
-class TorchMatMulParameter(TorchBinaryOpParameter):
+class TorchMatMulParameter(TorchBinaryParameterOp):
     def __init__(
         self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
     ) -> None:
@@ -364,7 +615,7 @@ class TorchGaussianProductMean(TorchParameterOp):
         return mean.view(-1, *self.shape)  # (F, D, K1 * K2, C)
 
 
-class TorchGaussianProductStddev(TorchBinaryOpParameter):
+class TorchGaussianProductStddev(TorchBinaryParameterOp):
     def __init__(
         self,
         in_gaussian1_shape: Tuple[int, ...],

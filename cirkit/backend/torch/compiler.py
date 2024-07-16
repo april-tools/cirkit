@@ -37,12 +37,13 @@ from cirkit.backend.torch.optimization.registry import (
     ParameterOptPattern,
     ParameterOptRegistry,
 )
-from cirkit.backend.torch.parameters.leaves import (
+from cirkit.backend.torch.parameters.nodes import (
     TorchParameterNode,
+    TorchParameterOp,
     TorchPointerParameter,
     TorchTensorParameter,
 )
-from cirkit.backend.torch.parameters.parameter import TorchParameter, TorchParameterOp
+from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.rules import (
     DEFAULT_INITIALIZER_COMPILATION_RULES,
     DEFAULT_LAYER_COMPILATION_RULES,
