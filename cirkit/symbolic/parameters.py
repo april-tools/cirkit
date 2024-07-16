@@ -4,7 +4,7 @@ from copy import copy as shallowcopy
 from functools import cached_property, reduce
 from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, Optional, Tuple, Union, final
+from typing import Any, Callable, Dict, Optional, Protocol, Tuple, Union, final
 
 from cirkit.symbolic.dtypes import DataType, dtype_value
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
@@ -361,7 +361,9 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return Parameter(nodes, in_nodes, outputs, topologically_ordered=True)
 
 
-Parameterization = Callable[[TensorParameter], Parameter]
+class ParameterFactory(Protocol):
+    def __call__(self, shape: Tuple[int, ...]) -> Parameter:
+        ...
 
 
 class GaussianProductMean(ParameterOp):
