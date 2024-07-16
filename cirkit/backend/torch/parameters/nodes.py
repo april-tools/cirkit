@@ -63,13 +63,17 @@ class TorchTensorParameter(TorchParameterInput):
         num_folds: int = 1,
         requires_grad: bool = True,
         initializer_: Optional[Callable[[Tensor], Tensor]] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> None:
         """Init class."""
+        if dtype is None:
+            dtype = torch.get_default_dtype()
         super().__init__(num_folds=num_folds)
         self._shape = shape
         self._ptensor: Optional[nn.Parameter] = None
         self._requires_grad = requires_grad
-        self.initializer_ = nn.init.normal_ if initializer_ is None else initializer_
+        self._initializer_ = nn.init.normal_ if initializer_ is None else initializer_
+        self._dtype = dtype
 
     def __copy__(self) -> "TorchTensorParameter":
         cls = self.__class__
@@ -82,8 +86,7 @@ class TorchTensorParameter(TorchParameterInput):
     @property
     def dtype(self) -> torch.dtype:
         """The dtype of the output parameter."""
-        assert self._ptensor is not None
-        return self._ptensor.dtype
+        return self._dtype
 
     @property
     def device(self) -> torch.device:
@@ -101,6 +104,10 @@ class TorchTensorParameter(TorchParameterInput):
             self._ptensor.requires_grad = value
 
     @property
+    def initializer(self) -> Callable[[Tensor], Tensor]:
+        return self._initializer_
+
+    @property
     def fold_settings(self) -> Tuple[Any, ...]:
         return self.shape, self.requires_grad
 
@@ -111,7 +118,8 @@ class TorchTensorParameter(TorchParameterInput):
             shape=self._shape,
             num_folds=self.num_folds,
             requires_grad=self._requires_grad,
-            initializer_=self.initializer_,
+            initializer_=self._initializer_,
+            dtype=self._dtype,
         )
 
     @property
@@ -123,10 +131,12 @@ class TorchTensorParameter(TorchParameterInput):
         """Initialize the internal parameter tensor with the given initializer."""
         if self._ptensor is None:
             shape = (self.num_folds, *self._shape)
-            self._ptensor = nn.Parameter(torch.empty(*shape), requires_grad=self._requires_grad)
-            self.initializer_(self._ptensor.data)
+            self._ptensor = nn.Parameter(
+                torch.empty(*shape, dtype=self._dtype), requires_grad=self._requires_grad
+            )
+            self._initializer_(self._ptensor.data)
             return
-        self.initializer_(self._ptensor.data)
+        self._initializer_(self._ptensor.data)
 
     def forward(self) -> Tensor:
         """Get the reparameterized parameters.

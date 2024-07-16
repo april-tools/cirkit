@@ -6,6 +6,7 @@ from itertools import chain
 from numbers import Number
 from typing import Any, Callable, Dict, Optional, Tuple, Union, final
 
+from cirkit.symbolic.dtypes import DataType, dtype_value
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, topologically_process_nodes
 
@@ -30,11 +31,18 @@ class ParameterInput(ParameterNode, ABC):
 
 
 class TensorParameter(ParameterInput):
-    def __init__(self, *shape: int, initializer: Initializer, learnable: bool = True):
+    def __init__(
+        self,
+        *shape: int,
+        initializer: Initializer,
+        learnable: bool = True,
+        dtype: DataType = DataType.REAL,
+    ):
         super().__init__()
         self._shape = tuple(shape)
         self.initializer = initializer
         self.learnable = learnable
+        self.dtype = dtype
 
     def __copy__(self) -> "TensorParameter":
         cls = self.__class__
@@ -46,12 +54,17 @@ class TensorParameter(ParameterInput):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(initializer=self.initializer, learnable=self.learnable)
+        return dict(initializer=self.initializer, learnable=self.learnable, dtype=self.dtype)
 
 
 class ConstantParameter(TensorParameter):
     def __init__(self, *shape: int, value: Number = 0.0):
-        super().__init__(*shape, initializer=ConstantInitializer(value), learnable=False)
+        super().__init__(
+            *shape,
+            initializer=ConstantInitializer(value),
+            learnable=False,
+            dtype=dtype_value(value),
+        )
         self.value = value
 
     def __copy__(self) -> "ConstantParameter":

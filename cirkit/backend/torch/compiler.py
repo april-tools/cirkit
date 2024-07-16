@@ -367,7 +367,7 @@ def _fold_parameter_nodes_group(
             num_folds=len(group),
             requires_grad=group[0].requires_grad,
             initializer_=functools.partial(
-                stacked_initializer_, initializers=list(map(lambda p: p.initializer_, group))
+                stacked_initializer_, initializers=list(map(lambda p: p.initializer, group))
             ),
         )
         # If we are folding parameter tensors, then update the registry as to maintain the correct
