@@ -261,7 +261,7 @@ def conjugate(
     # Construct the sequence of output blocks
     output_blocks = [layers_to_block[sl] for sl in sc.outputs]
 
-    # Construct the integral symbolic circuit and set the integration operation metadata
+    # Construct the conjugate symbolic circuit
     return Circuit.from_operation(
         sc.scope,
         sc.num_channels,
