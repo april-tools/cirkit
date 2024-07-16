@@ -109,7 +109,7 @@ class TorchTensorParameter(TorchParameterInput):
 
     @property
     def fold_settings(self) -> Tuple[Any, ...]:
-        return self.shape, self.requires_grad
+        return self.shape, self.requires_grad, self._dtype
 
     @property
     def config(self) -> Dict[str, Any]:
