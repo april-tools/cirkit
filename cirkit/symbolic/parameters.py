@@ -1,7 +1,7 @@
-import operator
 from abc import ABC, abstractmethod
+from collections import ChainMap
 from copy import copy as shallowcopy
-from functools import cached_property, reduce
+from functools import cached_property
 from itertools import chain
 from numbers import Number
 from typing import Any, Callable, Dict, Optional, Protocol, Tuple, Union, final
@@ -315,7 +315,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
     def from_nary(cls, n: ParameterOp, *ps: Union[ParameterInput, "Parameter"]) -> "Parameter":
         ps = tuple(Parameter.from_leaf(p) if isinstance(p, ParameterInput) else p for p in ps)
         p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
-        in_nodes = reduce(operator.ior, (p.nodes_inputs for p in ps), {})
+        in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
         in_nodes[n] = list(p.output for p in ps)
         topologically_ordered = all(p.is_topologically_ordered for p in ps)
         return Parameter(
