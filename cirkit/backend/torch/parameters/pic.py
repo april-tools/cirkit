@@ -74,7 +74,7 @@ class FourierLayer(nn.Module):
         return '{}, {}, sigma={}'.format(self.in_features, self.out_features, self.sigma)
 
 
-class InputNet(nn.Module):
+class PICInputNet(nn.Module):
 
     def __init__(
         self,
@@ -87,8 +87,8 @@ class InputNet(nn.Module):
         ff_dim: Optional[int] = None,
         ff_sigma: Optional[float] = 1.0,
         learn_ff: Optional[bool] = False,
-        output_shape: Optional[Tuple[int]] = None,
-        z_quad: Optional[bool] = None
+        z_quad: Optional[torch.Tensor] = None,
+        tensor_parameter: Optional[TorchTensorParameter] = None
     ):
         super().__init__()
         assert sharing in ['none', 'f', 'c']
@@ -96,8 +96,8 @@ class InputNet(nn.Module):
         self.num_param = num_param
         self.num_channels = num_channels
         self.sharing = sharing
-        self.output_shape = output_shape
-        self.register_buffer('z_quad', z_quad)
+        self.tensor_parameter = tensor_parameter
+        if z_quad is not None: self.register_buffer('z_quad', z_quad)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
         inner_conv_groups = num_channels * (1 if sharing in ['f', 'c'] else num_vars)
@@ -114,6 +114,9 @@ class InputNet(nn.Module):
             if self.net[-1].bias is not None:
                 self.net[-1].bias.data = self.net[-1].bias.data[:num_param * num_channels].repeat(num_vars)
 
+        if tensor_parameter is not None and z_quad is not None:
+            with torch.no_grad(): _ = self()  # initialize tensor_parameter as result of self.forward()
+
     def forward(
         self,
         z_quad: Optional[torch.Tensor] = None,
@@ -126,10 +129,13 @@ class InputNet(nn.Module):
         param = torch.cat([self.net(chunk.unsqueeze(1)) for chunk in z_quad.chunk(n_chunks, dim=0)], dim=1)
         if self.sharing == 'f': param = param.unsqueeze(0).expand(self.num_vars, -1, -1)
         param = param.view(self.num_vars, self.num_param * self.num_channels, len(z_quad)).transpose(1, 2)
-        return param if self.output_shape is None else param.view(self.output_shape)
+        if self.tensor_parameter is not None:
+            param = param.view_as(self.tensor_parameter._ptensor)
+            self.tensor_parameter._ptensor.data = param
+        return param
 
 
-class InnerNet(nn.Module):
+class PICInnerNet(nn.Module):
 
     def __init__(
         self,
@@ -145,7 +151,7 @@ class InnerNet(nn.Module):
         learn_ff: Optional[bool] = False,
         z_quad: Optional[torch.Tensor] = None,
         w_quad: Optional[torch.Tensor] = None,
-        tensor_parameter: Optional[TorchTensorParameter] = None,
+        tensor_parameter: Optional[TorchTensorParameter] = None
     ):
         super().__init__()
         assert sharing in ['none', 'f', 'c']
@@ -159,8 +165,10 @@ class InnerNet(nn.Module):
         self.eps = np.sqrt(torch.finfo(torch.get_default_dtype()).tiny)
         self.tensor_parameter = tensor_parameter
 
-        self.register_buffer('z_quad', z_quad)
-        self.register_buffer('w_quad', w_quad)
+        assert (z_quad is None) == (w_quad is None), 'must both be given or both be None'
+        if z_quad is not None:
+            self.register_buffer('z_quad', z_quad)
+            self.register_buffer('w_quad', w_quad)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
         inner_conv_groups = 1 if sharing in ['c', 'f'] else num_funcs
@@ -179,6 +187,9 @@ class InnerNet(nn.Module):
             self.net[-2].weight.data = self.net[-2].weight.data[:1].repeat(num_funcs, 1, 1)
             if self.net[-2].bias is not None:
                 self.net[-2].bias.data = self.net[-2].bias.data[:1].repeat(num_funcs)
+
+        if tensor_parameter is not None and z_quad is not None:
+            with torch.no_grad(): _ = self()  # initialize tensor_parameter as result of self.forward()
 
     def forward(
         self,
@@ -205,6 +216,7 @@ class InnerNet(nn.Module):
         return param
 
 
+@torch.no_grad()
 def pc2qpc(
     pc: TorchCircuit,
     integration_method: str,
@@ -234,26 +246,25 @@ def pc2qpc(
         if isinstance(node, TorchCategoricalLayer):
             logits_shape = list(node.logits().shape)
             z_quad = zw_quadrature(integration_method=integration_method, nip=logits_shape[2])[0]
-            node.logits._nodes[0] = InputNet(
+            node.logits._nodes[0] = PICInputNet(
                 num_vars=logits_shape[0], num_param=logits_shape[-1], num_channels=logits_shape[-2],
                 net_dim=net_dim, bias=bias, sharing=input_sharing,
                 ff_dim=ff_dim, ff_sigma=ff_sigma, learn_ff=learn_ff,
-                z_quad=z_quad, output_shape=logits_shape)
+                z_quad=z_quad, tensor_parameter=node.logits._nodes[0])
         elif isinstance(node, TorchDenseLayer):
             assert len(node.weight._nodes) == 1, \
                 'You are probably using a reparameterization. Do not do that, QPCs are already normalized!'
             weight_shape = list(node.weight().shape)
             assert len(np.unique([dim_size for dim_size in weight_shape[1:] if dim_size != 1])) == 1, \
-                'Cannot model a dense layer with shape %s!' % str(weight_shape)
+                f'Cannot model a dense layer with shape {weight_shape}!'
             nip = max(np.unique(weight_shape[1:]))
             num_dim = sum(max(np.unique(weight_shape[1:])) == weight_shape[1:])
             z_quad, w_quad = zw_quadrature(integration_method=integration_method, nip=nip)
-            node.weight._nodes = nn.ModuleList([InnerNet(
+            node.weight._nodes = nn.ModuleList([PICInnerNet(
                 num_dim=num_dim, num_funcs=weight_shape[0], perm_dim=tuple(range(1, num_dim + 1)), norm_dim=(num_dim,),
                 net_dim=net_dim, bias=bias, sharing=inner_sharing,
                 ff_dim=ff_dim, ff_sigma=ff_sigma, learn_ff=learn_ff,
                 z_quad=z_quad, w_quad=w_quad, tensor_parameter=node.weight._nodes[0])])
-            node.weight()
         elif isinstance(node, TorchMixingLayer):
             assert len(node.weight._nodes) == 1, \
                 'You are probably using a reparameterization. Do not do that, QPCs are already normalized!'
