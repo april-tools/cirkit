@@ -1,6 +1,7 @@
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
+import einops as E
 from torch import Tensor
 
 from cirkit.backend.torch.graph.folding import (
@@ -23,7 +24,10 @@ class LayerAddressBook(AddressBook):
         self._in_graph_fn = in_graph_fn
 
     def lookup(
-        self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
+        self,
+        module_outputs: List[Tensor],
+        *,
+        in_graph: Optional[Tensor] = None,
     ) -> Iterator[Tuple[Tensor, ...]]:
         # Loop through the entries and yield inputs
         for entry in self._entries:
@@ -34,16 +38,25 @@ class LayerAddressBook(AddressBook):
                 (in_module_ids,) = entry.in_module_ids
                 if len(in_module_ids) == 1:
                     x = module_outputs[in_module_ids[0]]
+                elif len(module_outputs[0].shape) == 5 and in_fold_idx is None:
+                    x = [module_outputs[mid] for mid in in_module_ids]
+                elif len(module_outputs[0].shape) == 5 and in_fold_idx is not None:
+                    x = [
+                        torch.cat(module_outputs[mid], dim=0)[in_fold_idx] for mid in in_module_ids
+                    ]
                 else:
                     x = torch.cat([module_outputs[mid] for mid in in_module_ids], dim=0)
-                x = x[in_fold_idx]
+                    x = x[in_fold_idx]
                 yield (x,)
                 continue
 
-            # Catch the case there are no inputs coming from other modules
-            assert in_graph is not None and in_fold_idx is not None
-            x = self._in_graph_fn(in_graph, in_fold_idx)
-            yield (x,)
+            # Catch the case there are no inputs coming from other modules if not sampling
+            if in_graph is None:
+                yield ()
+            else:
+                assert in_fold_idx is not None
+                x = self._in_graph_fn(in_graph, in_fold_idx)
+                yield (x,)
 
     @classmethod
     def from_index_info(
@@ -152,6 +165,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 
     def _index_input(self, x: Tensor, idx: Tensor) -> Tensor:
         # Index and process the input tensor, before feeding it to the input layers
+        # idx: (F, D)
         # x: (B, C, D)
         return x[..., idx].permute(2, 1, 0, 3)  # (F, C, B, D)
 
@@ -160,11 +174,23 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         y = self._eval_forward(x)  # (1, num_classes, B, K)
         return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
 
+    def _sample_layers_forward(self, num_samples: int) -> Tensor:
+        # Sample layers
+        y = self._sample_forward(num_samples)
+        y = y[0, 0, ...]  # (C, N, D)
+        return y.permute(1, 0, 2)
+
+    def _sample_layers_backward(self, num_samples: int) -> Tensor:
+        # TODO: check dimensions
+        # Sample layers
+        y = self._sample_backward(num_samples)  # (N, num_classes, B, K)
+        return E.rearrange(y, "s n b k -> b n k s")  # (B, num_classes, K, N)
+
 
 class TorchCircuit(AbstractTorchCircuit):
     """The tensorized circuit with concrete computational graph in PyTorch.
 
-    This class is aimed for computation, and therefore does not include strutural properties.
+    This class is aimed for computation, and therefore does not include structural properties.
     """
 
     def __call__(self, x: Tensor) -> Tensor:
@@ -181,6 +207,12 @@ class TorchCircuit(AbstractTorchCircuit):
 
     def forward(self, x: Tensor) -> Tensor:
         return self._eval_layers(x)
+
+    def sample_forward(self, num_samples: int) -> Tensor:
+        return self._sample_layers_forward(num_samples)
+
+    def sample_backward(self, num_samples: int) -> Tensor:
+        return self._sample_layers_backward(num_samples)
 
 
 class TorchConstantCircuit(AbstractTorchCircuit):

@@ -1,6 +1,6 @@
 import functools
 from abc import ABC
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple, List
 
 import torch
 from torch import Tensor, nn
@@ -83,6 +83,10 @@ class TorchHadamardLayer(TorchProductLayer):
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, *B, K) -> (F, *B, K).
+
+    def sample_forward(self, num_samples: int, x: List[Tensor]) -> Tensor:
+        x = torch.cat(x, dim=-1)
+        return x
 
 
 class TorchKroneckerLayer(TorchProductLayer):
@@ -244,3 +248,37 @@ class TorchMixingLayer(TorchSumLayer):
         """
         # shape (F, H, *B, K) -> (F, *B, K).
         return self.semiring.sum(self._forward_impl, x, dim=1, keepdim=False)
+
+    def sample_forward(self, num_samples: int, x: List[Tensor]) -> Tensor:
+        x = torch.cat(x, dim=1)
+
+        mixing_distribution = torch.distributions.Categorical(
+            logits=self.weight()
+        )  # shape (F, D, K)
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_samples = mixing_samples.permute(1, 2, 0)
+        mixing_samples = mixing_samples.unsqueeze(2).unsqueeze(-1)
+        mixing_samples = mixing_samples * torch.ones_like(x[:, :1, ...])
+
+        return torch.gather(x, 1, mixing_samples)
+
+    def sample_backward(
+        self,
+        sample_dict: Dict[TorchLayer, List[Tensor]],
+        unit_dict: Dict[TorchLayer, List[Tensor]],
+        num_samples: int,
+    ) -> Tensor:
+        mixing_distribution = torch.distributions.Categorical(logits=self.weight())
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_sample_weights = torch.gather(self.weight(), 1, mixing_samples.unsqueeze(1))
+
+        idx1, idx2 = torch.unravel_index(mixing_samples, self.weight().shape)
+
+        for i, layer in enumerate(sample_dict.keys()):
+            sample_idx = sample_dict[self][idx1[i]]
+            sample_dict[layer].extend(sample_idx)
+
+            unit_idx = unit_dict[self][idx2[i]]
+            unit_dict[layer].extend(unit_idx)
+
+        return mixing_sample_weights

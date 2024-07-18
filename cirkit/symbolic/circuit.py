@@ -19,7 +19,7 @@ AbstractCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or bette
 
 
 class CircuitOperator(AbstractCircuitOperator):
-    """Types of Symolic operations on circuits."""
+    """Types of Symbolic operations on circuits."""
 
     def _generate_next_value_(self, start: int, count: int, last_values: list) -> int:
         return -(

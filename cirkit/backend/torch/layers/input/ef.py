@@ -1,11 +1,12 @@
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import numpy as np
 import torch
 from torch import Tensor, distributions, nn
 from torch.nn import functional as F
 
+from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import SemiringCls
@@ -64,6 +65,19 @@ class TorchExpFamilyLayer(TorchInputLayer):
             Tensor: The output of this layer, shape (*B, Ko).
         """
         return self.semiring.from_lse_sum(self.log_score(x))
+
+    @abstractmethod
+    def sample_forward(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
+        ...
+
+    @abstractmethod
+    def sample_backward(
+        self,
+        sample_dict: Dict[TorchLayer, List[Tensor]],
+        unit_dict: Dict[TorchLayer, List[Tensor]],
+        num_samples: int,
+    ) -> Tensor:
+        ...
 
     @abstractmethod
     def log_score(self, x: Tensor) -> Tensor:
@@ -150,11 +164,33 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             params.update(logits=self.logits)
         return params
 
+    def sample_forward(self, num_samples: int) -> Tensor:
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        distribution = distributions.Categorical(logits=logits)
+
+        samples = distribution.sample((num_samples,))  # (N, F, D, K = 1, C)
+        return samples.permute(3, 1, 4, 0, 2)  # (K, F, C, N, D
+        # return samples.permute(1, 3, 4, 0, 2)  # (F, K, C, N, D)
+
+    def sample_backward(
+        self,
+        sample_dict: Dict[TorchLayer, List[Tensor]],
+        unit_dict: Dict[TorchLayer, List[Tensor]],
+        num_samples: int,
+    ) -> Tensor:
+        # TODO: if possible, implement sampling without torch distributions
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+
+        sample_idx = sample_dict[self]
+        unit_idx = unit_dict[self]
+
+        pairs = torch.vstack([sample_idx, unit_idx])
+
+        raise NotImplementedError("Backward sampling is not fully implemented yet!")
+
     def log_score(self, x: Tensor) -> Tensor:
-        if x.is_floating_point():
-            x = x.long()  # The input to Categorical should be discrete
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
         x = F.one_hot(x, self.num_categories)  # (F, C, *B, D, num_categories)
         x = x.to(torch.get_default_dtype())
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
         x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
         return x

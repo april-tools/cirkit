@@ -1,4 +1,5 @@
 import abc
+import torch
 import itertools
 from abc import ABC
 from functools import cached_property
@@ -54,6 +55,73 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
                 return output
             y = module(*inputs)
             module_outputs.append(y)
+
+    def _sample_forward(self, num_samples: int) -> Tensor:
+        if self._fold_idx_info is not None:
+            raise NotImplementedError("Folded forward sampling is not implemented yet!")
+
+        """
+        Sample the computational graph by following the topological ordering forwards
+        """
+
+        module_outputs: List[Tensor] = []
+        mixture_outputs: List[Tensor] = []
+        inputs_iterator = self._address_book.lookup(module_outputs)
+        for module, inputs in itertools.zip_longest(self.topological_ordering(), inputs_iterator):
+            if module is None:
+                (output,) = inputs
+                return output
+            elif inputs == ():
+                # input nodes take no inputs for sampling
+                y = module.sample_forward(num_samples)
+            else:
+                # inner nodes take inputs for sampling
+                y = module.sample_forward(num_samples, *inputs)
+
+            if type(y) is tuple:
+                module_outputs.append(y[0])
+                mixture_outputs.append(y[1])
+            else:
+                module_outputs.append(y)
+
+    def _sample_backward(self, num_samples: int) -> Tensor:
+        if self._fold_idx_info is not None:
+            raise NotImplementedError("Folded backward sampling is not implemented yet!")
+        raise NotImplementedError("Backward sampling is not implemented yet!")
+
+        """
+        Sample the computational graph by following the topological ordering backwards
+        """
+
+        sample_dict = {layer: [] for layer in self.modules()}
+        unit_dict = {layer: [] for layer in self.modules()}
+
+        inner_module_weights: List[Tensor] = []
+        input_modules: List[nn.Module] = []
+        module_iterator = self.topological_ordering()
+        for module in reversed(module_iterator):
+            if module.num_input_units == 0:
+                input_modules.append(module)
+            else:
+                sample_weights = module._sample_backward(
+                    sample_dict=sample_dict,
+                    unit_dict=unit_dict,
+                    num_samples=num_samples,
+                )
+                inner_module_weights.append(sample_weights)
+
+        samples = []
+        for module in input_modules:
+            samples.append(
+                module.sample_backward(
+                    sample_dict=sample_dict,
+                    unit_dict=unit_dict,
+                    num_samples=num_samples,
+                )
+            )
+
+        samples = torch.stack(samples, dim=0)
+        return samples
 
 
 class TorchRootedDiAcyclicGraph(TorchDiAcyclicGraph[TorchModuleType], ABC):
