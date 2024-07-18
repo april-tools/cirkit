@@ -1,6 +1,6 @@
 import os
 from abc import ABC, abstractmethod
-from typing import IO, Any, Optional, Protocol, Type, TypeVar, Union
+from typing import IO, Any, Optional, Protocol, Type, TypeVar, Union, cast
 
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.symbolic.circuit import Circuit
@@ -61,55 +61,66 @@ class CompilationRuleNotFound(Exception):
 
 class CompilerLayerRegistry(CompilerRegistry[LayerCompilationSign, LayerCompilationFunc]):
     @classmethod
-    def _validate_rule_signature(cls, func: LayerCompilationFunc) -> Optional[LayerCompilationSign]:
+    def _validate_rule_function(cls, func: LayerCompilationFunc) -> bool:
         args = func.__annotations__
         if "return" not in args or "compiler" not in args or len(args) != 3:
-            return None
+            return False
         if not issubclass(args["compiler"], AbstractCompiler):
-            return None
+            return False
         arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
         found_sym_cls = args[arg_names[0]]
-        if not issubclass(found_sym_cls, Layer):
-            return None
-        return found_sym_cls
+        return issubclass(found_sym_cls, Layer)
+
+    @classmethod
+    def _retrieve_signature(cls, func: LayerCompilationFunc) -> LayerCompilationSign:
+        args = func.__annotations__
+        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
+        found_sym_cls = args[arg_names[0]]
+        return cast(LayerCompilationSign, found_sym_cls)
 
 
 class CompilerParameterRegistry(
     CompilerRegistry[ParameterCompilationSign, ParameterCompilationFunc]
 ):
     @classmethod
-    def _validate_rule_signature(
-        cls, func: ParameterCompilationFunc
-    ) -> Optional[ParameterCompilationSign]:
+    def _validate_rule_function(cls, func: ParameterCompilationFunc) -> bool:
         args = func.__annotations__
         if "return" not in args or "compiler" not in args or len(args) != 3:
-            return None
+            return False
         if not issubclass(args["compiler"], AbstractCompiler):
-            return None
+            return False
         arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
         found_sym_cls = args[arg_names[0]]
-        if not issubclass(found_sym_cls, ParameterNode):
-            return None
-        return found_sym_cls
+        return issubclass(found_sym_cls, ParameterNode)
+
+    @classmethod
+    def _retrieve_signature(cls, func: ParameterCompilationFunc) -> ParameterCompilationSign:
+        args = func.__annotations__
+        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
+        found_sym_cls = args[arg_names[0]]
+        return cast(ParameterCompilationSign, found_sym_cls)
 
 
 class CompilerInitializerRegistry(
     CompilerRegistry[InitializerCompilationSign, InitializerCompilationFunc]
 ):
     @classmethod
-    def _validate_rule_signature(
-        cls, func: ParameterCompilationFunc
-    ) -> Optional[InitializerCompilationSign]:
+    def _validate_rule_function(cls, func: InitializerCompilationFunc) -> bool:
         args = func.__annotations__
         if "return" not in args or "compiler" not in args or len(args) != 3:
-            return None
+            return False
         if not issubclass(args["compiler"], AbstractCompiler):
-            return None
+            return False
         arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
         found_sym_cls = args[arg_names[0]]
-        if not issubclass(found_sym_cls, Initializer):
-            return None
-        return found_sym_cls
+        return issubclass(found_sym_cls, Initializer)
+
+    @classmethod
+    def _retrieve_signature(cls, func: ParameterCompilationFunc) -> InitializerCompilationSign:
+        args = func.__annotations__
+        arg_names = list(filter(lambda a: a not in ("return", "compiler"), args.keys()))
+        found_sym_cls = args[arg_names[0]]
+        return cast(InitializerCompilationSign, found_sym_cls)
 
 
 class AbstractCompiler(ABC):
