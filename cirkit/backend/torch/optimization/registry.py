@@ -66,7 +66,7 @@ class LayerOptApplyFunc(Protocol):
 class ParameterOptRegistry(CompilerRegistry[ParameterOptPattern, ParameterOptApplyFunc]):
     @classmethod
     def _validate_rule_function(cls, func: ParameterOptApplyFunc) -> bool:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return ann[args[-1]] == ParameterOptMatch
@@ -75,7 +75,7 @@ class ParameterOptRegistry(CompilerRegistry[ParameterOptPattern, ParameterOptApp
 class LayerOptRegistry(CompilerRegistry[LayerOptPattern, LayerOptApplyFunc]):
     @classmethod
     def _validate_rule_function(cls, func: LayerOptApplyFunc) -> bool:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return ann[args[-1]] == LayerOptMatch
