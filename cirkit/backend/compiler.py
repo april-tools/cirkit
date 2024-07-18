@@ -62,14 +62,14 @@ class CompilationRuleNotFound(Exception):
 class CompilerLayerRegistry(CompilerRegistry[LayerCompilationSign, LayerCompilationFunc]):
     @classmethod
     def _validate_rule_function(cls, func: LayerCompilationFunc) -> bool:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return issubclass(ann[args[-1]], Layer)
 
     @classmethod
     def _retrieve_signature(cls, func: LayerCompilationFunc) -> LayerCompilationSign:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return cast(LayerCompilationSign, ann[args[-1]])
@@ -80,14 +80,14 @@ class CompilerParameterRegistry(
 ):
     @classmethod
     def _validate_rule_function(cls, func: ParameterCompilationFunc) -> bool:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return issubclass(ann[args[-1]], ParameterNode)
 
     @classmethod
     def _retrieve_signature(cls, func: ParameterCompilationFunc) -> ParameterCompilationSign:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return cast(ParameterCompilationSign, ann[args[-1]])
@@ -98,14 +98,14 @@ class CompilerInitializerRegistry(
 ):
     @classmethod
     def _validate_rule_function(cls, func: InitializerCompilationFunc) -> bool:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return issubclass(ann[args[-1]], Initializer)
 
     @classmethod
     def _retrieve_signature(cls, func: ParameterCompilationFunc) -> InitializerCompilationSign:
-        ann = func.__annotations__
+        ann = func.__annotations__.copy()
         del ann["return"]
         args = tuple(ann.keys())
         return cast(InitializerCompilationSign, ann[args[-1]])
