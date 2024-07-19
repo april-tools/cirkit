@@ -131,7 +131,7 @@ class PICInputNet(nn.Module):
         param = param.view(self.num_vars, self.num_param * self.num_channels, len(z_quad)).transpose(1, 2)
         if self.tensor_parameter is not None:
             param = param.view_as(self.tensor_parameter._ptensor)
-            self.tensor_parameter._ptensor.data = param
+            self.tensor_parameter._ptensor = param
         return param
 
 
@@ -212,7 +212,7 @@ class PICInnerNet(nn.Module):
         param = (logits / (logits * w_meshgrid).sum(self.norm_dim, True)) * w_meshgrid
         if self.tensor_parameter is not None:
             param = param.view_as(self.tensor_parameter._ptensor)
-            self.tensor_parameter._ptensor.data = param
+            self.tensor_parameter._ptensor = param
         return param
 
 
