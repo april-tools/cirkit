@@ -38,7 +38,7 @@ def categorical_layer_factory(
         scope,
         num_units,
         num_channels,
-        num_categories=num_categories,
+        num_categories,
         parameterization=parameterization,
         initializer=initializer,
     )
