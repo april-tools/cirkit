@@ -22,6 +22,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
 
     # Retrieve the union of the scopes of the circuits
     scope = functools.reduce(operator.ior, map(lambda sc: sc.scope, scs))
+    assert scope == scs[0].scope
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
     layers_to_block: Dict[Layer, CircuitBlock] = {}

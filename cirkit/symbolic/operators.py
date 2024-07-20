@@ -69,6 +69,7 @@ def integrate_gaussian_layer(
 def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) -> CircuitBlock:
     assert sl1.num_variables == sl2.num_variables
     assert sl1.num_channels == sl2.num_channels
+    assert sl1.num_categories == sl2.num_categories
     if sl1.logits is None:
         sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs)
     else:
@@ -86,6 +87,7 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
         sl1.scope | sl2.scope,
         sl1.num_output_units * sl2.num_output_units,
         num_channels=sl1.num_channels,
+        num_categories=sl1.num_categories,
         logits=sl_logits,
     )
     return CircuitBlock.from_layer(sl)

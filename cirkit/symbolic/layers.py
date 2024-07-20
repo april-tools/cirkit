@@ -82,7 +82,7 @@ class CategoricalLayer(InputLayer):
         scope: Scope,
         num_output_units: int,
         num_channels: int,
-        num_categories: int = 2,
+        num_categories: int,
         logits: Optional[Parameter] = None,
         probs: Optional[Parameter] = None,
         logits_factory: Optional[ParameterFactory] = None,
