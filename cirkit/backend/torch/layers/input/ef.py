@@ -56,10 +56,10 @@ class TorchExpFamilyLayer(TorchInputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
         x = self.log_unnormalized_likelihood(x)
         return self.semiring.map_from(x, LSESumSemiring)
@@ -149,7 +149,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete
-        x = F.one_hot(x, self.num_categories)  # (F, C, *B, D, num_categories)
+        x = F.one_hot(x, self.num_categories)  # (F, C, B, D, num_categories)
         x = x.to(torch.get_default_dtype())
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         x = torch.einsum("fcbdi,fdkci->fbk", x, logits)

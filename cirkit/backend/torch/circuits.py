@@ -171,10 +171,10 @@ class TorchCircuit(AbstractTorchCircuit):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input of the circuit, shape (*B, C, D).
+            x (Tensor): The input of the circuit, shape (B, C, D).
 
         Returns:
-            Tensor: The output of the circuit, shape (*B, num_out, num_cls).
+            Tensor: The output of the circuit, shape (B, num_out, num_cls).
         """  # TODO: single letter name?
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
@@ -193,7 +193,7 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         """Invoke the forward function.
 
         Returns:
-            Tensor: The output of the circuit, shape (*B, num_out, num_cls).
+            Tensor: The output of the circuit, shape (B, num_out, num_cls).
         """  # TODO: single letter name?
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__()  # type: ignore[no-any-return,misc]

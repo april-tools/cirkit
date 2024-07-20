@@ -54,12 +54,12 @@ class TorchLogPartitionLayer(TorchInputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (F, *B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
         value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
-        # (F, Ko) -> (F, *B, O)
-        value = value.expand(value.shape[0], *x.shape[2:-1], value.shape[2])
+        # (F, Ko) -> (F, B, O)
+        value = value.expand(value.shape[0], x.shape[2], value.shape[2])
         return self.semiring.map_from(value, LSESumSemiring)

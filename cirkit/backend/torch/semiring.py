@@ -18,8 +18,6 @@ from typing_extensions import TypeVarTuple, Unpack, final
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.utils import flatten_dims, unflatten_dims
-
 Ts = TypeVarTuple("Ts")
 Semiring = TypeVar("Semiring", bound=Type["SemiringImpl"])
 
@@ -168,7 +166,7 @@ class SemiringImpl(ABC):
         *,
         inputs: Tuple[Tensor, ...],
         operands: Tuple[Tensor, ...],
-        dim: Union[int, Sequence[int]],
+        dim: int,
         keepdim: bool,
     ) -> Tensor:
         operands = tuple(cls.cast(opd) for opd in operands)
@@ -176,7 +174,7 @@ class SemiringImpl(ABC):
         def _einsum_func(*xs: Tensor) -> Tensor:
             return torch.einsum(equation, *xs, *operands)
 
-        return cls.apply(_einsum_func, *inputs, dim=dim, keepdim=keepdim)
+        return cls.apply_reduce(_einsum_func, *inputs, dim=dim, keepdim=keepdim)
 
     # NOTE: Subclasses should not touch any of the above final static methods but should implement
     #       all the following abstract class methods, and subclasses should be @final.
@@ -255,11 +253,11 @@ class SemiringImpl(ABC):
 
     @classmethod
     @abstractmethod
-    def apply(
+    def apply_reduce(
         cls,
         func: Callable[[Unpack[Ts]], Tensor],
         *xs: Unpack[Ts],
-        dim: Union[int, Sequence[int]],
+        dim: int,
         keepdim: bool,
     ) -> Tensor:
         """Apply a sum-like functions to the tensor(s).
@@ -276,8 +274,8 @@ class SemiringImpl(ABC):
         Args:
             func (Callable[[Unpack[Ts]], Tensor]): The sum-like function to be applied.
             *xs (Unpack[Ts]): The input tensors. Type expected to be Tensor.
-            dim (Union[int, Sequence[int]]): The dimension(s) along which the values are \
-                correlated and must be scaled together, i.e., the dim(s) to sum along. This should \
+            dim (int): The dimension along which the values are \
+                correlated and must be scaled together, i.e., the dim to sum along. This should \
                 match the actual operation done by func. The same dim is shared among all inputs.
             keepdim (bool): Whether the dim is kept as a size-1 dim, should match the actual \
                 operation done by func.
@@ -308,9 +306,8 @@ class SumProductSemiring(SemiringImpl):
 
     @classmethod
     def sum(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
     ) -> Tensor:
-        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -319,28 +316,22 @@ class SumProductSemiring(SemiringImpl):
 
     @classmethod
     def prod(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
     ) -> Tensor:
         # prod only accepts one dim and cannot be None.
-        dims = dim if isinstance(dim, Sequence) else (dim,) if dim is not None else range(x.ndim)
-
-        x = torch.prod(flatten_dims(x, dims=dims), dim=dims[0], keepdim=keepdim)
-        if keepdim:  # We don't need to unflatten if not keepdim -- dims are just squeezed.
-            # If we do keepdim, just "unqueeze" the 1s to the correct position.
-            x = unflatten_dims(x, dims=dims, shape=(1,) * len(dims))
-
-        return x
+        dim = dim if dim is not None else range(x.ndim)
+        return torch.prod(x, dim=dim, keepdim=keepdim)
 
     @classmethod
     def mul(cls, *xs: Tensor) -> Tensor:
         return functools.reduce(torch.mul, xs)
 
     @classmethod
-    def apply(
+    def apply_reduce(
         cls,
         func: Callable[[Unpack[Ts]], Tensor],
         *xs: Unpack[Ts],
-        dim: Union[int, Sequence[int]],
+        dim: int,
         keepdim: bool,
     ) -> Tensor:
         return func(*xs)
@@ -359,9 +350,8 @@ class LSESumSemiring(SemiringImpl):
 
     @classmethod
     def sum(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
     ) -> Tensor:
-        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -370,7 +360,7 @@ class LSESumSemiring(SemiringImpl):
 
     @classmethod
     def prod(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
     ) -> Tensor:
         dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.sum(dim=dim, keepdim=keepdim)
@@ -380,41 +370,32 @@ class LSESumSemiring(SemiringImpl):
         return functools.reduce(torch.add, xs)
 
     @classmethod
-    def apply(
+    def apply_reduce(
         cls,
         func: Callable[[Unpack[Ts]], Tensor],
         *xs: Unpack[Ts],
-        dim: Union[int, Sequence[int]],
+        dim: int,
         keepdim: bool,
     ) -> Tensor:
-        dims = tuple(dim) if isinstance(dim, Sequence) else (dim,)
-
         # NOTE: Due to usage of intermediate results, they need to be instantiated in lists but not
         #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
-        x = [cast(Tensor, xi) for xi in xs]
-        # We need flatten because max only works on one dim, and then match shape for exp_x.
-        max_x = [
-            unflatten_dims(
-                torch.max(flatten_dims(xi, dims=dims), dim=dims[0], keepdim=True)[0],
-                dims=dims,
-                shape=(1,) * len(dims),  # The size for dims is 1 after max.
-            )
-            for xi in x
+        xs = [cast(Tensor, xi) for xi in xs]
+        max_xs = [
+            torch.max(xi, dim=dim, keepdim=True)[0]
+            for xi in xs
         ]
-        exp_x = [torch.exp(xi - xi_max) for xi, xi_max in zip(x, max_x)]
+        exp_xs = [torch.exp(xi - max_xi) for xi, max_xi in zip(xs, max_xs)]
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
         # CAST: Expected Ts but got tuple (actually list) of Tensor.
-        func_exp_x = func(*cast(Tuple[Unpack[Ts]], exp_x))
+        func_exp_xs = func(*cast(Tuple[Unpack[Ts]], exp_xs))
 
         # TODO: verify the behavior of reduce under torch.compile
-        sum_max_x = functools.reduce(torch.add, max_x)  # Do n-1 add instead of n.
+        reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
         if not keepdim:
-            sum_max_x = sum_max_x.squeeze(dims)  # To match shape of func_exp_x.
-        log_func_exp_x = torch.log(func_exp_x) + sum_max_x
-
-        return log_func_exp_x
+            reduced_max_xs = reduced_max_xs.squeeze(dim)  # To match shape of func_exp_x.
+        return torch.log(func_exp_xs) + reduced_max_xs
 
 
 @SemiringImpl.register("complex-lse-sum")
@@ -436,9 +417,8 @@ class ComplexLSESumSemiring(SemiringImpl):
 
     @classmethod
     def sum(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
     ) -> Tensor:
-        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -447,9 +427,8 @@ class ComplexLSESumSemiring(SemiringImpl):
 
     @classmethod
     def prod(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
     ) -> Tensor:
-        dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -457,41 +436,32 @@ class ComplexLSESumSemiring(SemiringImpl):
         return functools.reduce(torch.add, xs)
 
     @classmethod
-    def apply(
+    def apply_reduce(
         cls,
         func: Callable[[Unpack[Ts]], Tensor],
         *xs: Unpack[Ts],
-        dim: Union[int, Sequence[int]],
+        dim: int,
         keepdim: bool,
     ) -> Tensor:
-        dims = tuple(dim) if isinstance(dim, Sequence) else (dim,)
-
         # NOTE: Due to usage of intermediate results, they need to be instantiated in lists but not
         #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
-        x = [cast(Tensor, xi) for xi in xs]
-        # We need flatten because max only works on one dim, and then match shape for exp_x.
-        max_x = [
-            unflatten_dims(
-                torch.max(flatten_dims(xi.real, dims=dims), dim=dims[0], keepdim=True)[0],
-                dims=dims,
-                shape=(1,) * len(dims),  # The size for dims is 1 after max.
-            )
-            for xi in x
+        xs = [cast(Tensor, xi) for xi in xs]
+        max_xs = [
+            torch.max(xi.real, dim=dim, keepdim=True)[0]
+            for xi in xs
         ]
-        exp_x = [torch.exp(xi - xi_max) for xi, xi_max in zip(x, max_x)]
+        exp_xs = [torch.exp(xi - max_xi) for xi, max_xi in zip(xs, max_xs)]
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
         # CAST: Expected Ts but got tuple (actually list) of Tensor.
-        func_exp_x = func(*cast(Tuple[Unpack[Ts]], exp_x))
+        func_exp_xs = func(*cast(Tuple[Unpack[Ts]], exp_xs))
 
         # TODO: verify the behavior of reduce under torch.compile
-        sum_max_x = functools.reduce(torch.add, max_x)  # Do n-1 add instead of n.
+        reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
         if not keepdim:
-            sum_max_x = sum_max_x.squeeze(dims)  # To match shape of func_exp_x.
-        log_func_exp_x = torch.log(func_exp_x) + sum_max_x
-
-        return log_func_exp_x
+            reduced_max_xs = reduced_max_xs.squeeze(dim)  # To match shape of func_exp_x.
+        return torch.log(func_exp_xs) + reduced_max_xs
 
 
 @SumProductSemiring.register_map_from(LSESumSemiring)
