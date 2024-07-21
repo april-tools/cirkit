@@ -25,7 +25,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
     # TODO: refactor scope class, I (LL) do not understand why do we would have different implementations
     #       of the Scope data structure. What is the difference between Scope and FrozenSetScope?
     #       Why do not we have just a frozen set or a bitmap?
-    #assert scope == scs[0].scope
+    # assert scope == scs[0].scope
     assert tuple(scope) == tuple(scs[0].scope)
 
     # Mapping the symbolic circuit layers with blocks of circuit layers

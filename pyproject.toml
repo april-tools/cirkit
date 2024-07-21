@@ -83,12 +83,12 @@ exclude_also = [  # regex for exclusion
 # code style
 [tool.black]
 line-length = 100
-target-version = ["py39"]
+target-version = ["py38"]
 required-version = "23"
 
 # import style
 [tool.isort]
-py_version = 39
+py_version = 38
 profile = "black"
 line_length = 100
 extra_standard_library = [  # we treat these as stdlib

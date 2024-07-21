@@ -305,9 +305,7 @@ class SumProductSemiring(SemiringImpl):
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
-    def sum(
-        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
-    ) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -315,9 +313,7 @@ class SumProductSemiring(SemiringImpl):
         raise functools.reduce(torch.add, xs)
 
     @classmethod
-    def prod(
-        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
-    ) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
         # prod only accepts one dim and cannot be None.
         dim = dim if dim is not None else range(x.ndim)
         return torch.prod(x, dim=dim, keepdim=keepdim)
@@ -349,9 +345,7 @@ class LSESumSemiring(SemiringImpl):
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
-    def sum(
-        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
-    ) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -359,9 +353,7 @@ class LSESumSemiring(SemiringImpl):
         return functools.reduce(torch.logaddexp, xs)
 
     @classmethod
-    def prod(
-        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
-    ) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
         dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.sum(dim=dim, keepdim=keepdim)
 
@@ -381,10 +373,7 @@ class LSESumSemiring(SemiringImpl):
         #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
         xs = [cast(Tensor, xi) for xi in xs]
-        max_xs = [
-            torch.max(xi, dim=dim, keepdim=True)[0]
-            for xi in xs
-        ]
+        max_xs = [torch.max(xi, dim=dim, keepdim=True)[0] for xi in xs]
         exp_xs = [torch.exp(xi - max_xi) for xi, max_xi in zip(xs, max_xs)]
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
@@ -416,9 +405,7 @@ class ComplexLSESumSemiring(SemiringImpl):
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
-    def sum(
-        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
-    ) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -426,9 +413,7 @@ class ComplexLSESumSemiring(SemiringImpl):
         return functools.reduce(torch.logaddexp, xs)
 
     @classmethod
-    def prod(
-        cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False
-    ) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -447,10 +432,7 @@ class ComplexLSESumSemiring(SemiringImpl):
         #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
         xs = [cast(Tensor, xi) for xi in xs]
-        max_xs = [
-            torch.max(xi.real, dim=dim, keepdim=True)[0]
-            for xi in xs
-        ]
+        max_xs = [torch.max(xi.real, dim=dim, keepdim=True)[0] for xi in xs]
         exp_xs = [torch.exp(xi - max_xi) for xi, max_xi in zip(xs, max_xs)]
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
@@ -473,12 +455,12 @@ class ComplexLSESumSemiring(SemiringImpl):
         # in turn might result in underflows. This has been observed in float32 for squared
         # non-monotonic PCs with real parameters. To solve this issue, here we clamp the real
         # part to be at least the tiny value of the default float dtype precision, in absolute.
-        # Note that we do not need to clamp also the imaginary parts, since the complex gradients of 
+        # Note that we do not need to clamp also the imaginary parts, since the complex gradients of
         # log(v + 0j) are 'well-behaved' for every non-zero real value 'v'.
         # Furthermore, torch.compile is used to hopefully obtain a faster kernel.
         # NOTE: to reproduce the bug, place the following assertion in the above code.
         #       This checks whether the real output of the function in the 'apply_reduce' is not 0.0.
-        #assert not torch.any(torch.isclose(func_exp_xs.real.sign(), torch.tensor(0.0, device=func_exp_xs.device)))
+        # assert not torch.any(torch.isclose(func_exp_xs.real.sign(), torch.tensor(0.0, device=func_exp_xs.device)))
         clamped_x_real = ComplexLSESumSemiring._double_zero_clamp(x.real)
         return torch.log(torch.complex(clamped_x_real, x.imag))
 
