@@ -27,7 +27,7 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "torch~=2.2.0",
+  "torch~=2.3.0",
   "numpy<2.0.0"
 ]
 
@@ -44,7 +44,7 @@ dev = [
 ]
 notebooks = [
   "notebook",
-  "torchvision~=0.17.0",
+  "torchvision~=0.18.0",
   "matplotlib",
   "scikit-learn",
   "pandas",

@@ -461,7 +461,33 @@ class ComplexLSESumSemiring(SemiringImpl):
         reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
         if not keepdim:
             reduced_max_xs = reduced_max_xs.squeeze(dim)  # To match shape of func_exp_x.
-        return torch.log(func_exp_xs) + reduced_max_xs
+        return ComplexLSESumSemiring._grad_safe_complex_log(func_exp_xs) + reduced_max_xs
+
+    @classmethod
+    def _grad_safe_complex_log(cls, x: Tensor) -> Tensor:
+        # Compute log(x) safely where x is a complex tensor.
+        # The problem is that if x = 0 + 0j, then the complex gradient of log(x) yields NaNs.
+        # Note that for real non-monotonic circuits this problem cannot be avoided by simply
+        # clipping the parameters of e.g., dense layers. In fact, even if we clipped the parameters
+        # to be sufficiently far from zero, cancellations would still arise from negations, which
+        # in turn might result in underflows. This has been observed in float32 for squared
+        # non-monotonic PCs with real parameters. To solve this issue, here we clamp the real
+        # part to be at least the tiny value of the default float dtype precision, in absolute.
+        # Note that we do not need to clamp also the imaginary parts, since the complex gradients of 
+        # log(v + 0j) are 'well-behaved' for every non-zero real value 'v'.
+        # Furthermore, torch.compile is used to hopefully obtain a faster kernel.
+        # NOTE: to reproduce the bug, place the following assertion in the above code.
+        #       This checks whether the real output of the function in the 'apply_reduce' is not 0.0.
+        #assert not torch.any(torch.isclose(func_exp_xs.real.sign(), torch.tensor(0.0, device=func_exp_xs.device)))
+        clamped_x_real = ComplexLSESumSemiring._double_zero_clamp(x.real)
+        return torch.log(torch.complex(clamped_x_real, x.imag))
+
+    @torch.compile()
+    def _double_zero_clamp(x: Tensor) -> Tensor:
+        eps = torch.finfo(torch.get_default_dtype()).tiny
+        close_zero_mask = (x > -eps) & (x < eps)
+        clamped_x = eps * (1.0 - 2.0 * torch.signbit(x))
+        return torch.where(close_zero_mask, clamped_x, x)
 
 
 @SumProductSemiring.register_map_from(LSESumSemiring)
