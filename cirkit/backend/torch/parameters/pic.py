@@ -3,8 +3,8 @@ import torch.nn as nn
 import numpy as np
 import torch
 
-from cirkit.backend.torch.parameters.leaves import TorchTensorParameter
-from cirkit.backend.torch.models import TorchCircuit
+from cirkit.backend.torch.parameters.nodes import TorchTensorParameter
+from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.layers import *
 
 
