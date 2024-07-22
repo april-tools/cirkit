@@ -112,10 +112,6 @@ class TorchTuckerLayer(TorchInnerLayer):
         # CAST: int**int is not guaranteed to be int.
         return cast(int, num_input_units**arity)
 
-    def _forward_linear(self, x0: Tensor, x1: Tensor) -> Tensor:
-        # shape (*B, I), (*B, J) -> (*B, O).
-        return torch.einsum("oij,...i,...j->...o", self.weight(), x0, x1)
-
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
@@ -125,4 +121,7 @@ class TorchTuckerLayer(TorchInnerLayer):
         Returns:
             Tensor: The output of this layer, shape (*B, Ko).
         """
-        return self.semiring.sum(self._forward_linear, x[0], x[1], dim=-1, keepdim=True)
+        weight = self.weight()
+        return self.semiring.einsum(
+            "oij,...i,...j->...o", operands=(weight,), inputs=(x[0], x[1]), dim=-1, keepdim=True
+        )

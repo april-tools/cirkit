@@ -4,7 +4,7 @@ from torch import Tensor
 
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.semiring import LSESumSemiring, Semiring
 from cirkit.utils.scope import Scope
 
 
@@ -22,7 +22,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         num_channels: int = 1,
         num_folds: int = 1,
         value: TorchParameter,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -62,4 +62,4 @@ class TorchLogPartitionLayer(TorchInputLayer):
         value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
         # (F, Ko) -> (F, *B, O)
         value = value.expand(value.shape[0], *x.shape[2:-1], value.shape[2])
-        return self.semiring.from_lse_sum(value)
+        return self.semiring.map_from(value, LSESumSemiring)

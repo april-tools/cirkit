@@ -5,7 +5,7 @@ from copy import copy as shallowcopy
 from functools import cached_property, reduce
 from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, Tuple, Union, final
+from typing import Any, Callable, Dict, Tuple, Union, final, Optional
 
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
@@ -225,6 +225,31 @@ class ScaledSigmoidParameter(EntrywiseOpParameter):
     @property
     def config(self) -> Dict[str, Any]:
         return dict(vmin=self.vmin, vmax=self.vmax)
+
+
+class ClampParameter(EntrywiseOpParameter):
+    """Exp reparameterization."""
+
+    def __init__(
+        self,
+        in_shape: Tuple[int, ...],
+        *,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+    ) -> None:
+        assert vmin is not None or vmax is not None
+        super().__init__(in_shape)
+        self.vmin = vmin
+        self.vmax = vmax
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        config = dict()
+        if self.vmin is not None:
+            config.update(vmin=self.vmin)
+        if self.vmax is not None:
+            config.update(vmax=self.vmax)
+        return config
 
 
 class ReduceSumParameter(ReduceOpParameter):

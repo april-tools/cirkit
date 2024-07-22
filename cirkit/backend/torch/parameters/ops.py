@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -272,6 +272,35 @@ class TorchScaledSigmoidParameter(TorchEntrywiseOpParameter):
         return torch.sigmoid(x) * (self.vmax - self.vmin) + self.vmin
 
 
+class TorchClampParameter(TorchEntrywiseOpParameter):
+    """Exp reparameterization."""
+
+    def __init__(
+        self,
+        in_shape: Tuple[int, ...],
+        num_folds: int = 1,
+        *,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+    ) -> None:
+        assert vmin is not None or vmax is not None
+        super().__init__(in_shape, num_folds=num_folds)
+        self.vmin = vmin
+        self.vmax = vmax
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        config = dict()
+        if self.vmin is not None:
+            config.update(vmin=self.vmin)
+        if self.vmax is not None:
+            config.update(vmax=self.vmax)
+        return config
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.clamp(x, min=self.vmin, max=self.vmax)
+
+
 class TorchReduceSumParameter(TorchReduceOpParamter):
     def forward(self, x: Tensor) -> Tensor:
         return torch.sum(x, dim=self.dim + 1)
@@ -315,7 +344,7 @@ class TorchGaussianProductMean(TorchParameterOp):
         in_gaussian1_shape: Tuple[int, ...],
         in_gaussian2_shape: Tuple[int, ...],
         *,
-        num_folds: int = 1,
+        num_folds: int = 1
     ) -> None:
         assert (
             in_gaussian1_shape[0] == in_gaussian2_shape[0]

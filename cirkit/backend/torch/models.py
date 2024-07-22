@@ -78,7 +78,9 @@ class LayerAddressBook(AddressBook):
             entries.append(entry)
 
         # Append the last bookkeeping entry with the information to compute the output tensor
-        entry = build_address_book_stacked_entry([fold_idx_info.out_fold_idx], num_folds=num_folds)
+        entry = build_address_book_stacked_entry(
+            [fold_idx_info.out_fold_idx], num_folds=num_folds, output=True
+        )
         entries.append(entry)
 
         return LayerAddressBook(entries, in_graph_fn=in_graph_fn)
@@ -157,8 +159,8 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 
     def _eval_layers(self, x: Tensor) -> Tensor:
         # Evaluate layers
-        y = self._eval_forward(x)  # (1, num_classes, B, K)
-        return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
+        y = self._eval_forward(x)  # (O, B, K)
+        return y.transpose(0, 1)  # (B, O, K)
 
 
 class TorchCircuit(AbstractTorchCircuit):
@@ -199,6 +201,6 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
-        x = torch.empty(size=(1, self.num_channels, len(self.scope)))
-        x = self._eval_layers(x)
-        return x.squeeze(dim=0)  # squeeze dummy batch dimension
+        x = torch.empty(size=(1, self.num_channels, len(self.scope)), device=self.device)
+        x = self._eval_layers(x)  # (B, O, K)
+        return x.squeeze(dim=0)  # (O, K)

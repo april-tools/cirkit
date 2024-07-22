@@ -12,7 +12,7 @@ from cirkit.backend.torch.graph.folding import (
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
-from cirkit.backend.torch.graph.modules import TorchRootedDiAcyclicGraph
+from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
 from cirkit.backend.torch.graph.nodes import TorchModule
 
 
@@ -84,11 +84,9 @@ class ParameterAddressBook(AddressBook):
         def select_index(mids: List[int], idx: Optional[Tensor]) -> Tensor:
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
-                return t if idx is None else t[idx]
-            t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
-            if idx is None:
-                return t
-            return t[idx]
+            else:
+                t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
+            return t if idx is None else t[idx]
 
         # Loop through the entries and yield inputs
         for entry in self._entries:
@@ -132,20 +130,22 @@ class ParameterAddressBook(AddressBook):
             entries.append(entry)
 
         # Append the last bookkeeping entry with the information to compute the output tensor
-        entry = build_address_book_stacked_entry([fold_idx_info.out_fold_idx], num_folds=num_folds)
+        entry = build_address_book_stacked_entry(
+            [fold_idx_info.out_fold_idx], num_folds=num_folds, output=True
+        )
         entries.append(entry)
 
         return ParameterAddressBook(entries)
 
 
-class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
+class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     @property
     def num_folds(self) -> int:
-        return self.output.num_folds
+        return sum(n.num_folds for n in self.outputs)
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.output.shape
+        return next(self.outputs).shape
 
     def reset_parameters(self) -> None:
         """Reset the input parameters."""

@@ -54,7 +54,7 @@ def test_compile_output_shape(
 
 @pytest.mark.parametrize(
     "fold",
-    itertools.product([False, True]),
+    [False, True],
 )
 def test_modules_parameters(fold: bool):
     compiler = TorchCompiler(fold=fold)

@@ -6,7 +6,7 @@ from torch import Tensor
 
 from cirkit.backend.torch.graph.nodes import TorchModule
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls, SumProductSemiring
+from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
 class TorchLayer(TorchModule, ABC):
@@ -19,7 +19,7 @@ class TorchLayer(TorchModule, ABC):
         *,
         arity: int = 1,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
