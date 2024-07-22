@@ -5,7 +5,7 @@ from copy import copy as shallowcopy
 from functools import cached_property, reduce
 from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, Optional, Tuple, Union, final
+from typing import Any, Callable, Dict, Tuple, Union, final, Optional
 
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
 from cirkit.utils.algorithms import RootedDiAcyclicGraph

@@ -344,17 +344,13 @@ class TorchGaussianProductMean(TorchParameterOp):
         in_gaussian1_shape: Tuple[int, ...],
         in_gaussian2_shape: Tuple[int, ...],
         *,
-        num_folds: int = 1,
-        eps: Optional[float] = None,
+        num_folds: int = 1
     ) -> None:
         assert (
             in_gaussian1_shape[0] == in_gaussian2_shape[0]
             and in_gaussian1_shape[2] == in_gaussian2_shape[2]
         )
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
-        if eps is None:
-            eps = torch.finfo(torch.get_default_dtype()).eps
-        self._eps = eps
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -364,15 +360,11 @@ class TorchGaussianProductMean(TorchParameterOp):
             self.in_shapes[0][2],
         )
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return dict(eps=self._eps)
-
     def forward(self, mean1: Tensor, mean2: Tensor, stddev1: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, D, K1, C)
         var2 = torch.square(stddev2)  # (F, D, K2, C)
         inv_var12 = torch.reciprocal(
-            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2) + self._eps
+            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)
         )  # (F, D, K1, K2, C)
         wm1 = mean1.unsqueeze(dim=3) * var2.unsqueeze(dim=2)  # (F, D, K1, K2, C)
         wm2 = mean2.unsqueeze(dim=2) * var1.unsqueeze(dim=3)  # (F, D, K1, K2, C)
