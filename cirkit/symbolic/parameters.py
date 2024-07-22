@@ -240,7 +240,7 @@ class ScaledSigmoidParameter(EntrywiseParameterOp):
 
 
 class ClampParameter(EntrywiseParameterOp):
-    """Exp reparameterization."""
+    """Clamp reparameterization."""
 
     def __init__(
         self,

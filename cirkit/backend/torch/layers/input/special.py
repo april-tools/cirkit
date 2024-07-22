@@ -27,7 +27,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         """Init class.
 
         Args:
-            num_variables (int): The number of variables.
+            scope (Scope): The scope of the layer.
             num_output_units (int): The number of output units.
             num_channels (int): The number of channels. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.

@@ -60,16 +60,16 @@ class TorchTuckerLayer(TorchSumProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (F, *B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
         weight = self.weight().view(
             -1, self.num_output_units, self.num_input_units, self.num_input_units
         )
         return self.semiring.einsum(
-            "f...i,f...j,foij->f...o",
+            "fbi,fbj,foij->fbo",
             operands=(weight,),
             inputs=(x[:, 0], x[:, 1]),
             dim=-1,
@@ -122,13 +122,13 @@ class TorchCPLayer(TorchSumProductLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (F, *B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
-        x = self.semiring.prod(x, dim=1, keepdim=False)  # (F, *B, Ki)
+        x = self.semiring.prod(x, dim=1, keepdim=False)  # (F, B, Ki)
         weight = self.weight()
         return self.semiring.einsum(
-            "f...i,foi->f...o", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )

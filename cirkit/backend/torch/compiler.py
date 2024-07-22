@@ -369,7 +369,7 @@ def _fold_parameter_nodes_group(
             initializer_=functools.partial(
                 stacked_initializer_, initializers=list(map(lambda p: p.initializer, group))
             ),
-            dtype=group[0].dtype,
+            dtype=group[0].dtype
         )
         # If we are folding parameter tensors, then update the registry as to maintain the correct
         # mapping between symbolic parameter leaves (which are unfolded) and slices within the folded

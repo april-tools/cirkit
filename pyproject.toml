@@ -170,7 +170,7 @@ default-docstring-type = "google"
 
 # type checking
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 mypy_path = "3rd-party-stubs"  # TODO: for old version, check deprecation for cirkit.new
 follow_imports = "silent"
 follow_imports_for_stubs = true
