@@ -18,7 +18,7 @@ ParameterOptMatch = GraphOptMatch[TorchParameterNode]
 class ParameterOptApplyFunc(Protocol):
     def __call__(
         self, compiler: "TorchCompiler", match: ParameterOptMatch
-    ) -> Tuple[TorchLayer, ...]:
+    ) -> Tuple[TorchParameterNode, ...]:
         ...
 
 

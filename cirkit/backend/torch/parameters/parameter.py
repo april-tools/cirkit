@@ -1,10 +1,6 @@
-import operator
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from copy import copy as shallowcopy
-from functools import reduce
-from itertools import chain
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -17,7 +13,6 @@ from cirkit.backend.torch.graph.folding import (
 )
 from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
 from cirkit.backend.torch.parameters.leaves import (
-    TorchParameterLeaf,
     TorchParameterNode,
     TorchPointerParameter,
     TorchTensorParameter,

@@ -312,24 +312,6 @@ class TorchLogSoftmaxParameter(TorchEntrywiseReduceOpParameter):
         return torch.log_softmax(x, dim=self.dim + 1)
 
 
-class TorchMatMulParameter(TorchBinaryOpParameter):
-    def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
-    ) -> None:
-        assert len(in_shape1) == len(in_shape2) == 2
-        assert in_shape1[1] == in_shape2[0]
-        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
-
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        return self.in_shapes[0][0], self.in_shapes[1][1]
-
-    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        # x1: (F, d1, d2)
-        # x2: (F, d2, d3)
-        return torch.matmul(x1, x2)  # (F, d1, d3)
-
-
 class TorchGaussianProductMean(TorchParameterOp):
     def __init__(
         self,
