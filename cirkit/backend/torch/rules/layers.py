@@ -8,9 +8,11 @@ from cirkit.backend.torch.layers.inner import (
     TorchKroneckerLayer,
     TorchMixingLayer,
 )
+from cirkit.backend.torch.layers.input.ef import TorchGaussianLayer
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
+    GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
     LogPartitionLayer,
@@ -54,6 +56,24 @@ def compile_categorical_layer(
     )
 
 
+def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> TorchGaussianLayer:
+    mean = compiler.compile_parameter(sl.mean)
+    stddev = compiler.compile_parameter(sl.stddev)
+    if sl.log_partition is not None:
+        log_partition = compiler.compile_parameter(sl.log_partition)
+    else:
+        log_partition = None
+    return TorchGaussianLayer(
+        sl.scope,
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        mean=mean,
+        stddev=stddev,
+        log_partition=log_partition,
+        semiring=compiler.semiring,
+    )
+
+
 def compile_hadamard_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchHadamardLayer:
     return TorchHadamardLayer(
         sl.num_input_units, sl.num_output_units, arity=sl.arity, semiring=compiler.semiring
@@ -87,6 +107,7 @@ def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMix
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     LogPartitionLayer: compile_log_partition_layer,
     CategoricalLayer: compile_categorical_layer,
+    GaussianLayer: compile_gaussian_layer,
     HadamardLayer: compile_hadamard_layer,
     KroneckerLayer: compile_kronecker_layer,
     DenseLayer: compile_dense_layer,

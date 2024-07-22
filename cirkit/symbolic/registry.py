@@ -6,12 +6,7 @@ from typing import Dict, Iterable, Optional, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import AbstractLayerOperator, Layer
-from cirkit.symbolic.operators import (
-    DEFAULT_OPERATOR_RULES,
-    LayerOperatorFunc,
-    LayerOperatorSign,
-    LayerOperatorSpecs,
-)
+from cirkit.symbolic.operators import DEFAULT_OPERATOR_RULES, LayerOperatorFunc, LayerOperatorSpecs
 
 
 class OperatorNotFound(Exception):
@@ -24,13 +19,15 @@ class OperatorNotFound(Exception):
 
 
 class OperatorSignatureNotFound(Exception):
-    def __init__(self, *signature: Type[Layer]):
+    def __init__(self, op: AbstractLayerOperator, *signature: Type[Layer]):
         super().__init__()
+        self._operator = op
         self._signature = tuple(signature)
 
     def __str__(self) -> str:
         signature_repr = ", ".join(map(lambda cls: cls.__name__, self._signature))
-        return f"Symbolic operator for signature ({signature_repr}) not found"
+        operator_repr = self._operator.name
+        return f"Symbolic operator '{operator_repr}' for signature ({signature_repr}) not found"
 
 
 class OperatorRegistry(AbstractContextManager):
@@ -90,7 +87,7 @@ class OperatorRegistry(AbstractContextManager):
         known_signatures = op_rules.keys()
         if signature in known_signatures:
             return op_rules[signature]
-        raise OperatorSignatureNotFound(*signature)
+        raise OperatorSignatureNotFound(op, *signature)
 
     def add_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
         args = func.__annotations__.copy()
