@@ -3,7 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import IntEnum, auto
 from functools import cached_property
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Protocol, Tuple, Union, Sequence
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Protocol, Sequence, Tuple, Union
 
 from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
