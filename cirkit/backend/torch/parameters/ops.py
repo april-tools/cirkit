@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import cached_property
 from typing import Any, Dict, Optional, Tuple
 
@@ -6,45 +6,11 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.parameters.parameter import TorchParameterOp
-
-
-class TorchUnaryOpParameter(TorchParameterOp, ABC):
-    def __init__(self, in_shape: Tuple[int, ...], num_folds: int = 1) -> None:
-        super().__init__(in_shape, num_folds=num_folds)
-
-    def __call__(self, x: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
-        ...
-
-
-class TorchBinaryOpParameter(TorchParameterOp, ABC):
-    def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], num_folds: int = 1
-    ) -> None:
-        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
-
-    def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x1, x2)  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        ...
+from cirkit.backend.torch.parameters.parameter import (
+    TorchBinaryOpParameter,
+    TorchParameterOp,
+    TorchUnaryOpParameter,
+)
 
 
 class TorchEntrywiseOpParameter(TorchUnaryOpParameter, ABC):
@@ -98,7 +64,9 @@ class TorchEntrywiseReduceOpParameter(TorchEntrywiseOpParameter, ABC):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(dim=self.dim)
+        config = super().config
+        config.update(dim=self.dim)
+        return config
 
 
 class TorchSumParameter(TorchBinaryOpParameter):
@@ -178,7 +146,9 @@ class TorchOuterProductParameter(TorchBinaryOpParameter):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(dim=self.dim)
+        config = super().config
+        config.update(dim=self.dim)
+        return config
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1: (F, d1, d2, ..., dk1, ... dn)
@@ -217,7 +187,9 @@ class TorchOuterSumParameter(TorchBinaryOpParameter):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(dim=self.dim)
+        config = super().config
+        config.update(dim=self.dim)
+        return config
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1: (F, d1, d2, ..., dk1, ... dn)
@@ -266,7 +238,9 @@ class TorchScaledSigmoidParameter(TorchEntrywiseOpParameter):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(vmin=self.vmin, vmax=self.vmax)
+        config = super().config
+        config.update(vmin=self.vmin, vmax=self.vmax)
+        return config
 
     def forward(self, x: Tensor) -> Tensor:
         return torch.sigmoid(x) * (self.vmax - self.vmin) + self.vmin
@@ -290,7 +264,7 @@ class TorchClampParameter(TorchEntrywiseOpParameter):
 
     @property
     def config(self) -> Dict[str, Any]:
-        config = dict()
+        config = super().config
         if self.vmin is not None:
             config.update(vmin=self.vmin)
         if self.vmax is not None:
@@ -344,7 +318,7 @@ class TorchGaussianProductMean(TorchParameterOp):
         in_gaussian1_shape: Tuple[int, ...],
         in_gaussian2_shape: Tuple[int, ...],
         *,
-        num_folds: int = 1
+        num_folds: int = 1,
     ) -> None:
         assert (
             in_gaussian1_shape[0] == in_gaussian2_shape[0]

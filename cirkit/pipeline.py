@@ -5,7 +5,7 @@ from types import TracebackType
 from typing import IO, Any, Iterable, Optional, Type, Union
 
 import cirkit.symbolic.functional as SF
-from cirkit.backend.base import (
+from cirkit.backend.compiler import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
     CompiledCircuit,
@@ -14,7 +14,7 @@ from cirkit.backend.base import (
     ParameterCompilationFunc,
 )
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import AbstractLayerOperator, Layer
+from cirkit.symbolic.layers import AbstractLayerOperator
 from cirkit.symbolic.operators import LayerOperatorFunc
 from cirkit.symbolic.registry import OperatorRegistry
 
@@ -38,7 +38,7 @@ class PipelineContext(AbstractContextManager):
 
     @classmethod
     def from_default_backend(cls) -> "PipelineContext":
-        return PipelineContext(backend="torch", fold=True, einsum=True)
+        return PipelineContext(backend="torch", semiring="lse-sum", fold=True, optimize=True)
 
     def __getitem__(self, sc: Circuit) -> Any:
         return self._compiler.get_compiled_circuit(sc)
@@ -83,9 +83,6 @@ class PipelineContext(AbstractContextManager):
 
     def add_initializer_compilation_rule(self, func: InitializerCompilationFunc):
         self._compiler.add_initializer_rule(func)
-
-    def compile_layer(self, sl: Layer) -> Any:
-        return self._compiler.compile_layer(sl)
 
     def compile(self, sc: Circuit) -> CompiledCircuit:
         return self._compiler.compile(sc)

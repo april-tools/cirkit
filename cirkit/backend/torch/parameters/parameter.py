@@ -1,66 +1,37 @@
 from abc import ABC, abstractmethod
+from copy import copy as shallowcopy
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
+from cirkit.backend.torch.graph.address_book import AddressBook, AddressBookEntry, FoldIndexInfo
 from cirkit.backend.torch.graph.folding import (
-    AddressBook,
-    AddressBookEntry,
-    FoldIndexInfo,
     build_address_book_entry,
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
 from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
-from cirkit.backend.torch.graph.nodes import TorchModule
-
-
-class TorchParameterNode(TorchModule, ABC):
-    """The abstract base class for all reparameterizations."""
-
-    def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
-        """Init class."""
-        super().__init__(num_folds=num_folds)
-
-    @property
-    @abstractmethod
-    def shape(self) -> Tuple[int, ...]:
-        ...
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Configuration flags for the parameter."""
-        return {}
-
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        ...
-
-
-class TorchParameterLeaf(TorchParameterNode, ABC):
-    @property
-    def is_initialized(self) -> bool:
-        return True
-
-    def __call__(self) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self) -> Tensor:
-        ...
+from cirkit.backend.torch.parameters.leaves import (
+    TorchParameterNode,
+    TorchPointerParameter,
+    TorchTensorParameter,
+)
+from cirkit.utils.algorithms import topologically_process_nodes
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
     def __init__(self, *in_shape: Tuple[int, ...], num_folds: int = 1):
         super().__init__(num_folds=num_folds)
         self.in_shapes = in_shape
+
+    def __copy__(self) -> "TorchParameterOp":
+        cls = self.__class__
+        return cls(*self.in_shapes, **self.config)
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *self.in_shapes, *self.config.items()
 
     def __call__(self, *xs: Tensor) -> Tensor:
         """Get the reparameterized parameters.
@@ -73,6 +44,44 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
     @abstractmethod
     def forward(self, *xs: Tensor) -> Tensor:
+        ...
+
+
+class TorchUnaryOpParameter(TorchParameterOp, ABC):
+    def __init__(self, in_shape: Tuple[int, ...], *, num_folds: int = 1) -> None:
+        super().__init__(in_shape, num_folds=num_folds)
+
+    def __call__(self, x: Tensor) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        ...
+
+
+class TorchBinaryOpParameter(TorchParameterOp, ABC):
+    def __init__(
+        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+    ) -> None:
+        super().__init__(in_shape1, in_shape2, num_folds=num_folds)
+
+    def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
+        """Get the reparameterized parameters.
+
+        Returns:
+            Tensor: The parameters after reparameterization.
+        """
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x1, x2)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         ...
 
 
@@ -147,17 +156,32 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def shape(self) -> Tuple[int, ...]:
         return next(self.outputs).shape
 
-    def reset_parameters(self) -> None:
-        """Reset the input parameters."""
-        for p in self.nodes:
-            p.reset_parameters()
+    def extract_subgraphs(self, *roots: TorchParameterNode) -> List["TorchParameter"]:
+        # The set of torch tensor nodes being observed
+        nodes_ptensor = set()
 
-    def __call__(self) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
+        def replace_ref_or_copy(n: TorchParameterNode) -> TorchParameterNode:
+            if isinstance(n, TorchTensorParameter):
+                if n in nodes_ptensor:
+                    return TorchPointerParameter(n)
+                nodes_ptensor.add(n)
+            return shallowcopy(n)
 
-    def forward(self) -> Tensor:
-        return self._eval_forward()  # (F, d1, d2, ..., dk)
+        # Extract parameter sub-computational graphs that are rooted by the provided roots
+        # If the sub-computational graphs would share torch tensor parameters (that are not pointers),
+        # then parameter sharing is ensured by introducing torch parameter pointers, based on the
+        # order specified by the roots.
+        pgraphs = []
+        for r in roots:
+            nodes, in_nodes, outputs = topologically_process_nodes(
+                self.topological_ordering(roots=[r]),
+                [r],
+                replace_ref_or_copy,
+                incomings_fn=self.node_inputs,
+            )
+            pgraph = TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
+            pgraphs.append(pgraph)
+        return pgraphs
 
     def _build_address_book(self) -> AddressBook:
         fold_idx_info = self._fold_idx_info
@@ -170,3 +194,15 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         )
         self._fold_idx_info = None
         return address_book
+
+    def reset_parameters(self) -> None:
+        """Reset the input parameters."""
+        for p in self.nodes:
+            p.reset_parameters()
+
+    def __call__(self) -> Tensor:
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__()  # type: ignore[no-any-return,misc]
+
+    def forward(self) -> Tensor:
+        return self._eval_forward()  # (F, d1, d2, ..., dk)

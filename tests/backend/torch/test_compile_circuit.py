@@ -6,8 +6,8 @@ import torch
 from scipy import integrate
 
 import cirkit.symbolic.functional as SF
+from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.models import TorchCircuit, TorchConstantCircuit
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.parameters import Parameter, TensorParameter
 from tests.floats import allclose, isclose

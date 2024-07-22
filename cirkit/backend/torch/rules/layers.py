@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Dict
 
-from cirkit.backend.base import LayerCompilationFunc, LayerCompilationSign
+from cirkit.backend.compiler import LayerCompilationFunc, LayerCompilationSign
 from cirkit.backend.torch.layers import TorchCategoricalLayer, TorchLogPartitionLayer
 from cirkit.backend.torch.layers.inner import (
     TorchDenseLayer,

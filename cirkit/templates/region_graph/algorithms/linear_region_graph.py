@@ -6,11 +6,7 @@ from cirkit.templates.region_graph.region_graph import RegionGraph
 from cirkit.templates.region_graph.rg_node import RegionNode
 
 
-def _partition_node(
-    graph: RegionGraph,
-    node: RegionNode,
-    rm_item: int
-) -> RegionNode:
+def _partition_node(graph: RegionGraph, node: RegionNode, rm_item: int) -> RegionNode:
     """Partition a region node with one specific item out and add to RG.
 
     Args:
@@ -37,9 +33,9 @@ def LinearRegionGraph(
     num_variables: int, random: bool = True, seed: int = 42, order: List[int] = None
 ) -> RegionGraph:
     """Construct a Linear RG. (random)
-    
+
     Args:
-		num_variables (int): The number of variables in the RG.
+                num_variables (int): The number of variables in the RG.
         random (bool): Whether to split out the nodes in a random order.
         order (List[int]): The spcified order to split out nodes.
 
@@ -54,12 +50,11 @@ def LinearRegionGraph(
         random_state = np.random.RandomState(seed)
         order = list(range(num_variables))
         random_state.shuffle(order)
-    else: assert order is not None and len(order) == num_variables
+    else:
+        assert order is not None and len(order) == num_variables
 
     rgn = root
     for i in range(num_variables - 1):
         rgn = _partition_node(graph, rgn, order[i])
 
     return graph.freeze()
-
-

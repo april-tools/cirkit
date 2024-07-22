@@ -27,7 +27,7 @@ classifiers = [
 ]
 dependencies = [
   "torch~=2.2.0",
-  "numpy<2.0.0",
+  "numpy<2.0.0"
 ]
 
 [project.optional-dependencies]

@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
@@ -45,6 +45,10 @@ class TorchInputLayer(TorchLayer, ABC):
     @property
     def num_channels(self) -> int:
         return self.arity
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.num_variables, self.num_channels, self.num_output_units
 
     @property
     def config(self) -> Dict[str, Any]:

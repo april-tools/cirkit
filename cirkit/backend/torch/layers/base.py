@@ -4,12 +4,12 @@ from typing import Any, Dict, Optional
 
 from torch import Tensor
 
-from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.graph.modules import AbstractTorchModule
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
-class TorchLayer(TorchModule, ABC):
+class TorchLayer(AbstractTorchModule, ABC):
     """The abstract base class for all layers."""
 
     def __init__(

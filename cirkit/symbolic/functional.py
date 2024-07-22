@@ -1,7 +1,6 @@
 import functools
 import itertools
 import operator
-from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from cirkit.symbolic.circuit import (
@@ -32,10 +31,10 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
     # Mapping the symbolic circuit layers with blocks of circuit layers
     layers_to_block: Dict[Layer, CircuitBlock] = {}
 
-    # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
+    # For each new circuit block, keep track of its inputs
     blocks: List[CircuitBlock] = []
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
+    output_blocks: List[CircuitBlock] = []
 
     # Copy the symbolic layers, pick references to parameters and build the blocks
     for sc in scs:
@@ -45,9 +44,8 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
             blocks.append(block)
             block_ins = [layers_to_block[sli] for sli in sc.layer_inputs(sl)]
             in_blocks[block] = block_ins
-            for bi in block_ins:
-                out_blocks[bi].append(block)
             layers_to_block[sl] = block
+        output_blocks.extend(layers_to_block[sl] for sl in sc.outputs)
 
     # Construct the symbolic circuit obtained by merging multiple circuits
     return Circuit.from_operation(
@@ -55,7 +53,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
         num_channels,
         blocks,
         in_blocks,
-        out_blocks,
+        output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
         topologically_ordered=True,
     )
@@ -86,10 +84,10 @@ def integrate(
     # Mapping the symbolic circuit layers with blocks of circuit layers
     layers_to_block: Dict[Layer, CircuitBlock] = {}
 
-    # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
+    # For each new circuit block, keep track of its inputs
     blocks: List[CircuitBlock] = []
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
+    output_blocks: List[CircuitBlock] = []
 
     for sl in sc.topological_ordering():
         # Input layers get integrated over
@@ -115,8 +113,9 @@ def integrate(
         layers_to_block[sl] = int_block
         int_block_ins = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
         in_blocks[int_block] = int_block_ins
-        for bi in int_block_ins:
-            out_blocks[bi].append(int_block)
+
+    # Construct the sequence of output blocks
+    output_blocks = [layers_to_block[sl] for sl in sc.outputs]
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit.from_operation(
@@ -124,7 +123,7 @@ def integrate(
         sc.num_channels,
         blocks,
         in_blocks,
-        out_blocks,
+        output_blocks,
         operation=CircuitOperation(
             operator=CircuitOperator.INTEGRATION,
             operands=(sc,),
@@ -149,10 +148,9 @@ def multiply(
     # Map from pairs of layers to their product circuit block
     layers_to_block: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
 
-    # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
+    # For each new circuit block, keep track of its inputs
     blocks: List[CircuitBlock] = []
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
@@ -199,10 +197,14 @@ def multiply(
         # Make the connections
         prod_block_ins = [layers_to_block[p] for p in next_to_multiply]
         in_blocks[prod_block] = prod_block_ins
-        for bi in prod_block_ins:
-            out_blocks[bi].append(prod_block)
         layers_to_block[pair] = prod_block
         to_multiply.pop()  # Go up in the recursion
+
+    # Construct the sequence of output blocks
+    output_blocks = [
+        layers_to_block[(lhs_out, rhs_out)]
+        for lhs_out, rhs_out in itertools.product(lhs_sc.outputs, rhs_sc.outputs)
+    ]
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
@@ -210,7 +212,7 @@ def multiply(
         lhs_sc.num_channels,
         blocks,
         in_blocks,
-        out_blocks,
+        output_blocks,
         operation=CircuitOperation(
             operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
         ),
