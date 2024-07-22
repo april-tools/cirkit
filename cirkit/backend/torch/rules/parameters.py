@@ -1,9 +1,11 @@
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict
+
+import torch
 
 from cirkit.backend.compiler import ParameterCompilationFunc, ParameterCompilationSign
-from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
-from cirkit.backend.torch.parameters.ops import (
+from cirkit.backend.torch.parameters.nodes import (
     TorchClampParameter,
+    TorchConjugateParameter,
     TorchExpParameter,
     TorchGaussianProductLogPartition,
     TorchGaussianProductMean,
@@ -14,6 +16,7 @@ from cirkit.backend.torch.parameters.ops import (
     TorchLogSoftmaxParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
+    TorchPointerParameter,
     TorchReduceLSEParameter,
     TorchReduceProductParameter,
     TorchReduceSumParameter,
@@ -22,9 +25,12 @@ from cirkit.backend.torch.parameters.ops import (
     TorchSoftmaxParameter,
     TorchSquareParameter,
     TorchSumParameter,
+    TorchTensorParameter,
 )
+from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.parameters import (
     ClampParameter,
+    ConjugateParameter,
     ConstantParameter,
     ExpParameter,
     GaussianProductLogPartition,
@@ -52,10 +58,27 @@ if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
-def compile_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTensorParameter:
+def _retrieve_dtype(dtype: DataType) -> torch.dtype:
+    if dtype == DataType.INTEGER:
+        return torch.int64
+    default_float_dtype = torch.get_default_dtype()
+    if dtype == DataType.REAL:
+        return default_float_dtype
+    if dtype == DataType.COMPLEX:
+        if default_float_dtype == torch.float32:
+            return torch.complex64
+        if default_float_dtype == torch.float64:
+            return torch.complex128
+    raise ValueError(
+        f"Cannot determine the torch.dtype to use, current default: {default_float_dtype}, given dtype: {dtype}"
+    )
+
+
+def compile_tensor_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTensorParameter:
     initializer_ = compiler.compiler_initializer(p.initializer)
+    dtype = _retrieve_dtype(p.dtype)
     compiled_p = TorchTensorParameter(
-        *p.shape, requires_grad=p.learnable, initializer_=initializer_
+        *p.shape, requires_grad=p.learnable, initializer_=initializer_, dtype=dtype
     )
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p
@@ -147,6 +170,13 @@ def compile_clamp_parameter(compiler: "TorchCompiler", p: ClampParameter) -> Tor
     return TorchClampParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
 
 
+def compile_conjugate_parameter(
+    compiler: "TorchCompiler", p: ClampParameter
+) -> TorchConjugateParameter:
+    (in_shape,) = p.in_shapes
+    return TorchConjugateParameter(in_shape)
+
+
 def compile_reduce_sum_parameter(
     compiler: "TorchCompiler", p: ReduceSumParameter
 ) -> TorchReduceSumParameter:
@@ -201,7 +231,7 @@ def compile_gaussian_product_log_partition(
 
 
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
-    TensorParameter: compile_parameter,
+    TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
     SumParameter: compile_sum_parameter,
@@ -215,6 +245,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     SigmoidParameter: compile_sigmoid_parameter,
     ScaledSigmoidParameter: compile_scaled_sigmoid_parameter,
     ClampParameter: compile_clamp_parameter,
+    ConjugateParameter: compile_conjugate_parameter,
     ReduceSumParameter: compile_reduce_sum_parameter,
     ReduceProductParameter: compile_reduce_product_parameter,
     ReduceLSEParameter: compile_reduce_lse_parameter,

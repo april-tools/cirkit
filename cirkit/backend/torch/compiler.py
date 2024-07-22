@@ -37,12 +37,13 @@ from cirkit.backend.torch.optimization.registry import (
     ParameterOptPattern,
     ParameterOptRegistry,
 )
-from cirkit.backend.torch.parameters.leaves import (
+from cirkit.backend.torch.parameters.nodes import (
     TorchParameterNode,
+    TorchParameterOp,
     TorchPointerParameter,
     TorchTensorParameter,
 )
-from cirkit.backend.torch.parameters.parameter import TorchParameter, TorchParameterOp
+from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.rules import (
     DEFAULT_INITIALIZER_COMPILATION_RULES,
     DEFAULT_LAYER_COMPILATION_RULES,
@@ -366,8 +367,9 @@ def _fold_parameter_nodes_group(
             num_folds=len(group),
             requires_grad=group[0].requires_grad,
             initializer_=functools.partial(
-                stacked_initializer_, initializers=list(map(lambda p: p.initializer_, group))
+                stacked_initializer_, initializers=list(map(lambda p: p.initializer, group))
             ),
+            dtype=group[0].dtype
         )
         # If we are folding parameter tensors, then update the registry as to maintain the correct
         # mapping between symbolic parameter leaves (which are unfolded) and slices within the folded

@@ -165,7 +165,6 @@ def build_address_book_stacked_entry(
     )
 
     # Build the bookkeeping entry
-    useless_fold_idx = False
     cum_fold_idx = [[cum_module_ids[idx[0]] + idx[1] for idx in fi] for fi in in_fold_idx]
 
     # Check if we are computing the output stacked address book entry

@@ -1,6 +1,5 @@
 from collections import defaultdict
 from enum import IntEnum, auto
-from functools import cached_property
 from typing import (
     Callable,
     Dict,

@@ -25,7 +25,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
     # TODO: refactor scope class, I (LL) do not understand why do we would have different implementations
     #       of the Scope data structure. What is the difference between Scope and FrozenSetScope?
     #       Why do not we have just a frozen set or a bitmap?
-    #assert scope == scs[0].scope
+    # assert scope == scs[0].scope
     assert tuple(scope) == tuple(scs[0].scope)
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
@@ -87,7 +87,6 @@ def integrate(
     # For each new circuit block, keep track of its inputs
     blocks: List[CircuitBlock] = []
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    output_blocks: List[CircuitBlock] = []
 
     for sl in sc.topological_ordering():
         # Input layers get integrated over
@@ -111,8 +110,7 @@ def integrate(
         int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
         blocks.append(int_block)
         layers_to_block[sl] = int_block
-        int_block_ins = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
-        in_blocks[int_block] = int_block_ins
+        in_blocks[int_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
 
     # Construct the sequence of output blocks
     output_blocks = [layers_to_block[sl] for sl in sc.outputs]
@@ -195,8 +193,7 @@ def multiply(
         prod_block = func(lhs_layer, rhs_layer)
         blocks.append(prod_block)
         # Make the connections
-        prod_block_ins = [layers_to_block[p] for p in next_to_multiply]
-        in_blocks[prod_block] = prod_block_ins
+        in_blocks[prod_block] = [layers_to_block[p] for p in next_to_multiply]
         layers_to_block[pair] = prod_block
         to_multiply.pop()  # Go up in the recursion
 
@@ -229,3 +226,53 @@ def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> C
     # Use the registry in the current context, if not specified otherwise
     if registry is None:
         registry = OPERATOR_REGISTRY.get()
+    raise NotImplementedError()
+
+
+def conjugate(
+    sc: Circuit,
+    registry: Optional[OperatorRegistry] = None,
+) -> Circuit:
+    # Use the registry in the current context, if not specified otherwise
+    if registry is None:
+        registry = OPERATOR_REGISTRY.get()
+
+    # Mapping the symbolic circuit layers with blocks of circuit layers
+    layers_to_block: Dict[Layer, CircuitBlock] = {}
+
+    # For each new circuit block, keep track of its inputs
+    blocks: List[CircuitBlock] = []
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+
+    for sl in sc.topological_ordering():
+        # The conjugation of a product layer is equivalent to the product of its conjugated inputs
+        if isinstance(sl, ProductLayer):
+            parameters = {name: p.ref() for name, p in sl.params.items()}
+            conj_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+            blocks.append(conj_block)
+            layers_to_block[sl] = conj_block
+            in_blocks[conj_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
+            continue
+
+        # We are not taking the conjugation of a non-product layer
+        # Retrieve the conjugation rule from the registry and apply it
+        assert isinstance(sl, (InputLayer, SumLayer))
+        func = registry.retrieve_rule(LayerOperation.CONJUGATION, type(sl))
+        conj_block = func(sl)
+        blocks.append(conj_block)
+        layers_to_block[sl] = conj_block
+        in_blocks[conj_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
+
+    # Construct the sequence of output blocks
+    output_blocks = [layers_to_block[sl] for sl in sc.outputs]
+
+    # Construct the conjugate symbolic circuit
+    return Circuit.from_operation(
+        sc.scope,
+        sc.num_channels,
+        blocks,
+        in_blocks,
+        output_blocks,
+        operation=CircuitOperation(operator=CircuitOperator.CONJUGATION, operands=(sc,)),
+        topologically_ordered=True,
+    )

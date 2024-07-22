@@ -123,6 +123,13 @@ class PipelineContext(AbstractContextManager):
         diff_sc = SF.differentiate(sc, registry=self._op_registry)
         return self.compile(diff_sc)
 
+    def conjugate(self, cc: Any) -> Any:
+        if not self._compiler.has_symbolic(cc):
+            raise ValueError("The given compiled circuit is not known in this pipeline")
+        sc = self._compiler.get_symbolic_circuit(cc)
+        conj_sc = SF.conjugate(sc, registry=self._op_registry)
+        return self.compile(conj_sc)
+
 
 def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
@@ -148,6 +155,12 @@ def differentiate(cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.differentiate(cc)
+
+
+def conjugate(cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+    if ctx is None:
+        ctx = _PIPELINE_CONTEXT.get()
+    return ctx.conjugate(cc)
 
 
 def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:

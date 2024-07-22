@@ -61,10 +61,10 @@ class TorchTensorDotLayer(TorchSumLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (F, *B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
         # x: (F, H=1, B, Ki) -> (F, B, Ki)
         x = x.squeeze(dim=1)
@@ -77,5 +77,5 @@ class TorchTensorDotLayer(TorchSumLayer):
         y = self.semiring.einsum(
             "fbqj,fkj->fbqk", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
-        # return y: (F, *B, Kq * Kj) = (F, *B, Ko)
+        # return y: (F, B, Kq * Kj) = (F, B, Ko)
         return y.view(y.shape[0], y.shape[1], self.num_output_units)

@@ -10,7 +10,7 @@ from cirkit.utils.scope import Scope
 class TorchInputLayer(TorchLayer, ABC):
     """The abstract base class for input layers."""
 
-    # NOTE: We use exactly the sae interface (F, H, *B, K) -> (F, *B, K) for __call__ of input layers:
+    # NOTE: We use exactly the sae interface (F, H, B, K) -> (F, B, K) for __call__ of input layers:
     #           1. Define arity(H)=num_channels(C), reusing the H dimension.
     #           2. Define num_input_units(K)=num_vars(D), which reuses the K dimension.
     #       For dimension D (variables), we should parse the input in circuit according to the

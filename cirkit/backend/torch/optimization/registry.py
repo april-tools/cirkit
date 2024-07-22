@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, List, Protocol, Tuple, Type
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDefn
 from cirkit.backend.torch.layers import TorchLayer
-from cirkit.backend.torch.parameters.leaves import TorchParameterNode
+from cirkit.backend.torch.parameters.nodes import TorchParameterNode
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler

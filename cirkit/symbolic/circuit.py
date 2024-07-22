@@ -3,7 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import IntEnum, auto
 from functools import cached_property
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Protocol, Tuple, Union, Sequence
 
 from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
@@ -30,6 +30,7 @@ class CircuitOperator(AbstractCircuitOperator):
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
     MULTIPLICATION = auto()
+    CONJUGATION = auto()
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,26 @@ class CircuitBlock(BiRootedDiAcyclicGraph[Layer]):
         return CircuitBlock(layers, in_layers, [sl[-1]], topologically_ordered=True)
 
 
+class InputLayerFactory(Protocol):
+    def __call__(self, scope: Scope, num_units: int, num_channels: int) -> InputLayer:
+        ...
+
+
+class SumLayerFactory(Protocol):
+    def __call__(self, scope: Scope, num_input_units: int, num_output_units: int) -> SumLayer:
+        ...
+
+
+class ProductLayerFactory(Protocol):
+    def __call__(self, scope: Scope, num_input_units: int, arity: int) -> ProductLayer:
+        ...
+
+
+class MixingLayerFactory(Protocol):
+    def __call__(self, scope: Scope, num_units: int, arity: int) -> SumLayer:
+        ...
+
+
 class Circuit(DiAcyclicGraph[Layer]):
     """The symbolic representation of a circuit."""
 
@@ -113,7 +134,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         operation: Optional[CircuitOperation] = None,
         topologically_ordered: bool = False,
     ) -> None:
-        super().__init__(layers, in_layers, outputs)
+        super().__init__(layers, in_layers, outputs, topologically_ordered=topologically_ordered)
         self.scope = scope
         self.num_channels = num_channels
         self.operation = operation
@@ -239,10 +260,10 @@ class Circuit(DiAcyclicGraph[Layer]):
     def from_region_graph(
         cls,
         region_graph: RegionGraph,
-        input_factory: Callable[[Scope, int, int], InputLayer],
-        sum_factory: Callable[[Scope, int, int], SumLayer],
-        prod_factory: Callable[[Scope, int, int], ProductLayer],
-        mixing_factory: Optional[Callable[[Scope, int, int], SumLayer]] = None,
+        input_factory: InputLayerFactory,
+        sum_factory: SumLayerFactory,
+        prod_factory: ProductLayerFactory,
+        mixing_factory: Optional[MixingLayerFactory] = None,
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
