@@ -489,9 +489,22 @@ class ComplexLSESumSemiring(SemiringImpl):
         sum_max_x = functools.reduce(torch.add, max_x)  # Do n-1 add instead of n.
         if not keepdim:
             sum_max_x = sum_max_x.squeeze(dims)  # To match shape of func_exp_x.
-        log_func_exp_x = torch.log(func_exp_x) + sum_max_x
+        return ComplexLSESumSemiring._grad_safe_complex_log(func_exp_x) + sum_max_x
 
-        return log_func_exp_x
+    @classmethod
+    def _grad_safe_complex_log(cls, x: Tensor) -> Tensor:
+        # Compute log(x) safely where x is a complex tensor.
+        ComplexLSESumSemiring.__double_zero_clamp_(x.real)
+        return torch.log(x)
+
+    @staticmethod
+    @torch.no_grad()
+    @torch.compile()
+    def __double_zero_clamp_(x: Tensor) -> None:
+        eps = torch.finfo(torch.get_default_dtype()).tiny
+        close_zero_mask = (x > -eps) & (x < eps)
+        clamped_x = eps * (1.0 - 2.0 * torch.signbit(x))
+        torch.where(close_zero_mask, clamped_x, x, out=x)
 
 
 @SumProductSemiring.register_map_from(LSESumSemiring)
