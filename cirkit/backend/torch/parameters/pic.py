@@ -307,12 +307,42 @@ def pc2qpc(
                 z_quad=z_quad,
                 tensor_parameter=node.probs._nodes[0],
             )
+        elif isinstance(node, TorchGaussianLayer):
+            gauss_shape = list(node.mean._nodes[0]._ptensor.shape)  # or node.stddev._nodes[0]._ptensor.shape
+            if len(gauss_shape) == 4: assert gauss_shape[1] == 1, f'Invalid Gaussian layer shape {gauss_shape}'
+            z_quad = zw_quadrature(integration_method=integration_method, nip=gauss_shape[-2])[0]
+            node.mean._nodes[0] = PICInputNet(
+                num_vars=gauss_shape[0],
+                num_param=1,
+                num_channels=gauss_shape[-1],
+                net_dim=net_dim,
+                bias=bias,
+                sharing=input_sharing,
+                ff_dim=ff_dim,
+                ff_sigma=ff_sigma,
+                learn_ff=learn_ff,
+                z_quad=z_quad,
+                tensor_parameter=node.mean._nodes[0]
+            )
+            node.stddev._nodes[0] = PICInputNet(
+                num_vars=gauss_shape[0],
+                num_param=1,
+                num_channels=gauss_shape[-1],
+                net_dim=net_dim,
+                bias=bias,
+                sharing=input_sharing,
+                ff_dim=ff_dim,
+                ff_sigma=ff_sigma,
+                learn_ff=learn_ff,
+                z_quad=z_quad,
+                tensor_parameter=node.stddev._nodes[0]
+            )
         elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPLayer)):
             assert (
                 len(node.weight._nodes) == 1
             ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
             weight_shape = list(node.weight._nodes[0]._ptensor.shape)
-            squeezed_weight_shape = [dim_size for dim_size in weight_shape if dim_size != 1]
+            squeezed_weight_shape = [weight_shape[0]] + [dim_size for dim_size in weight_shape[1:] if dim_size != 1]
             assert (
                 sum([dim_size % min(squeezed_weight_shape[1:]) for dim_size in squeezed_weight_shape[1:]]) == 0
             ), f"Cannot model a dense layer with shape {weight_shape}!"
