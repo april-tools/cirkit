@@ -8,7 +8,7 @@
 
 ### Requirements
 
-cirkit currently requires Python 3.8 and PyTorch 2.0 or above versions.
+cirkit currently requires Python 3.8 and PyTorch 2.3 or above versions.
 To start developing, install the virtual environment and activate it first.
 ```shell
 virtualenv venv  # or python -m venv venv
@@ -22,20 +22,43 @@ Then install the required dependencies in [development mode](https://setuptools.
 pip install -e .[dev]
 ```
 This will install not only the core dependencies of the library itself (e.g., PyTorch) but also additional dependencies useful for development (e.g., PyTest).
+It also installs other development tools, such as PyLint and MyPy.
 
-### Local Lint/Test
+#### Additional Requirements for Jupyter Notebooks
 
-In the repository root, run the following for linting and testing locally.
+If you want to execute the Jupyter notebooks in the ```notebooks/``` directory, then install the additional dependencies with:
+```shell
+pip install -e .[notebooks]
+```
+
+### Automatic Code Formatting
+
+We try to follow a consistent formatting across the library.
+If you want to automatically format your code, then you should run the following script.
 
 ```shell
-./scripts/lint.sh [--verbose] [file ...]
+bash scripts/format.sh
+```
+
+### Linting and Static Code Checks
+
+Locate youself in the repository root.
+Then, run the following for executing the linters and other static code checkers.
+
+```shell
+bash scripts/check.sh [--verbose] [file ...]
 ```
 Optionally,
 1. Use the `--verbose` flag to enable more verbose output.
-2. Add files to lint part of the repo.
+2. Add files to lint part of the repo. If none is specified then, all tracked directiories will be checked. 
+
+### Run Unit Tests and Check the Coverage 
+
+Locate youself in the repository root.
+Then, rn the following script.
 
 ```shell
-./scripts/coverage.sh [--FORMAT] [pytest_arg ...]
+bash scripts/coverage.sh [--FORMAT] [pytest_arg ...]
 ```
 Optionally,
 1. Use a `--FORMAT` (e.g. `--xml`) flag for exporting converage to file.
