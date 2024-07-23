@@ -1,4 +1,4 @@
-name: Lint
+name: Static Code Check
 
 on:
   pull_request:
