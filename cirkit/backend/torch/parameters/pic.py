@@ -292,12 +292,12 @@ def pc2qpc(
 
     for node in qpc._nodes:
         if isinstance(node, TorchCategoricalLayer):
-            logits_shape = list(node.logits().shape)
-            z_quad = zw_quadrature(integration_method=integration_method, nip=logits_shape[2])[0]
-            node.logits._nodes[0] = PICInputNet(
-                num_vars=logits_shape[0],
-                num_param=logits_shape[-1],
-                num_channels=logits_shape[-2],
+            probs_shape = list(node.probs._nodes[0]._ptensor.shape)
+            z_quad = zw_quadrature(integration_method=integration_method, nip=probs_shape[2])[0]
+            node.probs._nodes[0] = PICInputNet(
+                num_vars=probs_shape[0],
+                num_param=probs_shape[-1],
+                num_channels=probs_shape[-2],
                 net_dim=net_dim,
                 bias=bias,
                 sharing=input_sharing,
@@ -305,18 +305,50 @@ def pc2qpc(
                 ff_sigma=ff_sigma,
                 learn_ff=learn_ff,
                 z_quad=z_quad,
-                tensor_parameter=node.logits._nodes[0],
+                tensor_parameter=node.probs._nodes[0],
             )
-        elif isinstance(node, TorchDenseLayer):
+        elif isinstance(node, TorchGaussianLayer):
+            gauss_shape = list(node.mean._nodes[0]._ptensor.shape)  # or node.stddev._nodes[0]._ptensor.shape
+            if len(gauss_shape) == 4: assert gauss_shape[1] == 1, f'Invalid Gaussian layer shape {gauss_shape}'
+            z_quad = zw_quadrature(integration_method=integration_method, nip=gauss_shape[-2])[0]
+            node.mean._nodes[0] = PICInputNet(
+                num_vars=gauss_shape[0],
+                num_param=1,
+                num_channels=gauss_shape[-1],
+                net_dim=net_dim,
+                bias=bias,
+                sharing=input_sharing,
+                ff_dim=ff_dim,
+                ff_sigma=ff_sigma,
+                learn_ff=learn_ff,
+                z_quad=z_quad,
+                tensor_parameter=node.mean._nodes[0]
+            )
+            node.stddev._nodes[0] = PICInputNet(
+                num_vars=gauss_shape[0],
+                num_param=1,
+                num_channels=gauss_shape[-1],
+                net_dim=net_dim,
+                bias=bias,
+                sharing=input_sharing,
+                ff_dim=ff_dim,
+                ff_sigma=ff_sigma,
+                learn_ff=learn_ff,
+                z_quad=z_quad,
+                tensor_parameter=node.stddev._nodes[0]
+            )
+        elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPLayer)):
             assert (
                 len(node.weight._nodes) == 1
             ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
-            weight_shape = list(node.weight().shape)
+            weight_shape = list(node.weight._nodes[0]._ptensor.shape)
+            squeezed_weight_shape = [weight_shape[0]] + [dim_size for dim_size in weight_shape[1:] if dim_size != 1]
             assert (
-                len(np.unique([dim_size for dim_size in weight_shape[1:] if dim_size != 1])) == 1
+                sum([dim_size % min(squeezed_weight_shape[1:]) for dim_size in squeezed_weight_shape[1:]]) == 0
             ), f"Cannot model a dense layer with shape {weight_shape}!"
-            nip = max(np.unique(weight_shape[1:]))
-            num_dim = sum(max(np.unique(weight_shape[1:])) == weight_shape[1:])
+            is_tucker = isinstance(node, TorchTuckerLayer)
+            nip = int(max(squeezed_weight_shape[1:]) ** (0.5 if is_tucker else 1))
+            num_dim = sum([int(np.emath.logn(nip, dim_size)) for dim_size in squeezed_weight_shape[1:]])
             z_quad, w_quad = zw_quadrature(integration_method=integration_method, nip=nip)
             node.weight._nodes = nn.ModuleList(
                 [
@@ -324,7 +356,7 @@ def pc2qpc(
                         num_dim=num_dim,
                         num_funcs=weight_shape[0],
                         perm_dim=tuple(range(1, num_dim + 1)),
-                        norm_dim=(num_dim,),
+                        norm_dim=tuple(range(1, num_dim + 1))[-(2 if is_tucker else 1):],
                         net_dim=net_dim,
                         bias=bias,
                         sharing=inner_sharing,
@@ -343,7 +375,7 @@ def pc2qpc(
             ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
             node.weight._nodes = node.weight._nodes[:1]  # ignore possible reparameterizations
             node.weight._nodes[0]._ptensor.fill_(1 / node.weight._nodes[0]._ptensor.size(-1))
-        elif isinstance(node, TorchHadamardLayer) or isinstance(node, TorchKroneckerLayer):
+        elif isinstance(node, (TorchHadamardLayer, TorchKroneckerLayer)):
             pass
         else:
             raise NotImplementedError("Layer %s is not yet handled!" % str(type(node)))
