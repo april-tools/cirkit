@@ -458,13 +458,13 @@ class ComplexLSESumSemiring(SemiringImpl):
         # NOTE: to reproduce the bug, place the following assertion in the above code.
         #       This checks whether the real output of the function in the 'apply_reduce' is not 0.0.
         # assert not torch.any(torch.isclose(func_exp_xs.real.sign(), torch.tensor(0.0, device=func_exp_xs.device)))
-        ComplexLSESumSemiring.__double_zero_clamp_(func_exp_xs.real)
+        ComplexLSESumSemiring._double_zero_clamp_(func_exp_xs.real)
         return torch.log(func_exp_xs) + reduced_max_xs
 
     @staticmethod
     @torch.no_grad()
     @torch.compile()
-    def __double_zero_clamp_(x: Tensor) -> None:
+    def _double_zero_clamp_(x: Tensor) -> None:
         eps = torch.finfo(torch.get_default_dtype()).tiny
         close_zero_mask = (x > -eps) & (x < eps)
         clamped_x = eps * (1.0 - 2.0 * torch.signbit(x))
