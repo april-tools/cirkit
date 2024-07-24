@@ -1,0 +1,19 @@
+site_name: cirkit
+repo_url: https://github.com/april-tools/cirkit
+theme:
+  name: "material"
+plugins:
+  - search
+  - autorefs
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+nav:
+  - Home: 'index.md'
+  - API Documentation: 'api/index.md'

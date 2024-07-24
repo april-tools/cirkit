@@ -147,7 +147,6 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             incomings_fn=self.layer_inputs,
             in_graph_fn=self._index_input,
         )
-        self._fold_idx_info = None
         return address_book
 
     def _index_input(self, x: Tensor, idx: Tensor) -> Tensor:

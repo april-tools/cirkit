@@ -126,7 +126,6 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         address_book = ParameterAddressBook.from_index_info(
             self.topological_ordering(), fold_idx_info
         )
-        self._fold_idx_info = None
         return address_book
 
     def reset_parameters(self) -> None:
