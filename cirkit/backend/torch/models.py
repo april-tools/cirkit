@@ -38,15 +38,9 @@ class LayerAddressBook(AddressBook):
                 (in_module_ids,) = entry.in_module_ids
                 if len(in_module_ids) == 1:
                     x = module_outputs[in_module_ids[0]]
-                elif len(module_outputs[0].shape) == 5 and in_fold_idx is None:
-                    x = [module_outputs[mid] for mid in in_module_ids]
-                elif len(module_outputs[0].shape) == 5 and in_fold_idx is not None:
-                    x = [
-                        torch.cat(module_outputs[mid], dim=0)[in_fold_idx] for mid in in_module_ids
-                    ]
                 else:
                     x = torch.cat([module_outputs[mid] for mid in in_module_ids], dim=0)
-                    x = x[in_fold_idx]
+                x = x[in_fold_idx]
                 yield (x,)
                 continue
 
@@ -174,11 +168,16 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         y = self._eval_forward(x)  # (1, num_classes, B, K)
         return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
 
+    def _extended_eval_layers(self, x: Tensor) -> Tensor:
+        # Evaluate layers
+        y = self._extended_eval_forward(x)
+        return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
+
     def _sample_layers_forward(self, num_samples: int) -> Tensor:
         # Sample layers
-        y = self._sample_forward(num_samples)
-        y = y[0, 0, ...]  # (C, N, D)
-        return y.permute(1, 0, 2)
+        y = self._sample_forward(num_samples) # (M + 1, K, C, N, D)
+        y = y[:, 0] # (M + 1, C, N, D)
+        return y.permute(0, 2, 1, 3)  # (M + 1, N, C, D)
 
     def _sample_layers_backward(self, num_samples: int) -> Tensor:
         # TODO: check dimensions
@@ -207,6 +206,9 @@ class TorchCircuit(AbstractTorchCircuit):
 
     def forward(self, x: Tensor) -> Tensor:
         return self._eval_layers(x)
+
+    def extended_forward(self, x: Tensor) -> Tensor:
+        return self._extended_eval_layers(x)
 
     def sample_forward(self, num_samples: int) -> Tensor:
         return self._sample_layers_forward(num_samples)

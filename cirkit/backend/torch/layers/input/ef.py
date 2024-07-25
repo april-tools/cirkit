@@ -168,9 +168,11 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         distribution = distributions.Categorical(logits=logits)
 
-        samples = distribution.sample((num_samples,))  # (N, F, D, K = 1, C)
-        return samples.permute(3, 1, 4, 0, 2)  # (K, F, C, N, D
-        # return samples.permute(1, 3, 4, 0, 2)  # (F, K, C, N, D)
+        samples = distribution.sample((num_samples,))  # (N, F, D, K, C)
+        samples = samples.permute(1, 3, 4, 0, 2)  # (F, K, C, N, D)
+        # ASSUMPTION: seems like K is always 1 as it is an input node?
+        samples = samples.squeeze(dim=1)  # (F, C, N, D)
+        return samples
 
     def sample_backward(
         self,
@@ -194,3 +196,6 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         x = x.to(torch.get_default_dtype())
         x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
         return x
+
+    def extended_log_score(self, x: Tensor) -> Tensor:
+        return self.log_score(x)

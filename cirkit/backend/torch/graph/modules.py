@@ -10,6 +10,7 @@ from torch import Tensor, nn
 from cirkit.backend.torch.graph.folding import AddressBook, FoldIndexInfo
 from cirkit.backend.torch.graph.nodes import TorchModuleType
 from cirkit.utils.algorithms import DiAcyclicGraph
+from cirkit.utils.scope import Scope
 
 
 class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
@@ -56,6 +57,28 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
             y = module(*inputs)
             module_outputs.append(y)
 
+    def _extended_eval_forward(self, x: Optional[Tensor] = None) -> Tensor:
+        if self._fold_idx_info is not None:
+            raise NotImplementedError("Folded extended forward evaluation is not implemented yet!")
+        module_outputs: list[Tensor] = []
+
+
+    def _pad_samples(self, y: Tensor, scope: Scope) -> Tensor:
+        # Ideally, here we need to pad with the zero element of the semiring, I think.
+        # pad = torch.ones_like(y[..., 0]) * self.semiring.zero
+        pad = torch.zeros_like(y[..., 0])
+
+        padded_samples = []
+        running_scope = 0
+        for variable in self.scope:
+            if variable in scope:
+                padded_samples.append(y[..., running_scope])
+                running_scope += 1
+            else:
+                padded_samples.append(pad)
+        padded_samples = torch.stack(padded_samples, dim=-1)
+        return padded_samples
+
     def _sample_forward(self, num_samples: int) -> Tensor:
         if self._fold_idx_info is not None:
             raise NotImplementedError("Folded forward sampling is not implemented yet!")
@@ -69,15 +92,18 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
         inputs_iterator = self._address_book.lookup(module_outputs)
         for module, inputs in itertools.zip_longest(self.topological_ordering(), inputs_iterator):
             if module is None:
+                mixture_outputs = torch.cat(mixture_outputs, 0)
+
                 (output,) = inputs
+                output = torch.cat([output, mixture_outputs], 0)
                 return output
             elif inputs == ():
                 # input nodes take no inputs for sampling
                 y = module.sample_forward(num_samples)
+                y = self._pad_samples(y, module.scope)
             else:
                 # inner nodes take inputs for sampling
                 y = module.sample_forward(num_samples, *inputs)
-
             if type(y) is tuple:
                 module_outputs.append(y[0])
                 mixture_outputs.append(y[1])

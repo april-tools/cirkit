@@ -84,9 +84,11 @@ class TorchHadamardLayer(TorchProductLayer):
         """
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, *B, K) -> (F, *B, K).
 
-    def sample_forward(self, num_samples: int, x: List[Tensor]) -> Tensor:
-        x = torch.cat(x, dim=-1)
-        return x
+    def extended_forward(self, x: Tensor) -> Tensor:
+        return self.forward(x)
+
+    def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
+        return self.semiring.prod(x, dim=1, keepdim=False)
 
 
 class TorchKroneckerLayer(TorchProductLayer):
@@ -187,7 +189,15 @@ class TorchDenseLayer(TorchSumLayer):
         Returns:
             Tensor: The output of this layer, shape (F, *B, Ko).
         """
-        x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).
+        x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).8
+        return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # shape (F, *B, Ko).
+
+
+    def extended_forward(self, x: Tensor) -> Tensor:
+        raise NotImplementedError("Extended forward pass is not implemented for DenseLayer.")
+
+    def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
+        x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).8
         return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # shape (F, *B, Ko).
 
 
@@ -249,9 +259,11 @@ class TorchMixingLayer(TorchSumLayer):
         # shape (F, H, *B, K) -> (F, *B, K).
         return self.semiring.sum(self._forward_impl, x, dim=1, keepdim=False)
 
-    def sample_forward(self, num_samples: int, x: List[Tensor]) -> Tensor:
-        x = torch.cat(x, dim=1)
+    def extended_forward(self, x: Tensor) -> Tensor:
+        raise NotImplementedError("Extended forward pass is not implemented for MixingLayer.")
 
+
+    def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
         mixing_distribution = torch.distributions.Categorical(
             logits=self.weight()
         )  # shape (F, D, K)
@@ -260,7 +272,8 @@ class TorchMixingLayer(TorchSumLayer):
         mixing_samples = mixing_samples.unsqueeze(2).unsqueeze(-1)
         mixing_samples = mixing_samples * torch.ones_like(x[:, :1, ...])
 
-        return torch.gather(x, 1, mixing_samples)
+        x = torch.gather(x, 1, mixing_samples)[:, 0]
+        return x, mixing_samples
 
     def sample_backward(
         self,
