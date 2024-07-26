@@ -98,7 +98,7 @@ def test_optimize_candecomp():
     assert allclose(unoptimized_scores, optimized_scores)
 
 
-def test_optimize_tensordot():
+def test_optimize_dense_tensordot():
     num_variables = 6
     sc1 = build_simple_pc(num_variables, 3, 2)
     sc2 = build_simple_pc(num_variables, 4, 3)
@@ -205,3 +205,69 @@ def test_optimize_tensordot_squaring():
     assert allclose(unoptimized_scores, 2.0 * unoptimized_tci(worlds))
     assert allclose(optimized_scores, 2.0 * optimized_tci(worlds))
     assert allclose(unoptimized_scores, 2.0 * optimized_tci(worlds))
+
+
+def test_optimize_tensordot_tensordot():
+    num_variables = 6
+    sc1 = build_simple_pc(num_variables, 3, 2)
+    sc2 = build_simple_pc(num_variables, 4, 3)
+    sc3 = build_simple_pc(num_variables, 5, 4)
+    sc = SF.multiply(sc3, SF.multiply(sc1, sc2))
+
+    unoptimized_compiler = TorchCompiler(fold=True, semiring="lse-sum", optimize=False)
+    unoptimized_tc: TorchCircuit = unoptimized_compiler.compile(sc)
+    unoptimized_tc1 = unoptimized_compiler.get_compiled_circuit(sc1)
+    unoptimized_tc2 = unoptimized_compiler.get_compiled_circuit(sc2)
+    unoptimized_tc3 = unoptimized_compiler.get_compiled_circuit(sc3)
+
+    optimized_compiler = TorchCompiler(fold=True, semiring="lse-sum", optimize=True)
+    optimized_tc: TorchCircuit = optimized_compiler.compile(sc)
+    optimized_tc1 = optimized_compiler.get_compiled_circuit(sc1)
+    optimized_tc2 = optimized_compiler.get_compiled_circuit(sc2)
+    optimized_tc3 = optimized_compiler.get_compiled_circuit(sc3)
+
+    assert all(
+        isinstance(l, (TorchCategoricalLayer, TorchHadamardLayer, TorchDenseLayer))
+        for l in unoptimized_tc.layers
+    )
+    assert all(
+        isinstance(l, (TorchCategoricalLayer, TorchHadamardLayer, TorchTensorDotLayer))
+        for l in optimized_tc.layers
+    )
+
+    pnames = [
+        ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),
+        ("_nodes.1.logits._nodes.0._ptensor", "_nodes.1.logits._nodes.0._ptensor"),
+        ("_nodes.2.weight._nodes.0._ptensor", "_nodes.2.weight._nodes.0._ptensor"),
+        ("_nodes.4.weight._nodes.0._ptensor", "_nodes.3.weight._nodes.0._ptensor"),
+        ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
+    ]
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc1.load_state_dict(
+            {optimized_pname: unoptimized_tc1.state_dict()[unoptimized_pname]}, strict=False
+        )
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc2.load_state_dict(
+            {optimized_pname: unoptimized_tc2.state_dict()[unoptimized_pname]}, strict=False
+        )
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc3.load_state_dict(
+            {optimized_pname: unoptimized_tc3.state_dict()[unoptimized_pname]}, strict=False
+        )
+
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
+    assert worlds.shape == (2**num_variables, 1, num_variables)
+
+    unoptimized_scores = unoptimized_tc(worlds)
+    assert unoptimized_scores.shape == (2**num_variables, 1, 1)
+
+    optimized_scores = optimized_tc(worlds)
+    assert optimized_scores.shape == (2**num_variables, 1, 1)
+
+    assert allclose(unoptimized_scores, optimized_scores)
+    assert allclose(unoptimized_scores, unoptimized_tc1(worlds) + unoptimized_tc2(worlds) + unoptimized_tc3(worlds))
+    assert allclose(optimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds) + optimized_tc3(worlds))
+    assert allclose(unoptimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds) + optimized_tc3(worlds))

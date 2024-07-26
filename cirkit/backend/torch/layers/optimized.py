@@ -14,7 +14,6 @@ class TorchTensorDotLayer(TorchSumLayer):
         self,
         num_input_units: int,
         num_output_units: int,
-        num_batch_units: int,
         *,
         num_folds: int = 1,
         weight: TorchParameter,
@@ -28,16 +27,16 @@ class TorchTensorDotLayer(TorchSumLayer):
             num_folds (int): The number of channels. Defaults to 1.
             weight (TorchParameter): The reparameterization for layer parameters.
         """
-        assert num_input_units % num_batch_units == 0
-        num_contracted_units = num_input_units // num_batch_units
+        num_contract_units = weight.shape[1]
+        num_batch_units = num_input_units // num_contract_units
         assert weight.num_folds == num_folds
-        assert weight.shape[1] == num_contracted_units
+        assert num_input_units % weight.shape[1] == 0
         assert num_output_units == weight.shape[0] * num_batch_units
         super().__init__(
             num_input_units, num_output_units, arity=1, num_folds=num_folds, semiring=semiring
         )
-        self.num_batch_units = num_batch_units
-        self.num_contracted_units = num_contracted_units
+        self._num_contract_units = num_contract_units
+        self._num_batch_units = num_batch_units
         self.weight = weight
 
     @property
@@ -45,13 +44,12 @@ class TorchTensorDotLayer(TorchSumLayer):
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
-            "num_batch_units": self.num_batch_units,
             "num_folds": self.num_folds,
         }
 
     @property
     def fold_settings(self) -> Tuple[Any, ...]:
-        return *super().fold_settings, self.num_batch_units
+        return *super().fold_settings, self._num_batch_units
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
@@ -69,7 +67,7 @@ class TorchTensorDotLayer(TorchSumLayer):
         # x: (F, H=1, B, Ki) -> (F, B, Ki)
         x = x.squeeze(dim=1)
         # x: (F, B, Ki) -> (F, B, Kj, Kq) -> (F, B, Kq, Kj)
-        x = x.view(x.shape[0], x.shape[1], self.num_contracted_units, self.num_batch_units)
+        x = x.view(x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units)
         x = x.permute(0, 1, 3, 2)
         # weight: (F, Kk, Kj)
         weight = self.weight()
