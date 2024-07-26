@@ -136,6 +136,9 @@ class TorchKroneckerLayer(TorchProductLayer):
         # shape (*B, Ki, Ki) -> (*B, Ko=Ki**2).
         return self.semiring.mul(x0, x1).flatten(start_dim=-2)
 
+    def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
+        raise NotImplementedError("Sampling of Kronecker layer is not implemented.")
+
 
 class TorchDenseLayer(TorchSumLayer):
     """The sum layer for dense sum within a layer."""
@@ -193,8 +196,15 @@ class TorchDenseLayer(TorchSumLayer):
         x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).8
         return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # shape (F, *B, Ko).
 
-    def extended_forward(self, x: Tensor) -> Tensor:
-        raise NotImplementedError("Extended forward pass is not implemented for DenseLayer.")
+    def extended_forward(self, x: Tensor, branches: Tensor) -> Tensor:
+        x = self.forward(x)
+
+        branches_log_p = torch.gather(self.weight(), -1, branches)
+        branches_log_p = E.rearrange(branches_log_p, "f o n -> f n o")
+
+        # Probably this might have to be a semiring.product in general
+        joint_log_p = x + branches_log_p
+        return joint_log_p.squeeze(dim=1)
 
     def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
         if self.arity != 1:
@@ -278,8 +288,15 @@ class TorchMixingLayer(TorchSumLayer):
         # shape (F, H, *B, K) -> (F, *B, K).
         return self.semiring.sum(self._forward_impl, x, dim=1, keepdim=False)
 
-    def extended_forward(self, x: Tensor) -> Tensor:
-        raise NotImplementedError("Extended forward pass is not implemented for MixingLayer.")
+    def extended_forward(self, x: Tensor, branches: Tensor) -> Tensor:
+        x_log_p = self.forward(x)
+
+        branches_log_p = torch.gather(self.weight(), -1, branches)
+        branches_log_p = E.rearrange(branches_log_p, "f o n -> f n o")
+
+        # Probably this might have to be a semiring.product in general
+        joint_log_p = x_log_p + branches_log_p
+        return joint_log_p
 
     def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
         normalisation = self.weight().sum(-1).abs().mean()
@@ -295,8 +312,8 @@ class TorchMixingLayer(TorchSumLayer):
             probs=self.weight()
         )  # shape (F, K, H)
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_indices = E.repeat(mixing_samples, "n f k -> f 1 c k n d", c=c, k=k, d=d)
+        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
+        mixing_indices = E.repeat(mixing_samples, "f k n -> f 1 c k n d", c=c, k=k, d=d)
 
         x = torch.gather(x, 1, mixing_indices)[:, 0]
-        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n", n=num_samples, f=f)
         return x, mixing_samples

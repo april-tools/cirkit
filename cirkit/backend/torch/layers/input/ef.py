@@ -198,5 +198,5 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
         return x
 
-    def extended_log_score(self, x: Tensor) -> Tensor:
+    def extended_forward(self, x: Tensor) -> Tensor:
         return self.log_score(x)

@@ -168,19 +168,20 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         y = self._eval_forward(x)  # (1, num_classes, B, K)
         return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
 
-    def _extended_eval_layers(self, x: Tensor) -> Tensor:
+    def _extended_eval_layers(self, x: Tensor, branches: List[Tensor]) -> Tensor:
         # Evaluate layers
-        y = self._extended_eval_forward(x)
+        y = self._extended_eval_forward(x, branches)
         return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
 
     def _sample_layers_forward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
         # Sample layers
         y = self._sample_forward(num_samples)
-        samples = y[0][0, 0] # (C, O, N, D)
+        samples = y[0][0, 0, :, 0]  # (C, N, D)
+        samples = E.rearrange(samples, "c n d -> n c d")  # (N, C, D
         mixture_samples = y[1]
-        return samples.permute(2, 0, 1, 3), mixture_samples  # (N, C, O, D) and (M,
+        return samples, mixture_samples  # (N, C, D)
 
-    def _sample_layers_backward(self, num_samples: int) -> Tensor:
+    def _sample_layers_backward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
         # TODO: check dimensions
         # Sample layers
         y = self._sample_backward(num_samples)  # (N, num_classes, B, K)
@@ -208,13 +209,13 @@ class TorchCircuit(AbstractTorchCircuit):
     def forward(self, x: Tensor) -> Tensor:
         return self._eval_layers(x)
 
-    def extended_forward(self, x: Tensor) -> Tensor:
-        return self._extended_eval_layers(x)
+    def extended_forward(self, x: Tensor, branches: List[Tensor]) -> Tensor:
+        return self._extended_eval_layers(x, branches)
 
-    def sample_forward(self, num_samples: int) -> Tensor:
+    def sample_forward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
         return self._sample_layers_forward(num_samples)
 
-    def sample_backward(self, num_samples: int) -> Tensor:
+    def sample_backward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
         return self._sample_layers_backward(num_samples)
 
 

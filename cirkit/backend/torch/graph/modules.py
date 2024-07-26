@@ -58,10 +58,20 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
             y = module(*inputs)
             module_outputs.append(y)
 
-    def _extended_eval_forward(self, x: Optional[Tensor] = None) -> Tensor:
-        if self._fold_idx_info is not None:
-            raise NotImplementedError("Folded extended forward evaluation is not implemented yet!")
-        module_outputs: list[Tensor] = []
+    def _extended_eval_forward(self, x: Optional[Tensor], branches: List[Tensor]) -> Tensor:
+        module_outputs: List[Tensor] = []
+        inputs_iterator = self._address_book.lookup(module_outputs, in_graph=x)
+        for module, inputs in itertools.zip_longest(self.topological_ordering(), inputs_iterator):
+            if module is None:
+                (output,) = inputs
+                return output
+            elif "Mixing" in str(type(module)) or "Dense" in str(type(module)):
+                # elif isinstance(module, (TorchMixingLayer, TorchDenseLayer)):
+                current_branch = branches.pop(0)
+                y = module.extended_forward(*inputs, current_branch)
+            else:
+                y = module.extended_forward(*inputs)
+            module_outputs.append(y)
 
     def _pad_samples(self, y: Tensor, scope: Scope) -> Tensor:
         """
