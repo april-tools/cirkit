@@ -1,4 +1,5 @@
 import functools
+import einops as E
 from abc import ABC
 from typing import Any, Callable, Dict, Optional, Tuple, List
 
@@ -192,13 +193,31 @@ class TorchDenseLayer(TorchSumLayer):
         x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).8
         return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # shape (F, *B, Ko).
 
-
     def extended_forward(self, x: Tensor) -> Tensor:
         raise NotImplementedError("Extended forward pass is not implemented for DenseLayer.")
 
     def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
-        x = x.squeeze(dim=1)  # shape (F, H=1, *B, Ki) -> (F, *B, Ki).8
-        return self.semiring.sum(self._forward_impl, x, dim=-1, keepdim=True)  # shape (F, *B, Ko).
+        if self.arity != 1:
+            raise NotImplementedError("Sampling of Dense layer only implemented for arity 1.")
+
+        normalisation = self.weight().sum(-1).abs().mean()
+        if normalisation < 1 - 1e-6 or normalisation > 1 + 1e-6:
+            raise ValueError("Sampling only works with a normalised parametrisation!")
+
+        c = x.shape[2]
+        d = x.shape[-1]
+
+        mixing_distribution = torch.distributions.Categorical(
+            probs=self.weight()
+        )  # shape (F, O, K)
+
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
+        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
+
+        x = torch.gather(x, -3, mixing_indices)
+        x = x[:, 0]
+        return x, mixing_samples
 
 
 class TorchMixingLayer(TorchSumLayer):
@@ -262,36 +281,22 @@ class TorchMixingLayer(TorchSumLayer):
     def extended_forward(self, x: Tensor) -> Tensor:
         raise NotImplementedError("Extended forward pass is not implemented for MixingLayer.")
 
+    def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
+        normalisation = self.weight().sum(-1).abs().mean()
+        if normalisation < 1 - 1e-6 or normalisation > 1 + 1e-6:
+            raise ValueError("Sampling only works with a normalised parametrisation!")
 
-    def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
+        f = x.shape[0]
+        c = x.shape[2]
+        k = x.shape[-3]
+        d = x.shape[-1]
+
         mixing_distribution = torch.distributions.Categorical(
-            logits=self.weight()
-        )  # shape (F, D, K)
+            probs=self.weight()
+        )  # shape (F, K, H)
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = mixing_samples.permute(1, 2, 0)
-        mixing_samples = mixing_samples.unsqueeze(2).unsqueeze(-1)
-        mixing_samples = mixing_samples * torch.ones_like(x[:, :1, ...])
+        mixing_indices = E.repeat(mixing_samples, "n f k -> f 1 c k n d", c=c, k=k, d=d)
 
-        x = torch.gather(x, 1, mixing_samples)[:, 0]
+        x = torch.gather(x, 1, mixing_indices)[:, 0]
+        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n", n=num_samples, f=f)
         return x, mixing_samples
-
-    def sample_backward(
-        self,
-        sample_dict: Dict[TorchLayer, List[Tensor]],
-        unit_dict: Dict[TorchLayer, List[Tensor]],
-        num_samples: int,
-    ) -> Tensor:
-        mixing_distribution = torch.distributions.Categorical(logits=self.weight())
-        mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_sample_weights = torch.gather(self.weight(), 1, mixing_samples.unsqueeze(1))
-
-        idx1, idx2 = torch.unravel_index(mixing_samples, self.weight().shape)
-
-        for i, layer in enumerate(sample_dict.keys()):
-            sample_idx = sample_dict[self][idx1[i]]
-            sample_dict[layer].extend(sample_idx)
-
-            unit_idx = unit_dict[self][idx2[i]]
-            unit_dict[layer].extend(unit_idx)
-
-        return mixing_sample_weights

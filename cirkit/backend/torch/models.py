@@ -173,11 +173,12 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         y = self._extended_eval_forward(x)
         return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
 
-    def _sample_layers_forward(self, num_samples: int) -> Tensor:
+    def _sample_layers_forward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
         # Sample layers
-        y = self._sample_forward(num_samples) # (M + 1, K, C, N, D)
-        y = y[:, 0] # (M + 1, C, N, D)
-        return y.permute(0, 2, 1, 3)  # (M + 1, N, C, D)
+        y = self._sample_forward(num_samples)
+        samples = y[0][0, 0] # (C, O, N, D)
+        mixture_samples = y[1]
+        return samples.permute(2, 0, 1, 3), mixture_samples  # (N, C, O, D) and (M,
 
     def _sample_layers_backward(self, num_samples: int) -> Tensor:
         # TODO: check dimensions

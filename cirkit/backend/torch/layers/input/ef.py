@@ -2,6 +2,7 @@ from abc import abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
 
 import numpy as np
+import einops as E
 import torch
 from torch import Tensor, distributions, nn
 from torch.nn import functional as F
@@ -165,13 +166,13 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         return params
 
     def sample_forward(self, num_samples: int) -> Tensor:
+        if len(self.scope) > 1:
+            raise NotImplementedError("Multivariate Categorical sampling is not implemented yet!")
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         distribution = distributions.Categorical(logits=logits)
 
-        samples = distribution.sample((num_samples,))  # (N, F, D, K, C)
-        samples = samples.permute(1, 3, 4, 0, 2)  # (F, K, C, N, D)
-        # ASSUMPTION: seems like K is always 1 as it is an input node?
-        samples = samples.squeeze(dim=1)  # (F, C, N, D)
+        samples = distribution.sample((num_samples,))  # (N, F, D = 1, K, C)
+        samples = E.rearrange(samples[..., 0, :, :], "n f k c -> f c k n")  # (F, C, K, N)
         return samples
 
     def sample_backward(
