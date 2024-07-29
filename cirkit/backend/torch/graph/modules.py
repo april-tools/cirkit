@@ -59,6 +59,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
             module_outputs.append(y)
 
     def _extended_eval_forward(self, x: Optional[Tensor], branches: List[Tensor]) -> Tensor:
+        branches_queue = branches.copy()
         module_outputs: List[Tensor] = []
         inputs_iterator = self._address_book.lookup(module_outputs, in_graph=x)
         for module, inputs in itertools.zip_longest(self.topological_ordering(), inputs_iterator):
@@ -67,7 +68,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleType], ABC):
                 return output
             elif "Mixing" in str(type(module)) or "Dense" in str(type(module)):
                 # elif isinstance(module, (TorchMixingLayer, TorchDenseLayer)):
-                current_branch = branches.pop(0)
+                current_branch = branches_queue.pop(0)
                 y = module.extended_forward(*inputs, current_branch)
             else:
                 y = module.extended_forward(*inputs)
