@@ -1,4 +1,4 @@
-from typing import Literal, cast
+from typing import Literal, cast, Tuple
 
 import torch
 from torch import Tensor
@@ -67,6 +67,11 @@ class TorchCPLayer(TorchInnerLayer):
         """
         # shape (H, *B, Ki) -> (*B, Ki) -> (H, *B, Ki) -> (*B, Ko).
         return self.sum_layer(self.prod_layer(x).unsqueeze(dim=0))
+
+    def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
+        product_samples = self.prod_layer.sample_forward(num_samples, x)
+        samples, mixing_samples = self.sum_layer.sample_forward(num_samples, product_samples)
+        return samples, mixing_samples
 
 
 class TorchTuckerLayer(TorchInnerLayer):
