@@ -105,7 +105,6 @@ def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[To
     return (cp,)
 
 
-
 def _apply_tensordot_rule(
     compiler: "TorchCompiler",
     num_input_units: int,
@@ -141,11 +140,7 @@ def apply_dense_tensordot(
     weight_patterns = match.pentries[0]["weight"]
     kronecker = cast(TorchKroneckerParameter, weight_patterns[0].entries[0])
     return _apply_tensordot_rule(
-        compiler,
-        dense.num_input_units,
-        dense.num_output_units,
-        dense.weight,
-        kronecker
+        compiler, dense.num_input_units, dense.num_output_units, dense.weight, kronecker
     )
 
 
@@ -156,11 +151,7 @@ def apply_tensordot_tensordot(
     weight_patterns = match.pentries[0]["weight"]
     kronecker = cast(TorchKroneckerParameter, weight_patterns[0].entries[0])
     return _apply_tensordot_rule(
-        compiler,
-        tdot.num_input_units,
-        tdot.num_output_units,
-        tdot.weight,
-        kronecker
+        compiler, tdot.num_input_units, tdot.num_output_units, tdot.weight, kronecker
     )
 
 
@@ -170,5 +161,5 @@ DEFAULT_LAYER_FUSE_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # ty
 }
 DEFAULT_LAYER_SHATTER_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
     DenseKroneckerPattern: apply_dense_tensordot,
-    TensorDotKroneckerPattern: apply_tensordot_tensordot
+    TensorDotKroneckerPattern: apply_tensordot_tensordot,
 }

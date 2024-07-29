@@ -268,6 +268,13 @@ def test_optimize_tensordot_tensordot():
     assert optimized_scores.shape == (2**num_variables, 1, 1)
 
     assert allclose(unoptimized_scores, optimized_scores)
-    assert allclose(unoptimized_scores, unoptimized_tc1(worlds) + unoptimized_tc2(worlds) + unoptimized_tc3(worlds))
-    assert allclose(optimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds) + optimized_tc3(worlds))
-    assert allclose(unoptimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds) + optimized_tc3(worlds))
+    assert allclose(
+        unoptimized_scores,
+        unoptimized_tc1(worlds) + unoptimized_tc2(worlds) + unoptimized_tc3(worlds),
+    )
+    assert allclose(
+        optimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds) + optimized_tc3(worlds)
+    )
+    assert allclose(
+        unoptimized_scores, optimized_tc1(worlds) + optimized_tc2(worlds) + optimized_tc3(worlds)
+    )
