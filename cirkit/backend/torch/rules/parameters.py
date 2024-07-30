@@ -75,7 +75,7 @@ def _retrieve_dtype(dtype: DataType) -> torch.dtype:
 
 
 def compile_tensor_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTensorParameter:
-    initializer_ = compiler.compiler_initializer(p.initializer)
+    initializer_ = compiler.compile_initializer(p.initializer)
     dtype = _retrieve_dtype(p.dtype)
     compiled_p = TorchTensorParameter(
         *p.shape, requires_grad=p.learnable, initializer_=initializer_, dtype=dtype
@@ -87,7 +87,7 @@ def compile_tensor_parameter(compiler: "TorchCompiler", p: TensorParameter) -> T
 def compile_constant_parameter(
     compiler: "TorchCompiler", p: ConstantParameter
 ) -> TorchTensorParameter:
-    initializer_ = compiler.compiler_initializer(p.initializer)
+    initializer_ = compiler.compile_initializer(p.initializer)
     compiled_p = TorchTensorParameter(*p.shape, requires_grad=False, initializer_=initializer_)
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p

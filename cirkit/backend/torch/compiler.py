@@ -171,7 +171,7 @@ class TorchCompiler(AbstractCompiler):
         outputs = [compiled_nodes_map[parameter.output]]
         return TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
 
-    def compiler_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
+    def compile_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
         # Retrieve the rule for the given initializer and compile it
         signature = type(initializer)
         rule = self.retrieve_initializer_rule(signature)
