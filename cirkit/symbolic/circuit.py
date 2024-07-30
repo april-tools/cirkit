@@ -321,8 +321,10 @@ class Circuit(DiAcyclicGraph[Layer]):
             Circuit: A symbolic circuit.
 
         Raises:
+            NotImplementedError: If an unknown 'sum_product' is given.
             ValueError: If both 'sum_product' and layer factories are specified, or none of them.
             ValueError: If the mixing factory is required, but it was not given.
+            ValueError: The given region graph is malformed.
         """
         if (sum_factory is None and prod_factory is not None) or (
             sum_factory is not None and prod_factory is None
@@ -405,7 +407,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             rgn_to_layers[rgn] = dense
             return dense
 
-        sum_prod_builder_: Optional[Callable[[Scope, OrderedSet[RegionNode], int], Layer]]
+        sum_prod_builder_: Optional[Callable[[RegionNode, OrderedSet[RegionNode], int], Layer]]
         if sum_product is None:
             sum_prod_builder_ = None
         elif sum_product == "cp":
@@ -415,7 +417,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         elif sum_product == "tucker":
             sum_prod_builder_ = build_tucker_
         else:
-            raise ValueError(f"Unknown sum-product layer abstraction called {sum_product}")
+            raise NotImplementedError(f"Unknown sum-product layer abstraction called {sum_product}")
 
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
@@ -482,7 +484,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 #       completeness cannot be inferred and is only guaranteed by larger picture.
                 #       Also, should anything really go wrong, we will hit this guard statement
                 #       instead of going into a wrong branch.
-                assert False, "Region graph nodes must be either region or partition nodes"
+                raise ValueError("Region graph nodes must be either region or partition nodes")
 
         outputs = [rgn_to_layers[rgn] for rgn in region_graph.output_nodes]
         return cls(
