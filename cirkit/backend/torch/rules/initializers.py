@@ -5,9 +5,10 @@ import torch
 from torch import nn
 
 from cirkit.backend.compiler import InitializerCompilationFunc, InitializerCompilationSign
-from cirkit.backend.torch.initializers import InitializerFunc, dirichlet_
+from cirkit.backend.torch.initializers import InitializerFunc, copy_from_ndarray_, dirichlet_
 from cirkit.symbolic.initializers import (
     ConstantInitializer,
+    ConstantTensorInitializer,
     DirichletInitializer,
     NormalInitializer,
     UniformInitializer,
@@ -21,6 +22,12 @@ def compile_constant_initializer(
     compiler: "TorchCompiler", init: ConstantInitializer
 ) -> InitializerFunc:
     return functools.partial(torch.fill_, value=init.value)
+
+
+def compile_constant_tensor_initializer(
+    compiler: "TorchCompiler", init: ConstantTensorInitializer
+) -> InitializerFunc:
+    return functools.partial(copy_from_ndarray_, array=init.value)
 
 
 def compile_uniform_initializer(
@@ -44,6 +51,7 @@ def compiler_dirichlet_initializer(
 
 DEFAULT_INITIALIZER_COMPILATION_RULES: Dict[InitializerCompilationSign, InitializerCompilationFunc] = {  # type: ignore[misc]
     ConstantInitializer: compile_constant_initializer,
+    ConstantTensorInitializer: compile_constant_tensor_initializer,
     UniformInitializer: compile_uniform_initializer,
     NormalInitializer: compile_normal_initializer,
     DirichletInitializer: compiler_dirichlet_initializer,
