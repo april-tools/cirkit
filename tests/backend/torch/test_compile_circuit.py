@@ -9,7 +9,7 @@ from scipy import integrate
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.layers import TorchDenseLayer, TorchMixingLayer
+from cirkit.backend.torch.layers import TorchCPTLayer, TorchDenseLayer, TorchMixingLayer
 from cirkit.pipeline import PipelineContext, compile
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import NormalInitializer
@@ -438,11 +438,14 @@ def test_compile_circuit_cp_layers():
     assert y.shape == (42, 1, 1)
 
     # for l in circuit.layers:
-    #     if isinstance(l, (TorchDenseLayer, TorchMixingLayer)):
+    #     if isinstance(l, (TorchDenseLayer, TorchMixingLayer, TorchCPLayer)):
     #         print(l.__class__.__name__, (l.weight.num_folds, *l.weight.shape))
 
     layers = list(
-        filter(lambda l: isinstance(l, (TorchDenseLayer, TorchMixingLayer)), circuit.layers)
+        filter(
+            lambda l: isinstance(l, (TorchDenseLayer, TorchMixingLayer, TorchCPTLayer)),
+            circuit.layers,
+        )
     )
     assert (layers[0].weight.num_folds, *layers[0].weight.shape) == (32, 64, 64)
     assert (layers[1].weight.num_folds, *layers[1].weight.shape) == (16, 64, 64)
