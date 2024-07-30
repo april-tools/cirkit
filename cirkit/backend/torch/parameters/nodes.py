@@ -220,7 +220,7 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
     @property
     def fold_settings(self) -> Tuple[Any, ...]:
-        return *self.in_shapes, *self.config.items()
+        return self.in_shapes
 
     def __call__(self, *xs: Tensor) -> Tensor:
         """Get the reparameterized parameters.
@@ -280,7 +280,7 @@ class TorchEntrywiseParameterOp(TorchUnaryParameterOp, ABC):
         return self.in_shapes[0]
 
 
-class TorchReduceParamterOp(TorchUnaryParameterOp, ABC):
+class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
     """The base class for normalized reparameterization."""
 
     # NOTE: This class only serves as the common base of all normalized reparams, but include
@@ -305,6 +305,10 @@ class TorchReduceParamterOp(TorchUnaryParameterOp, ABC):
     def config(self) -> Dict[str, Any]:
         return dict(dim=self.dim)
 
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.dim
+
 
 class TorchEntrywiseReduceParameterOp(TorchEntrywiseParameterOp, ABC):
     """The base class for normalized reparameterization."""
@@ -328,6 +332,48 @@ class TorchEntrywiseReduceParameterOp(TorchEntrywiseParameterOp, ABC):
         config = super().config
         config.update(dim=self.dim)
         return config
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.dim
+
+
+class TorchIndexParameter(TorchUnaryParameterOp):
+    def __init__(
+        self, in_shape: Tuple[int, ...], *, num_folds: int = 1, indices: List[int], dim: int = -1
+    ) -> None:
+        super().__init__(in_shape, num_folds=num_folds)
+        dim = dim if dim >= 0 else dim + len(in_shape)
+        assert 0 <= dim < len(in_shape)
+        assert all(0 <= i < in_shape[dim] for i in indices)
+        super().__init__(in_shape, num_folds=num_folds)
+        self.dim = dim
+        self.register_buffer("_indices", torch.tensor(indices))
+
+    @property
+    def indices(self) -> List[int]:
+        return self._indices.cpu().tolist()
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        config = super().config
+        config.update(indices=self.indices, dim=self.dim)
+        return config
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, tuple(self.indices), self.dim
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            *self.in_shapes[0][: self.dim],
+            len(self._indices),
+            *self.in_shapes[0][self.dim + 1 :],
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x[:, self._indices]
 
 
 class TorchSumParameter(TorchBinaryParameterOp):
@@ -411,6 +457,10 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
         config.update(dim=self.dim)
         return config
 
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.dim
+
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1: (F, d1, d2, ..., dk1, ... dn)
         # x2: (F, d1, d2, ..., dk2, ... dn)
@@ -451,6 +501,10 @@ class TorchOuterSumParameter(TorchBinaryParameterOp):
         config = super().config
         config.update(dim=self.dim)
         return config
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.dim
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1: (F, d1, d2, ..., dk1, ... dn)
@@ -503,6 +557,10 @@ class TorchScaledSigmoidParameter(TorchEntrywiseParameterOp):
         config.update(vmin=self.vmin, vmax=self.vmax)
         return config
 
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.vmin, self.vmax
+
     def forward(self, x: Tensor) -> Tensor:
         return torch.sigmoid(x) * (self.vmax - self.vmin) + self.vmin
 
@@ -532,6 +590,10 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
             config.update(vmax=self.vmax)
         return config
 
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.vmin, self.vmax
+
     def forward(self, x: Tensor) -> Tensor:
         return torch.clamp(x, min=self.vmin, max=self.vmax)
 
@@ -546,17 +608,17 @@ class TorchConjugateParameter(TorchEntrywiseParameterOp):
         return torch.conj(x)
 
 
-class TorchReduceSumParameter(TorchReduceParamterOp):
+class TorchReduceSumParameter(TorchReduceParameterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.sum(x, dim=self.dim + 1)
 
 
-class TorchReduceProductParameter(TorchReduceParamterOp):
+class TorchReduceProductParameter(TorchReduceParameterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.prod(x, dim=self.dim + 1)
 
 
-class TorchReduceLSEParameter(TorchReduceParamterOp):
+class TorchReduceLSEParameter(TorchReduceParameterOp):
     def forward(self, x: Tensor) -> Tensor:
         return torch.logsumexp(x, dim=self.dim + 1)
 

@@ -7,17 +7,17 @@ import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.utils.scope import Scope
-from tests.floats import allclose, isclose
+from tests.floats import allclose
 from tests.symbolic.test_utils import build_simple_pc
 
 
 @pytest.mark.parametrize(
     "fold,semiring,num_variables,normalized",
-    itertools.product([False, True], ["lse-sum", "sum-product"], [5], [False, True]),
+    itertools.product([False, True], ["lse-sum", "sum-product"], [6], [False, True]),
 )
 def test_marginalize_pc_discrete(fold: bool, semiring: str, num_variables: int, normalized: bool):
     compiler = TorchCompiler(fold=fold, semiring=semiring)
-    sc = build_simple_pc(num_variables, 3, 2, num_repetitions=3, normalized=normalized)
+    sc = build_simple_pc(num_variables, 3, 2, normalized=normalized)
 
     mar_sc = SF.integrate(sc, scope=Scope([num_variables - 1]))
     mar_tc: TorchCircuit = compiler.compile(mar_sc)

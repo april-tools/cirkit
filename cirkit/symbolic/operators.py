@@ -38,6 +38,8 @@ def integrate_categorical_layer(
     if scope is None:
         scope = sl.scope
     rem_scope = sl.scope.difference(scope)
+    mar_var_indices = [i for i, s in enumerate(sl.scope) if s in scope]
+    rem_var_indices = [i for i, s in enumerate(sl.scope) if s in rem_scope]
 
     if len(rem_scope) == 0:
         mar_logits = sl.logits.ref() if sl.logits is not None else None
@@ -48,14 +50,14 @@ def integrate_categorical_layer(
             mar_logits = None
             rem_logits = None
             rem_probs = Parameter.from_unary(
-                IndexParameter(sl.probs.shape, indices=list(scope), axis=0), sl.probs.ref()
+                IndexParameter(sl.probs.shape, indices=rem_var_indices, axis=0), sl.probs.ref()
             )
         else:
             mar_logits = Parameter.from_unary(
-                IndexParameter(sl.logits.shape, indices=list(scope), axis=0), sl.logits.ref()
+                IndexParameter(sl.logits.shape, indices=mar_var_indices, axis=0), sl.logits.ref()
             )
             rem_logits = Parameter.from_unary(
-                IndexParameter(sl.logits.shape, indices=list(rem_scope), axis=0), sl.logits.ref()
+                IndexParameter(sl.logits.shape, indices=rem_var_indices, axis=0), sl.logits.ref()
             )
             rem_probs = None
 
@@ -92,6 +94,8 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Optional[Scope] = None
     if scope is None:
         scope = sl.scope
     rem_scope = sl.scope.difference(scope)
+    mar_var_indices = [i for i, s in enumerate(sl.scope) if s in scope]
+    rem_var_indices = [i for i, s in enumerate(sl.scope) if s in rem_scope]
 
     if len(rem_scope) == 0:
         rem_mean = None
@@ -100,17 +104,17 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Optional[Scope] = None
         mar_lp_value = sl.log_partition
     else:
         rem_mean = Parameter.from_unary(
-            IndexParameter(sl.mean.shape, indices=list(rem_scope), axis=0), sl.mean.ref()
+            IndexParameter(sl.mean.shape, indices=rem_var_indices, axis=0), sl.mean.ref()
         )
         rem_stddev = Parameter.from_unary(
-            IndexParameter(sl.stddev.shape, indices=list(rem_scope), axis=0), sl.mean.ref()
+            IndexParameter(sl.stddev.shape, indices=rem_var_indices, axis=0), sl.mean.ref()
         )
         mar_lp_value = Parameter.from_unary(
-            IndexParameter(sl.log_partition.shape, indices=list(scope), axis=0),
+            IndexParameter(sl.log_partition.shape, indices=mar_var_indices, axis=0),
             sl.log_partition.ref(),
         )
         rem_lp_value = Parameter.from_unary(
-            IndexParameter(sl.log_partition.shape, indices=list(rem_scope), axis=0),
+            IndexParameter(sl.log_partition.shape, indices=rem_var_indices, axis=0),
             sl.log_partition.ref(),
         )
 

@@ -11,6 +11,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchGaussianProductMean,
     TorchGaussianProductStddev,
     TorchHadamardParameter,
+    TorchIndexParameter,
     TorchKroneckerParameter,
     TorchLogParameter,
     TorchLogSoftmaxParameter,
@@ -37,6 +38,7 @@ from cirkit.symbolic.parameters import (
     GaussianProductMean,
     GaussianProductStddev,
     HadamardParameter,
+    IndexParameter,
     KroneckerParameter,
     LogParameter,
     LogSoftmaxParameter,
@@ -100,6 +102,11 @@ def compile_reference_parameter(
     # and wrap it in a pointer parameter node.
     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+
+def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
+    (in_shape,) = p.in_shapes
+    return TorchIndexParameter(in_shape, indices=p.indices, dim=p.axis)
 
 
 def compile_sum_parameter(compiler: "TorchCompiler", p: SumParameter) -> TorchSumParameter:
@@ -234,6 +241,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
+    IndexParameter: compile_index_parameter,
     SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,
     KroneckerParameter: compile_kronecker_parameter,
