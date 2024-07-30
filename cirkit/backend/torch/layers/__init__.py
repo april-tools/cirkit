@@ -11,5 +11,5 @@ from .input import TorchExpFamilyLayer as TorchExpFamilyLayer
 from .input import TorchGaussianLayer as TorchGaussianLayer
 from .input import TorchInputLayer as TorchInputLayer
 from .input import TorchLogPartitionLayer as TorchLogPartitionLayer
-from .optimized import TorchTensorDotLayer as TorchTensorDotLayer
-from .optimized import TorchTuckerLayer as TorchTuckerLayer
+from .sum_product import TorchCPLayer as TorchCPLayer
+from .sum_product import TorchTuckerLayer as TorchTuckerLayer

@@ -2,11 +2,13 @@ from typing import TYPE_CHECKING, Dict, List, Tuple, Type, cast
 
 from cirkit.backend.torch.layers import (
     TorchDenseLayer,
+    TorchHadamardLayer,
     TorchKroneckerLayer,
     TorchLayer,
     TorchTuckerLayer,
 )
 from cirkit.backend.torch.layers.optimized import TorchTensorDotLayer
+from cirkit.backend.torch.layers.sum_product import TorchCPLayer
 from cirkit.backend.torch.optimization.parameters import KroneckerOutParameterPattern
 from cirkit.backend.torch.optimization.registry import (
     LayerOptApplyFunc,
@@ -29,6 +31,20 @@ class TuckerPattern(LayerOptPattern):
     @classmethod
     def entries(cls) -> List[Type[TorchLayer]]:
         return [TorchDenseLayer, TorchKroneckerLayer]
+
+    @classmethod
+    def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
+        return [{} for _ in cls.entries()]
+
+
+class CandecompPattern(LayerOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> List[Type[TorchLayer]]:
+        return [TorchDenseLayer, TorchHadamardLayer]
 
     @classmethod
     def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
@@ -74,6 +90,19 @@ def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[Torch
         semiring=compiler.semiring,
     )
     return (tucker,)
+
+
+def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchCPLayer]:
+    dense = cast(TorchDenseLayer, match.entries[0])
+    hadamard = cast(TorchHadamardLayer, match.entries[1])
+    cp = TorchCPLayer(
+        hadamard.num_input_units,
+        dense.num_output_units,
+        hadamard.arity,
+        weight=dense.weight,
+        semiring=compiler.semiring,
+    )
+    return (cp,)
 
 
 def _apply_tensordot_rule(
@@ -127,7 +156,8 @@ def apply_tensordot_tensordot(
 
 
 DEFAULT_LAYER_FUSE_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
-    TuckerPattern: apply_tucker
+    TuckerPattern: apply_tucker,
+    CandecompPattern: apply_candecomp,
 }
 DEFAULT_LAYER_SHATTER_OPT_RULES: Dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
     DenseKroneckerPattern: apply_dense_tensordot,

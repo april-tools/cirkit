@@ -13,6 +13,7 @@ from cirkit.backend.torch.layers import (
     TorchTuckerLayer,
 )
 from cirkit.backend.torch.layers.optimized import TorchTensorDotLayer
+from cirkit.backend.torch.layers.sum_product import TorchCPLayer
 from tests.floats import allclose
 from tests.symbolic.test_utils import build_simple_pc
 
@@ -31,6 +32,46 @@ def test_optimize_tucker():
         isinstance(l, (TorchKroneckerLayer, TorchDenseLayer)) for l in unoptimized_tc.layers[-4:]
     )
     assert all(isinstance(l, TorchTuckerLayer) for l in optimized_tc.layers[-2:])
+
+    pnames = [
+        ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),
+        ("_nodes.1.logits._nodes.0._ptensor", "_nodes.1.logits._nodes.0._ptensor"),
+        ("_nodes.2.weight._nodes.0._ptensor", "_nodes.2.weight._nodes.0._ptensor"),
+        ("_nodes.4.weight._nodes.0._ptensor", "_nodes.3.weight._nodes.0._ptensor"),
+        ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
+    ]
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc.load_state_dict(
+            {optimized_pname: unoptimized_tc.state_dict()[unoptimized_pname]}, strict=False
+        )
+
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
+    assert worlds.shape == (2**num_variables, 1, num_variables)
+
+    unoptimized_scores = unoptimized_tc(worlds)
+    assert unoptimized_scores.shape == (2**num_variables, 1, 1)
+
+    optimized_scores = optimized_tc(worlds)
+    assert optimized_scores.shape == (2**num_variables, 1, 1)
+
+    assert allclose(unoptimized_scores, optimized_scores)
+
+
+def test_optimize_candecomp():
+    num_variables = 6
+    sc = build_simple_pc(num_variables, 3, 2)
+
+    unoptimized_compiler = TorchCompiler(fold=True, semiring="lse-sum", optimize=False)
+    unoptimized_tc: TorchCircuit = unoptimized_compiler.compile(sc)
+
+    optimized_compiler = TorchCompiler(fold=True, semiring="lse-sum", optimize=True)
+    optimized_tc: TorchCircuit = optimized_compiler.compile(sc)
+
+    assert all(
+        isinstance(l, (TorchHadamardLayer, TorchDenseLayer)) for l in unoptimized_tc.layers[-4:]
+    )
+    assert all(isinstance(l, TorchCPLayer) for l in optimized_tc.layers[-2:])
 
     pnames = [
         ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),
@@ -82,11 +123,23 @@ def test_optimize_dense_tensordot():
         for l in optimized_tc.layers
     )
 
-    for pname, pvalue in unoptimized_tc1.named_parameters():
-        optimized_tc1.load_state_dict({pname: pvalue.data}, strict=False)
+    pnames = [
+        ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),
+        ("_nodes.1.logits._nodes.0._ptensor", "_nodes.1.logits._nodes.0._ptensor"),
+        ("_nodes.2.weight._nodes.0._ptensor", "_nodes.2.weight._nodes.0._ptensor"),
+        ("_nodes.4.weight._nodes.0._ptensor", "_nodes.3.weight._nodes.0._ptensor"),
+        ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
+    ]
 
-    for pname, pvalue in unoptimized_tc2.named_parameters():
-        optimized_tc2.load_state_dict({pname: pvalue.data}, strict=False)
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc1.load_state_dict(
+            {optimized_pname: unoptimized_tc1.state_dict()[unoptimized_pname]}, strict=False
+        )
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc2.load_state_dict(
+            {optimized_pname: unoptimized_tc2.state_dict()[unoptimized_pname]}, strict=False
+        )
 
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
     assert worlds.shape == (2**num_variables, 1, num_variables)
@@ -125,8 +178,19 @@ def test_optimize_tensordot_squaring():
         for l in optimized_tc.layers
     )
 
-    for pname, pvalue in unoptimized_tci.named_parameters():
-        optimized_tci.load_state_dict({pname: pvalue.data}, strict=False)
+    pnames = [
+        ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),
+        ("_nodes.1.logits._nodes.0._ptensor", "_nodes.1.logits._nodes.0._ptensor"),
+        ("_nodes.2.weight._nodes.0._ptensor", "_nodes.2.weight._nodes.0._ptensor"),
+        ("_nodes.4.weight._nodes.0._ptensor", "_nodes.3.weight._nodes.0._ptensor"),
+        ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
+        ("_nodes.8.weight._nodes.0._ptensor", "_nodes.5.weight._nodes.0._ptensor"),
+    ]
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tci.load_state_dict(
+            {optimized_pname: unoptimized_tci.state_dict()[unoptimized_pname]}, strict=False
+        )
 
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
     assert worlds.shape == (2**num_variables, 1, num_variables)
@@ -171,14 +235,28 @@ def test_optimize_tensordot_tensordot():
         for l in optimized_tc.layers
     )
 
-    for pname, pvalue in unoptimized_tc1.named_parameters():
-        optimized_tc1.load_state_dict({pname: pvalue.data}, strict=False)
+    pnames = [
+        ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),
+        ("_nodes.1.logits._nodes.0._ptensor", "_nodes.1.logits._nodes.0._ptensor"),
+        ("_nodes.2.weight._nodes.0._ptensor", "_nodes.2.weight._nodes.0._ptensor"),
+        ("_nodes.4.weight._nodes.0._ptensor", "_nodes.3.weight._nodes.0._ptensor"),
+        ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
+    ]
 
-    for pname, pvalue in unoptimized_tc2.named_parameters():
-        optimized_tc2.load_state_dict({pname: pvalue.data}, strict=False)
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc1.load_state_dict(
+            {optimized_pname: unoptimized_tc1.state_dict()[unoptimized_pname]}, strict=False
+        )
 
-    for pname, pvalue in unoptimized_tc3.named_parameters():
-        optimized_tc3.load_state_dict({pname: pvalue.data}, strict=False)
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc2.load_state_dict(
+            {optimized_pname: unoptimized_tc2.state_dict()[unoptimized_pname]}, strict=False
+        )
+
+    for unoptimized_pname, optimized_pname in pnames:
+        optimized_tc3.load_state_dict(
+            {optimized_pname: unoptimized_tc3.state_dict()[unoptimized_pname]}, strict=False
+        )
 
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
     assert worlds.shape == (2**num_variables, 1, num_variables)
