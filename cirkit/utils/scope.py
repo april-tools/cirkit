@@ -388,6 +388,9 @@ class Scope(Collection[int], Hashable):
         """
         return Scope(frozenset().union(*scopes))
 
+    def difference(self, other: "Scope") -> "Scope":
+        return Scope(filter(lambda s: s not in other, self))
+
 
 @Scope.register("frozenset")  # type: ignore[misc]
 @final  # type: ignore[misc]

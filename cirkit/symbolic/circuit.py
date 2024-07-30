@@ -7,12 +7,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Protocol, Sequ
 
 from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
-from cirkit.utils.algorithms import (
-    BiRootedDiAcyclicGraph,
-    DiAcyclicGraph,
-    bfs,
-    topological_ordering,
-)
+from cirkit.utils.algorithms import DiAcyclicGraph, RootedDiAcyclicGraph, bfs, topological_ordering
 from cirkit.utils.scope import Scope
 
 AbstractCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
@@ -42,16 +37,16 @@ class CircuitOperation:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-class CircuitBlock(BiRootedDiAcyclicGraph[Layer]):
+class CircuitBlock(RootedDiAcyclicGraph[Layer]):
     def __init__(
         self,
         layers: List[Layer],
         in_layers: Dict[Layer, List[Layer]],
-        outputs: List[Layer],
+        output: Layer,
         *,
         topologically_ordered: bool = False,
     ):
-        super().__init__(layers, in_layers, outputs, topologically_ordered=topologically_ordered)
+        super().__init__(layers, in_layers, [output], topologically_ordered=topologically_ordered)
 
     def layer_inputs(self, l: Layer) -> List[Layer]:
         return self.node_inputs(l)
@@ -88,7 +83,7 @@ class CircuitBlock(BiRootedDiAcyclicGraph[Layer]):
 
     @staticmethod
     def from_layer(sl: Layer) -> "CircuitBlock":
-        return CircuitBlock([sl], {}, [sl], topologically_ordered=True)
+        return CircuitBlock([sl], {}, sl, topologically_ordered=True)
 
     @staticmethod
     def from_layer_composition(*sl: Layer) -> "CircuitBlock":
@@ -97,7 +92,7 @@ class CircuitBlock(BiRootedDiAcyclicGraph[Layer]):
         assert len(layers) > 1, "Expected a composition of at least 2 layers"
         for i, l in enumerate(layers):
             in_layers[l] = [layers[i - 1]] if i - 1 >= 0 else []
-        return CircuitBlock(layers, in_layers, [sl[-1]], topologically_ordered=True)
+        return CircuitBlock(layers, in_layers, sl[-1], topologically_ordered=True)
 
 
 class InputLayerFactory(Protocol):
@@ -241,7 +236,15 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         # Retrieve connections between layers from connections between circuit blocks
         for b in blocks:
-            in_layers[b.input].extend(bi.output for bi in in_blocks.get(b, []))
+            b_layer_inputs = list(b.inputs)
+            block_ins = in_blocks.get(b, [])
+            if len(b_layer_inputs) == 1:
+                (b_input,) = b_layer_inputs
+                in_layers[b_input].extend(bi.output for bi in block_ins)
+            elif len(block_ins) > 0:
+                raise ValueError(
+                    f"A circuit block having multiple inputs cannot be a non-input block"
+                )
             for l in b.layers:
                 in_layers[l].extend(b.layer_inputs(l))
         # Build the circuit and set the operation
