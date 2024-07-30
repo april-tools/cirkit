@@ -1,79 +1,22 @@
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from copy import copy as shallowcopy
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
+from cirkit.backend.torch.graph.address_book import AddressBook, AddressBookEntry, FoldIndexInfo
 from cirkit.backend.torch.graph.folding import (
-    AddressBook,
-    AddressBookEntry,
-    FoldIndexInfo,
     build_address_book_entry,
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
-from cirkit.backend.torch.graph.modules import TorchRootedDiAcyclicGraph
-from cirkit.backend.torch.graph.nodes import TorchModule
-
-
-class TorchParameterNode(TorchModule, ABC):
-    """The abstract base class for all reparameterizations."""
-
-    def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
-        """Init class."""
-        super().__init__(num_folds=num_folds)
-
-    @property
-    @abstractmethod
-    def shape(self) -> Tuple[int, ...]:
-        ...
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Configuration flags for the parameter."""
-        return {}
-
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        ...
-
-
-class TorchParameterLeaf(TorchParameterNode, ABC):
-    @property
-    def is_initialized(self) -> bool:
-        return True
-
-    def __call__(self) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self) -> Tensor:
-        ...
-
-
-class TorchParameterOp(TorchParameterNode, ABC):
-    def __init__(self, *in_shape: Tuple[int, ...], num_folds: int = 1):
-        super().__init__(num_folds=num_folds)
-        self.in_shapes = in_shape
-
-    def __call__(self, *xs: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(*xs)  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self, *xs: Tensor) -> Tensor:
-        ...
+from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
+from cirkit.backend.torch.parameters.nodes import (
+    TorchParameterNode,
+    TorchPointerParameter,
+    TorchTensorParameter,
+)
+from cirkit.utils.algorithms import topologically_process_nodes
 
 
 class ParameterAddressBook(AddressBook):
@@ -84,11 +27,9 @@ class ParameterAddressBook(AddressBook):
         def select_index(mids: List[int], idx: Optional[Tensor]) -> Tensor:
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
-                return t if idx is None else t[idx]
-            t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
-            if idx is None:
-                return t[idx]
-            return t
+            else:
+                t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
+            return t if idx is None else t[idx]
 
         # Loop through the entries and yield inputs
         for entry in self._entries:
@@ -132,32 +73,49 @@ class ParameterAddressBook(AddressBook):
             entries.append(entry)
 
         # Append the last bookkeeping entry with the information to compute the output tensor
-        entry = build_address_book_stacked_entry([fold_idx_info.out_fold_idx], num_folds=num_folds)
+        entry = build_address_book_stacked_entry(
+            [fold_idx_info.out_fold_idx], num_folds=num_folds, output=True
+        )
         entries.append(entry)
 
         return ParameterAddressBook(entries)
 
 
-class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
+class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     @property
     def num_folds(self) -> int:
-        return self.output.num_folds
+        return sum(n.num_folds for n in self.outputs)
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.output.shape
+        return next(self.outputs).shape
 
-    def reset_parameters(self) -> None:
-        """Reset the input parameters."""
-        for p in self.nodes:
-            p.reset_parameters()
+    def extract_subgraphs(self, *roots: TorchParameterNode) -> List["TorchParameter"]:
+        # The set of torch tensor nodes being observed
+        nodes_ptensor = set()
 
-    def __call__(self) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
+        def replace_ref_or_copy(n: TorchParameterNode) -> TorchParameterNode:
+            if isinstance(n, TorchTensorParameter):
+                if n in nodes_ptensor:
+                    return TorchPointerParameter(n)
+                nodes_ptensor.add(n)
+            return shallowcopy(n)
 
-    def forward(self) -> Tensor:
-        return self._eval_forward()  # (F, d1, d2, ..., dk)
+        # Extract parameter sub-computational graphs that are rooted by the provided roots
+        # If the sub-computational graphs would share torch tensor parameters (that are not pointers),
+        # then parameter sharing is ensured by introducing torch parameter pointers, based on the
+        # order specified by the roots.
+        pgraphs = []
+        for r in roots:
+            nodes, in_nodes, outputs = topologically_process_nodes(
+                self.topological_ordering(roots=[r]),
+                [r],
+                replace_ref_or_copy,
+                incomings_fn=self.node_inputs,
+            )
+            pgraph = TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
+            pgraphs.append(pgraph)
+        return pgraphs
 
     def _build_address_book(self) -> AddressBook:
         fold_idx_info = self._fold_idx_info
@@ -170,3 +128,15 @@ class TorchParameter(TorchRootedDiAcyclicGraph[TorchParameterNode]):
         )
         self._fold_idx_info = None
         return address_book
+
+    def reset_parameters(self) -> None:
+        """Reset the input parameters."""
+        for p in self.nodes:
+            p.reset_parameters()
+
+    def __call__(self) -> Tensor:
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__()  # type: ignore[no-any-return,misc]
+
+    def forward(self) -> Tensor:
+        return self._eval_forward()  # (F, d1, d2, ..., dk)

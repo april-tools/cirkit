@@ -1,17 +1,16 @@
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Tuple, List
 
-import numpy as np
 import einops as E
+from typing import Any, Dict, Optional, List
+
 import torch
-from torch import Tensor, distributions, nn
+from torch import Tensor, distributions
 from torch.nn import functional as F
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
-from cirkit.backend.torch.utils import InitializerFunc
+from cirkit.backend.torch.semiring import LSESumSemiring, Semiring
 from cirkit.utils.scope import Scope
 
 
@@ -38,7 +37,7 @@ class TorchExpFamilyLayer(TorchInputLayer):
         *,
         num_channels: int = 1,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -60,29 +59,28 @@ class TorchExpFamilyLayer(TorchInputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (*B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
-        return self.semiring.from_lse_sum(self.log_score(x))
+        x = self.log_unnormalized_likelihood(x)
+        return self.semiring.map_from(x, LSESumSemiring)
 
     @abstractmethod
-    def sample_forward(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
+    def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         ...
 
-    @abstractmethod
+    def sample_forward(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
+        raise NotImplementedError()
+
     def sample_backward(
         self,
         sample_dict: Dict[TorchLayer, List[Tensor]],
         unit_dict: Dict[TorchLayer, List[Tensor]],
         num_samples: int,
     ) -> Tensor:
-        ...
-
-    @abstractmethod
-    def log_score(self, x: Tensor) -> Tensor:
-        ...
+        raise NotImplementedError()
 
 
 class TorchCategoricalLayer(TorchExpFamilyLayer):
@@ -103,7 +101,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         num_categories: int = 2,
         probs: Optional[TorchParameter] = None,
         logits: Optional[TorchParameter] = None,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -158,14 +156,20 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        params = super().params
         if self.logits is None:
-            params.update(probs=self.probs)
-        else:
-            params.update(logits=self.logits)
-        return params
+            return dict(probs=self.probs)
+        return dict(logits=self.logits)
 
-    def sample_forward(self, num_samples: int) -> Tensor:
+    def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
+        if x.is_floating_point():
+            x = x.long()  # The input to Categorical should be discrete
+        x = F.one_hot(x, self.num_categories)  # (F, C, B, D, num_categories)
+        x = x.to(torch.get_default_dtype())
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
+        return x
+
+    def sample_forward(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
         if len(self.scope) > 1:
             raise NotImplementedError("Multivariate Categorical sampling is not implemented yet!")
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
@@ -191,12 +195,76 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
 
         raise NotImplementedError("Backward sampling is not fully implemented yet!")
 
-    def log_score(self, x: Tensor) -> Tensor:
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        x = F.one_hot(x, self.num_categories)  # (F, C, *B, D, num_categories)
-        x = x.to(torch.get_default_dtype())
-        x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
-        return x
-
     def extended_forward(self, x: Tensor) -> Tensor:
         return self.log_score(x)
+
+
+class TorchGaussianLayer(TorchExpFamilyLayer):
+    """The Normal distribution layer.
+
+    This is fully factorized down to univariate Categorical distributions.
+    """
+
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        *,
+        num_channels: int = 1,
+        num_folds: int = 1,
+        mean: Optional[TorchParameter],
+        stddev: Optional[TorchParameter],
+        log_partition: Optional[TorchParameter] = None,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        """Init class.
+
+        Args:
+            scope (Scope): The scope the input layer is defined on.
+            num_output_units (int): The number of output units.
+            num_channels (int): The number of channels. Defaults to 1.
+            mean (AbstractTorchParameter): The reparameterization for layer parameters.
+            stddev (AbstractTorchParameter): The reparameterization for layer parameters.
+            num_folds (int): The number of channels. Defaults to 1.
+        """
+        super().__init__(
+            scope,
+            num_output_units,
+            num_channels=num_channels,
+            num_folds=num_folds,
+            semiring=semiring,
+        )
+        if not self._valid_parameters_shape(mean):
+            raise ValueError(f"The number of folds and shape of 'mean' must match the layer's")
+        if not self._valid_parameters_shape(stddev):
+            raise ValueError(f"The number of folds and shape of 'stddev' must match the layer's")
+        if log_partition is not None and not self._valid_parameters_shape(log_partition):
+            raise ValueError(
+                f"The number of folds and shape of 'log_partition' must match the layer's"
+            )
+        self.mean = mean
+        self.stddev = stddev
+        self.log_partition = log_partition
+
+    def _valid_parameters_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == (len(self.scope), self.num_output_units, self.num_channels)
+
+    @property
+    def params(self) -> Dict[str, TorchParameter]:
+        params = dict(mean=self.mean, stddev=self.stddev)
+        if self.log_partition is not None:
+            params.update(log_partition=self.log_partition)
+        return params
+
+    def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
+        mean = self.mean().unsqueeze(dim=1)  # (F, 1, D, K, C)
+        stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, D, K, C)
+        x = x.permute(0, 2, 3, 1).unsqueeze(dim=3)  # (F, B, D, 1, C)
+        x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, D, K, C)
+        x = torch.sum(x, dim=[2, 4])  # (F, B, K)
+        if self.log_partition is not None:
+            log_partition = self.log_partition()  # (F, D, K, C)
+            x = x + torch.sum(log_partition, dim=[1, 3]).unsqueeze(dim=1)
+        return x

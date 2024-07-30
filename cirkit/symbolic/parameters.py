@@ -1,17 +1,19 @@
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import ChainMap
 from copy import copy as shallowcopy
 from functools import cached_property
+from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, List, Tuple, Union, final
+from typing import Any, Callable, Dict, Optional, Protocol, Tuple, Union, final
 
+from cirkit.symbolic.dtypes import DataType, dtype_value
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
-from cirkit.utils.algorithms import RootedDiAcyclicGraph
+from cirkit.utils.algorithms import RootedDiAcyclicGraph, topologically_process_nodes
 
 
 class ParameterNode(ABC):
     @abstractmethod
-    def __copy__(self) -> "ParameterLeaf":
+    def __copy__(self) -> "ParameterNode":
         ...
 
     @property
@@ -24,16 +26,23 @@ class ParameterNode(ABC):
         return {}
 
 
-class ParameterLeaf(ParameterNode, ABC):
+class ParameterInput(ParameterNode, ABC):
     ...
 
 
-class TensorParameter(ParameterLeaf):
-    def __init__(self, *shape: int, initializer: Initializer, learnable: bool = True):
+class TensorParameter(ParameterInput):
+    def __init__(
+        self,
+        *shape: int,
+        initializer: Initializer,
+        learnable: bool = True,
+        dtype: DataType = DataType.REAL,
+    ):
         super().__init__()
         self._shape = tuple(shape)
         self.initializer = initializer
         self.learnable = learnable
+        self.dtype = dtype
 
     def __copy__(self) -> "TensorParameter":
         cls = self.__class__
@@ -45,12 +54,17 @@ class TensorParameter(ParameterLeaf):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(initializer=self.initializer, learnable=self.learnable)
+        return dict(initializer=self.initializer, learnable=self.learnable, dtype=self.dtype)
 
 
 class ConstantParameter(TensorParameter):
     def __init__(self, *shape: int, value: Number = 0.0):
-        super().__init__(*shape, initializer=ConstantInitializer(value), learnable=False)
+        super().__init__(
+            *shape,
+            initializer=ConstantInitializer(value),
+            learnable=False,
+            dtype=dtype_value(value),
+        )
         self.value = value
 
     def __copy__(self) -> "ConstantParameter":
@@ -63,7 +77,7 @@ class ConstantParameter(TensorParameter):
 
 
 @final
-class ReferenceParameter(ParameterLeaf):
+class ReferenceParameter(ParameterInput):
     def __init__(self, parameter: TensorParameter):
         super().__init__()
         self._parameter = parameter
@@ -99,13 +113,13 @@ class BinaryParameterOp(ParameterOp, ABC):
         super().__init__(in_shape1, in_shape2)
 
 
-class EntrywiseOpParameter(UnaryParameterOp, ABC):
+class EntrywiseParameterOp(UnaryParameterOp, ABC):
     @property
     def shape(self) -> Tuple[int, ...]:
         return self.in_shapes[0]
 
 
-class ReduceOpParameter(UnaryParameterOp, ABC):
+class ReduceParameterOp(UnaryParameterOp, ABC):
     def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
         assert 0 <= axis < len(in_shape)
         super().__init__(in_shape)
@@ -120,7 +134,7 @@ class ReduceOpParameter(UnaryParameterOp, ABC):
         return dict(axis=self.axis)
 
 
-class EntrywiseReduceOpParameter(EntrywiseOpParameter, ABC):
+class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
     def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
         super().__init__(in_shape)
         axis = axis if axis >= 0 else axis + len(in_shape)
@@ -130,6 +144,16 @@ class EntrywiseReduceOpParameter(EntrywiseOpParameter, ABC):
     @property
     def config(self) -> Dict[str, Any]:
         return dict(axis=self.axis)
+
+
+class SumParameter(BinaryParameterOp):
+    def __init__(self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...]) -> None:
+        assert in_shape1 == in_shape2
+        super().__init__(in_shape1, in_shape2)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.in_shapes[0]
 
 
 class HadamardParameter(BinaryParameterOp):
@@ -154,7 +178,7 @@ class KroneckerParameter(BinaryParameterOp):
         )
 
 
-class OuterOpParameter(BinaryParameterOp):
+class OuterParameterOp(BinaryParameterOp):
     def __init__(
         self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, axis: int = -1
     ) -> None:
@@ -176,35 +200,35 @@ class OuterOpParameter(BinaryParameterOp):
         return dict(axis=self.axis)
 
 
-class OuterProductParameter(OuterOpParameter):
+class OuterProductParameter(OuterParameterOp):
     ...
 
 
-class OuterSumParameter(OuterOpParameter):
+class OuterSumParameter(OuterParameterOp):
     ...
 
 
-class ExpParameter(EntrywiseOpParameter):
+class ExpParameter(EntrywiseParameterOp):
     ...
 
 
-class LogParameter(EntrywiseOpParameter):
+class LogParameter(EntrywiseParameterOp):
     ...
 
 
-class SquareParameter(EntrywiseOpParameter):
+class SquareParameter(EntrywiseParameterOp):
     ...
 
 
-class SoftplusParameter(EntrywiseOpParameter):
+class SoftplusParameter(EntrywiseParameterOp):
     ...
 
 
-class SigmoidParameter(EntrywiseOpParameter):
+class SigmoidParameter(EntrywiseParameterOp):
     ...
 
 
-class ScaledSigmoidParameter(EntrywiseOpParameter):
+class ScaledSigmoidParameter(EntrywiseParameterOp):
     def __init__(self, in_shape: Tuple[int, ...], vmin: float, vmax: float):
         super().__init__(in_shape)
         self.vmin = vmin
@@ -215,23 +239,52 @@ class ScaledSigmoidParameter(EntrywiseOpParameter):
         return dict(vmin=self.vmin, vmax=self.vmax)
 
 
-class ReduceSumParameter(ReduceOpParameter):
+class ClampParameter(EntrywiseParameterOp):
+    """Clamp reparameterization."""
+
+    def __init__(
+        self,
+        in_shape: Tuple[int, ...],
+        *,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+    ) -> None:
+        assert vmin is not None or vmax is not None
+        super().__init__(in_shape)
+        self.vmin = vmin
+        self.vmax = vmax
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        config = dict()
+        if self.vmin is not None:
+            config.update(vmin=self.vmin)
+        if self.vmax is not None:
+            config.update(vmax=self.vmax)
+        return config
+
+
+class ConjugateParameter(EntrywiseParameterOp):
     ...
 
 
-class ReduceProductParameter(ReduceOpParameter):
+class ReduceSumParameter(ReduceParameterOp):
     ...
 
 
-class ReduceLSEParameter(ReduceOpParameter):
+class ReduceProductParameter(ReduceParameterOp):
     ...
 
 
-class SoftmaxParameter(EntrywiseReduceOpParameter):
+class ReduceLSEParameter(ReduceParameterOp):
     ...
 
 
-class LogSoftmaxParameter(EntrywiseReduceOpParameter):
+class SoftmaxParameter(EntrywiseReduceParameterOp):
+    ...
+
+
+class LogSoftmaxParameter(EntrywiseReduceParameterOp):
     ...
 
 
@@ -241,56 +294,54 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return self.output.shape
 
     @classmethod
-    def from_leaf(cls, p: ParameterLeaf) -> "Parameter":
-        return Parameter([p], {}, {}, topologically_ordered=True)
+    def from_leaf(cls, p: ParameterInput) -> "Parameter":
+        return Parameter([p], {}, [p], topologically_ordered=True)
 
     @classmethod
-    def from_sequence(cls, p: Union[ParameterLeaf, "Parameter"], *ns: ParameterNode) -> "Parameter":
-        if isinstance(p, ParameterLeaf):
+    def from_sequence(
+        cls, p: Union[ParameterInput, "Parameter"], *ns: ParameterNode
+    ) -> "Parameter":
+        if isinstance(p, ParameterInput):
             p = Parameter.from_leaf(p)
         nodes = p.nodes + list(ns)
         in_nodes = dict(p.nodes_inputs)
-        out_nodes = dict(p.nodes_outputs)
         for i, n in enumerate(ns):
             in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.output]
-            out_nodes[n] = [ns[i + 1]] if i + 1 < len(ns) else []
-        out_nodes[p.output] = [ns[0]]
         return Parameter(
-            nodes, in_nodes, out_nodes, topologically_ordered=p.is_topologically_ordered
+            nodes, in_nodes, [ns[-1]], topologically_ordered=p.is_topologically_ordered
         )
 
     @classmethod
-    def from_unary(cls, p: Union[ParameterLeaf, "Parameter"], n: UnaryParameterOp) -> "Parameter":
+    def from_nary(cls, n: ParameterOp, *ps: Union[ParameterInput, "Parameter"]) -> "Parameter":
+        ps = tuple(Parameter.from_leaf(p) if isinstance(p, ParameterInput) else p for p in ps)
+        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
+        in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
+        in_nodes[n] = list(p.output for p in ps)
+        topologically_ordered = all(p.is_topologically_ordered for p in ps)
+        return Parameter(
+            p_nodes,
+            in_nodes,
+            [n],
+            topologically_ordered=topologically_ordered,
+        )
+
+    @classmethod
+    def from_unary(cls, n: UnaryParameterOp, p: Union[ParameterInput, "Parameter"]) -> "Parameter":
         return Parameter.from_sequence(p, n)
 
     @classmethod
     def from_binary(
         cls,
-        p1: Union[ParameterLeaf, "Parameter"],
-        p2: Union[ParameterLeaf, "Parameter"],
         n: BinaryParameterOp,
+        p1: Union[ParameterInput, "Parameter"],
+        p2: Union[ParameterInput, "Parameter"],
     ) -> "Parameter":
-        if isinstance(p1, ParameterLeaf):
-            p1 = Parameter.from_leaf(p1)
-        if isinstance(p2, ParameterLeaf):
-            p2 = Parameter.from_leaf(p2)
-        p_nodes = p1.nodes + p2.nodes + [n]
-        in_nodes = {**p1.nodes_inputs, **p2.nodes_inputs}
-        out_nodes = {**p1.nodes_outputs, **p2.nodes_outputs}
-        in_nodes[n] = [p1.output, p2.output]
-        out_nodes[p1.output] = [n]
-        out_nodes[p2.output] = [n]
-        return Parameter(
-            p_nodes,
-            in_nodes,
-            out_nodes,
-            topologically_ordered=p1.is_topologically_ordered and p2.is_topologically_ordered,
-        )
+        return Parameter.from_nary(n, p1, p2)
 
     def copy(self) -> "Parameter":
         # Build a new symbolic parameter's computational graph, by coping nodes.
-        def replace_copy(p: ParameterNode) -> ParameterNode:
-            return shallowcopy(p)
+        def replace_copy(n: ParameterNode) -> ParameterNode:
+            return shallowcopy(n)
 
         return self._process_nodes(replace_copy)
 
@@ -298,24 +349,75 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         # Build a new symbolic parameter's computational graph, where the parameter tensors
         # become references to the tensors of the 'self' parameter's computational graph.
         # All the other nodes are new objects.
-        def replace_ref_or_copy(p: ParameterNode) -> ParameterNode:
-            return ReferenceParameter(p) if isinstance(p, TensorParameter) else shallowcopy(p)
+        def replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
+            return ReferenceParameter(n) if isinstance(n, TensorParameter) else shallowcopy(n)
 
         return self._process_nodes(replace_ref_or_copy)
 
     def _process_nodes(self, process_fn: Callable[[ParameterNode], ParameterNode]) -> "Parameter":
-        nodes_map = {}
-        in_nodes = {}
-        out_nodes = defaultdict(list)
-        for p in self.topological_ordering():
-            new_p = process_fn(p)
-            nodes_map[p] = new_p
-            in_new_nodes = [nodes_map[in_p] for in_p in self.node_inputs(p)]
-            in_nodes[new_p] = in_new_nodes
-            for in_p in in_new_nodes:
-                out_nodes[in_p].append(new_p)
-        nodes = [nodes_map[p] for p in nodes_map.keys()]
-        return Parameter(nodes, in_nodes, out_nodes, topologically_ordered=True)
+        nodes, in_nodes, outputs = topologically_process_nodes(
+            self.topological_ordering(), self.outputs, process_fn, incomings_fn=self.node_inputs
+        )
+        return Parameter(nodes, in_nodes, outputs, topologically_ordered=True)
 
 
-Parameterization = Callable[[TensorParameter], Parameter]
+class ParameterFactory(Protocol):
+    def __call__(self, shape: Tuple[int, ...]) -> Parameter:
+        ...
+
+
+class GaussianProductMean(ParameterOp):
+    def __init__(
+        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+    ) -> None:
+        assert (
+            in_gaussian1_shape[0] == in_gaussian2_shape[0]
+            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
+        )
+        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] * self.in_shapes[1][1],
+            self.in_shapes[0][2],
+        )
+
+
+class GaussianProductStddev(BinaryParameterOp):
+    def __init__(
+        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+    ) -> None:
+        assert (
+            in_gaussian1_shape[0] == in_gaussian2_shape[0]
+            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
+        )
+        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] * self.in_shapes[1][1],
+            self.in_shapes[0][2],
+        )
+
+
+class GaussianProductLogPartition(ParameterOp):
+    def __init__(
+        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+    ) -> None:
+        assert (
+            in_gaussian1_shape[0] == in_gaussian2_shape[0]
+            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
+        )
+        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] * self.in_shapes[1][1],
+            self.in_shapes[0][2],
+        )

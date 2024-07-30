@@ -1,9 +1,45 @@
-from typing import Callable, Sequence
+from typing import Any, Sequence, Tuple
 
 import torch
-from torch import Tensor
+from torch import Tensor, autograd
 
-InitializerFunc = Callable[[Tensor], Tensor]
+
+class SafeLog(autograd.Function):
+    @staticmethod
+    def forward(x: Tensor) -> Tensor:
+        return torch.log(x)
+
+    @staticmethod
+    def setup_context(ctx: Any, inputs: Tuple[Tensor, ...], output: Tensor) -> None:
+        (x,) = inputs
+        ctx.save_for_backward(x)
+
+    @staticmethod
+    def backward(ctx: Any, grad_output: Tensor) -> Tensor:
+        (x,) = ctx.saved_tensors
+        return torch.nan_to_num(grad_output / x)
+
+
+safelog = SafeLog.apply
+
+
+class ComplexSafeLog(autograd.Function):
+    @staticmethod
+    def forward(x: Tensor) -> Tensor:
+        return torch.log(x)
+
+    @staticmethod
+    def setup_context(ctx: Any, inputs: Tuple[Tensor, ...], output: Tensor) -> None:
+        (x,) = inputs
+        ctx.save_for_backward(x)
+
+    @staticmethod
+    def backward(ctx: Any, grad_output: Tensor) -> Tensor:
+        (x,) = ctx.saved_tensors
+        return torch.nan_to_num(grad_output / x.conj())
+
+
+csafelog = ComplexSafeLog.apply
 
 
 def flatten_dims(x: Tensor, /, *, dims: Sequence[int]) -> Tensor:

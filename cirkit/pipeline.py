@@ -5,9 +5,10 @@ from types import TracebackType
 from typing import IO, Any, Iterable, Optional, Type, Union
 
 import cirkit.symbolic.functional as SF
-from cirkit.backend.base import (
+from cirkit.backend.compiler import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
+    CompiledCircuit,
     InitializerCompilationFunc,
     LayerCompilationFunc,
     ParameterCompilationFunc,
@@ -37,7 +38,7 @@ class PipelineContext(AbstractContextManager):
 
     @classmethod
     def from_default_backend(cls) -> "PipelineContext":
-        return PipelineContext(backend="torch", fold=True, einsum=True)
+        return PipelineContext(backend="torch", semiring="lse-sum", fold=True, optimize=True)
 
     def __getitem__(self, sc: Circuit) -> Any:
         return self._compiler.get_compiled_circuit(sc)
@@ -83,8 +84,20 @@ class PipelineContext(AbstractContextManager):
     def add_initializer_compilation_rule(self, func: InitializerCompilationFunc):
         self._compiler.add_initializer_rule(func)
 
-    def compile(self, sc: Circuit) -> Any:
+    def compile(self, sc: Circuit) -> CompiledCircuit:
         return self._compiler.compile(sc)
+
+    def is_compiled(self, sc: Circuit) -> bool:
+        return self._compiler.is_compiled(sc)
+
+    def has_symbolic(self, cc: CompiledCircuit) -> bool:
+        return self._compiler.has_symbolic(cc)
+
+    def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
+        return self._compiler.get_compiled_circuit(sc)
+
+    def get_symbolic_circuit(self, cc: CompiledCircuit) -> Circuit:
+        return self._compiler.get_symbolic_circuit(cc)
 
     def integrate(self, cc: Any, scope: Optional[Iterable[int]] = None) -> Any:
         if not self._compiler.has_symbolic(cc):
@@ -109,6 +122,13 @@ class PipelineContext(AbstractContextManager):
         sc = self._compiler.get_symbolic_circuit(cc)
         diff_sc = SF.differentiate(sc, registry=self._op_registry)
         return self.compile(diff_sc)
+
+    def conjugate(self, cc: Any) -> Any:
+        if not self._compiler.has_symbolic(cc):
+            raise ValueError("The given compiled circuit is not known in this pipeline")
+        sc = self._compiler.get_symbolic_circuit(cc)
+        conj_sc = SF.conjugate(sc, registry=self._op_registry)
+        return self.compile(conj_sc)
 
 
 def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> Any:
@@ -135,6 +155,12 @@ def differentiate(cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.differentiate(cc)
+
+
+def conjugate(cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+    if ctx is None:
+        ctx = _PIPELINE_CONTEXT.get()
+    return ctx.conjugate(cc)
 
 
 def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:

@@ -4,12 +4,12 @@ from typing import Any, Dict, Optional
 
 from torch import Tensor
 
-from cirkit.backend.torch.graph.nodes import TorchModule
+from cirkit.backend.torch.graph.modules import AbstractTorchModule
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls, SumProductSemiring
+from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
-class TorchLayer(TorchModule, ABC):
+class TorchLayer(AbstractTorchModule, ABC):
     """The abstract base class for all layers."""
 
     def __init__(
@@ -19,7 +19,7 @@ class TorchLayer(TorchModule, ABC):
         *,
         arity: int = 1,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -76,10 +76,10 @@ class TorchLayer(TorchModule, ABC):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (F, *B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
@@ -89,8 +89,8 @@ class TorchLayer(TorchModule, ABC):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (F, *B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """

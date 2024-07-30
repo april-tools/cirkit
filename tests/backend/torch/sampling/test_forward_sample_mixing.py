@@ -3,11 +3,13 @@ import pytest
 import torch
 import itertools
 
+from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import MixingLayer, CategoricalLayer
-from cirkit.symbolic.parameters import TensorParameter
 from cirkit.symbolic.initializers import ConstantInitializer
 from cirkit.pipeline import PipelineContext
+from cirkit.symbolic.parameters import TensorParameter, Parameter
+from cirkit.utils.scope import Scope
 
 
 def build_shallow_dense_circuit(
@@ -16,10 +18,10 @@ def build_shallow_dense_circuit(
     n_variables: int = 11,
     n_outputs: int = 5,
     n_categories: int = 21,
-) -> Circuit:
+) -> TorchCircuit:
     input_layers = [
         CategoricalLayer(
-            scope=range(n_variables),
+            scope=Scope(range(n_variables)),
             num_output_units=n_outputs,
             num_channels=n_channels,
             num_categories=n_categories,
@@ -42,27 +44,24 @@ def build_shallow_dense_circuit(
     weight = torch.tensor(weight, dtype=torch.float32)
 
     dense_layer = MixingLayer(
-        scope=range(n_variables),
+        scope=Scope(range(n_variables)),
         num_units=n_outputs,
         arity=n_variables,
         # weight=weight_parameter,
-        # parameterization=lambda p: Parameter.from_unary(p, SoftmaxParameter(p.shape)),
-        initializer=ConstantInitializer(weight),
+        weight_factory=lambda shape: Parameter.from_leaf(TensorParameter(
+            *shape, initializer=ConstantInitializer(weight), learnable=False
+        ))
     )
 
     input_dict = dict()
     input_dict[dense_layer] = input_layers
 
-    output_dict = dict()
-    for in_layer in input_layers:
-        output_dict[in_layer] = [dense_layer]
-
     circuit = Circuit(
-        scope=range(n_variables),
+        scope=Scope(range(n_variables)),
         num_channels=n_channels,
         layers=input_layers + [dense_layer],
         in_layers=input_dict,
-        out_layers=output_dict,
+        outputs=[dense_layer],
         topologically_ordered=True,
     )
     ctx = PipelineContext(backend="torch", fold=folded, semiring="lse-sum")

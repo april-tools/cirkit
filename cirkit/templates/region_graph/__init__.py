@@ -1,4 +1,5 @@
 from .algorithms import FullyFactorized as FullyFactorized
+from .algorithms import LinearRegionGraph as LinearRegionGraph
 from .algorithms import PoonDomingos as PoonDomingos
 from .algorithms import QuadTree as QuadTree
 from .algorithms import RandomBinaryTree as RandomBinaryTree

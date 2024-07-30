@@ -1,6 +1,6 @@
 import cirkit.symbolic.functional as SF
 from cirkit.symbolic.layers import DenseLayer, HadamardLayer, LogPartitionLayer
-from cirkit.symbolic.parameters import KroneckerParameter, ReferenceParameter
+from cirkit.symbolic.parameters import ConjugateParameter, KroneckerParameter, ReferenceParameter
 from tests.symbolic.test_utils import build_simple_circuit
 
 
@@ -38,3 +38,15 @@ def test_multiply_integrate_circuits():
     assert len(list(int_sc.inner_layers)) == len(list(prod_sc.inner_layers))
     sum_layers = list(filter(lambda l: isinstance(l, DenseLayer), int_sc.inner_layers))
     assert all(isinstance(l.weight.output, KroneckerParameter) for l in sum_layers)
+
+
+def test_conjugate_circuit():
+    sc = build_simple_circuit(12, 4, 2, num_repetitions=3)
+    conj_sc = SF.conjugate(sc)
+    assert len(list(conj_sc.inputs)) == len(list(sc.inputs))
+    assert len(list(conj_sc.inner_layers)) == len(list(sc.inner_layers))
+    assert list(map(type, conj_sc.topological_ordering())) == list(
+        map(type, sc.topological_ordering())
+    )
+    sum_layers = list(filter(lambda l: isinstance(l, DenseLayer), conj_sc.inner_layers))
+    assert all(isinstance(l.weight.output, ConjugateParameter) for l in sum_layers)

@@ -1,16 +1,16 @@
 from abc import ABC
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.semiring import Semiring
 from cirkit.utils.scope import Scope
 
 
 class TorchInputLayer(TorchLayer, ABC):
     """The abstract base class for input layers."""
 
-    # NOTE: We use exactly the sae interface (F, H, *B, K) -> (F, *B, K) for __call__ of input layers:
+    # NOTE: We use exactly the sae interface (F, H, B, K) -> (F, B, K) for __call__ of input layers:
     #           1. Define arity(H)=num_channels(C), reusing the H dimension.
     #           2. Define num_input_units(K)=num_vars(D), which reuses the K dimension.
     #       For dimension D (variables), we should parse the input in circuit according to the
@@ -23,7 +23,7 @@ class TorchInputLayer(TorchLayer, ABC):
         *,
         num_channels: int = 1,
         num_folds: int = 1,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -45,6 +45,10 @@ class TorchInputLayer(TorchLayer, ABC):
     @property
     def num_channels(self) -> int:
         return self.arity
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.num_variables, self.num_channels, self.num_output_units
 
     @property
     def config(self) -> Dict[str, Any]:

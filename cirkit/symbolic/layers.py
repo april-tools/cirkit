@@ -1,9 +1,14 @@
 from abc import ABC
 from enum import IntEnum, auto
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
-from cirkit.symbolic.initializers import Initializer, NormalInitializer
-from cirkit.symbolic.parameters import Parameter, Parameterization, TensorParameter
+from cirkit.symbolic.initializers import NormalInitializer
+from cirkit.symbolic.parameters import (
+    Parameter,
+    ParameterFactory,
+    ScaledSigmoidParameter,
+    TensorParameter,
+)
 from cirkit.utils.scope import Scope
 
 AbstractLayerOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
@@ -20,6 +25,7 @@ class LayerOperation(AbstractLayerOperator):
     INTEGRATION = auto()
     DIFFERENTIATION = auto()
     MULTIPLICATION = auto()
+    CONJUGATION = auto()
 
 
 class Layer(ABC):
@@ -76,36 +82,45 @@ class CategoricalLayer(InputLayer):
         scope: Scope,
         num_output_units: int,
         num_channels: int,
-        num_categories: int = 2,
+        num_categories: int,
         logits: Optional[Parameter] = None,
         probs: Optional[Parameter] = None,
-        parameterization: Optional[Parameterization] = None,
-        initializer: Optional[Initializer] = None,
+        logits_factory: Optional[ParameterFactory] = None,
+        probs_factory: Optional[ParameterFactory] = None,
     ):
         if logits is not None and probs is not None:
             raise ValueError("At most one between 'logits' and 'probs' can be specified")
+        if logits_factory is not None and probs_factory is not None:
+            raise ValueError(
+                "At most one between 'logits_factory' and 'probs_factory' can be specified"
+            )
+        if num_categories < 2:
+            raise ValueError("At least two categories must be specified")
         super().__init__(scope, num_output_units, num_channels)
         self.num_categories = num_categories
         if logits is None and probs is None:
-            if initializer is None:
-                initializer = NormalInitializer()
-            logits = TensorParameter(
-                len(scope),
-                num_output_units,
-                num_channels,
-                num_categories,
-                initializer=initializer,
-            )
-            if parameterization is None:
-                logits = Parameter.from_leaf(logits)
+            if logits_factory is not None:
+                logits = logits_factory(self.probs_logits_shape)
+            elif probs_factory is not None:
+                probs = probs_factory(self.probs_logits_shape)
             else:
-                logits = parameterization(logits)
-        elif logits is not None:
-            assert logits.shape == (len(scope), num_output_units, num_channels, num_categories)
-        elif probs is not None:
-            assert probs.shape == (len(scope), num_output_units, num_channels, num_categories)
+                logits = Parameter.from_leaf(
+                    TensorParameter(*self.probs_logits_shape, initializer=NormalInitializer())
+                )
+        if logits is not None and logits.shape != self.probs_logits_shape:
+            raise ValueError(
+                f"Expected parameter shape {self.probs_logits_shape}, found {logits.shape}"
+            )
+        if probs is not None and probs.shape != self.probs_logits_shape:
+            raise ValueError(
+                f"Expected parameter shape {self.probs_logits_shape}, found {probs.shape}"
+            )
         self.probs = probs
         self.logits = logits
+
+    @property
+    def probs_logits_shape(self) -> Tuple[int, ...]:
+        return self.num_variables, self.num_output_units, self.num_channels, self.num_categories
 
     @property
     def config(self) -> dict:
@@ -115,19 +130,81 @@ class CategoricalLayer(InputLayer):
 
     @property
     def params(self) -> Dict[str, Parameter]:
-        params = super().params
         if self.logits is None:
-            params.update(probs=self.probs)
-        else:
-            params.update(logits=self.logits)
+            return dict(probs=self.probs)
+        return dict(logits=self.logits)
+
+
+class GaussianLayer(InputLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int,
+        mean: Optional[Parameter] = None,
+        stddev: Optional[Parameter] = None,
+        log_partition: Optional[Parameter] = None,
+        mean_factory: Optional[ParameterFactory] = None,
+        stddev_factory: Optional[ParameterFactory] = None,
+    ):
+        super().__init__(scope, num_output_units, num_channels)
+        if mean is None:
+            if mean_factory is None:
+                mean = Parameter.from_leaf(
+                    TensorParameter(*self.mean_stddev_shape, initializer=NormalInitializer())
+                )
+            else:
+                mean = mean_factory(self.mean_stddev_shape)
+        if stddev is None:
+            if stddev_factory is None:
+                stddev = Parameter.from_unary(
+                    ScaledSigmoidParameter(self.mean_stddev_shape, vmin=1e-5, vmax=1.0),
+                    TensorParameter(*self.mean_stddev_shape, initializer=NormalInitializer()),
+                )
+            else:
+                stddev = stddev_factory(self.mean_stddev_shape)
+        if mean.shape != self.mean_stddev_shape:
+            raise ValueError(
+                f"Expected parameter shape {self.mean_stddev_shape}, found {mean.shape}"
+            )
+        if stddev.shape != self.mean_stddev_shape:
+            raise ValueError(
+                f"Expected parameter shape {self.mean_stddev_shape}, found {stddev.shape}"
+            )
+        if log_partition is not None and log_partition.shape != self.log_partition_shape:
+            raise ValueError(
+                f"Expected parameter shape {self.log_partition_shape}, found {log_partition.shape}"
+            )
+        self.mean = mean
+        self.stddev = stddev
+        self.log_partition = log_partition
+
+    @property
+    def mean_stddev_shape(self) -> Tuple[int, ...]:
+        return self.num_variables, self.num_output_units, self.num_channels
+
+    @property
+    def log_partition_shape(self) -> Tuple[int, ...]:
+        return self.num_variables, self.num_output_units, self.num_channels
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        params = dict(mean=self.mean, stddev=self.stddev)
+        if self.log_partition is not None:
+            params.update(log_partition=self.log_partition)
         return params
 
 
 class LogPartitionLayer(InputLayer):
     def __init__(self, scope: Scope, num_output_units: int, num_channels: int, value: Parameter):
-        assert value.shape == (num_output_units,)
         super().__init__(scope, num_output_units, num_channels)
+        if value.shape != self.value_shape:
+            raise ValueError(f"Expected parameter shape {self.value_shape}, found {value.shape}")
         self.value = value
+
+    @property
+    def value_shape(self) -> Tuple[int, ...]:
+        return (self.num_output_units,)
 
     @property
     def params(self) -> Dict[str, Parameter]:
@@ -193,21 +270,23 @@ class DenseLayer(SumLayer):
         num_input_units: int,
         num_output_units: int,
         weight: Optional[Parameter] = None,
-        parameterization: Optional[Parameterization] = None,
-        initializer: Optional[Initializer] = None,
+        weight_factory: Optional[ParameterFactory] = None,
     ):
         super().__init__(scope, num_input_units, num_output_units, arity=1)
         if weight is None:
-            if initializer is None:
-                initializer = NormalInitializer()
-            weight = TensorParameter(num_output_units, num_input_units, initializer=initializer)
-            if parameterization is None:
-                weight = Parameter.from_leaf(weight)
+            if weight_factory is None:
+                weight = Parameter.from_leaf(
+                    TensorParameter(*self.weight_shape, initializer=NormalInitializer())
+                )
             else:
-                weight = parameterization(weight)
-        else:
-            assert weight.shape == (num_output_units, num_input_units)
+                weight = weight_factory(self.weight_shape)
+        if weight.shape != self.weight_shape:
+            raise ValueError(f"Expected parameter shape {self.weight_shape}, found {weight.shape}")
         self.weight = weight
+
+    @property
+    def weight_shape(self) -> Tuple[int, ...]:
+        return self.num_output_units, self.num_input_units
 
     @property
     def config(self) -> Dict[str, Any]:
@@ -231,21 +310,23 @@ class MixingLayer(SumLayer):
         num_units: int,
         arity: int,
         weight: Optional[Parameter] = None,
-        parameterization: Optional[Parameterization] = None,
-        initializer: Optional[Initializer] = None,
+        weight_factory: Optional[ParameterFactory] = None,
     ):
         super().__init__(scope, num_units, num_units, arity)
         if weight is None:
-            if initializer is None:
-                initializer = NormalInitializer()
-            weight = TensorParameter(num_units, arity, initializer=initializer)
-            if parameterization is None:
-                weight = Parameter.from_leaf(weight)
+            if weight_factory is None:
+                weight = Parameter.from_leaf(
+                    TensorParameter(*self.weight_shape, initializer=NormalInitializer())
+                )
             else:
-                weight = parameterization(weight)
-        else:
-            assert weight.shape == (num_units, arity)
+                weight = weight_factory(self.weight_shape)
+        if weight.shape != self.weight_shape:
+            raise ValueError(f"Expected parameter shape {self.weight_shape}, found {weight.shape}")
         self.weight = weight
+
+    @property
+    def weight_shape(self) -> Tuple[int, ...]:
+        return self.num_input_units, self.arity
 
     @property
     def config(self) -> Dict[str, Any]:

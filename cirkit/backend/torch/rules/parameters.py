@@ -1,15 +1,22 @@
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict
 
-from cirkit.backend.base import ParameterCompilationFunc, ParameterCompilationSign
-from cirkit.backend.torch.parameters.leaves import TorchPointerParameter, TorchTensorParameter
-from cirkit.backend.torch.parameters.ops import (
+import torch
+
+from cirkit.backend.compiler import ParameterCompilationFunc, ParameterCompilationSign
+from cirkit.backend.torch.parameters.nodes import (
+    TorchClampParameter,
+    TorchConjugateParameter,
     TorchExpParameter,
+    TorchGaussianProductLogPartition,
+    TorchGaussianProductMean,
+    TorchGaussianProductStddev,
     TorchHadamardParameter,
     TorchKroneckerParameter,
     TorchLogParameter,
     TorchLogSoftmaxParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
+    TorchPointerParameter,
     TorchReduceLSEParameter,
     TorchReduceProductParameter,
     TorchReduceSumParameter,
@@ -17,11 +24,18 @@ from cirkit.backend.torch.parameters.ops import (
     TorchSigmoidParameter,
     TorchSoftmaxParameter,
     TorchSquareParameter,
+    TorchSumParameter,
+    TorchTensorParameter,
 )
-from cirkit.backend.torch.utils import InitializerFunc
+from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.parameters import (
+    ClampParameter,
+    ConjugateParameter,
     ConstantParameter,
     ExpParameter,
+    GaussianProductLogPartition,
+    GaussianProductMean,
+    GaussianProductStddev,
     HadamardParameter,
     KroneckerParameter,
     LogParameter,
@@ -36,6 +50,7 @@ from cirkit.symbolic.parameters import (
     SigmoidParameter,
     SoftmaxParameter,
     SquareParameter,
+    SumParameter,
     TensorParameter,
 )
 
@@ -43,10 +58,27 @@ if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
-def compile_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTensorParameter:
+def _retrieve_dtype(dtype: DataType) -> torch.dtype:
+    if dtype == DataType.INTEGER:
+        return torch.int64
+    default_float_dtype = torch.get_default_dtype()
+    if dtype == DataType.REAL:
+        return default_float_dtype
+    if dtype == DataType.COMPLEX:
+        if default_float_dtype == torch.float32:
+            return torch.complex64
+        if default_float_dtype == torch.float64:
+            return torch.complex128
+    raise ValueError(
+        f"Cannot determine the torch.dtype to use, current default: {default_float_dtype}, given dtype: {dtype}"
+    )
+
+
+def compile_tensor_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTensorParameter:
     initializer_ = compiler.compiler_initializer(p.initializer)
+    dtype = _retrieve_dtype(p.dtype)
     compiled_p = TorchTensorParameter(
-        *p.shape, requires_grad=p.learnable, initializer_=initializer_
+        *p.shape, requires_grad=p.learnable, initializer_=initializer_, dtype=dtype
     )
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p
@@ -68,6 +100,11 @@ def compile_reference_parameter(
     # and wrap it in a pointer parameter node.
     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+
+def compile_sum_parameter(compiler: "TorchCompiler", p: SumParameter) -> TorchSumParameter:
+    in_shape1, in_shape2 = p.in_shapes
+    return TorchSumParameter(in_shape1, in_shape2)
 
 
 def compile_hadamard_parameter(
@@ -115,7 +152,7 @@ def compile_square_parameter(compiler: "TorchCompiler", p: SquareParameter) -> T
 
 
 def compile_sigmoid_parameter(
-    compiler: "TorchCompiler", p: ScaledSigmoidParameter
+    compiler: "TorchCompiler", p: SigmoidParameter
 ) -> TorchSigmoidParameter:
     (in_shape,) = p.in_shapes
     return TorchSigmoidParameter(in_shape)
@@ -126,6 +163,18 @@ def compile_scaled_sigmoid_parameter(
 ) -> TorchScaledSigmoidParameter:
     (in_shape,) = p.in_shapes
     return TorchScaledSigmoidParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
+
+
+def compile_clamp_parameter(compiler: "TorchCompiler", p: ClampParameter) -> TorchClampParameter:
+    (in_shape,) = p.in_shapes
+    return TorchClampParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
+
+
+def compile_conjugate_parameter(
+    compiler: "TorchCompiler", p: ClampParameter
+) -> TorchConjugateParameter:
+    (in_shape,) = p.in_shapes
+    return TorchConjugateParameter(in_shape)
 
 
 def compile_reduce_sum_parameter(
@@ -163,10 +212,29 @@ def compile_log_softmax_parameter(
     return TorchLogSoftmaxParameter(in_shape, dim=p.axis)
 
 
+def compile_gaussian_product_mean(
+    compiler: "TorchCompiler", p: GaussianProductMean
+) -> TorchGaussianProductMean:
+    return TorchGaussianProductMean(*p.in_shapes)
+
+
+def compile_gaussian_product_stddev(
+    compiler: "TorchCompiler", p: GaussianProductStddev
+) -> TorchGaussianProductStddev:
+    return TorchGaussianProductStddev(*p.in_shapes)
+
+
+def compile_gaussian_product_log_partition(
+    compiler: "TorchCompiler", p: GaussianProductLogPartition
+) -> TorchGaussianProductLogPartition:
+    return TorchGaussianProductLogPartition(*p.in_shapes)
+
+
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
-    TensorParameter: compile_parameter,
+    TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
+    SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,
     KroneckerParameter: compile_kronecker_parameter,
     OuterProductParameter: compile_outer_product_parameter,
@@ -176,9 +244,14 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     SquareParameter: compile_square_parameter,
     SigmoidParameter: compile_sigmoid_parameter,
     ScaledSigmoidParameter: compile_scaled_sigmoid_parameter,
+    ClampParameter: compile_clamp_parameter,
+    ConjugateParameter: compile_conjugate_parameter,
     ReduceSumParameter: compile_reduce_sum_parameter,
     ReduceProductParameter: compile_reduce_product_parameter,
     ReduceLSEParameter: compile_reduce_lse_parameter,
     SoftmaxParameter: compile_softmax_parameter,
     LogSoftmaxParameter: compile_log_softmax_parameter,
+    GaussianProductMean: compile_gaussian_product_mean,
+    GaussianProductStddev: compile_gaussian_product_stddev,
+    GaussianProductLogPartition: compile_gaussian_product_log_partition,
 }

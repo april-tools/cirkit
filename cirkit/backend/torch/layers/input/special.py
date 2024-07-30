@@ -4,7 +4,7 @@ from torch import Tensor
 
 from cirkit.backend.torch.layers.input.base import TorchInputLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import SemiringCls
+from cirkit.backend.torch.semiring import LSESumSemiring, Semiring
 from cirkit.utils.scope import Scope
 
 
@@ -22,12 +22,12 @@ class TorchLogPartitionLayer(TorchInputLayer):
         num_channels: int = 1,
         num_folds: int = 1,
         value: TorchParameter,
-        semiring: Optional[SemiringCls] = None,
+        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
         Args:
-            num_variables (int): The number of variables.
+            scope (Scope): The scope of the layer.
             num_output_units (int): The number of output units.
             num_channels (int): The number of channels. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.
@@ -54,12 +54,12 @@ class TorchLogPartitionLayer(TorchInputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, *B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
 
         Returns:
-            Tensor: The output of this layer, shape (F, *B, Ko).
+            Tensor: The output of this layer, shape (F, B, Ko).
         """
         value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
-        # (F, Ko) -> (F, *B, O)
-        value = value.expand(value.shape[0], *x.shape[2:-1], value.shape[2])
-        return self.semiring.from_lse_sum(value)
+        # (F, Ko) -> (F, B, O)
+        value = value.expand(value.shape[0], x.shape[2], value.shape[2])
+        return self.semiring.map_from(value, LSESumSemiring)

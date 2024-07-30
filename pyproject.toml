@@ -27,8 +27,8 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "torch~=2.2.0",
-  "numpy>=1.24.0",
+  "torch~=2.3.0",
+  "numpy<2.0.0"
 ]
 
 [project.optional-dependencies]
@@ -44,7 +44,11 @@ dev = [
 ]
 notebooks = [
   "notebook",
-  "torchvision",
+  "torchvision~=0.18.0",
+  "matplotlib",
+  "scikit-learn",
+  "pandas",
+  "h5py"
 ]
 
 [project.urls]
@@ -166,7 +170,7 @@ default-docstring-type = "google"
 
 # type checking
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 mypy_path = "3rd-party-stubs"  # TODO: for old version, check deprecation for cirkit.new
 follow_imports = "silent"
 follow_imports_for_stubs = true

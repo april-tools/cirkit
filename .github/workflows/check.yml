@@ -1,4 +1,4 @@
-name: Lint
+name: Static Code Checkers
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint:
+  Linting-Typing-Docs-Checks:
     runs-on: ubuntu-latest
     steps:
       - name: Check out with submodules
@@ -39,4 +39,4 @@ jobs:
           bash ./benchmark/install_submodule.sh all
       - name: Run linters
         run: |
-          ./scripts/lint.sh --verbose
+          bash scripts/check.sh --verbose

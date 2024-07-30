@@ -4,10 +4,8 @@ import torch
 import einops as E
 from torch import Tensor
 
+from cirkit.backend.torch.graph.address_book import AddressBook, AddressBookEntry, FoldIndexInfo
 from cirkit.backend.torch.graph.folding import (
-    AddressBook,
-    AddressBookEntry,
-    FoldIndexInfo,
     build_address_book_stacked_entry,
     build_fold_index_info,
 )
@@ -85,7 +83,9 @@ class LayerAddressBook(AddressBook):
             entries.append(entry)
 
         # Append the last bookkeeping entry with the information to compute the output tensor
-        entry = build_address_book_stacked_entry([fold_idx_info.out_fold_idx], num_folds=num_folds)
+        entry = build_address_book_stacked_entry(
+            [fold_idx_info.out_fold_idx], num_folds=num_folds, output=True
+        )
         entries.append(entry)
 
         return LayerAddressBook(entries, in_graph_fn=in_graph_fn)
@@ -98,7 +98,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         num_channels: int,
         layers: List[TorchLayer],
         in_layers: Dict[TorchLayer, List[TorchLayer]],
-        out_layers: Dict[TorchLayer, List[TorchLayer]],
+        outputs: List[TorchLayer],
         *,
         topologically_ordered: bool = False,
         fold_idx_info: Optional[FoldIndexInfo] = None,
@@ -106,7 +106,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         super().__init__(
             layers,
             in_layers,
-            out_layers,
+            outputs,
             topologically_ordered=topologically_ordered,
             fold_idx_info=fold_idx_info,
         )
@@ -165,8 +165,8 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 
     def _eval_layers(self, x: Tensor) -> Tensor:
         # Evaluate layers
-        y = self._eval_forward(x)  # (1, num_classes, B, K)
-        return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
+        y = self._eval_forward(x)  # (O, B, K)
+        return y.transpose(0, 1)  # (B, O, K)
 
     def _extended_eval_layers(self, x: Tensor, branches: List[Tensor]) -> Tensor:
         # Evaluate layers
@@ -198,10 +198,10 @@ class TorchCircuit(AbstractTorchCircuit):
         """Invoke the forward function.
 
         Args:
-            x (Tensor): The input of the circuit, shape (*B, C, D).
+            x (Tensor): The input of the circuit, shape (B, C, D).
 
         Returns:
-            Tensor: The output of the circuit, shape (*B, num_out, num_cls).
+            Tensor: The output of the circuit, shape (B, num_out, num_cls).
         """  # TODO: single letter name?
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
@@ -229,12 +229,12 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         """Invoke the forward function.
 
         Returns:
-            Tensor: The output of the circuit, shape (*B, num_out, num_cls).
+            Tensor: The output of the circuit, shape (B, num_out, num_cls).
         """  # TODO: single letter name?
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
-        x = torch.empty(size=(1, self.num_channels, len(self.scope)))
-        x = self._eval_layers(x)
-        return x.squeeze(dim=0)  # squeeze dummy batch dimension
+        x = torch.empty(size=(1, self.num_channels, len(self.scope)), device=self.device)
+        x = self._eval_layers(x)  # (B, O, K)
+        return x.squeeze(dim=0)  # (O, K)

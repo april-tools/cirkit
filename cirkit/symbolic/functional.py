@@ -1,6 +1,7 @@
+import functools
 import itertools
-from collections import defaultdict
-from typing import Dict, Iterable, List, Optional, Tuple
+import operator
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from cirkit.symbolic.circuit import (
     Circuit,
@@ -12,6 +13,50 @@ from cirkit.symbolic.circuit import (
 from cirkit.symbolic.layers import InputLayer, Layer, LayerOperation, ProductLayer, SumLayer
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
+
+
+def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
+    # Retrieve the number of channels
+    assert len(set(sc.num_channels for sc in scs)) == 1
+    num_channels = scs[0].num_channels
+
+    # Retrieve the union of the scopes of the circuits
+    scope = functools.reduce(operator.or_, map(lambda sc: sc.scope, scs))
+    # TODO: refactor scope class, I (LL) do not understand why do we would have different implementations
+    #       of the Scope data structure. What is the difference between Scope and FrozenSetScope?
+    #       Why do not we have just a frozen set or a bitmap?
+    # assert scope == scs[0].scope
+    assert tuple(scope) == tuple(scs[0].scope)
+
+    # Mapping the symbolic circuit layers with blocks of circuit layers
+    layers_to_block: Dict[Layer, CircuitBlock] = {}
+
+    # For each new circuit block, keep track of its inputs
+    blocks: List[CircuitBlock] = []
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    output_blocks: List[CircuitBlock] = []
+
+    # Copy the symbolic layers, pick references to parameters and build the blocks
+    for sc in scs:
+        for sl in sc.topological_ordering():
+            parameters = {name: p.ref() for name, p in sl.params.items()}
+            block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+            blocks.append(block)
+            block_ins = [layers_to_block[sli] for sli in sc.layer_inputs(sl)]
+            in_blocks[block] = block_ins
+            layers_to_block[sl] = block
+        output_blocks.extend(layers_to_block[sl] for sl in sc.outputs)
+
+    # Construct the symbolic circuit obtained by merging multiple circuits
+    return Circuit.from_operation(
+        scope,
+        num_channels,
+        blocks,
+        in_blocks,
+        output_blocks,
+        operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
+        topologically_ordered=True,
+    )
 
 
 def integrate(
@@ -37,12 +82,11 @@ def integrate(
         registry = OPERATOR_REGISTRY.get()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    map_layers: Dict[Layer, CircuitBlock] = {}
+    layers_to_block: Dict[Layer, CircuitBlock] = {}
 
-    # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
+    # For each new circuit block, keep track of its inputs
     blocks: List[CircuitBlock] = []
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
 
     for sl in sc.topological_ordering():
         # Input layers get integrated over
@@ -55,7 +99,7 @@ def integrate(
             func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
             int_block = func(sl)
             blocks.append(int_block)
-            map_layers[sl] = int_block
+            layers_to_block[sl] = int_block
             continue
         assert isinstance(
             sl, (SumLayer, ProductLayer)
@@ -65,11 +109,11 @@ def integrate(
         parameters = {name: p.ref() for name, p in sl.params.items()}
         int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
         blocks.append(int_block)
-        map_layers[sl] = int_block
-        int_block_ins = [map_layers[isl] for isl in sc.layer_inputs(sl)]
-        in_blocks[int_block] = int_block_ins
-        for bi in int_block_ins:
-            out_blocks[bi].append(int_block)
+        layers_to_block[sl] = int_block
+        in_blocks[int_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
+
+    # Construct the sequence of output blocks
+    output_blocks = [layers_to_block[sl] for sl in sc.outputs]
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit.from_operation(
@@ -77,7 +121,7 @@ def integrate(
         sc.num_channels,
         blocks,
         in_blocks,
-        out_blocks,
+        output_blocks,
         operation=CircuitOperation(
             operator=CircuitOperator.INTEGRATION,
             operands=(sc,),
@@ -100,12 +144,11 @@ def multiply(
         registry = OPERATOR_REGISTRY.get()
 
     # Map from pairs of layers to their product circuit block
-    map_layers: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
+    layers_to_block: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
 
-    # For each new circuit block, keep track of (i) its inputs and (ii) the blocks it feeds
+    # For each new circuit block, keep track of its inputs
     blocks: List[CircuitBlock] = []
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    out_blocks: Dict[CircuitBlock, List[CircuitBlock]] = defaultdict(list)
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
@@ -115,7 +158,7 @@ def multiply(
     # Using a stack in place of recursion for better memory efficiency and debugging
     while to_multiply:
         pair = to_multiply[-1]
-        if pair in map_layers:
+        if pair in layers_to_block:
             to_multiply.pop()
             continue
         lhs_layer, rhs_layer = pair
@@ -139,7 +182,7 @@ def multiply(
             assert False
 
         # Check if at least one pair of layers needs to be multiplied before going up in the recursion
-        not_yet_multiplied = list(filter(lambda p: p not in map_layers, next_to_multiply))
+        not_yet_multiplied = list(filter(lambda p: p not in layers_to_block, next_to_multiply))
         if len(not_yet_multiplied) > 0:
             to_multiply.extend(not_yet_multiplied)
             continue
@@ -150,12 +193,15 @@ def multiply(
         prod_block = func(lhs_layer, rhs_layer)
         blocks.append(prod_block)
         # Make the connections
-        prod_block_ins = [map_layers[p] for p in next_to_multiply]
-        in_blocks[prod_block] = prod_block_ins
-        for bi in prod_block_ins:
-            out_blocks[bi].append(prod_block)
-        map_layers[pair] = prod_block
+        in_blocks[prod_block] = [layers_to_block[p] for p in next_to_multiply]
+        layers_to_block[pair] = prod_block
         to_multiply.pop()  # Go up in the recursion
+
+    # Construct the sequence of output blocks
+    output_blocks = [
+        layers_to_block[(lhs_out, rhs_out)]
+        for lhs_out, rhs_out in itertools.product(lhs_sc.outputs, rhs_sc.outputs)
+    ]
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
@@ -163,7 +209,7 @@ def multiply(
         lhs_sc.num_channels,
         blocks,
         in_blocks,
-        out_blocks,
+        output_blocks,
         operation=CircuitOperation(
             operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
         ),
@@ -180,3 +226,53 @@ def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> C
     # Use the registry in the current context, if not specified otherwise
     if registry is None:
         registry = OPERATOR_REGISTRY.get()
+    raise NotImplementedError()
+
+
+def conjugate(
+    sc: Circuit,
+    registry: Optional[OperatorRegistry] = None,
+) -> Circuit:
+    # Use the registry in the current context, if not specified otherwise
+    if registry is None:
+        registry = OPERATOR_REGISTRY.get()
+
+    # Mapping the symbolic circuit layers with blocks of circuit layers
+    layers_to_block: Dict[Layer, CircuitBlock] = {}
+
+    # For each new circuit block, keep track of its inputs
+    blocks: List[CircuitBlock] = []
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+
+    for sl in sc.topological_ordering():
+        # The conjugation of a product layer is equivalent to the product of its conjugated inputs
+        if isinstance(sl, ProductLayer):
+            parameters = {name: p.ref() for name, p in sl.params.items()}
+            conj_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+            blocks.append(conj_block)
+            layers_to_block[sl] = conj_block
+            in_blocks[conj_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
+            continue
+
+        # We are not taking the conjugation of a non-product layer
+        # Retrieve the conjugation rule from the registry and apply it
+        assert isinstance(sl, (InputLayer, SumLayer))
+        func = registry.retrieve_rule(LayerOperation.CONJUGATION, type(sl))
+        conj_block = func(sl)
+        blocks.append(conj_block)
+        layers_to_block[sl] = conj_block
+        in_blocks[conj_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
+
+    # Construct the sequence of output blocks
+    output_blocks = [layers_to_block[sl] for sl in sc.outputs]
+
+    # Construct the conjugate symbolic circuit
+    return Circuit.from_operation(
+        sc.scope,
+        sc.num_channels,
+        blocks,
+        in_blocks,
+        output_blocks,
+        operation=CircuitOperation(operator=CircuitOperator.CONJUGATION, operands=(sc,)),
+        topologically_ordered=True,
+    )
