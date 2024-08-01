@@ -176,7 +176,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def _sample_layers_forward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
         # Sample layers
         y = self._sample_forward(num_samples)
-        samples = y[0][0, 0, :, 0]  # (C, N, D)
+        samples = y[0][0, 0, :, :]  # (C, N, D)
         samples = E.rearrange(samples, "c n d -> n c d")  # (N, C, D
         mixture_samples = y[1]
         return samples, mixture_samples  # (N, C, D)

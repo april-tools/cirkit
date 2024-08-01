@@ -196,7 +196,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         raise NotImplementedError("Backward sampling is not fully implemented yet!")
 
     def extended_forward(self, x: Tensor) -> Tensor:
-        return self.log_score(x)
+        return self.log_unnormalized_likelihood(x)
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
