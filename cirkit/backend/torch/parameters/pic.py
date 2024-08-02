@@ -295,7 +295,7 @@ def pc2qpc(
             probs_shape = list(node.probs._nodes[0]._ptensor.shape)
             z_quad = zw_quadrature(integration_method=integration_method, nip=probs_shape[2])[0]
             node.probs._nodes[0] = PICInputNet(
-                num_vars=probs_shape[0],
+                num_vars=probs_shape[0] * probs_shape[1],
                 num_param=probs_shape[-1],
                 num_channels=probs_shape[-2],
                 net_dim=net_dim,
