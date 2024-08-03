@@ -19,6 +19,15 @@ class ConstantInitializer(Initializer):
         return dict(value=self.value)
 
 
+class ConstantTensorInitializer(Initializer):
+    def __init__(self, value: np.ndarray) -> None:
+        self.value = value
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(value=self.value)
+
+
 class UniformInitializer(Initializer):
     def __init__(self, a: float = 0.0, b: float = 1.0) -> None:
         if a >= b:
