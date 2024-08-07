@@ -65,10 +65,7 @@ def _retrieve_dtype(dtype: DataType) -> torch.dtype:
     if dtype == DataType.REAL:
         return default_float_dtype
     if dtype == DataType.COMPLEX:
-        if default_float_dtype == torch.float32:
-            return torch.complex64
-        if default_float_dtype == torch.float64:
-            return torch.complex128
+        return default_float_dtype.to_complex()
     raise ValueError(
         f"Cannot determine the torch.dtype to use, current default: {default_float_dtype}, given dtype: {dtype}"
     )
