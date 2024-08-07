@@ -1,4 +1,5 @@
 import itertools
+from typing import cast
 
 import numpy as np
 import pytest
@@ -8,8 +9,13 @@ from scipy import integrate
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
+from cirkit.backend.torch.layers import TorchCPTLayer, TorchDenseLayer, TorchMixingLayer
+from cirkit.pipeline import PipelineContext, compile
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.parameters import Parameter, TensorParameter
+from cirkit.symbolic.initializers import NormalInitializer
+from cirkit.symbolic.layers import GaussianLayer, MixingLayer
+from cirkit.symbolic.parameters import Parameter, SoftmaxParameter, TensorParameter
+from cirkit.templates.region_graph import RandomBinaryTree
 from tests.floats import allclose, isclose
 from tests.symbolic.test_utils import build_simple_pc
 
@@ -407,3 +413,41 @@ def test_compile_product_integrate_pc_continuous(num_products: int):
     scores = scores.squeeze()
     each_tc_scores = torch.stack([tci(points).squeeze() for tci in tcs], dim=0)
     assert allclose(torch.sum(each_tc_scores, dim=0), scores)
+
+
+def test_compile_circuit_cp_layers():
+    rg = RandomBinaryTree(8, depth=3, num_repetitions=4)
+    symbolic_circuit = Circuit.from_region_graph(
+        rg,
+        input_factory=lambda scope, num_units, num_channels: GaussianLayer(
+            scope, num_units, num_channels=num_channels
+        ),
+        sum_product="cp",
+        dense_weight_factory=lambda shape: Parameter.from_unary(
+            SoftmaxParameter(shape), TensorParameter(*shape, initializer=NormalInitializer())
+        ),
+        mixing_factory=lambda scope, num_units, arity: MixingLayer(scope, num_units, arity=arity),
+        num_input_units=64,
+        num_sum_units=64,
+    )
+
+    pipeline = PipelineContext(backend="torch", fold=True, optimize=True)
+    with pipeline:
+        circuit = cast(TorchCircuit, compile(symbolic_circuit))
+    y = circuit(torch.randn(42, 1, 8))
+    assert y.shape == (42, 1, 1)
+
+    # for l in circuit.layers:
+    #     if isinstance(l, (TorchDenseLayer, TorchMixingLayer, TorchCPLayer)):
+    #         print(l.__class__.__name__, (l.weight.num_folds, *l.weight.shape))
+
+    layers = list(
+        filter(
+            lambda l: isinstance(l, (TorchDenseLayer, TorchMixingLayer, TorchCPTLayer)),
+            circuit.layers,
+        )
+    )
+    assert (layers[0].weight.num_folds, *layers[0].weight.shape) == (32, 64, 64)
+    assert (layers[1].weight.num_folds, *layers[1].weight.shape) == (16, 64, 64)
+    assert (layers[2].weight.num_folds, *layers[2].weight.shape) == (8, 1, 64)
+    assert (layers[3].weight.num_folds, *layers[3].weight.shape) == (1, 1, 4)

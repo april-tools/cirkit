@@ -12,8 +12,7 @@ from cirkit.backend.torch.layers import (
     TorchKroneckerLayer,
     TorchTuckerLayer,
 )
-from cirkit.backend.torch.layers.optimized import TorchTensorDotLayer
-from cirkit.backend.torch.layers.sum_product import TorchCPLayer
+from cirkit.backend.torch.layers.optimized import TorchCPTLayer, TorchTensorDotLayer
 from tests.floats import allclose
 from tests.symbolic.test_utils import build_simple_pc
 
@@ -71,7 +70,7 @@ def test_optimize_candecomp():
     assert all(
         isinstance(l, (TorchHadamardLayer, TorchDenseLayer)) for l in unoptimized_tc.layers[-4:]
     )
-    assert all(isinstance(l, TorchCPLayer) for l in optimized_tc.layers[-2:])
+    assert all(isinstance(l, TorchCPTLayer) for l in optimized_tc.layers[-2:])
 
     pnames = [
         ("_nodes.0.logits._nodes.0._ptensor", "_nodes.0.logits._nodes.0._ptensor"),

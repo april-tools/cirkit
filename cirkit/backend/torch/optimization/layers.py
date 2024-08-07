@@ -7,8 +7,7 @@ from cirkit.backend.torch.layers import (
     TorchLayer,
     TorchTuckerLayer,
 )
-from cirkit.backend.torch.layers.optimized import TorchTensorDotLayer
-from cirkit.backend.torch.layers.sum_product import TorchCPLayer
+from cirkit.backend.torch.layers.optimized import TorchCPTLayer, TorchTensorDotLayer
 from cirkit.backend.torch.optimization.parameters import KroneckerOutParameterPattern
 from cirkit.backend.torch.optimization.registry import (
     LayerOptApplyFunc,
@@ -92,17 +91,17 @@ def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[Torch
     return (tucker,)
 
 
-def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchCPLayer]:
+def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchCPTLayer]:
     dense = cast(TorchDenseLayer, match.entries[0])
     hadamard = cast(TorchHadamardLayer, match.entries[1])
-    cp = TorchCPLayer(
+    cpt = TorchCPTLayer(
         hadamard.num_input_units,
         dense.num_output_units,
         hadamard.arity,
         weight=dense.weight,
         semiring=compiler.semiring,
     )
-    return (cp,)
+    return (cpt,)
 
 
 def _apply_tensordot_rule(
