@@ -462,11 +462,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                     raise ValueError(
                         "A mixing layer factory must be specified to overparameterize multiple region partitionings"
                     )
-                if sum_prod_builder_ is not None:
-                    mix_ins = [
-                        sum_prod_builder_(rgn, rgn_in.inputs, num_units) for rgn_in in rgn.inputs
-                    ]
-                else:
+                if sum_prod_builder_ is None:
                     sum_ins = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
                     mix_ins = [
                         sum_factory(rgn.scope, sli.num_output_units, num_units) for sli in sum_ins
@@ -474,6 +470,10 @@ class Circuit(DiAcyclicGraph[Layer]):
                     layers.extend(mix_ins)
                     for mix_sl, sli in zip(mix_ins, sum_ins):
                         in_layers[mix_sl] = [sli]
+                else:
+                    mix_ins = [
+                        sum_prod_builder_(rgn, rgn_in.inputs, num_units) for rgn_in in rgn.inputs
+                    ]
                 mix_sl = mixing_factory(rgn.scope, num_units, len(mix_ins))
                 layers.append(mix_sl)
                 in_layers[mix_sl] = mix_ins
