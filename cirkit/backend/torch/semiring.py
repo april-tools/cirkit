@@ -494,7 +494,7 @@ def _(x: Tensor) -> Tensor:
 
 @ComplexLSESumSemiring.register_map_from(SumProductSemiring)
 def _(x: Tensor) -> Tensor:
-    return torch.log(ComplexLSESumSemiring.cast(x))
+    return csafelog(ComplexLSESumSemiring.cast(x))
 
 
 @ComplexLSESumSemiring.register_map_from(LSESumSemiring)
