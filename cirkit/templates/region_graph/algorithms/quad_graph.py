@@ -25,8 +25,34 @@ def _merge_2_regions(graph: RegionGraph, region_nodes: Tuple[RegionNode, RegionN
     return region_node
 
 
-def _merge_4_regions_struct_decomp(
+def _merge_4_regions(
     graph: RegionGraph, region_nodes: Tuple[RegionNode, RegionNode, RegionNode, RegionNode]
+) -> RegionNode:
+    """Merge 4 regions to a larger region.
+
+    Args:
+        graph (RegionGraph): The region graph to hold the merging.
+        region_nodes (Tuple[RegionNode, RegionNode]): The region nodes to merge.
+
+    Returns:
+        RegionNode: The merged region node.
+    """
+    assert len(region_nodes) == 4
+
+    region_node = RegionNode(
+        region_nodes[0].scope
+        | region_nodes[1].scope
+        | region_nodes[2].scope
+        | region_nodes[3].scope
+    )
+    graph.add_partitioning(region_node, region_nodes)
+    return region_node
+
+
+def _merge_4_regions_tree(
+    graph: RegionGraph,
+    region_nodes: Tuple[RegionNode, RegionNode, RegionNode, RegionNode],
+    num_patch_splits: int = 2,
 ) -> RegionNode:
     """Merge 4 regions to a larger region, with structured-decomposablility.
 
@@ -36,18 +62,24 @@ def _merge_4_regions_struct_decomp(
         graph (RegionGraph): The region graph to hold the merging.
         region_nodes (Tuple[RegionNode, RegionNode, RegionNode, RegionNode]): The region nodes to \
             merge.
+        num_patch_splits (int): The number of patches to split. It can be either 2 or 4.
 
     Returns:
         RegionNode: The merged region node.
     """
     assert len(region_nodes) == 4
+    assert num_patch_splits in [2, 4], "The number of patches to split must be either 2 or 4"
 
-    # Merge horizontally.
-    region_top = _merge_2_regions(graph, region_nodes[:2])
-    region_bot = _merge_2_regions(graph, region_nodes[2:])
+    if num_patch_splits == 2:
+        # Merge horizontally.
+        region_top = _merge_2_regions(graph, region_nodes[:2])
+        region_bot = _merge_2_regions(graph, region_nodes[2:])
 
-    # Merge vertically.
-    region_whole = _merge_2_regions(graph, (region_top, region_bot))
+        # Merge vertically.
+        region_whole = _merge_2_regions(graph, (region_top, region_bot))
+    else:  # num_patch_splits == 4
+        # Merge both horizontally and vertically
+        region_whole = _merge_4_regions(graph, region_nodes)
 
     return region_whole
 
@@ -68,7 +100,7 @@ def _merge_4_regions_mixed(
     assert len(region_nodes) == 4
 
     # Merge horizontally then vertically.
-    region_whole = _merge_4_regions_struct_decomp(graph, region_nodes)
+    region_whole = _merge_4_regions_tree(graph, region_nodes)
 
     # Merge vertically then horizontally.
     region_lft = _merge_2_regions(graph, region_nodes[0::2])
@@ -81,13 +113,17 @@ def _merge_4_regions_mixed(
 
 # DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name
-def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGraph:
+def QuadGraph(
+    shape: Tuple[int, int], *, is_tree: bool = False, num_patch_splits: int = 2
+) -> RegionGraph:
     """Construct a RG with a quad tree.
 
     Args:
         shape (Tuple[int, int]): The shape of the image, in (H, W).
-        struct_decomp (bool, optional): Whether the RG needs to be \
+        is_tree (bool, optional): Whether the RG needs to be \
             structured-decomposable. Defaults to False.
+        num_patch_splits (int): The number of patches to split. It can be either 2 or 4.
+            This is used only when is_tree is True.
 
     Returns:
         RegionGraph: The QT RG.
@@ -133,9 +169,9 @@ def QuadTree(shape: Tuple[int, int], *, struct_decomp: bool = False) -> RegionGr
                 node = regions[0]
             elif len(regions) == 2:
                 node = _merge_2_regions(graph, regions)
-            elif len(regions) == 4 and struct_decomp:
-                node = _merge_4_regions_struct_decomp(graph, regions)
-            elif len(regions) == 4 and not struct_decomp:
+            elif len(regions) == 4 and is_tree:
+                node = _merge_4_regions_tree(graph, regions, num_patch_splits=num_patch_splits)
+            elif len(regions) == 4 and not is_tree:
                 node = _merge_4_regions_mixed(graph, regions)
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
