@@ -22,9 +22,7 @@ from tests.symbolic.test_utils import build_simple_pc
 def test_save_load_statedict(fold: bool, optimize: bool):
     num_variables = 6
     compiler = TorchCompiler(fold=fold, optimize=optimize)
-    sc = build_simple_pc(
-        num_variables, 3, 4, num_repetitions=2
-    )
+    sc = build_simple_pc(num_variables, 3, 4, num_repetitions=2)
     tc: TorchCircuit = compiler.compile(sc)
 
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=num_variables))).unsqueeze(dim=-2)
