@@ -6,6 +6,7 @@ import torch.nn as nn
 
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.layers import *
+from cirkit.backend.torch.layers import TorchTuckerLayer
 from cirkit.backend.torch.parameters.nodes import TorchTensorParameter
 
 
@@ -295,7 +296,7 @@ def pc2qpc(
             probs_shape = list(node.probs._nodes[0]._ptensor.shape)
             z_quad = zw_quadrature(integration_method=integration_method, nip=probs_shape[2])[0]
             node.probs._nodes[0] = PICInputNet(
-                num_vars=probs_shape[0],
+                num_vars=probs_shape[0] * probs_shape[1],
                 num_param=probs_shape[-1],
                 num_channels=probs_shape[-2],
                 net_dim=net_dim,
@@ -340,7 +341,7 @@ def pc2qpc(
                 z_quad=z_quad,
                 tensor_parameter=node.stddev._nodes[0],
             )
-        elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPLayer)):
+        elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPTLayer)):
             assert (
                 len(node.weight._nodes) == 1
             ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"

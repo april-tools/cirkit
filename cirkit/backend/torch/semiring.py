@@ -304,6 +304,9 @@ class SumProductSemiring(SemiringImpl):
         """
         if x.is_floating_point():
             return x
+        if not x.is_complex():
+            default_float_dtype = torch.get_default_dtype()
+            return x.to(default_float_dtype)
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
@@ -344,6 +347,9 @@ class LSESumSemiring(SemiringImpl):
     def cast(cls, x: Tensor) -> Tensor:
         if x.is_floating_point():
             return x
+        if not x.is_complex():
+            default_float_dtype = torch.get_default_dtype()
+            return x.to(default_float_dtype)
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
@@ -398,13 +404,10 @@ class ComplexLSESumSemiring(SemiringImpl):
     def cast(cls, x: Tensor) -> Tensor:
         if x.is_complex():
             return x
-        if x.dtype == torch.float16:
-            return x.to(torch.complex32)
-        if x.dtype == torch.float32:
-            return x.to(torch.complex64)
-        if x.dtype == torch.float64:
-            return x.to(torch.complex128)
-        raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
+        if x.is_floating_point():
+            return x.to(x.dtype.to_complex())
+        default_float_dtype = torch.get_default_dtype()
+        return x.to(default_float_dtype.to_complex())
 
     @classmethod
     def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
@@ -491,7 +494,7 @@ def _(x: Tensor) -> Tensor:
 
 @ComplexLSESumSemiring.register_map_from(SumProductSemiring)
 def _(x: Tensor) -> Tensor:
-    return torch.log(ComplexLSESumSemiring.cast(x))
+    return csafelog(ComplexLSESumSemiring.cast(x))
 
 
 @ComplexLSESumSemiring.register_map_from(LSESumSemiring)
