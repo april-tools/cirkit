@@ -296,6 +296,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
+        factorize_inputs: bool = True,
     ) -> "Circuit":
         """Construct a symbolic circuit from a region graph.
             There are two ways to use this method. The first one is to specify a sum-product layer
@@ -319,6 +320,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
             num_classes: The number of output classes.
+            factorize_inputs: Whether to fully factorize input layers, when they depend on more than one variable.
 
         Returns:
             Circuit: A symbolic circuit.
@@ -425,7 +427,18 @@ class Circuit(DiAcyclicGraph[Layer]):
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
-                input_sl = input_factory(rgn.scope, num_input_units, num_channels)
+                if factorize_inputs:
+                    factorized_input_sls = [
+                        input_factory(Scope([sc]), num_input_units, num_channels)
+                        for sc in rgn.scope
+                    ]
+                    input_sl = HadamardLayer(
+                        rgn.scope, num_input_units, arity=len(factorized_input_sls)
+                    )
+                    layers.extend(factorized_input_sls)
+                    in_layers[input_sl] = factorized_input_sls
+                else:
+                    input_sl = input_factory(rgn.scope, num_input_units, num_channels)
                 num_output_units = num_sum_units if rgn.outputs else num_classes
                 if sum_factory is None:
                     layers.append(input_sl)

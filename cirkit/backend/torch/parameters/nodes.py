@@ -173,7 +173,7 @@ class TorchPointerParameter(TorchParameterInput):
                 num_folds = len(fold_idx)
         assert not isinstance(parameter, TorchPointerParameter)
         super().__init__(num_folds=num_folds)
-        super().__setattr__('_parameter', parameter)
+        super().__setattr__("_parameter", parameter)
         self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
 
     def __copy__(self) -> "TorchPointerParameter":
@@ -671,30 +671,26 @@ class TorchGaussianProductMean(TorchParameterOp):
         *,
         num_folds: int = 1,
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
     def forward(self, mean1: Tensor, mean2: Tensor, stddev1: Tensor, stddev2: Tensor) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, D, K1, C)
-        var2 = torch.square(stddev2)  # (F, D, K2, C)
+        var1 = torch.square(stddev1)  # (F, K1, C)
+        var2 = torch.square(stddev2)  # (F, K2, C)
         inv_var12 = torch.reciprocal(
-            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)
-        )  # (F, D, K1, K2, C)
-        wm1 = mean1.unsqueeze(dim=3) * var2.unsqueeze(dim=2)  # (F, D, K1, K2, C)
-        wm2 = mean2.unsqueeze(dim=2) * var1.unsqueeze(dim=3)  # (F, D, K1, K2, C)
-        mean = (wm1 + wm2) * inv_var12  # (F, D, K1, K2, C)
-        return mean.view(-1, *self.shape)  # (F, D, K1 * K2, C)
+            var1.unsqueeze(dim=2) + var2.unsqueeze(dim=1)
+        )  # (F, K1, K2, C)
+        wm1 = mean1.unsqueeze(dim=2) * var2.unsqueeze(dim=1)  # (F, K1, K2, C)
+        wm2 = mean2.unsqueeze(dim=1) * var1.unsqueeze(dim=2)  # (F, K1, K2, C)
+        mean = (wm1 + wm2) * inv_var12  # (F, K1, K2, C)
+        return mean.view(-1, *self.shape)  # (F, K1 * K2, C)
 
 
 class TorchGaussianProductStddev(TorchBinaryParameterOp):
@@ -705,27 +701,23 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
         *,
         num_folds: int = 1,
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
     def forward(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, D, K1, C)
-        var2 = torch.square(stddev2)  # (F, D, K2, C)
-        inv_var1 = torch.reciprocal(var1).unsqueeze(dim=3)  # (F, D, K1, 1, C)
-        inv_var2 = torch.reciprocal(var2).unsqueeze(dim=2)  # (F, D, 1, K2, C)
-        var = torch.reciprocal(inv_var1 + inv_var2)  # (F, D, K1, K2, C)
-        return torch.sqrt(var).view(-1, *self.shape)  # (F, D, K1 * K2print, C)
+        var1 = torch.square(stddev1)  # (F, K1, C)
+        var2 = torch.square(stddev2)  # (F, K2, C)
+        inv_var1 = torch.reciprocal(var1).unsqueeze(dim=2)  # (F, K1, 1, C)
+        inv_var2 = torch.reciprocal(var2).unsqueeze(dim=1)  # (F, 1, K2, C)
+        var = torch.reciprocal(inv_var1 + inv_var2)  # (F, K1, K2, C)
+        return torch.sqrt(var).view(-1, *self.shape)  # (F, K1 * K2, C)
 
 
 class TorchGaussianProductLogPartition(TorchParameterOp):
@@ -736,19 +728,15 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         *,
         num_folds: int = 1,
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
         self._log_two_pi = np.log(2.0 * np.pi)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
     def forward(
@@ -758,10 +746,10 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         stddev1: Tensor,
         stddev2: Tensor,
     ) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, D, K1, C)
-        var2 = torch.square(stddev2)  # (F, D, K1, C)
-        var12 = var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)  # (F, D, K1, K2, C)
+        var1 = torch.square(stddev1)  # (F, K1, C)
+        var2 = torch.square(stddev2)  # (F, K2, C)
+        var12 = var1.unsqueeze(dim=2) + var2.unsqueeze(dim=1)  # (F, K1, K2, C)
         inv_var12 = torch.reciprocal(var12)
-        sq_mahalanobis = torch.square(mean1.unsqueeze(dim=3) - mean2.unsqueeze(dim=2)) * inv_var12
+        sq_mahalanobis = torch.square(mean1.unsqueeze(dim=2) - mean2.unsqueeze(dim=1)) * inv_var12
         log_partition = -0.5 * (self._log_two_pi + torch.log(var12) + sq_mahalanobis)
-        return log_partition.view(-1, *self.shape)  # (F, D, K1 * K2, C)
+        return log_partition.view(-1, *self.shape)  # (F, K1 * K2, C)

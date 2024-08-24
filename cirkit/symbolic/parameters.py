@@ -392,18 +392,14 @@ class GaussianProductMean(ParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
 
@@ -411,18 +407,14 @@ class GaussianProductStddev(BinaryParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
 
@@ -430,16 +422,12 @@ class GaussianProductLogPartition(ParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )

@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, List, Optional, Protocol, Tuple, Type
+from typing import Dict, List, Protocol, Tuple, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
@@ -20,7 +20,6 @@ from cirkit.symbolic.parameters import (
     GaussianProductLogPartition,
     GaussianProductMean,
     GaussianProductStddev,
-    IndexParameter,
     KroneckerParameter,
     LogParameter,
     OuterSumParameter,
@@ -32,126 +31,54 @@ from cirkit.symbolic.parameters import (
 from cirkit.utils.scope import Scope
 
 
-def integrate_categorical_layer(
-    sl: CategoricalLayer, *, scope: Optional[Scope] = None
-) -> CircuitBlock:
-    if scope is None:
-        scope = sl.scope
-    rem_scope = sl.scope.difference(scope)
-    mar_var_indices = [i for i, s in enumerate(sl.scope) if s in scope]
-    rem_var_indices = [i for i, s in enumerate(sl.scope) if s in rem_scope]
-
-    if len(rem_scope) == 0:
-        mar_logits = sl.logits.ref() if sl.logits is not None else None
-        rem_logits = None
-        rem_probs = None
-    else:
-        if sl.logits is None:
-            mar_logits = None
-            rem_logits = None
-            rem_probs = Parameter.from_unary(
-                IndexParameter(sl.probs.shape, indices=rem_var_indices, axis=0), sl.probs.ref()
-            )
-        else:
-            mar_logits = Parameter.from_unary(
-                IndexParameter(sl.logits.shape, indices=mar_var_indices, axis=0), sl.logits.ref()
-            )
-            rem_logits = Parameter.from_unary(
-                IndexParameter(sl.logits.shape, indices=rem_var_indices, axis=0), sl.logits.ref()
-            )
-            rem_probs = None
-
-    if mar_logits is None:
-        lp_value = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
-    else:
-        reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=3)
-        reduce_sum1 = ReduceSumParameter(reduce_lse.shape, axis=2)
-        reduce_sum2 = ReduceSumParameter(reduce_sum1.shape, axis=0)
-        lp_value = Parameter.from_sequence(mar_logits, reduce_lse, reduce_sum1, reduce_sum2)
-    log_partition = LogPartitionLayer(scope, sl.num_output_units, sl.num_channels, value=lp_value)
-    if len(rem_scope) == 0:
-        return CircuitBlock.from_layer(log_partition)
-
-    categorical = CategoricalLayer(
-        rem_scope,
-        sl.num_output_units,
-        sl.num_channels,
-        sl.num_categories,
-        logits=rem_logits,
-        probs=rem_probs,
-    )
-    hadamard = HadamardLayer(sl.scope, num_input_units=sl.num_output_units, arity=2)
-
-    return CircuitBlock(
-        [categorical, log_partition, hadamard],
-        in_layers={hadamard: [categorical, log_partition]},
-        output=hadamard,
-        topologically_ordered=True,
-    )
-
-
-def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Optional[Scope] = None) -> CircuitBlock:
-    if scope is None:
-        scope = sl.scope
-    rem_scope = sl.scope.difference(scope)
-    mar_var_indices = [i for i, s in enumerate(sl.scope) if s in scope]
-    rem_var_indices = [i for i, s in enumerate(sl.scope) if s in rem_scope]
-
-    if len(rem_scope) == 0:
-        rem_mean = None
-        rem_stddev = None
-        rem_lp_value = None
-        mar_lp_value = sl.log_partition
-    else:
-        rem_mean = Parameter.from_unary(
-            IndexParameter(sl.mean.shape, indices=rem_var_indices, axis=0), sl.mean.ref()
+def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> CircuitBlock:
+    if len(sl.scope & scope) == 0:
+        raise ValueError(
+            f"The scope of the Categorical layer '{sl.scope}'"
+            f" is expected to be a subset of the integration scope '{scope}'"
         )
-        rem_stddev = Parameter.from_unary(
-            IndexParameter(sl.stddev.shape, indices=rem_var_indices, axis=0), sl.mean.ref()
-        )
-        mar_lp_value = Parameter.from_unary(
-            IndexParameter(sl.log_partition.shape, indices=mar_var_indices, axis=0),
-            sl.log_partition.ref(),
-        )
-        rem_lp_value = Parameter.from_unary(
-            IndexParameter(sl.log_partition.shape, indices=rem_var_indices, axis=0),
-            sl.log_partition.ref(),
-        )
-
-    if mar_lp_value is None:
-        lp_value = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+    if sl.logits is None:
+        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
     else:
-        reduce_sum1 = ReduceSumParameter(sl.log_partition.shape, axis=2)
-        reduce_sum2 = ReduceSumParameter(reduce_sum1.shape, axis=0)
-        lp_value = Parameter.from_sequence(mar_lp_value, reduce_sum1, reduce_sum2)
-    log_partition = LogPartitionLayer(
-        sl.scope, sl.num_output_units, sl.num_channels, value=lp_value
-    )
-    if len(rem_scope) == 0:
-        return CircuitBlock.from_layer(log_partition)
+        reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=2)
+        reduce_channels = ReduceSumParameter(reduce_lse.shape, axis=1)
+        log_partition = Parameter.from_sequence(sl.logits.ref(), reduce_lse, reduce_channels)
+    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+    return CircuitBlock.from_layer(sl)
 
-    gaussian = GaussianLayer(
-        rem_scope,
-        sl.num_output_units,
-        sl.num_channels,
-        mean=rem_mean,
-        stddev=rem_stddev,
-        log_partition=rem_lp_value,
-    )
-    hadamard = HadamardLayer(sl.scope, num_input_units=sl.num_output_units, arity=2)
 
-    return CircuitBlock(
-        [gaussian, log_partition, hadamard],
-        in_layers={hadamard: [gaussian, log_partition]},
-        output=hadamard,
-        topologically_ordered=True,
-    )
+def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock:
+    if len(sl.scope & scope) == 0:
+        raise ValueError(
+            f"The scope of the Gaussian layer '{sl.scope}'"
+            f" is expected to be a subset of the integration scope '{scope}'"
+        )
+    if sl.log_partition is None:
+        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+    else:
+        reduce_channels = ReduceSumParameter(sl.log_partition.shape, axis=1)
+        log_partition = Parameter.from_unary(reduce_channels, sl.log_partition.ref())
+    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+    return CircuitBlock.from_layer(sl)
 
 
 def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) -> CircuitBlock:
-    assert sl1.num_variables == sl2.num_variables
-    assert sl1.num_channels == sl2.num_channels
-    assert sl1.num_categories == sl2.num_categories
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Categorical layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
+    if sl1.num_channels != sl2.num_channels:
+        raise ValueError(
+            f"Expected Categorical layers to have the number of channels,"
+            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
+        )
+    if sl1.num_categories != sl2.num_categories:
+        raise ValueError(
+            f"Expected Categorical layers to have the number of categories,"
+            f"but found '{sl1.num_categories}' and '{sl2.num_categories}'"
+        )
+
     if sl1.logits is None:
         sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs)
     else:
@@ -161,12 +88,12 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
     else:
         sl2_logits = sl2.logits
     sl_logits = Parameter.from_binary(
-        OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=1),
+        OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=0),
         sl1_logits.ref(),
         sl2_logits.ref(),
     )
     sl = CategoricalLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
         num_channels=sl1.num_channels,
         num_categories=sl1.num_categories,
@@ -176,8 +103,16 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
 
 
 def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitBlock:
-    assert sl1.num_variables == sl2.num_variables
-    assert sl1.num_channels == sl2.num_channels
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Gaussian layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
+    if sl1.num_channels != sl2.num_channels:
+        raise ValueError(
+            f"Expected Gaussian layers to have the number of channels,"
+            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
+        )
 
     gaussian1_shape, gaussian2_shape = sl1.mean.shape, sl2.mean.shape
     mean = Parameter.from_nary(
@@ -202,29 +137,25 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
 
     if sl1.log_partition is not None or sl2.log_partition is not None:
         if sl1.log_partition is None:
-            log_partition1 = ConstantParameter(
-                sl1.num_variables, sl1.num_output_units, sl1.num_channels, value=0.0
-            )
+            log_partition1 = ConstantParameter(sl1.num_output_units, sl1.num_channels, value=0.0)
         else:
             log_partition1 = sl1.log_partition.ref()
         if sl2.log_partition is None:
-            log_partition2 = ConstantParameter(
-                sl2.num_variables, sl2.num_output_units, sl2.num_channels, value=0.0
-            )
+            log_partition2 = ConstantParameter(sl2.num_output_units, sl2.num_channels, value=0.0)
         else:
             log_partition2 = sl2.log_partition.ref()
         log_partition = Parameter.from_binary(
             SumParameter(log_partition.shape, log_partition.shape),
             log_partition,
             Parameter.from_binary(
-                OuterSumParameter(log_partition1.shape, log_partition2.shape, axis=1),
+                OuterSumParameter(log_partition1.shape, log_partition2.shape, axis=0),
                 log_partition1,
                 log_partition2,
             ),
         )
 
     sl = GaussianLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
         num_channels=sl1.num_channels,
         mean=mean,

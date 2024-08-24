@@ -137,7 +137,7 @@ def build_simple_pc(
         )
     if normalized:
         logits_factory = lambda shape: Parameter.from_unary(
-            LogSoftmaxParameter(shape, axis=3),
+            LogSoftmaxParameter(shape, axis=2),
             TensorParameter(*shape, initializer=NormalInitializer(0.0, 3e-1)),
         )
     else:

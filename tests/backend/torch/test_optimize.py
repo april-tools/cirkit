@@ -40,6 +40,17 @@ def test_optimize_tucker():
         ("_nodes.6.weight._nodes.0._ptensor", "_nodes.4.weight._nodes.0._ptensor"),
     ]
 
+    print(unoptimized_tc)
+    print()
+    print(optimized_tc)
+    print()
+
+    for pname, ptensor in unoptimized_tc.named_parameters():
+        print(pname, ptensor.shape)
+    print()
+    for pname, ptensor in optimized_tc.named_parameters():
+        print(pname, ptensor.shape)
+
     for unoptimized_pname, optimized_pname in pnames:
         optimized_tc.load_state_dict(
             {optimized_pname: unoptimized_tc.state_dict()[unoptimized_pname]}, strict=False
