@@ -225,7 +225,7 @@ def _prioritize_optimization_strategy(
 
         # Prune the 'excess' pattern matches
         for match in sorted_matches[1:]:
-            for mid, m in match.entries:
+            for m in match.entries:
                 module_matches[m].remove(match)
         prioritized_module_matches[module] = sorted_matches[0]
 
