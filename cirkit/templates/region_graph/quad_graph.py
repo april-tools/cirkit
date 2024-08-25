@@ -1,9 +1,9 @@
 import itertools
 from typing import Tuple
 
-from cirkit.templates.region_graph.algorithms.utils import HypercubeToScope
-from cirkit.templates.region_graph.region_graph import RegionGraph
-from cirkit.templates.region_graph.rg_node import RegionNode
+from cirkit.templates.region_graph import RegionNode
+from cirkit.templates.region_graph.graph import RegionGraph
+from cirkit.templates.region_graph.utils import HypercubeToScope
 
 # TODO: now should work with H!=W but need tests
 
@@ -13,10 +13,10 @@ def _merge_2_regions(graph: RegionGraph, region_nodes: Tuple[RegionNode, RegionN
 
     Args:
         graph (RegionGraph): The region graph to hold the merging.
-        region_nodes (Tuple[RegionNode, RegionNode]): The region nodes to merge.
+        region_nodes (Tuple[cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode]): The region nodes to merge.
 
     Returns:
-        RegionNode: The merged region node.
+        cirkit.templates.region_graph.RegionNode: The merged region node.
     """
     assert len(region_nodes) == 2
 
@@ -32,10 +32,10 @@ def _merge_4_regions(
 
     Args:
         graph (RegionGraph): The region graph to hold the merging.
-        region_nodes (Tuple[RegionNode, RegionNode]): The region nodes to merge.
+        region_nodes (Tuple[cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode]): The region nodes to merge.
 
     Returns:
-        RegionNode: The merged region node.
+        cirkit.templates.region_graph.RegionNode: The merged region node.
     """
     assert len(region_nodes) == 4
 
@@ -60,12 +60,12 @@ def _merge_4_regions_tree(
 
     Args:
         graph (RegionGraph): The region graph to hold the merging.
-        region_nodes (Tuple[RegionNode, RegionNode, RegionNode, RegionNode]): The region nodes to \
+        region_nodes (Tuple[cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode]): The region nodes to \
             merge.
         num_patch_splits (int): The number of patches to split. It can be either 2 or 4.
 
     Returns:
-        RegionNode: The merged region node.
+        cirkit.templates.region_graph.RegionNode: The merged region node.
     """
     assert len(region_nodes) == 4
     assert num_patch_splits in [2, 4], "The number of patches to split must be either 2 or 4"
@@ -91,11 +91,11 @@ def _merge_4_regions_mixed(
 
     Args:
         graph (RegionGraph): The region graph to hold the merging.
-        region_nodes (Tuple[RegionNode, RegionNode, RegionNode, RegionNode]): The region nodes to \
+        region_nodes (Tuple[cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode, cirkit.templates.region_graph.RegionNode]): The region nodes to \
             merge.
 
     Returns:
-        RegionNode: The merged region node.
+        cirkit.templates.region_graph.RegionNode: The merged region node.
     """
     assert len(region_nodes) == 4
 

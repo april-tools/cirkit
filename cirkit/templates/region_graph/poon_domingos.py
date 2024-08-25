@@ -1,9 +1,9 @@
 from collections import deque
 from typing import Deque, Dict, List, Optional, Sequence, Union
 
-from cirkit.templates.region_graph.algorithms.utils import HyperCube, HypercubeToScope
-from cirkit.templates.region_graph.region_graph import RegionGraph
-from cirkit.templates.region_graph.rg_node import RegionNode
+from cirkit.templates.region_graph import RegionNode
+from cirkit.templates.region_graph.graph import RegionGraph
+from cirkit.templates.region_graph.utils import HyperCube, HypercubeToScope
 from cirkit.utils.scope import Scope
 
 # TODO: test what is constructed here
@@ -17,7 +17,7 @@ def _get_region_node_by_scope(graph: RegionGraph, scope: Scope) -> RegionNode:
         scope (Scope): The scope to find.
 
     Returns:
-        RegionNode: The RegionNode found or constructed.
+        cirkit.templates.region_graph.RegionNode: The RegionNode found or constructed.
     """
     # Should found at most one, by PD algorithm.
     region_node = next((node for node in graph.region_nodes if node.scope == scope), None)

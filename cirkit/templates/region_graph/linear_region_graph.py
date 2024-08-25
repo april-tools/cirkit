@@ -2,8 +2,8 @@ from typing import List
 
 import numpy as np
 
-from cirkit.templates.region_graph.region_graph import RegionGraph
-from cirkit.templates.region_graph.rg_node import RegionNode
+from cirkit.templates.region_graph import RegionNode
+from cirkit.templates.region_graph.graph import RegionGraph
 
 
 def _partition_node(graph: RegionGraph, node: RegionNode, rm_item: int) -> RegionNode:
@@ -11,11 +11,11 @@ def _partition_node(graph: RegionGraph, node: RegionNode, rm_item: int) -> Regio
 
     Args:
         graph (RegionGraph): The region graph to hold the partitioning.
-        node (RegionNode): The node to partition.
+        node (cirkit.templates.region_graph.RegionNode): The node to partition.
         rm_item (int): The identifier of node to split out.
 
     Returns:
-        RegionNode: The region node need more partitioning.
+        cirkit.templates.region_graph.RegionNode: The region node need more partitioning.
     """
     scope_list = list(node.scope)
 

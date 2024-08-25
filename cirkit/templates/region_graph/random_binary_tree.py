@@ -3,8 +3,8 @@ from typing import List, Optional, Sequence, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from cirkit.templates.region_graph.region_graph import RegionGraph
-from cirkit.templates.region_graph.rg_node import RegionNode
+from cirkit.templates.region_graph import RegionNode
+from cirkit.templates.region_graph.graph import RegionGraph
 
 
 def _partition_node_randomly(
@@ -18,14 +18,14 @@ def _partition_node_randomly(
 
     Args:
         graph (RegionGraph): The region graph to hold the partitioning.
-        node (RegionNode): The node to partition.
+        node (cirkit.templates.region_graph.RegionNode): The node to partition.
         num_parts (Optional[int], optional): The number of parts to partition. If not provided, \
             will be inferred from proportions. Defaults to None.
         proportions (Optional[Sequence[float]], optional): The proportions of each part, can be \
             unnormalized. If not provided, will equally divide to num_parts. Defaults to None.
 
     Returns:
-        List[RegionNode]: The region nodes forming the partitioning.
+        List[cirkit.templates.region_graph.RegionNode]: The region nodes forming the partitioning.
     """
     scope_list = list(node.scope)
     random_state.shuffle(scope_list)

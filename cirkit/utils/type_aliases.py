@@ -1,5 +1,4 @@
 from typing import Dict, List, TypedDict, Union
-from typing_extensions import NotRequired  # FUTURE: in typing from 3.11
 from typing_extensions import TypeAlias  # FUTURE: in typing from 3.10, deprecated in 3.12
 
 # Here're the type defs and aliases shared across the library. The code should work without anything
@@ -16,7 +15,6 @@ class RegionDict(TypedDict):
     """The structure of a region node in the json file."""
 
     scope: List[int]  # The scope of this region node, specified by id of variable.
-    metadata: NotRequired[RGNodeMetadata]  # The metadata of this region node, if any.
 
 
 class PartitionDict(TypedDict):
@@ -24,7 +22,6 @@ class PartitionDict(TypedDict):
 
     inputs: List[int]  # The inputs of this partition node, specified by id of region node.
     output: int  # The output of this partition node, specified by id of region node.
-    metadata: NotRequired[RGNodeMetadata]  # The metadata of this partition node, if any.
 
 
 class RegionGraphJson(TypedDict):
