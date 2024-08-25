@@ -28,12 +28,7 @@ from cirkit.symbolic.layers import (
 )
 from cirkit.symbolic.parameters import ParameterFactory
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
-from cirkit.utils.algorithms import (
-    BiRootedDiAcyclicGraph,
-    DiAcyclicGraph,
-    bfs,
-    topological_ordering,
-)
+from cirkit.utils.algorithms import DiAcyclicGraph, RootedDiAcyclicGraph, bfs, topological_ordering
 from cirkit.utils.orderedset import OrderedSet
 from cirkit.utils.scope import Scope
 
@@ -64,16 +59,16 @@ class CircuitOperation:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-class CircuitBlock(BiRootedDiAcyclicGraph[Layer]):
+class CircuitBlock(RootedDiAcyclicGraph[Layer]):
     def __init__(
         self,
         layers: List[Layer],
         in_layers: Dict[Layer, List[Layer]],
-        outputs: List[Layer],
+        output: Layer,
         *,
         topologically_ordered: bool = False,
     ):
-        super().__init__(layers, in_layers, outputs, topologically_ordered=topologically_ordered)
+        super().__init__(layers, in_layers, [output], topologically_ordered=topologically_ordered)
 
     def layer_inputs(self, l: Layer) -> List[Layer]:
         return self.node_inputs(l)
@@ -110,7 +105,7 @@ class CircuitBlock(BiRootedDiAcyclicGraph[Layer]):
 
     @staticmethod
     def from_layer(sl: Layer) -> "CircuitBlock":
-        return CircuitBlock([sl], {}, [sl], topologically_ordered=True)
+        return CircuitBlock([sl], {}, sl, topologically_ordered=True)
 
     @staticmethod
     def from_layer_composition(*sl: Layer) -> "CircuitBlock":
@@ -119,7 +114,7 @@ class CircuitBlock(BiRootedDiAcyclicGraph[Layer]):
         assert len(layers) > 1, "Expected a composition of at least 2 layers"
         for i, l in enumerate(layers):
             in_layers[l] = [layers[i - 1]] if i - 1 >= 0 else []
-        return CircuitBlock(layers, in_layers, [sl[-1]], topologically_ordered=True)
+        return CircuitBlock(layers, in_layers, sl[-1], topologically_ordered=True)
 
 
 class InputLayerFactory(Protocol):
@@ -263,7 +258,15 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         # Retrieve connections between layers from connections between circuit blocks
         for b in blocks:
-            in_layers[b.input].extend(bi.output for bi in in_blocks.get(b, []))
+            b_layer_inputs = list(b.inputs)
+            block_ins = in_blocks.get(b, [])
+            if len(b_layer_inputs) == 1:
+                (b_input,) = b_layer_inputs
+                in_layers[b_input].extend(bi.output for bi in block_ins)
+            elif len(block_ins) > 0:
+                raise ValueError(
+                    f"A circuit block having multiple inputs cannot be a non-input block"
+                )
             for l in b.layers:
                 in_layers[l].extend(b.layer_inputs(l))
         # Build the circuit and set the operation
@@ -293,6 +296,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
+        factorize_inputs: bool = True,
     ) -> "Circuit":
         """Construct a symbolic circuit from a region graph.
             There are two ways to use this method. The first one is to specify a sum-product layer
@@ -316,6 +320,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
             num_classes: The number of output classes.
+            factorize_inputs: Whether to fully factorize input layers, when they depend on more than one variable.
 
         Returns:
             Circuit: A symbolic circuit.
@@ -422,7 +427,18 @@ class Circuit(DiAcyclicGraph[Layer]):
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
-                input_sl = input_factory(rgn.scope, num_input_units, num_channels)
+                if factorize_inputs:
+                    factorized_input_sls = [
+                        input_factory(Scope([sc]), num_input_units, num_channels)
+                        for sc in rgn.scope
+                    ]
+                    input_sl = HadamardLayer(
+                        rgn.scope, num_input_units, arity=len(factorized_input_sls)
+                    )
+                    layers.extend(factorized_input_sls)
+                    in_layers[input_sl] = factorized_input_sls
+                else:
+                    input_sl = input_factory(rgn.scope, num_input_units, num_channels)
                 num_output_units = num_sum_units if rgn.outputs else num_classes
                 if sum_factory is None:
                     layers.append(input_sl)

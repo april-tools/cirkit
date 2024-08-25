@@ -4,7 +4,7 @@ from copy import copy as shallowcopy
 from functools import cached_property
 from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, Optional, Protocol, Tuple, Union, final
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union, final
 
 from cirkit.symbolic.dtypes import DataType, dtype_value
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
@@ -144,6 +144,28 @@ class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
     @property
     def config(self) -> Dict[str, Any]:
         return dict(axis=self.axis)
+
+
+class IndexParameter(UnaryParameterOp):
+    def __init__(self, in_shape: Tuple[int, ...], *, indices: List[int], axis: int = -1):
+        super().__init__(in_shape)
+        axis = axis if axis >= 0 else axis + len(in_shape)
+        assert 0 <= axis < len(in_shape)
+        assert all(0 <= i < in_shape[axis] for i in indices)
+        self.indices = indices
+        self.axis = axis
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            *self.in_shapes[0][: self.axis],
+            len(self.indices),
+            *self.in_shapes[0][self.axis + 1 :],
+        )
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(indices=self.indices, axis=self.axis)
 
 
 class SumParameter(BinaryParameterOp):
@@ -370,18 +392,14 @@ class GaussianProductMean(ParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
 
@@ -389,18 +407,14 @@ class GaussianProductStddev(BinaryParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
 
@@ -408,16 +422,12 @@ class GaussianProductLogPartition(ParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )

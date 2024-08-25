@@ -88,6 +88,8 @@ class CategoricalLayer(InputLayer):
         logits_factory: Optional[ParameterFactory] = None,
         probs_factory: Optional[ParameterFactory] = None,
     ):
+        if len(scope) != 1:
+            raise ValueError("The Categorical layer encodes a univariate distribution")
         if logits is not None and probs is not None:
             raise ValueError("At most one between 'logits' and 'probs' can be specified")
         if logits_factory is not None and probs_factory is not None:
@@ -120,7 +122,7 @@ class CategoricalLayer(InputLayer):
 
     @property
     def probs_logits_shape(self) -> Tuple[int, ...]:
-        return self.num_variables, self.num_output_units, self.num_channels, self.num_categories
+        return self.num_output_units, self.num_channels, self.num_categories
 
     @property
     def config(self) -> dict:
@@ -147,6 +149,8 @@ class GaussianLayer(InputLayer):
         mean_factory: Optional[ParameterFactory] = None,
         stddev_factory: Optional[ParameterFactory] = None,
     ):
+        if len(scope) != 1:
+            raise ValueError("The Gaussian layer encodes a univariate distribution")
         super().__init__(scope, num_output_units, num_channels)
         if mean is None:
             if mean_factory is None:
@@ -181,11 +185,11 @@ class GaussianLayer(InputLayer):
 
     @property
     def mean_stddev_shape(self) -> Tuple[int, ...]:
-        return self.num_variables, self.num_output_units, self.num_channels
+        return self.num_output_units, self.num_channels
 
     @property
     def log_partition_shape(self) -> Tuple[int, ...]:
-        return self.num_variables, self.num_output_units, self.num_channels
+        return self.num_output_units, self.num_channels
 
     @property
     def params(self) -> Dict[str, Parameter]:

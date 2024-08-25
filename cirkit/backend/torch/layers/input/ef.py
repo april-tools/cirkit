@@ -99,6 +99,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             num_categories (int): The number of categories for Categorical distribution. Defaults to 2.
             logits (TorchParameter): The reparameterization for layer parameters.
         """
+        if len(scope) != 1:
+            raise ValueError("The Gaussian layer encodes a univariate distribution")
         if num_categories <= 0:
             raise ValueError(
                 "The number of categories for Categorical distribution must be positive"
@@ -128,7 +130,6 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         if p.num_folds != self.num_folds:
             return False
         return p.shape == (
-            len(self.scope),
             self.num_output_units,
             self.num_channels,
             self.num_categories,
@@ -149,10 +150,11 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete
-        x = F.one_hot(x, self.num_categories)  # (F, C, B, D, num_categories)
+        x = F.one_hot(x, self.num_categories)  # (F, C, B, 1, num_categories)
+        x = x.squeeze(dim=3)  # (F, C, B, num_categories)
         x = x.to(torch.get_default_dtype())
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
+        x = torch.einsum("fcbi,fkci->fbk", x, logits)
         return x
 
 
@@ -184,6 +186,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             stddev (AbstractTorchParameter): The reparameterization for layer parameters.
             num_folds (int): The number of channels. Defaults to 1.
         """
+        if len(scope) != 1:
+            raise ValueError("The Gaussian layer encodes a univariate distribution")
         super().__init__(
             scope,
             num_output_units,
@@ -206,7 +210,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
     def _valid_parameters_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return p.shape == (len(self.scope), self.num_output_units, self.num_channels)
+        return p.shape == (self.num_output_units, self.num_channels)
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
@@ -216,12 +220,12 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return params
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
-        mean = self.mean().unsqueeze(dim=1)  # (F, 1, D, K, C)
-        stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, D, K, C)
-        x = x.permute(0, 2, 3, 1).unsqueeze(dim=3)  # (F, B, D, 1, C)
-        x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, D, K, C)
-        x = torch.sum(x, dim=[2, 4])  # (F, B, K)
+        mean = self.mean().unsqueeze(dim=1)  # (F, 1, K, C)
+        stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, K, C)
+        x = x.permute(0, 2, 3, 1)  # (F, C, B, 1) -> (F, B, 1, C)
+        x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, K, C)
+        x = torch.sum(x, dim=-1)  # (F, B, K)
         if self.log_partition is not None:
-            log_partition = self.log_partition()  # (F, D, K, C)
-            x = x + torch.sum(log_partition, dim=[1, 3]).unsqueeze(dim=1)
+            log_partition = self.log_partition()  # (F, K, C)
+            x = x + torch.sum(log_partition, dim=-1).unsqueeze(dim=1)
         return x

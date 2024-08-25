@@ -1,7 +1,7 @@
 import functools
 import itertools
 import operator
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from cirkit.symbolic.circuit import (
     Circuit,
@@ -61,7 +61,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
 
 def integrate(
     sc: Circuit,
-    scope: Optional[Iterable[int]] = None,
+    scope: Optional[Scope] = None,
     registry: Optional[OperatorRegistry] = None,
 ) -> Circuit:
     # Check for structural properties
@@ -71,8 +71,9 @@ def integrate(
         )
 
     # Check the variable
-    scope = Scope(scope) if scope is not None else sc.scope
-    if (scope | sc.scope) != sc.scope:
+    if scope is None:
+        scope = sc.scope
+    elif (scope | sc.scope) != sc.scope:
         raise ValueError(
             "The variables scope to integrate must be a subset of the scope of the circuit"
         )
@@ -91,20 +92,13 @@ def integrate(
     for sl in sc.topological_ordering():
         # Input layers get integrated over
         if isinstance(sl, InputLayer) and sl.scope & scope:
-            if not (sl.scope <= scope):
-                raise NotImplementedError(
-                    "Multivariate integration of proper subsets of variables is not implemented"
-                )
-            # Retrieve the integration rule from the registry and apply it
             func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
-            int_block = func(sl)
+            int_block = func(sl, scope=scope)
             blocks.append(int_block)
             layers_to_block[sl] = int_block
             continue
-        assert isinstance(
-            sl, (SumLayer, ProductLayer)
-        ), "Symbolic inner layers must be either sum or product layers"
-        # Sum/product layers are simply copied
+        # Sum/product layers and input layers whose scope does not
+        # include variables to integrate over are simply copied.
         # Note that this willTo keep track of shared parameters, we use parameter references
         parameters = {name: p.ref() for name, p in sl.params.items()}
         int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))

@@ -194,16 +194,6 @@ class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
         return output
 
 
-class BiRootedDiAcyclicGraph(RootedDiAcyclicGraph[NodeType]):
-    @cached_property
-    def input(self) -> NodeType:
-        inputs = list(self.inputs)
-        if len(inputs) != 1:
-            raise ValueError("The graph should have exactly one input node.")
-        (input,) = inputs
-        return input
-
-
 BimapLeftType = TypeVar("BimapLeftType")
 BimapRightType = TypeVar("BimapRightType")
 
