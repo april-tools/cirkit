@@ -16,7 +16,6 @@ from cirkit.backend.torch.layers.optimized import TorchCPTLayer, TorchTensorDotL
 from tests.floats import allclose
 from tests.symbolic.test_utils import build_simple_pc
 
-
 """
 def test_optimize_tucker():
     num_variables = 6

@@ -195,9 +195,7 @@ class SemiringImpl(ABC):
 
     @classmethod
     @abstractmethod
-    def sum(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
-    ) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
         """
 
         Args:
