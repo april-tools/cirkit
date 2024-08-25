@@ -169,7 +169,7 @@ class TorchCompiler(AbstractCompiler):
 
         # Build the parameter's computational graph
         outputs = [compiled_nodes_map[parameter.output]]
-        return TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
+        return TorchParameter(nodes, in_nodes, outputs)
 
     def compile_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
         # Retrieve the rule for the given initializer and compile it
@@ -228,14 +228,7 @@ class TorchCompiler(AbstractCompiler):
 
         # Construct the tensorized circuit
         layers = [compiled_layers_map[sl] for sl in compiled_layers_map.keys()]
-        cc = cc_cls(
-            sc.scope,
-            sc.num_channels,
-            layers=layers,
-            in_layers=in_layers,
-            outputs=outputs,
-            topologically_ordered=True,
-        )
+        cc = cc_cls(sc.scope, sc.num_channels, layers=layers, in_layers=in_layers, outputs=outputs)
 
         # Post-process the compiled circuit, i.e.,
         # optionally apply optimizations to it and then fold it
@@ -296,7 +289,6 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         layers,
         in_layers,
         outputs,
-        topologically_ordered=True,
         fold_idx_info=fold_idx_info,
     )
 
@@ -348,9 +340,7 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
     )
 
     # Construct the folded parameter's computational graph
-    return TorchParameter(
-        nodes, in_nodes, outputs, topologically_ordered=True, fold_idx_info=fold_idx_info
-    )
+    return TorchParameter(nodes, in_nodes, outputs, fold_idx_info=fold_idx_info)
 
 
 def _fold_parameter_nodes_group(
@@ -463,7 +453,7 @@ def _optimize_parameter_nodes(
             nodes, in_nodes, outputs = optimize_result
 
             # Build the optimized computational graph
-            pgraph = type(pgraph)(nodes, in_nodes, outputs, topologically_ordered=True)
+            pgraph = type(pgraph)(nodes, in_nodes, outputs)
 
             # Update the parameter computational graph assigned to the layer
             assert hasattr(layer, pname)
@@ -502,7 +492,7 @@ def _optimize_layers(
     if optimize_result is None:
         return cc, False
     layers, in_layers, outputs = optimize_result
-    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs, topologically_ordered=True)
+    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs)
     return cc, True
 
 

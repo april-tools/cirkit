@@ -55,7 +55,6 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
         in_blocks,
         output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
-        topologically_ordered=True,
     )
 
 
@@ -121,7 +120,6 @@ def integrate(
             operands=(sc,),
             metadata=dict(scope=scope),
         ),
-        topologically_ordered=True,
     )
 
 
@@ -207,7 +205,6 @@ def multiply(
         operation=CircuitOperation(
             operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
         ),
-        topologically_ordered=True,
     )
 
 
@@ -268,5 +265,4 @@ def conjugate(
         in_blocks,
         output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.CONJUGATION, operands=(sc,)),
-        topologically_ordered=True,
     )

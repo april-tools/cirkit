@@ -60,15 +60,8 @@ class CircuitOperation:
 
 
 class CircuitBlock(RootedDiAcyclicGraph[Layer]):
-    def __init__(
-        self,
-        layers: List[Layer],
-        in_layers: Dict[Layer, List[Layer]],
-        output: Layer,
-        *,
-        topologically_ordered: bool = False,
-    ):
-        super().__init__(layers, in_layers, [output], topologically_ordered=topologically_ordered)
+    def __init__(self, layers: List[Layer], in_layers: Dict[Layer, List[Layer]], output: Layer):
+        super().__init__(layers, in_layers, [output])
 
     def layer_inputs(self, l: Layer) -> List[Layer]:
         return self.node_inputs(l)
@@ -105,7 +98,7 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
 
     @staticmethod
     def from_layer(sl: Layer) -> "CircuitBlock":
-        return CircuitBlock([sl], {}, sl, topologically_ordered=True)
+        return CircuitBlock([sl], {}, sl)
 
     @staticmethod
     def from_layer_composition(*sl: Layer) -> "CircuitBlock":
@@ -114,7 +107,7 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
         assert len(layers) > 1, "Expected a composition of at least 2 layers"
         for i, l in enumerate(layers):
             in_layers[l] = [layers[i - 1]] if i - 1 >= 0 else []
-        return CircuitBlock(layers, in_layers, sl[-1], topologically_ordered=True)
+        return CircuitBlock(layers, in_layers, sl[-1])
 
 
 class InputLayerFactory(Protocol):
@@ -149,9 +142,8 @@ class Circuit(DiAcyclicGraph[Layer]):
         outputs: List[Layer],
         *,
         operation: Optional[CircuitOperation] = None,
-        topologically_ordered: bool = False,
     ) -> None:
-        super().__init__(layers, in_layers, outputs, topologically_ordered=topologically_ordered)
+        super().__init__(layers, in_layers, outputs)
         self.scope = scope
         self.num_channels = num_channels
         self.operation = operation
@@ -247,9 +239,8 @@ class Circuit(DiAcyclicGraph[Layer]):
         blocks: List[CircuitBlock],
         in_blocks: Dict[CircuitBlock, List[CircuitBlock]],
         output_blocks: List[CircuitBlock],
-        operation: CircuitOperation,
         *,
-        topologically_ordered: bool = False,
+        operation: CircuitOperation,
     ):
         # Unwrap blocks into layers (as well as their connections)
         layers = [l for b in blocks for l in b.layers]
@@ -270,16 +261,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             for l in b.layers:
                 in_layers[l].extend(b.layer_inputs(l))
         # Build the circuit and set the operation
-        return cls(
-            scope,
-            num_channels,
-            layers,
-            in_layers,
-            outputs,
-            operation=operation,
-            topologically_ordered=topologically_ordered
-            and all(b.is_topologically_ordered for b in blocks),
-        )
+        return cls(scope, num_channels, layers, in_layers, outputs, operation=operation)
 
     @classmethod
     def from_region_graph(
@@ -503,14 +485,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 raise ValueError("Region graph nodes must be either region or partition nodes")
 
         outputs = [rgn_to_layers[rgn] for rgn in region_graph.output_nodes]
-        return cls(
-            region_graph.scope,
-            num_channels,
-            layers,
-            in_layers,
-            outputs,
-            topologically_ordered=True,
-        )
+        return cls(region_graph.scope, num_channels, layers, in_layers, outputs)
 
 
 def pipeline_topological_ordering(roots: Sequence[Circuit]) -> Iterator[Circuit]:

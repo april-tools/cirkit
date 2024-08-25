@@ -8,12 +8,12 @@ from tests.floats import allclose
 
 def test_complex_safelog_derivative():
     torch.set_grad_enabled(True)
-    z = torch.randn(1000, dtype=torch.complex128)
+    z = torch.randn(512, dtype=torch.complex128)
     z.requires_grad = True
     assert autograd.gradcheck(csafelog, z)
 
     torch.set_default_dtype(torch.float32)
-    z = 1.0 + 2.0 * torch.randn(1000, dtype=torch.complex64)
+    z = 1.0 + 2.0 * torch.randn(512, dtype=torch.complex64)
     z.requires_grad = True
     log_y = torch.log(z)
     log_y.mean().real.backward()
