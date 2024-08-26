@@ -15,6 +15,7 @@ from typing import (
     Sequence,
     Tuple,
     Union,
+    cast,
 )
 
 from cirkit.symbolic.layers import (
@@ -27,7 +28,7 @@ from cirkit.symbolic.layers import (
     SumLayer,
 )
 from cirkit.symbolic.parameters import ParameterFactory
-from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode, RGNode
+from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
 from cirkit.utils.algorithms import DiAcyclicGraph, RootedDiAcyclicGraph, bfs, topological_ordering
 from cirkit.utils.orderedset import OrderedSet
 from cirkit.utils.scope import Scope
@@ -330,16 +331,16 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         layers: List[Layer] = []
         in_layers: Dict[Layer, List[Layer]] = {}
-        rgn_to_layers: Dict[RGNode, Layer] = {}
+        node_to_layer: Dict[RegionGraphNode, Layer] = {}
 
         def build_cp_(
-            rgn: RegionNode, rgn_partitioning: OrderedSet[RegionNode], num_output_units: int
+            rgn: RegionNode, rgn_partitioning: List[RegionNode], num_output_units: int
         ) -> HadamardLayer:
-            layer_ins = [rgn_to_layers[rgn_in] for rgn_in in rgn_partitioning]
+            layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             denses = [
                 DenseLayer(
                     rgn_in.scope,
-                    rgn_to_layers[rgn_in].num_output_units,
+                    node_to_layer[rgn_in].num_output_units,
                     num_output_units,
                     weight_factory=dense_weight_factory,
                 )
@@ -351,13 +352,13 @@ class Circuit(DiAcyclicGraph[Layer]):
             in_layers[hadamard] = denses
             for d, li in zip(denses, layer_ins):
                 in_layers[d] = [li]
-            rgn_to_layers[rgn] = hadamard
+            node_to_layer[rgn] = hadamard
             return hadamard
 
         def build_cp_transposed_(
-            rgn: RegionNode, rgn_partitioning: OrderedSet[RegionNode], num_output_units: int
+            rgn: RegionNode, rgn_partitioning: List[RegionNode], num_output_units: int
         ) -> DenseLayer:
-            layer_ins = [rgn_to_layers[rgn_in] for rgn_in in rgn_partitioning]
+            layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             num_in_units = list(set([li.num_output_units for li in layer_ins]))
             if len(num_in_units) > 1:
                 raise ValueError(
@@ -371,13 +372,13 @@ class Circuit(DiAcyclicGraph[Layer]):
             layers.append(dense)
             in_layers[hadamard] = layer_ins
             in_layers[dense] = [hadamard]
-            rgn_to_layers[rgn] = dense
+            node_to_layer[rgn] = dense
             return dense
 
         def build_tucker_(
-            rgn: RegionNode, rgn_partitioning: OrderedSet[RegionNode], num_output_units: int
+            rgn: RegionNode, rgn_partitioning: List[RegionNode], num_output_units: int
         ) -> DenseLayer:
-            layer_ins = [rgn_to_layers[rgn_in] for rgn_in in rgn_partitioning]
+            layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             num_in_units = list(set([li.num_output_units for li in layer_ins]))
             if len(num_in_units) > 1:
                 raise ValueError(
@@ -391,10 +392,10 @@ class Circuit(DiAcyclicGraph[Layer]):
             layers.append(dense)
             in_layers[kronecker] = layer_ins
             in_layers[dense] = [kronecker]
-            rgn_to_layers[rgn] = dense
+            node_to_layer[rgn] = dense
             return dense
 
-        sum_prod_builder_: Optional[Callable[[RegionNode, OrderedSet[RegionNode], int], Layer]]
+        sum_prod_builder_: Optional[Callable[[RegionNode, List[RegionNode], int], Layer]]
         if sum_product is None:
             sum_prod_builder_ = None
         elif sum_product == "cp":
@@ -407,75 +408,80 @@ class Circuit(DiAcyclicGraph[Layer]):
             raise NotImplementedError(f"Unknown sum-product layer abstraction called {sum_product}")
 
         # Loop through the region graph nodes, which are already sorted in a topological ordering
-        for rgn in region_graph.nodes:
-            if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
+        for node in region_graph.topological_ordering():
+            node_inputs = region_graph.node_inputs(node)
+            node_outputs = region_graph.node_outputs(node)
+            if isinstance(node, RegionNode) and not node_inputs:  # Input region node
                 if factorize_inputs:
                     factorized_input_sls = [
                         input_factory(Scope([sc]), num_input_units, num_channels)
-                        for sc in rgn.scope
+                        for sc in node.scope
                     ]
                     input_sl = HadamardLayer(
-                        rgn.scope, num_input_units, arity=len(factorized_input_sls)
+                        node.scope, num_input_units, arity=len(factorized_input_sls)
                     )
                     layers.extend(factorized_input_sls)
                     in_layers[input_sl] = factorized_input_sls
                 else:
-                    input_sl = input_factory(rgn.scope, num_input_units, num_channels)
-                num_output_units = num_sum_units if rgn.outputs else num_classes
+                    input_sl = input_factory(node.scope, num_input_units, num_channels)
+                num_output_units = num_sum_units if node_outputs else num_classes
                 if sum_factory is None:
                     layers.append(input_sl)
-                    rgn_to_layers[rgn] = input_sl
+                    node_to_layer[node] = input_sl
                     continue
-                sum_sl = sum_factory(rgn.scope, num_input_units, num_output_units)
+                sum_sl = sum_factory(node.scope, num_input_units, num_output_units)
                 layers.append(input_sl)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = [input_sl]
-                rgn_to_layers[rgn] = sum_sl
-            elif isinstance(rgn, PartitionNode):  # Partition node
+                node_to_layer[node] = sum_sl
+            elif isinstance(node, PartitionNode):  # Partition node
                 # If a sum-product layer abstraction has been specified, then just skip partition nodes
                 if sum_prod_builder_ is not None:
                     continue
                 assert prod_factory is not None
-                prod_inputs = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
-                prod_sl = prod_factory(rgn.scope, num_sum_units, len(prod_inputs))
+                prod_inputs = [node_to_layer[rgn] for rgn in node_inputs]
+                prod_sl = prod_factory(node.scope, num_sum_units, len(prod_inputs))
                 layers.append(prod_sl)
                 in_layers[prod_sl] = prod_inputs
-                rgn_to_layers[rgn] = prod_sl
-            elif isinstance(rgn, RegionNode) and len(rgn.inputs) == 1:  # Region node
-                num_units = num_sum_units if rgn.outputs else num_classes
-                (rgn_in,) = rgn.inputs
+                node_to_layer[node] = prod_sl
+            elif isinstance(node, RegionNode) and len(node_inputs) == 1:  # Region node
+                num_units = num_sum_units if node_outputs else num_classes
+                (ptn,) = node_inputs
                 if sum_prod_builder_ is not None:
-                    sum_prod_builder_(rgn, rgn_in.inputs, num_units)
+                    sum_prod_builder_(node, region_graph.partition_inputs(ptn), num_units)
                     continue
-                sum_input = rgn_to_layers[rgn_in]
-                sum_sl = sum_factory(rgn.scope, sum_input.num_output_units, num_units)
+                sum_input = node_to_layer[ptn]
+                sum_sl = sum_factory(node.scope, sum_input.num_output_units, num_units)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = [sum_input]
-                rgn_to_layers[rgn] = sum_sl
+                node_to_layer[node] = sum_sl
             elif (
-                isinstance(rgn, RegionNode) and len(rgn.inputs) > 1
+                isinstance(node, RegionNode) and len(node_inputs) > 1
             ):  # Region with multiple partitionings
-                num_units = num_sum_units if rgn.outputs else num_classes
+                num_units = num_sum_units if node_outputs else num_classes
                 if mixing_factory is None:
                     raise ValueError(
                         "A mixing layer factory must be specified to overparameterize multiple region partitionings"
                     )
                 if sum_prod_builder_ is None:
-                    sum_ins = [rgn_to_layers[rgn_in] for rgn_in in rgn.inputs]
+                    sum_ins = [node_to_layer[ptn] for ptn in node_inputs]
                     mix_ins = [
-                        sum_factory(rgn.scope, sli.num_output_units, num_units) for sli in sum_ins
+                        sum_factory(node.scope, sli.num_output_units, num_units) for sli in sum_ins
                     ]
                     layers.extend(mix_ins)
                     for mix_sl, sli in zip(mix_ins, sum_ins):
                         in_layers[mix_sl] = [sli]
                 else:
                     mix_ins = [
-                        sum_prod_builder_(rgn, rgn_in.inputs, num_units) for rgn_in in rgn.inputs
+                        sum_prod_builder_(
+                            node, region_graph.partition_inputs(cast(PartitionNode, ptn)), num_units
+                        )
+                        for ptn in node_inputs
                     ]
-                mix_sl = mixing_factory(rgn.scope, num_units, len(mix_ins))
+                mix_sl = mixing_factory(node.scope, num_units, len(mix_ins))
                 layers.append(mix_sl)
                 in_layers[mix_sl] = mix_ins
-                rgn_to_layers[rgn] = mix_sl
+                node_to_layer[node] = mix_sl
             else:
                 # NOTE: In the above if/elif, we made all conditions explicit to make it more
                 #       readable and also easier for static analysis inside the blocks. Yet the
@@ -484,7 +490,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 #       instead of going into a wrong branch.
                 raise ValueError("Region graph nodes must be either region or partition nodes")
 
-        outputs = [rgn_to_layers[rgn] for rgn in region_graph.output_nodes]
+        outputs = [node_to_layer[rgn] for rgn in region_graph.outputs]
         return cls(region_graph.scope, num_channels, layers, in_layers, outputs)
 
 

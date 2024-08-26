@@ -97,16 +97,27 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                         raise ValueError(
                             f"Expected partition node as children of '{node}', but found '{ptn}'"
                         )
+                    if ptn.scope != node.scope:
+                        raise ValueError(
+                            f"Expectet partition node with scope '{node.scope}', but found '{ptn.scope}"
+                        )
                 continue
             if not isinstance(node, PartitionNode):
                 raise ValueError(
                     f"Region graph nodes must be either partition nodes or region nodes, found '{type(node)}'"
                 )
+            scopes = []
             for rgn in node_children:
                 if not isinstance(rgn, RegionNode):
                     raise ValueError(
                         f"Expected region node as children of '{node}', but found '{rgn}'"
                     )
+                scopes.append(rgn.scope)
+            scope = Scope.union(*scopes)
+            if scope != node.scope or sum(len(sc) for sc in scopes) != len(scope):
+                raise ValueError(
+                    f"Expecte partitioning of scope '{node.scope}', but found '{scopes}'"
+                )
         for ptn in self.partition_nodes:
             rgn_outs = self.node_outputs(ptn)
             if len(rgn_outs) != 1:
@@ -115,11 +126,11 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                     f" but found '{len(rgn_outs)}' parent nodes"
                 )
 
-    def region_inputs(self, rgn: RegionNode) -> Iterator[PartitionNode]:
-        return (cast(PartitionNode, node) for node in self.node_inputs(rgn))
+    def region_inputs(self, rgn: RegionNode) -> List[PartitionNode]:
+        return [cast(PartitionNode, node) for node in self.node_inputs(rgn)]
 
-    def partition_inputs(self, ptn: PartitionNode) -> Iterator[RegionNode]:
-        return (cast(RegionNode, node) for node in self.node_inputs(ptn))
+    def partition_inputs(self, ptn: PartitionNode) -> List[RegionNode]:
+        return [cast(RegionNode, node) for node in self.node_inputs(ptn)]
 
     @property
     def inputs(self) -> Iterator[RegionNode]:
@@ -158,27 +169,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
         return len(self.scope)
 
     @cached_property
-    def is_smooth(self) -> bool:
-        return all(
-            partition.scope == region.scope
-            for region in self.inner_region_nodes
-            for partition in self.node_inputs(region)
-        )
-
-    @cached_property
-    def is_decomposable(self) -> bool:
-        return not any(
-            region1.scope & region2.scope
-            for partition in self.partition_nodes
-            for region1, region2 in itertools.combinations(self.node_inputs(partition), 2)
-        )
-
-    @cached_property
     def is_structured_decomposable(self) -> bool:
-        if not self.is_smooth:
-            return False
-        if not self.is_decomposable:
-            return False
         is_structured_decomposable = True
         decompositions: Dict[Scope, Tuple[Scope, ...]] = {}
         for partition in self.partition_nodes:
@@ -187,13 +178,10 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             if partition.scope not in decompositions:
                 decompositions[partition.scope] = decomp
             is_structured_decomposable &= decomp == decompositions[partition.scope]
+        return is_structured_decomposable
 
     @cached_property
     def is_omni_compatible(self) -> bool:
-        if not self.is_smooth:
-            return False
-        if not self.is_decomposable:
-            return False
         return all(
             len(region.scope) == 1
             for partition in self.partition_nodes
@@ -214,11 +202,6 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             bool: Whether self is compatible to other.
         """
         # _is_frozen is implicitly tested because is_smooth is set in freeze().
-        if not (
-            self.is_smooth and self.is_decomposable and other.is_smooth and other.is_decomposable
-        ):  # Compatiblility first requires smoothness and decomposability.
-            return False
-
         scope = Scope(scope) if scope is not None else self.scope & other.scope
 
         # TODO: is this correct for more-than-2 partition?
