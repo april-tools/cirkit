@@ -1,14 +1,44 @@
 import itertools
 import json
 from abc import ABC
+from collections import defaultdict
 from functools import cached_property
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast, final
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple, TypedDict, Union, cast, final
+from typing_extensions import TypeAlias
 
 import numpy as np
 from numpy.typing import NDArray
 
 from cirkit.utils.algorithms import DiAcyclicGraph
 from cirkit.utils.scope import Scope
+
+RGNodeMetadata: TypeAlias = Dict[str, Union[int, float, str, bool]]
+
+
+class RegionDict(TypedDict):
+    """The structure of a region node in the json file."""
+
+    scope: List[int]  # The scope of this region node, specified by id of variable.
+
+
+class PartitionDict(TypedDict):
+    """The structure of a partition node in the json file."""
+
+    inputs: List[int]  # The inputs of this partition node, specified by id of region node.
+    output: int  # The output of this partition node, specified by id of region node.
+
+
+class RegionGraphJson(TypedDict):
+    """The structure of the region graph json file."""
+
+    # The regions of RG represented by a mapping from id in str to either a dict or only the scope.
+    regions: Dict[str, Union[RegionDict, List[int]]]
+
+    # The list of region node roots str ids in the RG
+    roots: List[str]
+
+    # The graph of RG represented by a list of partitions.
+    graph: List[PartitionDict]
 
 
 class RegionGraphNode(ABC):
@@ -49,14 +79,18 @@ class PartitionNode(RegionGraphNode):
 # We mark RG as final to hint that RG algorithms should not be its subclasses but factories, so that
 # constructed RGs and loaded RGs are all of type RegionGraph.
 @final
-class RegionGraph(DiAcyclicGraph):
+class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     def __init__(
         self,
         nodes: List[RegionGraphNode],
         in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]],
         outputs: List[RegionGraphNode],
     ) -> None:
-        for node, node_children in in_nodes.items():
+        super().__init__(nodes, in_nodes, outputs)
+        self._check_structure()
+
+    def _check_structure(self):
+        for node, node_children in self.nodes_inputs.items():
             if isinstance(node, RegionNode):
                 for ptn in node_children:
                     if not isinstance(ptn, PartitionNode):
@@ -73,7 +107,47 @@ class RegionGraph(DiAcyclicGraph):
                     raise ValueError(
                         f"Expected region node as children of '{node}', but found '{rgn}'"
                     )
-        super().__init__(nodes, in_nodes, outputs)
+        for ptn in self.partition_nodes:
+            rgn_outs = self.node_outputs(ptn)
+            if len(rgn_outs) != 1:
+                raise ValueError(
+                    f"Expected each partition node to have exactly one parent region node,"
+                    f" but found '{len(rgn_outs)}' parent nodes"
+                )
+
+    def region_inputs(self, rgn: RegionNode) -> Iterator[PartitionNode]:
+        return (cast(PartitionNode, node) for node in self.node_inputs(rgn))
+
+    def partition_inputs(self, ptn: PartitionNode) -> Iterator[RegionNode]:
+        return (cast(RegionNode, node) for node in self.node_inputs(ptn))
+
+    @property
+    def inputs(self) -> Iterator[RegionNode]:
+        return (cast(RegionNode, node) for node in super().inputs)
+
+    @property
+    def outputs(self) -> Iterator[RegionNode]:
+        return (cast(RegionNode, node) for node in super().outputs)
+
+    @property
+    def region_nodes(self) -> Iterator[RegionNode]:
+        """Region nodes in the graph."""
+        return (node for node in self.nodes if isinstance(node, RegionNode))
+
+    @property
+    def partition_nodes(self) -> Iterator[PartitionNode]:
+        """Partition nodes in the graph, which are always inner nodes."""
+        return (node for node in self.nodes if isinstance(node, PartitionNode))
+
+    @property
+    def inner_nodes(self) -> Iterator[RegionGraphNode]:
+        """Inner (non-input) nodes in the graph."""
+        return (node for node in self.nodes if self.node_inputs(node))
+
+    @property
+    def inner_region_nodes(self) -> Iterator[RegionNode]:
+        """Inner region nodes in the graph."""
+        return (node for node in self.region_nodes if self.node_inputs(node))
 
     @cached_property
     def scope(self) -> Scope:
@@ -88,7 +162,7 @@ class RegionGraph(DiAcyclicGraph):
         return all(
             partition.scope == region.scope
             for region in self.inner_region_nodes
-            for partition in region.inputs
+            for partition in self.node_inputs(region)
         )
 
     @cached_property
@@ -96,7 +170,7 @@ class RegionGraph(DiAcyclicGraph):
         return not any(
             region1.scope & region2.scope
             for partition in self.partition_nodes
-            for region1, region2 in itertools.combinations(partition.inputs, 2)
+            for region1, region2 in itertools.combinations(self.node_inputs(partition), 2)
         )
 
     @cached_property
@@ -109,7 +183,7 @@ class RegionGraph(DiAcyclicGraph):
         decompositions: Dict[Scope, Tuple[Scope, ...]] = {}
         for partition in self.partition_nodes:
             # The scopes are sorted by _sort_nodes(), so the tuple has a deterministic order.
-            decomp = tuple(region.scope for region in partition.inputs)
+            decomp = tuple(region.scope for region in self.node_inputs(partition))
             if partition.scope not in decompositions:
                 decompositions[partition.scope] = decomp
             is_structured_decomposable &= decomp == decompositions[partition.scope]
@@ -123,7 +197,7 @@ class RegionGraph(DiAcyclicGraph):
         return all(
             len(region.scope) == 1
             for partition in self.partition_nodes
-            for region in partition.inputs
+            for region in self.node_inputs(partition)
         )
 
     def is_compatible(
@@ -182,117 +256,90 @@ class RegionGraph(DiAcyclicGraph):
 
         return True
 
-    @property
-    def region_nodes(self) -> Iterator[RegionNode]:
-        """Region nodes in the graph."""
-        return (node for node in self.nodes if isinstance(node, RegionNode))
-
-    @property
-    def partition_nodes(self) -> Iterator[PartitionNode]:
-        """Partition nodes in the graph, which are always inner nodes."""
-        return (node for node in self.nodes if isinstance(node, PartitionNode))
-
-    @property
-    def inner_nodes(self) -> Iterator[RegionGraphNode]:
-        """Inner (non-input) nodes in the graph."""
-        return (node for node in self.nodes if self.node_inputs(node))
-
-    @property
-    def inner_region_nodes(self) -> Iterator[RegionNode]:
-        """Inner region nodes in the graph."""
-        return (node for node in self.region_nodes if self.node_inputs(node))
-
     ####################################    (De)Serialization    ###################################
     # The RG can be dumped and loaded from json files, which can be useful when we want to save and
     # share it. The load() is another way to construct a RG other than the RG algorithms.
 
-    # def dump(self, filename: str, with_meta: bool = True) -> None:
-    #     """Dump the region graph to the json file.
-    #
-    #     The file will be opened with mode="w" and encoding="utf-8".
-    #
-    #     Args:
-    #         filename (str): The file name for dumping.
-    #         with_meta (bool, optional): Whether to include metadata of RGNode, set to False to \
-    #             save some space while risking loss of information. Defaults to True.
-    #     """
-    #     # NOTE: Below we don't assume the existence of RGNode.metadata["sort_key"], and try to
-    #     #       preserve the ordering by file structure. However, the sort_key will be saved when
-    #     #       available and with_meta enabled.
-    #
-    #     # ANNOTATE: Specify content for empty container.
-    #     rg_json: RegionGraphJson = {"regions": {}, "graph": []}
-    #
-    #     region_idx = {node: idx for idx, node in enumerate(self.region_nodes)}
-    #
-    #     # "regions" keeps ordered by the index, corresponding to the self.region_nodes order.
-    #     rg_json["regions"] = (
-    #         {
-    #             str(idx): {"scope": list(node.scope), "metadata": node.metadata}
-    #             for node, idx in region_idx.items()
-    #         }
-    #         if with_meta
-    #         else {str(idx): list(node.scope) for node, idx in region_idx.items()}
-    #     )
-    #
-    #     # "graph" keeps ordered by the list, corresponding to the self.partition_nodes order.
-    #     for partition in self.partition_nodes:
-    #         input_idxs = [region_idx[region_in] for region_in in partition.inputs]
-    #         # partition.outputs is guaranteed to have len==1 by _validate().
-    #         output_idx = region_idx[next(iter(partition.outputs))]
-    #         rg_json["graph"].append({"inputs": input_idxs, "output": output_idx})
-    #
-    #     if with_meta:
-    #         for partition, part_dict in zip(self.partition_nodes, rg_json["graph"]):
-    #             part_dict["metadata"] = partition.metadata
-    #
-    #     # TODO: logging for dumping graph_json?
-    #     with open(filename, "w", encoding="utf-8") as f:
-    #         json.dump(rg_json, f)
+    def dump(self, filename: str) -> None:
+        """Dump the region graph to the json file.
 
-    # @staticmethod
-    # def load(filename: str) -> "RegionGraph":
-    #     """Load the region graph from the json file.
-    #
-    #     The file will be opened with mode="r" and encoding="utf-8".
-    #
-    #     Metadata is always loaded when available.
-    #
-    #     Args:
-    #         filename (str): The file name for loading.
-    #
-    #     Returns:
-    #         RegionGraph: The loaded region graph.
-    #     """
-    #     # NOTE: Below we don't assume the existence of RGNode.metadata["sort_key"], and try to
-    #     #       recover the ordering from file structure. However, the sort_key will be used when
-    #     #       available.
-    #
-    #     with open(filename, "r", encoding="utf-8") as f:
-    #         # ANNOTATE: json.load gives Any.
-    #         rg_json: RegionGraphJson = json.load(f)
-    #
-    #     graph = RegionGraph()
-    #     # ANNOTATE: Specify content for empty container.
-    #     idx_region: Dict[int, RegionNode] = {}
-    #
-    #     # Iterate regions by the order of idx so that the order of graph.region_nodes is recovered.
-    #     # NOTE: By json standard, rg_json["regions"] has no guaranteed order.
-    #     for idx in range(len(rg_json["regions"])):
-    #         dict_or_scope = rg_json["regions"][str(idx)]
-    #         if isinstance(dict_or_scope, dict):
-    #             region_node = RegionNode(dict_or_scope["scope"])
-    #             graph.add_node(region_node, metadata=dict_or_scope.get("metadata", {}))
-    #         else:
-    #             region_node = RegionNode(dict_or_scope)
-    #             graph.add_node(region_node)
-    #         idx_region[idx] = region_node
-    #
-    #     # Iterate partitions by the order of list so that the order of graph.partition_nodes is
-    #     # recovered.
-    #     for partition in rg_json["graph"]:
-    #         regions_in = [idx_region[idx_in] for idx_in in partition["inputs"]]
-    #         region_out = idx_region[partition["output"]]
-    #         graph.add_partitioning(region_out, regions_in, metadata=partition.get("metadata", {}))
-    #
-    #     return graph.freeze()
+        The file will be opened with mode="w" and encoding="utf-8".
+
+        Args:
+            filename (str): The file name for dumping.
+        """
+        # NOTE: Below we don't assume the existence of RGNode.metadata["sort_key"], and try to
+        #       preserve the ordering by file structure. However, the sort_key will be saved when
+        #       available and with_meta enabled.
+
+        # ANNOTATE: Specify content for empty container.
+        rg_json: RegionGraphJson = {}
+        region_idx: Dict[RegionNode, int] = {
+            node: idx for idx, node in enumerate(self.region_nodes)
+        }
+
+        # Store the region nodes information
+        rg_json["regions"] = {str(idx): list(node.scope) for node, idx in region_idx.items()}
+
+        # Store the roots information
+        rg_json["roots"] = [str(region_idx[rgn]) for rgn in self.outputs]
+
+        # Store the partition nodes information
+        rg_json["graph"] = []
+        for partition in self.partition_nodes:
+            input_idxs = [region_idx[cast(RegionNode, rgn)] for rgn in self.node_inputs(partition)]
+            # partition.outputs is guaranteed to have len==1 by _validate().
+            output_idx = region_idx[cast(RegionNode, self.node_outputs(partition)[0])]
+            rg_json["graph"].append({"output": output_idx, "inputs": input_idxs})
+
+        # TODO: logging for dumping graph_json?
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(rg_json, f)
+
+    @staticmethod
+    def load(filename: str) -> "RegionGraph":
+        """Load the region graph from the json file.
+
+        The file will be opened with mode="r" and encoding="utf-8".
+
+        Metadata is always loaded when available.
+
+        Args:
+            filename (str): The file name for loading.
+
+        Returns:
+            RegionGraph: The loaded region graph.
+        """
+        # NOTE: Below we don't assume the existence of RGNode.metadata["sort_key"], and try to
+        #       recover the ordering from file structure. However, the sort_key will be used when
+        #       available.
+
+        with open(filename, "r", encoding="utf-8") as f:
+            # ANNOTATE: json.load gives Any.
+            rg_json: RegionGraphJson = json.load(f)
+
+        nodes: List[RegionGraphNode] = []
+        in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]] = defaultdict(list)
+        outputs = []
+        region_idx: Dict[int, RegionNode] = {}
+
+        # Load the region nodes
+        for idx, rgn_scope in rg_json["regions"].items():
+            rgn = RegionNode(rgn_scope)
+            nodes.append(rgn)
+            region_idx[int(idx)] = rgn
+
+        # Load the root region nodes
+        for idx in rg_json["roots"]:
+            outputs.append(region_idx[int(idx)])
+
+        # Load the partition nodes
+        for partitioning in rg_json["graph"]:
+            in_rgns = [region_idx[int(idx)] for idx in partitioning["inputs"]]
+            out_rgn = region_idx[partitioning["output"]]
+            ptn = PartitionNode(out_rgn.scope)
+            nodes.append(ptn)
+            in_nodes[out_rgn].append(ptn)
+            in_nodes[ptn] = in_rgns
+
+        return RegionGraph(nodes, in_nodes, outputs=outputs)

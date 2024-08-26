@@ -1,4 +1,4 @@
-from .fully_factorized import FullyFactorized as FullyFactorized
+from .algorithms import FullyFactorized
 from .graph import PartitionNode as PartitionNode
 from .graph import RegionGraph as RegionGraph
 from .graph import RegionGraphNode

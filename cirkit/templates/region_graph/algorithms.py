@@ -1,6 +1,11 @@
 from typing import Dict, List
 
-from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
+from cirkit.templates.region_graph.graph import (
+    PartitionNode,
+    RegionGraph,
+    RegionGraphNode,
+    RegionNode,
+)
 
 
 # DISABLE: We use function name with upper case to mimic a class constructor.
