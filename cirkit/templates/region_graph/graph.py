@@ -123,7 +123,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             if len(rgn_outs) != 1:
                 raise ValueError(
                     f"Expected each partition node to have exactly one parent region node,"
-                    f" but found '{len(rgn_outs)}' parent nodes"
+                    f" but found {len(rgn_outs)} parent nodes"
                 )
 
     def region_inputs(self, rgn: RegionNode) -> List[PartitionNode]:
@@ -131,6 +131,12 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
     def partition_inputs(self, ptn: PartitionNode) -> List[RegionNode]:
         return [cast(RegionNode, node) for node in self.node_inputs(ptn)]
+
+    def region_outputs(self, rgn: RegionNode) -> List[PartitionNode]:
+        return [cast(PartitionNode, node) for node in self.node_outputs(rgn)]
+
+    def partition_outputs(self, ptn: PartitionNode) -> List[RegionNode]:
+        return [cast(RegionNode, node) for node in self.node_outputs(ptn)]
 
     @property
     def inputs(self) -> Iterator[RegionNode]:
@@ -158,7 +164,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     @property
     def inner_region_nodes(self) -> Iterator[RegionNode]:
         """Inner region nodes in the graph."""
-        return (node for node in self.region_nodes if self.node_inputs(node))
+        return (
+            node for node in self.region_nodes if self.node_inputs(node) and self.node_outputs(node)
+        )
 
     @cached_property
     def scope(self) -> Scope:

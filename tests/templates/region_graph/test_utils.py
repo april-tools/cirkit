@@ -1,8 +1,8 @@
 import tempfile
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Dict, Set, Tuple
 
-from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionNode
+from cirkit.templates.region_graph import RegionGraph
 
 
 def check_equivalent_region_graphs(rg1: RegionGraph, rg2: RegionGraph) -> None:
