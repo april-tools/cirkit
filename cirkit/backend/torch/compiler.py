@@ -443,6 +443,7 @@ def _optimize_parameter_nodes(
                 pgraph.outputs,
                 patterns,
                 incomings_fn=pgraph.node_inputs,
+                outcomings_fn=pgraph.node_outputs,
                 pattern_matcher_fn=_match_parameter_nodes_pattern,
                 match_optimizer_fn=match_optimizer,
             )
@@ -486,6 +487,7 @@ def _optimize_layers(
         cc.outputs,
         registry.signatures,
         incomings_fn=cc.layer_inputs,
+        outcomings_fn=cc.layer_outputs,
         pattern_matcher_fn=_match_layer_pattern,
         match_optimizer_fn=match_optimizer,
     )
@@ -501,6 +503,7 @@ def _match_parameter_nodes_pattern(
     pattern: ParameterOptPattern,
     *,
     incomings_fn: Callable[[TorchParameterNode], List[TorchParameterNode]],
+    outcomings_fn: Callable[[TorchParameterNode], List[TorchParameterNode]],
 ) -> Optional[ParameterOptMatch]:
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
@@ -514,6 +517,9 @@ def _match_parameter_nodes_pattern(
         in_nodes = incomings_fn(node)
         if len(in_nodes) > 1 and nid != num_entries - 1:
             return None
+        out_nodes = outcomings_fn(node)
+        if len(out_nodes) > 1 and nid != 0:
+            return None
         matched_nodes.append(node)
         if nid != num_entries - 1:
             (node,) = in_nodes
@@ -526,6 +532,7 @@ def _match_layer_pattern(
     pattern: LayerOptPattern,
     *,
     incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
+    outcomings_fn: Callable[[TorchLayer], List[TorchLayer]],
 ) -> Optional[LayerOptMatch]:
     ppatterns = pattern.ppatterns()
     pattern_entries = pattern.entries()
@@ -534,13 +541,16 @@ def _match_layer_pattern(
     matched_parameters = []
 
     # Start matching the pattern from the root
-    # TODO: generalize to match DAGs or binary trees
+    # TODO: generalize to match DAGs or trees
     for lid in range(num_entries):
         # First, attempt to match the layer
         if not isinstance(layer, pattern_entries[lid]):
             return None
         in_nodes = incomings_fn(layer)
         if len(in_nodes) > 1 and lid != num_entries - 1:
+            return None
+        out_nodes = outcomings_fn(layer)
+        if len(out_nodes) > 1 and lid != 0:
             return None
 
         # Second, attempt to match the patterns specified for its parameters
@@ -552,6 +562,7 @@ def _match_layer_pattern(
                 pgraph.outputs,
                 [ppattern],
                 incomings_fn=pgraph.node_inputs,
+                outcomings_fn=pgraph.node_outputs,
                 pattern_matcher_fn=_match_parameter_nodes_pattern,
             )
             if not matches:
