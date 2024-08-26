@@ -31,14 +31,6 @@ def build_monotonic_structured_categorical_pc() -> (
         (0, 1, 2, 3, 4): np.array([[4.0, 2.0]]),
     }
 
-    # The vtree, i.e., for each scope we have its factorization
-    scope_vtree: Dict[Tuple[int, ...], Tuple[Tuple[int, ...], ...]] = {
-        (0, 2): ((0,), (2,)),
-        (1, 3): ((1,), (3,)),
-        (0, 1, 2, 3): ((0, 2), (1, 3)),
-        (0, 1, 2, 3, 4): ((0, 1, 2, 3), (4,)),
-    }
-
     # Build the categorical layers and copy the probabilities
     categorical_layers = {
         vids: CategoricalLayer(
