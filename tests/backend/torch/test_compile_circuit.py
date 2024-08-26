@@ -1,25 +1,15 @@
 import itertools
-from typing import Dict, Tuple, cast
+from typing import Dict, Tuple
 
-import numpy as np
 import pytest
 import torch
-from scipy import integrate
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.layers import TorchCPTLayer, TorchDenseLayer, TorchMixingLayer
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
-from cirkit.pipeline import PipelineContext, compile
-from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.initializers import NormalInitializer
-from cirkit.symbolic.layers import GaussianLayer, MixingLayer
-from cirkit.symbolic.parameters import Parameter, SoftmaxParameter, TensorParameter
-from cirkit.templates.region_graph import RandomBinaryTree
-from tests.floats import allclose, isclose
-from tests.symbolic.test_utils import build_simple_pc
-from tests.symbolic.test_utils_new import build_monotonic_structured_categorical_pc
+from tests.floats import isclose
+from tests.symbolic.test_utils import build_monotonic_structured_categorical_pc
 
 
 def check_ground_truth(
