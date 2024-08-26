@@ -82,20 +82,14 @@ def build_monotonic_structured_categorical_pc() -> (
 
     # Build the connectivity, i.e., for each layer assign its inputs
     in_layers: Dict[Layer, List[Layer]] = {
-        dense_layer: [product_layers[scope_factorization]]
-        for scope_factorization, dense_layer in dense_layers.items()
+        dense_layer: [product_layers[scope]] for scope, dense_layer in dense_layers.items()
     }
     in_layers.update(
         {
-            product_layer: [
-                categorical_layers[scope_vtree[scope][0]]
-                if len(scope_vtree[scope][0]) == 1
-                else dense_layers[scope_vtree[scope][0]],
-                categorical_layers[scope_vtree[scope][1]]
-                if len(scope_vtree[scope][1]) == 1
-                else dense_layers[scope_vtree[scope][1]],
-            ]
-            for scope, product_layer in product_layers.items()
+            product_layers[(0, 2)]: [categorical_layers[(0,)], categorical_layers[(2,)]],
+            product_layers[(1, 3)]: [categorical_layers[(1,)], categorical_layers[(3,)]],
+            product_layers[(0, 1, 2, 3)]: [dense_layers[(0, 2)], dense_layers[(1, 3)]],
+            product_layers[(0, 1, 2, 3, 4)]: [dense_layers[(0, 1, 2, 3)], categorical_layers[(4,)]],
         }
     )
 
