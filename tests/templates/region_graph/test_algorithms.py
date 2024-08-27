@@ -1,11 +1,12 @@
 import itertools
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import pytest
 
 from cirkit.templates.region_graph import (
     FullyFactorized,
     LinearTree,
+    PoonDomingos,
     QuadGraph,
     QuadTree,
     RandomBinaryTree,
@@ -96,6 +97,7 @@ def test_rg_algorithm_quad_tree(shape: Tuple[int, int], num_patch_splits: int):
     (root,) = list(rg.outputs)
     assert isinstance(root, RegionNode)
     assert root.scope == Scope(range(num_variables))
+    assert all(len(rgn.scope) == 1 for rgn in rg.inputs)
     assert all(len(rg.region_inputs(rgn)) == 1 for rgn in rg.inner_region_nodes)
     if num_patch_splits == 2:
         assert all(len(rg.partition_inputs(ptn)) == 2 for ptn in rg.partition_nodes)
@@ -115,6 +117,22 @@ def test_rg_algorithm_quad_graph(shape: Tuple[int, int]):
     (root,) = list(rg.outputs)
     assert isinstance(root, RegionNode)
     assert root.scope == Scope(range(num_variables))
+    assert all(len(rgn.scope) == 1 for rgn in rg.inputs)
     assert all(len(rg.region_inputs(rgn)) in [1, 2] for rgn in rg.inner_region_nodes)
     assert all(len(rg.partition_inputs(ptn)) in [2, 4] for ptn in rg.partition_nodes)
+    check_region_graph_save_load(rg)
+
+
+@pytest.mark.parametrize(
+    "shape,delta", itertools.product([(1, 1), (3, 3), (4, 4)], [1, [1, 2], [[1, 3], [2, 4]]])
+)
+def test_rg_algorithm_poon_domingos(
+    shape: Tuple[int, int],
+    delta: Union[int, List[int], List[List[int]]],
+) -> None:
+    num_variables = shape[0] * shape[1]
+    rg = PoonDomingos(shape, delta=delta)
+    if num_variables > 1:
+        assert not rg.is_structured_decomposable
+    # TODO: how to test the PoonDomingos region graph?
     check_region_graph_save_load(rg)
