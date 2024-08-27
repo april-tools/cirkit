@@ -283,9 +283,8 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             output_idx = region_idx[cast(RegionNode, self.node_outputs(partition)[0])]
             rg_json["graph"].append({"output": output_idx, "inputs": input_idxs})
 
-        # TODO: logging for dumping graph_json?
         with open(filename, "w", encoding="utf-8") as f:
-            json.dump(rg_json, f)
+            json.dump(rg_json, f, indent=4)
 
     @staticmethod
     def load(filename: str) -> "RegionGraph":

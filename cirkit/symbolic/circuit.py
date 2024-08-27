@@ -30,7 +30,6 @@ from cirkit.symbolic.layers import (
 from cirkit.symbolic.parameters import ParameterFactory
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
 from cirkit.utils.algorithms import DiAcyclicGraph, RootedDiAcyclicGraph, bfs, topological_ordering
-from cirkit.utils.orderedset import OrderedSet
 from cirkit.utils.scope import Scope
 
 AbstractCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative

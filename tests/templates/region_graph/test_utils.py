@@ -6,6 +6,7 @@ from cirkit.templates.region_graph import RegionGraph
 
 
 def check_equivalent_region_graphs(rg1: RegionGraph, rg2: RegionGraph) -> None:
+    # TODO: this method only works when there is exactly one instance of region node for each scope
     assert (
         rg1.scope == rg2.scope
     ), f"Region graphs have different scopes: '{rg1.scope}' and '{rg2.scope}'"
