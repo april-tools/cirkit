@@ -236,6 +236,8 @@ class HadamardLayer(ProductLayer):
     """The Symbolic Hadamard product layer."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
+        if arity < 2:
+            raise ValueError("The arity should be at least 2")
         super().__init__(
             scope, num_input_units, HadamardLayer.num_prod_units(num_input_units), arity=arity
         )
