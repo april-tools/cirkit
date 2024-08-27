@@ -409,7 +409,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         # Loop through the region graph nodes, which are already sorted in a topological ordering
         for rgn in region_graph.nodes:
             if isinstance(rgn, RegionNode) and not rgn.inputs:  # Input region node
-                if factorize_inputs:
+                if factorize_inputs and len(rgn.scope) > 1:
                     factorized_input_sls = [
                         input_factory(Scope([sc]), num_input_units, num_channels)
                         for sc in rgn.scope
