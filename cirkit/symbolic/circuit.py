@@ -411,7 +411,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             node_inputs = region_graph.node_inputs(node)
             node_outputs = region_graph.node_outputs(node)
             if isinstance(node, RegionNode) and not node_inputs:  # Input region node
-                if factorize_inputs:
+                if factorize_inputs and len(node.scope) > 1:
                     factorized_input_sls = [
                         input_factory(Scope([sc]), num_input_units, num_channels)
                         for sc in node.scope
