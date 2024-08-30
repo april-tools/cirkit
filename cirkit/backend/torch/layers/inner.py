@@ -67,9 +67,12 @@ class TorchHadamardLayer(TorchProductLayer):
             num_folds (int): The number of channels. Defaults to 1.
             arity (int, optional): The arity of the layer. Defaults to 2.
         """
-        assert (
-            num_output_units == num_input_units
-        ), "The number of input and output units must be the same for Hadamard product."
+        if arity < 2:
+            raise ValueError("The arity should be at least 2")
+        if num_output_units != num_input_units:
+            raise ValueError(
+                "The number of input and output units must be the same for Hadamard product"
+            )
         super().__init__(
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )
