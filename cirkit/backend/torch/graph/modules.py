@@ -1,12 +1,12 @@
 import itertools
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union, cast
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar, Union, cast
 
 import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.graph.address_book import AddressBook, FoldIndexInfo
-from cirkit.utils.algorithms import DiAcyclicGraph
+from cirkit.utils.algorithms import DiAcyclicGraph, NodeType
 
 
 class AbstractTorchModule(nn.Module, ABC):
@@ -45,7 +45,6 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         in_modules: Dict[TorchModule, List[TorchModule]],
         outputs: List[TorchModule],
         *,
-        topologically_ordered: bool = False,
         fold_idx_info: Optional[FoldIndexInfo] = None,
     ):
         """Initialize a Torch computational graph.
@@ -62,12 +61,11 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         """
         modules: List = nn.ModuleList(modules)  # type: ignore
         super().__init__()
-        super(nn.Module, self).__init__(
-            modules, in_modules, outputs, topologically_ordered=topologically_ordered
-        )
-        self._address_book: Optional[AddressBook] = None
-        self._fold_idx_info = fold_idx_info
+        super(nn.Module, self).__init__(modules, in_modules, outputs)
         self._device = None
+        self._address_book: Optional[AddressBook] = None
+        self._modules_ordering: Optional[List[TorchModule]] = None
+        self._fold_idx_info = fold_idx_info
 
     @property
     def has_address_book(self) -> bool:
@@ -87,6 +85,13 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         """
         return self._device
 
+    def topological_ordering(
+        self, roots: Optional[Iterable[NodeType]] = None
+    ) -> Iterator[NodeType]:
+        if roots is None and self._modules_ordering is not None:
+            return iter(self._modules_ordering)
+        return super().topological_ordering(roots)
+
     def initialize_address_book(self) -> None:
         """Initialize the address book data structure. This can only be called once, and consumes
             the folding index information, if any.
@@ -99,6 +104,9 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         # Build the book address entries
         self._address_book = self._build_address_book()
         self._fold_idx_info = None
+
+        # Cache the topological ordering of the modules
+        self._modules_ordering = list(super().topological_ordering())
 
     def to(
         self,
@@ -148,7 +156,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             raise RuntimeError("The address book has not been initialized")
         module_outputs: List[Tensor] = []
         inputs_iterator = self._address_book.lookup(module_outputs, in_graph=x)
-        for module, inputs in itertools.zip_longest(self.topological_ordering(), inputs_iterator):
+        for module, inputs in itertools.zip_longest(self._modules_ordering, inputs_iterator):
             if module is None:
                 (output,) = inputs
                 return output

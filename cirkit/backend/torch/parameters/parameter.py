@@ -113,7 +113,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
                 replace_ref_or_copy,
                 incomings_fn=self.node_inputs,
             )
-            pgraph = TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
+            pgraph = TorchParameter(nodes, in_nodes, outputs)
             pgraphs.append(pgraph)
         return pgraphs
 

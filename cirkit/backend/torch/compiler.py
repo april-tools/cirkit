@@ -169,9 +169,9 @@ class TorchCompiler(AbstractCompiler):
 
         # Build the parameter's computational graph
         outputs = [compiled_nodes_map[parameter.output]]
-        return TorchParameter(nodes, in_nodes, outputs, topologically_ordered=True)
+        return TorchParameter(nodes, in_nodes, outputs)
 
-    def compiler_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
+    def compile_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
         # Retrieve the rule for the given initializer and compile it
         signature = type(initializer)
         rule = self.retrieve_initializer_rule(signature)
@@ -228,14 +228,7 @@ class TorchCompiler(AbstractCompiler):
 
         # Construct the tensorized circuit
         layers = [compiled_layers_map[sl] for sl in compiled_layers_map.keys()]
-        cc = cc_cls(
-            sc.scope,
-            sc.num_channels,
-            layers=layers,
-            in_layers=in_layers,
-            outputs=outputs,
-            topologically_ordered=True,
-        )
+        cc = cc_cls(sc.scope, sc.num_channels, layers=layers, in_layers=in_layers, outputs=outputs)
 
         # Post-process the compiled circuit, i.e.,
         # optionally apply optimizations to it and then fold it
@@ -296,7 +289,6 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         layers,
         in_layers,
         outputs,
-        topologically_ordered=True,
         fold_idx_info=fold_idx_info,
     )
 
@@ -348,9 +340,7 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
     )
 
     # Construct the folded parameter's computational graph
-    return TorchParameter(
-        nodes, in_nodes, outputs, topologically_ordered=True, fold_idx_info=fold_idx_info
-    )
+    return TorchParameter(nodes, in_nodes, outputs, fold_idx_info=fold_idx_info)
 
 
 def _fold_parameter_nodes_group(
@@ -453,6 +443,7 @@ def _optimize_parameter_nodes(
                 pgraph.outputs,
                 patterns,
                 incomings_fn=pgraph.node_inputs,
+                outcomings_fn=pgraph.node_outputs,
                 pattern_matcher_fn=_match_parameter_nodes_pattern,
                 match_optimizer_fn=match_optimizer,
             )
@@ -463,7 +454,7 @@ def _optimize_parameter_nodes(
             nodes, in_nodes, outputs = optimize_result
 
             # Build the optimized computational graph
-            pgraph = type(pgraph)(nodes, in_nodes, outputs, topologically_ordered=True)
+            pgraph = type(pgraph)(nodes, in_nodes, outputs)
 
             # Update the parameter computational graph assigned to the layer
             assert hasattr(layer, pname)
@@ -496,13 +487,14 @@ def _optimize_layers(
         cc.outputs,
         registry.signatures,
         incomings_fn=cc.layer_inputs,
+        outcomings_fn=cc.layer_outputs,
         pattern_matcher_fn=_match_layer_pattern,
         match_optimizer_fn=match_optimizer,
     )
     if optimize_result is None:
         return cc, False
     layers, in_layers, outputs = optimize_result
-    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs, topologically_ordered=True)
+    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs)
     return cc, True
 
 
@@ -511,6 +503,7 @@ def _match_parameter_nodes_pattern(
     pattern: ParameterOptPattern,
     *,
     incomings_fn: Callable[[TorchParameterNode], List[TorchParameterNode]],
+    outcomings_fn: Callable[[TorchParameterNode], List[TorchParameterNode]],
 ) -> Optional[ParameterOptMatch]:
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
@@ -524,6 +517,9 @@ def _match_parameter_nodes_pattern(
         in_nodes = incomings_fn(node)
         if len(in_nodes) > 1 and nid != num_entries - 1:
             return None
+        out_nodes = outcomings_fn(node)
+        if len(out_nodes) > 1 and nid != 0:
+            return None
         matched_nodes.append(node)
         if nid != num_entries - 1:
             (node,) = in_nodes
@@ -536,6 +532,7 @@ def _match_layer_pattern(
     pattern: LayerOptPattern,
     *,
     incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
+    outcomings_fn: Callable[[TorchLayer], List[TorchLayer]],
 ) -> Optional[LayerOptMatch]:
     ppatterns = pattern.ppatterns()
     pattern_entries = pattern.entries()
@@ -544,13 +541,16 @@ def _match_layer_pattern(
     matched_parameters = []
 
     # Start matching the pattern from the root
-    # TODO: generalize to match DAGs or binary trees
+    # TODO: generalize to match DAGs or trees
     for lid in range(num_entries):
         # First, attempt to match the layer
         if not isinstance(layer, pattern_entries[lid]):
             return None
         in_nodes = incomings_fn(layer)
         if len(in_nodes) > 1 and lid != num_entries - 1:
+            return None
+        out_nodes = outcomings_fn(layer)
+        if len(out_nodes) > 1 and lid != 0:
             return None
 
         # Second, attempt to match the patterns specified for its parameters
@@ -562,6 +562,7 @@ def _match_layer_pattern(
                 pgraph.outputs,
                 [ppattern],
                 incomings_fn=pgraph.node_inputs,
+                outcomings_fn=pgraph.node_outputs,
                 pattern_matcher_fn=_match_parameter_nodes_pattern,
             )
             if not matches:

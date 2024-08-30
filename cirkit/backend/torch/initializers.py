@@ -1,9 +1,24 @@
 from typing import Callable, List, Optional, Union
 
+import numpy as np
 import torch
 from torch import Tensor
 
 InitializerFunc = Callable[[Tensor], Tensor]
+
+
+def copy_from_ndarray_(tensor: torch.Tensor, *, array: np.ndarray) -> Tensor:
+    t = torch.from_numpy(array)
+    default_float_dtype = torch.get_default_dtype()
+    if t.is_floating_point():
+        if t.dtype != default_float_dtype:
+            t = t.to(default_float_dtype)
+    elif t.is_complex():
+        if t.dtype != torch.complex64 and default_float_dtype == torch.float32:
+            t = t.to(torch.complex64)
+        elif t.dtype != torch.complex128 and default_float_dtype == torch.float64:
+            t = t.to(torch.complex128)
+    return tensor.copy_(t)
 
 
 def dirichlet_(tensor: torch.Tensor, alpha: Union[float, List[float]], *, dim: int = -1) -> Tensor:

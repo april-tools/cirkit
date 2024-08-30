@@ -93,18 +93,20 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         in_layers: Dict[TorchLayer, List[TorchLayer]],
         outputs: List[TorchLayer],
         *,
-        topologically_ordered: bool = False,
         fold_idx_info: Optional[FoldIndexInfo] = None,
     ) -> None:
         super().__init__(
             layers,
             in_layers,
             outputs,
-            topologically_ordered=topologically_ordered,
             fold_idx_info=fold_idx_info,
         )
         self.scope = scope
         self.num_channels = num_channels
+
+    @property
+    def num_variables(self) -> int:
+        return len(self.scope)
 
     def reset_parameters(self) -> None:
         # For each layer, initialize its parameters, if any
@@ -198,6 +200,6 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
-        x = torch.empty(size=(1, self.num_channels, len(self.scope)), device=self.device)
+        x = torch.empty(size=(1, self.num_channels, self.num_variables), device=self.device)
         x = self._eval_layers(x)  # (B, O, K)
         return x.squeeze(dim=0)  # (O, K)

@@ -4,7 +4,7 @@ from copy import copy as shallowcopy
 from functools import cached_property
 from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, Optional, Protocol, Tuple, Union, final
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union, final
 
 from cirkit.symbolic.dtypes import DataType, dtype_value
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
@@ -144,6 +144,28 @@ class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
     @property
     def config(self) -> Dict[str, Any]:
         return dict(axis=self.axis)
+
+
+class IndexParameter(UnaryParameterOp):
+    def __init__(self, in_shape: Tuple[int, ...], *, indices: List[int], axis: int = -1):
+        super().__init__(in_shape)
+        axis = axis if axis >= 0 else axis + len(in_shape)
+        assert 0 <= axis < len(in_shape)
+        assert all(0 <= i < in_shape[axis] for i in indices)
+        self.indices = indices
+        self.axis = axis
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            *self.in_shapes[0][: self.axis],
+            len(self.indices),
+            *self.in_shapes[0][self.axis + 1 :],
+        )
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(indices=self.indices, axis=self.axis)
 
 
 class SumParameter(BinaryParameterOp):
@@ -295,7 +317,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
     @classmethod
     def from_leaf(cls, p: ParameterInput) -> "Parameter":
-        return Parameter([p], {}, [p], topologically_ordered=True)
+        return Parameter([p], {}, [p])
 
     @classmethod
     def from_sequence(
@@ -307,9 +329,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         in_nodes = dict(p.nodes_inputs)
         for i, n in enumerate(ns):
             in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.output]
-        return Parameter(
-            nodes, in_nodes, [ns[-1]], topologically_ordered=p.is_topologically_ordered
-        )
+        return Parameter(nodes, in_nodes, [ns[-1]])
 
     @classmethod
     def from_nary(cls, n: ParameterOp, *ps: Union[ParameterInput, "Parameter"]) -> "Parameter":
@@ -317,13 +337,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
         in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
         in_nodes[n] = list(p.output for p in ps)
-        topologically_ordered = all(p.is_topologically_ordered for p in ps)
-        return Parameter(
-            p_nodes,
-            in_nodes,
-            [n],
-            topologically_ordered=topologically_ordered,
-        )
+        return Parameter(p_nodes, in_nodes, [n])
 
     @classmethod
     def from_unary(cls, n: UnaryParameterOp, p: Union[ParameterInput, "Parameter"]) -> "Parameter":
@@ -358,7 +372,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         nodes, in_nodes, outputs = topologically_process_nodes(
             self.topological_ordering(), self.outputs, process_fn, incomings_fn=self.node_inputs
         )
-        return Parameter(nodes, in_nodes, outputs, topologically_ordered=True)
+        return Parameter(nodes, in_nodes, outputs)
 
 
 class ParameterFactory(Protocol):
@@ -370,18 +384,14 @@ class GaussianProductMean(ParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
 
@@ -389,18 +399,14 @@ class GaussianProductStddev(BinaryParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
 
@@ -408,16 +414,12 @@ class GaussianProductLogPartition(ParameterOp):
     def __init__(
         self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
     ) -> None:
-        assert (
-            in_gaussian1_shape[0] == in_gaussian2_shape[0]
-            and in_gaussian1_shape[2] == in_gaussian2_shape[2]
-        )
+        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] * self.in_shapes[1][1],
-            self.in_shapes[0][2],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
