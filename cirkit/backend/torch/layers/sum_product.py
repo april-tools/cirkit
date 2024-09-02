@@ -1,3 +1,6 @@
+import torch
+import einops as E
+
 from abc import ABC
 from typing import Any, Dict, Optional, Tuple
 
@@ -137,3 +140,25 @@ class TorchCPLayer(TorchSumProductLayer):
         return self.semiring.einsum(
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
+
+    def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
+        x = self.semiring.prod(x, dim=1, keepdim=False)
+
+        normalisation = self.weight().sum(-1).abs().mean()
+        if normalisation < 1 - 1e-6 or normalisation > 1 + 1e-6:
+            raise ValueError("Sampling only works with a normalised parametrisation!")
+
+        c = x.shape[2]
+        d = x.shape[-1]
+
+        mixing_distribution = torch.distributions.Categorical(
+            probs=self.weight()
+        )  # shape (F, O, K)
+
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
+        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
+
+        x = torch.gather(x, -3, mixing_indices)
+        x = x[:, 0]
+        return x, mixing_samples
