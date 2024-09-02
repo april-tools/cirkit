@@ -11,14 +11,12 @@
 cirkit currently requires Python 3.8 and PyTorch 2.3 or above versions.
 To start developing, install the virtual environment and activate it first.
 ```shell
-virtualenv venv  # or python -m venv venv
-# Linux & MacOS
+virtualenv venv           # or python -m venv venv
 source venv/bin/activate
-# Windows
-venv\Scripts\activate
 ```
 Then install the required dependencies in [development mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html).
 ```shell
+pip install -U pip        # update pip
 pip install -e .[dev]
 ```
 This will install not only the core dependencies of the library itself (e.g., PyTorch) but also additional dependencies useful for development (e.g., PyTest).
@@ -28,7 +26,7 @@ It also installs other development tools, such as PyLint and MyPy.
 
 If you want to execute the Jupyter notebooks in the ```notebooks/``` directory, then install the additional dependencies with:
 ```shell
-pip install -e .[notebooks]
+pip install .[notebooks]
 ```
 
 ### Automatic Code Formatting
