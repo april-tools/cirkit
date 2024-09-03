@@ -68,12 +68,6 @@ def test_build_circuit_qt4_3x3_cp():
     assert sc.is_smooth
     assert sc.is_decomposable
     assert sc.is_structured_decomposable
-    for layer in sc.topological_ordering():
-        print(
-            layer.__class__.__name__,
-            layer.scope,
-            *tuple((pname, pgraph.shape) for pname, pgraph in layer.params.items()),
-        )
     assert len(list(sc.inputs)) == 9
     assert all(isinstance(sl, CategoricalLayer) and len(sl.scope) == 1 for sl in sc.inputs)
     assert len(list(sc.product_layers)) == 4
