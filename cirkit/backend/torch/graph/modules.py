@@ -45,6 +45,9 @@ class AddressBook(ABC):
     def __len__(self) -> int:
         return len(self._entries)
 
+    def __iter__(self) -> Iterator[AddressBookEntry]:
+        return iter(self._entries)
+
     def set_device(self, device: Optional[Union[str, torch.device, int]] = None) -> "AddressBook":
         self._entries = list(
             map(
@@ -116,3 +119,23 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
     @abstractmethod
     def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
         ...
+
+    def __repr__(self) -> str:
+        def indent(s: str) -> str:
+            s = s.split("\n")
+            r = s[0]
+            if len(s) == 1:
+                return r
+            return r + "\n" + "\n".join(f"  {t}" for t in s[1:])
+
+        lines = [self.__class__.__name__ + "("]
+        extra_lines = self.extra_repr()
+        if extra_lines:
+            lines.append(f"  {indent(extra_lines)}")
+        for i, entry in enumerate(self._address_book):
+            if entry.module is None:
+                continue
+            repr_module = indent(repr(entry.module))
+            lines.append(f"  ({i}): {repr_module}")
+        lines.append(")")
+        return "\n".join(lines)

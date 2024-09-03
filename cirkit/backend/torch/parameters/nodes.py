@@ -48,6 +48,9 @@ class TorchParameterInput(TorchParameterNode, ABC):
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__()  # type: ignore[no-any-return,misc]
 
+    def extra_repr(self) -> str:
+        return f"output-shape: {(self.num_folds, *self.shape)}"
+
     @abstractmethod
     def forward(self) -> Tensor:
         ...
@@ -230,6 +233,13 @@ class TorchParameterOp(TorchParameterNode, ABC):
         """
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(*xs)  # type: ignore[no-any-return,misc]
+
+    def extra_repr(self) -> str:
+        return (
+            f"input-shapes: {[(self.num_folds, *in_shape) for in_shape in self.in_shapes]}"
+            + "\n"
+            + f"output-shape: {(self.num_folds, *self.shape)}"
+        )
 
     @abstractmethod
     def forward(self, *xs: Tensor) -> Tensor:

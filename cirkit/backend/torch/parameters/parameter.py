@@ -139,3 +139,6 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
 
     def forward(self) -> Tensor:
         return self._eval_forward()  # (F, d1, d2, ..., dk)
+
+    def extra_repr(self) -> str:
+        return f"shape: {(self.num_folds, *self.shape)}"
