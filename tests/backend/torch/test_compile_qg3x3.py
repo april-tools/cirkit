@@ -1,12 +1,18 @@
+from collections import Counter
+
+from cirkit.backend.torch.layers import (
+    TorchCategoricalLayer,
+    TorchDenseLayer,
+    TorchHadamardLayer,
+    TorchMixingLayer,
+)
+from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import DirichletInitializer
-from cirkit.symbolic.layers import CategoricalLayer, MixingLayer, DenseLayer, HadamardLayer
+from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, HadamardLayer, MixingLayer
 from cirkit.symbolic.parameters import Parameter, TensorParameter
 from cirkit.templates.region_graph import QuadGraph
 from cirkit.utils.scope import Scope
-from cirkit.pipeline import PipelineContext
-from cirkit.backend.torch.layers import TorchCategoricalLayer, TorchDenseLayer, TorchHadamardLayer, TorchMixingLayer
-from collections import Counter
 
 
 def categorical_layer_factory(
@@ -48,12 +54,7 @@ def test_build_circuit_qg_cp():
     )
     assert sc.is_smooth
     assert sc.is_decomposable
-    ctx = PipelineContext(
-        backend='torch',
-        optimize=False,
-        fold=False,
-        semiring='lse-sum'
-    )
+    ctx = PipelineContext(backend="torch", optimize=False, fold=False, semiring="lse-sum")
 
     circuit = ctx.compile(sc)
     circuit_pf = ctx.integrate(circuit)
@@ -63,22 +64,40 @@ def test_build_circuit_qg_cp():
     # check numbers of nodes by type
     assert len(nodes_sc) == len(nodes_c) == 53
     for n1, n2 in zip(nodes_sc[:9], nodes_c[:9]):
-        assert isinstance(n1, CategoricalLayer) and isinstance(n2, TorchCategoricalLayer) or \
-               isinstance(n1, DenseLayer) and isinstance(n2, TorchDenseLayer) or \
-               isinstance(n1, HadamardLayer) and isinstance(n2, TorchHadamardLayer) or \
-               isinstance(n1, MixingLayer) and isinstance(n2, TorchMixingLayer)
+        assert (
+            isinstance(n1, CategoricalLayer)
+            and isinstance(n2, TorchCategoricalLayer)
+            or isinstance(n1, DenseLayer)
+            and isinstance(n2, TorchDenseLayer)
+            or isinstance(n1, HadamardLayer)
+            and isinstance(n2, TorchHadamardLayer)
+            or isinstance(n1, MixingLayer)
+            and isinstance(n2, TorchMixingLayer)
+        )
 
-    assert sum([1 for n1 in nodes_sc if isinstance(n1, CategoricalLayer)]) == \
-           sum([1 for n2 in nodes_c if isinstance(n2, TorchCategoricalLayer)]) == 9
-    assert sum([1 for n1 in nodes_sc if isinstance(n1, DenseLayer)]) == \
-           sum([1 for n2 in nodes_c if isinstance(n2, TorchDenseLayer)]) == 28
-    assert sum([1 for n1 in nodes_sc if isinstance(n1, HadamardLayer)]) == \
-           sum([1 for n2 in nodes_c if isinstance(n2, TorchHadamardLayer)]) == 14
-    assert sum([1 for n1 in nodes_sc if isinstance(n1, MixingLayer)]) == \
-           sum([1 for n2 in nodes_c if isinstance(n2, TorchMixingLayer)]) == 2
+    assert (
+        sum([1 for n1 in nodes_sc if isinstance(n1, CategoricalLayer)])
+        == sum([1 for n2 in nodes_c if isinstance(n2, TorchCategoricalLayer)])
+        == 9
+    )
+    assert (
+        sum([1 for n1 in nodes_sc if isinstance(n1, DenseLayer)])
+        == sum([1 for n2 in nodes_c if isinstance(n2, TorchDenseLayer)])
+        == 28
+    )
+    assert (
+        sum([1 for n1 in nodes_sc if isinstance(n1, HadamardLayer)])
+        == sum([1 for n2 in nodes_c if isinstance(n2, TorchHadamardLayer)])
+        == 14
+    )
+    assert (
+        sum([1 for n1 in nodes_sc if isinstance(n1, MixingLayer)])
+        == sum([1 for n2 in nodes_c if isinstance(n2, TorchMixingLayer)])
+        == 2
+    )
 
     # check all input layers
-    input_scopes = set([(i, ) for i in range(9)])
+    input_scopes = set([(i,) for i in range(9)])
     scopes = set()
     for n1, n2 in zip(nodes_sc[:9], nodes_c[:9]):
         assert isinstance(n1, CategoricalLayer)

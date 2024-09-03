@@ -7,12 +7,12 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     Iterator,
     List,
     Optional,
     Protocol,
     Sequence,
+    Set,
     Tuple,
     Union,
     cast,
@@ -31,6 +31,12 @@ from cirkit.symbolic.parameters import ParameterFactory
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
 from cirkit.utils.algorithms import DiAcyclicGraph, RootedDiAcyclicGraph, bfs, topological_ordering
 from cirkit.utils.scope import Scope
+
+
+class StructuralPropertyError(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
+
 
 AbstractCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
 
@@ -211,8 +217,12 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     @cached_property
     def is_structured_decomposable(self) -> bool:
-        # Structured-decomposability is self-compatiblity
-        return self.is_compatible(self)
+        if not self.is_smooth:
+            return False
+        if not self.is_decomposable:
+            return False
+        scope_factorizations = _scope_factorizations(self)
+        return all(len(fs) == 1 for _, fs in scope_factorizations.items())
 
     @cached_property
     def is_omni_compatible(self) -> bool:
@@ -220,16 +230,9 @@ class Circuit(DiAcyclicGraph[Layer]):
             return False
         if not self.is_decomposable:
             return False
-        # TODO
-        return False
-
-    def is_compatible(self, oth: "Circuit", scope: Optional[Iterable[int]] = None) -> bool:
-        if not self.is_smooth:
-            return False
-        if not self.is_decomposable:
-            return False
-        # TODO
-        return True
+        scope_factorizations = _scope_factorizations(self)
+        vars = Scope(range(self.num_variables))
+        return _are_compatible(scope_factorizations, {vars: {tuple(Scope([vid]) for vid in vars)}})
 
     @classmethod
     def from_operation(
@@ -500,6 +503,38 @@ def pipeline_topological_ordering(roots: Sequence[Circuit]) -> Iterator[Circuit]
     return topological_ordering(bfs(roots, incomings_fn=operands_fn), incomings_fn=operands_fn)
 
 
-class StructuralPropertyError(Exception):
-    def __init__(self, msg: str):
-        super().__init__(msg)
+def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:
+    scope_factorizations: Dict[Scope, Set[Tuple[Scope, ...]]] = defaultdict(set)
+    for sl in sc.product_layers:
+        scope_factorizations[sl.scope].add(tuple(sorted(sli.scope for sli in sc.layer_inputs(sl))))
+    return scope_factorizations
+
+
+def is_compatible(sc1: Circuit, sc2: Circuit) -> bool:
+    if not sc1.is_smooth:
+        return False
+    if not sc1.is_decomposable:
+        return False
+    if not sc2.is_smooth:
+        return False
+    if not sc2.is_decomposable:
+        return False
+    sfs1 = _scope_factorizations(sc1)
+    sfs2 = _scope_factorizations(sc2)
+    return _are_compatible(sfs1, sfs2)
+
+
+def _are_compatible(
+    sfs1: Dict[Scope, Set[Tuple[Scope, ...]]], sfs2: Dict[Scope, Set[Tuple[Scope, ...]]]
+) -> bool:
+    for scope, fs1 in sfs1.items():
+        fs2 = sfs2.get(scope, None)
+        if fs2 is None:
+            return False
+        if len(fs1) != 1 or len(fs2) != 1:
+            return False
+        f1 = fs1.pop()
+        f2 = fs2.pop()
+        if f1 != f2:
+            return False
+    return True
