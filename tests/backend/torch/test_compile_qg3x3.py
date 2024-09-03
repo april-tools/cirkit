@@ -31,17 +31,6 @@ def categorical_layer_factory(
     )
 
 
-def mixing_layer_factory(scope: Scope, num_units: int, arity: int) -> MixingLayer:
-    return MixingLayer(
-        scope,
-        num_units,
-        arity,
-        weight=Parameter.from_leaf(
-            TensorParameter(num_units, arity, initializer=DirichletInitializer())
-        ),
-    )
-
-
 def test_build_circuit_qg_cp():
     rg = QuadGraph((3, 3))
     sc = Circuit.from_region_graph(
@@ -50,7 +39,6 @@ def test_build_circuit_qg_cp():
         num_sum_units=8,
         sum_product="cp",
         input_factory=categorical_layer_factory,
-        mixing_factory=mixing_layer_factory,
     )
     assert sc.is_smooth
     assert sc.is_decomposable

@@ -4,24 +4,140 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.initializers import ConstantTensorInitializer
-from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, HadamardLayer, Layer, MixingLayer
-from cirkit.symbolic.parameters import Parameter, TensorParameter
+from cirkit.symbolic.initializers import (
+    ConstantTensorInitializer,
+    DirichletInitializer,
+    NormalInitializer,
+)
+from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, GaussianLayer, HadamardLayer, Layer
+from cirkit.symbolic.parameters import (
+    ExpParameter,
+    LogSoftmaxParameter,
+    Parameter,
+    SoftmaxParameter,
+    TensorParameter,
+)
 from cirkit.utils.scope import Scope
 
 
-def build_monotonic_structured_categorical_pc() -> (
+def build_structured_monotonic_cpt_pc(
+    *,
+    num_units: int = 2,
+    input_layer: str = "bernoulli",
+    parameterize: bool = True,
+    normalized: bool = True,
+):
+    # Build input layers
+    if input_layer == "bernoulli":
+        if parameterize:
+            if normalized:
+                logits_factory = lambda shape: Parameter.from_leaf(
+                    TensorParameter(*shape, initializer=NormalInitializer())
+                )
+                probs_factory = None
+            else:
+                logits_factory = lambda shape: Parameter.from_unary(
+                    LogSoftmaxParameter(shape),
+                    TensorParameter(*shape, initializer=NormalInitializer()),
+                )
+                probs_factory = None
+        else:
+            probs_factory = lambda shape: Parameter.from_leaf(
+                TensorParameter(*shape, initializer=DirichletInitializer())
+            )
+            logits_factory = None
+        input_layers = {
+            (vid,): CategoricalLayer(
+                Scope([vid]),
+                num_output_units=num_units,
+                num_channels=1,
+                num_categories=2,
+                logits_factory=logits_factory,
+                probs_factory=probs_factory,
+            )
+            for vid in range(5)
+        }
+    elif input_layer == "gaussian":
+        input_layers = {
+            (vid,): GaussianLayer(Scope([vid]), num_output_units=num_units, num_channels=1)
+            for vid in range(5)
+        }
+    else:
+        raise NotImplementedError()
+
+    # Build dense layers
+    if parameterize:
+        if normalized:
+            dense_weight_factory = lambda shape: Parameter.from_unary(
+                SoftmaxParameter(shape, axis=1),
+                TensorParameter(*shape, initializer=NormalInitializer()),
+            )
+        else:
+            dense_weight_factory = lambda shape: Parameter.from_unary(
+                ExpParameter(shape), TensorParameter(*shape, initializer=NormalInitializer())
+            )
+    else:
+        dense_weight_factory = lambda shape: Parameter.from_leaf(
+            TensorParameter(*shape, initializer=DirichletInitializer())
+        )
+    dense_layers = {
+        scope: DenseLayer(
+            Scope(scope),
+            num_input_units=num_units,
+            num_output_units=1 if len(scope) == 5 else num_units,
+            weight_factory=dense_weight_factory,
+        )
+        for scope in [(0, 2), (1, 3), (0, 1, 2, 3), (0, 1, 2, 3, 4)]
+    }
+
+    # Build hadamard product layers
+    product_layers = {
+        scope: HadamardLayer(Scope(scope), num_input_units=num_units, arity=2)
+        for scope in dense_layers
+    }
+
+    # Set the connections between layers
+    in_layers: Dict[Layer, List[Layer]] = {
+        dense_layer: [product_layers[scope]] for scope, dense_layer in dense_layers.items()
+    }
+    in_layers.update(
+        {
+            product_layers[(0, 2)]: [input_layers[(0,)], input_layers[(2,)]],
+            product_layers[(1, 3)]: [input_layers[(1,)], input_layers[(3,)]],
+            product_layers[(0, 1, 2, 3)]: [dense_layers[(0, 2)], dense_layers[(1, 3)]],
+            product_layers[(0, 1, 2, 3, 4)]: [dense_layers[(0, 1, 2, 3)], input_layers[(4,)]],
+        }
+    )
+
+    # Build the symbolic circuit
+    circuit = Circuit(
+        scope=Scope([0, 1, 2, 3, 4]),
+        num_channels=1,
+        layers=list(
+            itertools.chain(input_layers.values(), product_layers.values(), dense_layers.values())
+        ),
+        in_layers=in_layers,
+        outputs=[dense_layers[(0, 1, 2, 3, 4)]],
+    )
+
+    assert circuit.is_smooth
+    assert circuit.is_decomposable
+    assert circuit.is_structured_decomposable
+    assert not circuit.is_omni_compatible
+    return circuit
+
+
+def build_monotonic_structured_categorical_cpt_pc() -> (
     Tuple[Circuit, Dict[Tuple[int, ...], float], float]
 ):
-    # The probabilities of categorical layers
-    categorical_probs: Dict[Tuple[int, ...], np.ndarray] = {
+    # The probabilities of Bernoulli layers
+    bernoulli_probs: Dict[Tuple[int, ...], np.ndarray] = {
         (0,): np.array([[[0.5, 0.5]], [[0.4, 0.6]]]),
         (1,): np.array([[[0.2, 0.8]], [[0.3, 0.7]]]),
         (2,): np.array([[[0.3, 0.7]], [[0.1, 0.9]]]),
         (3,): np.array([[[0.5, 0.5]], [[0.5, 0.5]]]),
         (4,): np.array([[[0.1, 0.9]], [[0.8, 0.2]]]),
     }
-    num_variables = len(categorical_probs)
 
     # The parameters of dense weights
     dense_weights: Dict[Tuple[int, ...], np.ndarray] = {
@@ -31,68 +147,21 @@ def build_monotonic_structured_categorical_pc() -> (
         (0, 1, 2, 3, 4): np.array([[4.0, 2.0]]),
     }
 
-    # Build the categorical layers and copy the probabilities
-    categorical_layers = {
-        vids: CategoricalLayer(
-            Scope(vids),
-            num_output_units=2,
-            num_channels=1,
-            num_categories=2,
-            probs=Parameter.from_leaf(
-                TensorParameter(2, 1, 2, initializer=ConstantTensorInitializer(probs)),
-            ),
-        )
-        for vids, probs in categorical_probs.items()
-    }
-
-    # Build the hadamard product layers before each dense layer
-    product_layers = {
-        scope: HadamardLayer(Scope(scope), num_input_units=2, arity=2) for scope in dense_weights
-    }
-
-    # Build the dense layers and copy the parameters
-    dense_layers = {
-        scope: DenseLayer(
-            Scope(scope),
-            num_input_units=2,
-            num_output_units=1 if len(scope) == num_variables else 2,
-            weight=Parameter.from_leaf(
-                TensorParameter(
-                    1 if len(scope) == num_variables else 2,
-                    2,
-                    initializer=ConstantTensorInitializer(weight),
-                )
-            ),
-        )
-        for scope, weight in dense_weights.items()
-    }
-
-    # Chain the layers in a single list
-    layers = list(
-        itertools.chain(categorical_layers.values(), product_layers.values(), dense_layers.values())
-    )
-
-    # Build the connectivity, i.e., for each layer assign its inputs
-    in_layers: Dict[Layer, List[Layer]] = {
-        dense_layer: [product_layers[scope]] for scope, dense_layer in dense_layers.items()
-    }
-    in_layers.update(
-        {
-            product_layers[(0, 2)]: [categorical_layers[(0,)], categorical_layers[(2,)]],
-            product_layers[(1, 3)]: [categorical_layers[(1,)], categorical_layers[(3,)]],
-            product_layers[(0, 1, 2, 3)]: [dense_layers[(0, 2)], dense_layers[(1, 3)]],
-            product_layers[(0, 1, 2, 3, 4)]: [dense_layers[(0, 1, 2, 3)], categorical_layers[(4,)]],
-        }
-    )
-
     # Build the symbolic circuit
-    circuit = Circuit(
-        scope=Scope([0, 1, 2, 3, 4]),
-        num_channels=1,
-        layers=layers,
-        in_layers=in_layers,
-        outputs=[dense_layers[(0, 1, 2, 3, 4)]],
+    circuit = build_structured_monotonic_cpt_pc(
+        num_units=2, input_layer="bernoulli", parameterize=False
     )
+
+    for sl in circuit.inputs:
+        assert isinstance(sl, CategoricalLayer)
+        next(sl.probs.inputs).initializer = ConstantTensorInitializer(
+            bernoulli_probs[tuple(sl.scope)]
+        )
+    for sl in circuit.sum_layers:
+        assert isinstance(sl, DenseLayer)
+        next(sl.weight.inputs).initializer = ConstantTensorInitializer(
+            dense_weights[tuple(sl.scope)]
+        )
 
     # Input: (0, 0, 0, 0, 0)
     # Outputs:
@@ -158,118 +227,3 @@ def build_monotonic_structured_categorical_pc() -> (
     }
     gt_partition_func = 318.0
     return circuit, gt_outputs, gt_partition_func
-
-
-def test_build_monotonic_categorical_pc() -> Tuple[Circuit, Dict[Tuple[int, ...], float], float]:
-    categorical_probs: Dict[Tuple[int, ...], np.ndarray] = {
-        (0,): np.array([[[0.5, 0.5]], [[0.4, 0.6]]]),
-        (1,): np.array([[[0.2, 0.8]], [[0.3, 0.7]]]),
-        (2,): np.array([[[0.3, 0.7]], [[0.1, 0.9]]]),
-        (3,): np.array([[[0.5, 0.5]], [[0.5, 0.5]]]),
-        (4,): np.array([[[0.1, 0.9]], [[0.8, 0.2]]]),
-        (5,): np.array([[[0.2, 0.8]], [[0.3, 0.7]]]),
-        (6,): np.array([[[0.5, 0.5]], [[0.3, 0.7]]]),
-        (7,): np.array([[[0.9, 0.1]], [[0.3, 0.7]]]),
-        (8,): np.array([[[0.2, 0.8]], [[0.1, 0.9]]]),
-    }
-    num_variables = len(categorical_probs)
-
-    dense_weights: Dict[Tuple[int, ...], np.ndarray] = {
-        (0,): np.array([[1.0, 1.0], [2.0, 2.0]]),
-        (1,): np.array([[3.0, 3.0], [1.0, 1.0]]),
-        (2,): np.array([[1.0, 2.0], [2.0, 2.0]]),
-        (3,): np.array([[1.0, 2.0], [1.0, 2.0]]),
-        (4,): np.array([[2.0, 2.0], [1.0, 1.0]]),
-        (5,): np.array([[1.0, 2.0], [1.0, 2.0]]),
-        (6,): np.array([[2.0, 3.0], [2.0, 2.0]]),
-        (7,): np.array([[2.0, 1.0], [1.0, 2.0]]),
-        (8,): np.array([[3.0, 2.0], [1.0, 1.0]]),
-        (0, 1): np.array([[1.0, 1.0], [1.0, 1.0]]),
-        (3, 4): np.array([[1.0, 1.0], [2.0, 2.0]]),
-        (0, 3): np.array([[1.0, 1.0], [2.0, 3.0]]),
-        (1, 4): np.array([[1.0, 2.0], [1.0, 1.0]]),
-        (0, 1, 3, 4): np.array([[1.0, 2.0], [2.0, 1.0]]),
-        (2, 5): np.array([[1.0, 1.0], [1.0, 2.0]]),
-        (6, 7): np.array([[3.0, 3.0], [1.0, 2.0]]),
-        (0, 1, 3, 4, 6, 7): np.array([[1.0, 2.0]]),
-        (0, 1, 2, 3, 4, 5): np.array([[1.0, 3.0]]),
-        (2, 5, 8): np.array([[3.0, 2.0]]),
-        (6, 7, 8): np.array([[1.0, 2.0]]),
-    }
-    last_dense_scopes = [(0, 1, 3, 4, 6, 7), (0, 1, 2, 3, 4, 5), (2, 5, 8), (6, 7, 8)]
-
-    mixing_weights: Dict[Tuple[int, ...], np.ndarray] = {
-        (0, 1, 3, 4): np.array([[1.0, 1.0], [2.0, 3.0]]),
-        (0, 1, 2, 3, 4, 5, 6, 7, 8): np.array([[2.0, 1.0]]),
-    }
-
-    categorical_layers = {
-        vids: CategoricalLayer(
-            Scope(vids),
-            num_output_units=2,
-            num_channels=1,
-            num_categories=2,
-            probs=Parameter.from_leaf(
-                TensorParameter(2, 1, 2, initializer=ConstantTensorInitializer(probs)),
-            ),
-        )
-        for vids, probs in categorical_probs.items()
-    }
-
-    scope_factorization: Dict[Tuple[int, ...], List[Tuple[Tuple[int, ...], ...]]] = {
-        (0, 1): [((0,), (1,))],
-        (3, 4): [((3,), (4,))],
-        (0, 3): [((0,), (3,))],
-        (1, 4): [((1,), (4,))],
-        (6, 7): [((6,), (7,))],
-        (2, 5): [((2,), (5,))],
-        (0, 1, 3, 4): [((0, 1), (3, 4), (0, 3), (1, 4))],
-        (0, 1, 3, 4, 6, 7): [((0, 1, 3, 4), (6, 7))],
-        (0, 1, 2, 3, 4, 5): [((0, 1, 3, 4), (2, 5))],
-        (2, 5, 8): [((2, 5), (8,))],
-        (6, 7, 8): [((6, 7), (8,))],
-        (0, 1, 2, 3, 4, 5, 6, 7, 8): [
-            ((0, 1, 3, 4, 6, 7), (2, 5, 8)),
-            ((0, 1, 2, 3, 4, 5), (6, 7, 8)),
-        ],
-    }
-
-    product_layers: Dict[Tuple[int, ...], List[HadamardLayer]] = {
-        scope: [
-            HadamardLayer(Scope(scope), num_input_units=2, arity=2)
-            for _ in range(len(decomposed_factors))
-        ]
-        for scope, decomposed_factors in scope_factorization.items()
-    }
-
-    dense_layers: Dict[Tuple[int, ...], DenseLayer] = {
-        scope: DenseLayer(
-            Scope(scope),
-            num_input_units=2,
-            num_output_units=1 if scope in last_dense_scopes else 2,
-            weight=Parameter.from_leaf(
-                TensorParameter(
-                    1 if scope in last_dense_scopes else 2,
-                    2,
-                    initializer=ConstantTensorInitializer(weight),
-                )
-            ),
-        )
-        for scope, weight in dense_weights.items()
-    }
-
-    mixing_layers: Dict[Tuple[int, ...], MixingLayer] = {
-        scope: MixingLayer(
-            Scope(scope),
-            num_units=1 if len(scope) == num_variables else 2,
-            arity=2,
-            weight=Parameter.from_leaf(
-                TensorParameter(
-                    1 if len(scope) == num_variables else 2,
-                    2,
-                    initializer=ConstantTensorInitializer(weight),
-                )
-            ),
-        )
-        for scope, weight in mixing_weights.items()
-    }

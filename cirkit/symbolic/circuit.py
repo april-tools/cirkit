@@ -24,6 +24,7 @@ from cirkit.symbolic.layers import (
     InputLayer,
     KroneckerLayer,
     Layer,
+    MixingLayer,
     ProductLayer,
     SumLayer,
 )
@@ -273,7 +274,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         *,
         input_factory: InputLayerFactory,
         sum_product: Optional[str] = None,
-        dense_weight_factory: Optional[ParameterFactory] = None,
+        weight_factory: Optional[ParameterFactory] = None,
         sum_factory: Optional[SumLayerFactory] = None,
         prod_factory: Optional[ProductLayerFactory] = None,
         mixing_factory: Optional[MixingLayerFactory] = None,
@@ -295,7 +296,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             region_graph: The region graph.
             input_factory: A factory that builds an input layer.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
-            dense_weight_factory: The factory to construct the weight of the sum-product layer abstraction.
+            weight_factory: The factory to construct the weight of the sum-product layer abstraction and mixing layers.
                 It can be None, or a parameter factory, i.e., a map from a shape to a symbolic parameter.
             sum_factory: A factory that builds a sum layer. It can be None.
             prod_factory: A factory that builds a product layer. It can be None.
@@ -313,7 +314,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         Raises:
             NotImplementedError: If an unknown 'sum_product' is given.
             ValueError: If both 'sum_product' and layer factories are specified, or none of them.
-            ValueError: If the mixing factory is required, but it was not given.
+            ValueError: If 'sum_product' is specified, but 'weight_factory' is not.
             ValueError: The given region graph is malformed.
         """
         if (sum_factory is None and prod_factory is not None) or (
@@ -344,7 +345,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                     rgn_in.scope,
                     node_to_layer[rgn_in].num_output_units,
                     num_output_units,
-                    weight_factory=dense_weight_factory,
+                    weight_factory=weight_factory,
                 )
                 for rgn_in in rgn_partitioning
             ]
@@ -368,7 +369,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             hadamard = HadamardLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
             dense = DenseLayer(
-                rgn.scope, num_in_units[0], num_output_units, weight_factory=dense_weight_factory
+                rgn.scope, num_in_units[0], num_output_units, weight_factory=weight_factory
             )
             layers.append(hadamard)
             layers.append(dense)
@@ -388,7 +389,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             kronecker = KroneckerLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
             dense = DenseLayer(
-                rgn.scope, num_in_units[0], num_output_units, weight_factory=dense_weight_factory
+                rgn.scope, num_in_units[0], num_output_units, weight_factory=weight_factory
             )
             layers.append(kronecker)
             layers.append(dense)
@@ -461,10 +462,6 @@ class Circuit(DiAcyclicGraph[Layer]):
                 isinstance(node, RegionNode) and len(node_inputs) > 1
             ):  # Region with multiple partitionings
                 num_units = num_sum_units if node_outputs else num_classes
-                if mixing_factory is None:
-                    raise ValueError(
-                        "A mixing layer factory must be specified to overparameterize multiple region partitionings"
-                    )
                 if sum_prod_builder_ is None:
                     sum_ins = [node_to_layer[ptn] for ptn in node_inputs]
                     mix_ins = [
@@ -480,7 +477,12 @@ class Circuit(DiAcyclicGraph[Layer]):
                         )
                         for ptn in node_inputs
                     ]
-                mix_sl = mixing_factory(node.scope, num_units, len(mix_ins))
+                if mixing_factory is None:
+                    mix_sl = MixingLayer(
+                        node.scope, num_units, len(mix_ins), weight_factory=weight_factory
+                    )
+                else:
+                    mix_sl = mixing_factory(node.scope, num_units, len(mix_ins))
                 layers.append(mix_sl)
                 in_layers[mix_sl] = mix_ins
                 node_to_layer[node] = mix_sl
@@ -496,20 +498,6 @@ class Circuit(DiAcyclicGraph[Layer]):
         return cls(region_graph.scope, num_channels, layers, in_layers, outputs)
 
 
-def pipeline_topological_ordering(roots: Sequence[Circuit]) -> Iterator[Circuit]:
-    def operands_fn(sc: Circuit) -> Tuple[Circuit, ...]:
-        return () if sc.operation is None else sc.operation.operands
-
-    return topological_ordering(bfs(roots, incomings_fn=operands_fn), incomings_fn=operands_fn)
-
-
-def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:
-    scope_factorizations: Dict[Scope, Set[Tuple[Scope, ...]]] = defaultdict(set)
-    for sl in sc.product_layers:
-        scope_factorizations[sl.scope].add(tuple(sorted(sli.scope for sli in sc.layer_inputs(sl))))
-    return scope_factorizations
-
-
 def is_compatible(sc1: Circuit, sc2: Circuit) -> bool:
     if not sc1.is_smooth:
         return False
@@ -522,6 +510,20 @@ def is_compatible(sc1: Circuit, sc2: Circuit) -> bool:
     sfs1 = _scope_factorizations(sc1)
     sfs2 = _scope_factorizations(sc2)
     return _are_compatible(sfs1, sfs2)
+
+
+def pipeline_topological_ordering(roots: Sequence[Circuit]) -> Iterator[Circuit]:
+    def operands_fn(sc: Circuit) -> Tuple[Circuit, ...]:
+        return () if sc.operation is None else sc.operation.operands
+
+    return topological_ordering(bfs(roots, incomings_fn=operands_fn), incomings_fn=operands_fn)
+
+
+def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:
+    scope_factorizations: Dict[Scope, Set[Tuple[Scope, ...]]] = defaultdict(set)
+    for sl in sc.product_layers:
+        scope_factorizations[sl.scope].add(tuple(sorted(sli.scope for sli in sc.layer_inputs(sl))))
+    return scope_factorizations
 
 
 def _are_compatible(

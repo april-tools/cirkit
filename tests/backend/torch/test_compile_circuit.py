@@ -9,7 +9,7 @@ from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 from tests.floats import isclose
-from tests.symbolic.test_utils import build_monotonic_structured_categorical_pc
+from tests.symbolic.test_utils import build_monotonic_structured_categorical_cpt_pc
 
 
 def check_ground_truth(
@@ -47,7 +47,7 @@ def check_ground_truth(
 )
 def test_compile_monotonic_structured_categorical_pc(fold: bool, optimize: bool, semiring):
     compiler = TorchCompiler(fold=fold, optimize=optimize, semiring=semiring)
-    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_pc()
+    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc()
     int_sc = SF.integrate(sc)
     tc: TorchCircuit = compiler.compile(sc)
     int_tc: TorchConstantCircuit = compiler.compile(int_sc)
