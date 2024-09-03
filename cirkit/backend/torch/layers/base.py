@@ -94,3 +94,19 @@ class TorchLayer(AbstractTorchModule, ABC):
         Returns:
             Tensor: The output of this layer, shape (F, B, Ko).
         """
+
+    def extra_repr(self) -> str:
+        return (
+            "  ".join(
+                [
+                    f"folds: {self.num_folds}",
+                    f"arity: {self.arity}",
+                    f"input-units: {self.num_input_units}",
+                    f"output-units: {self.num_output_units}",
+                ]
+            )
+            + "\n"
+            + f"input-shape: {(self.num_folds, self.arity, -1, self.num_input_units)}"
+            + "\n"
+            + f"output-shape: {(self.num_folds, -1, self.num_output_units)}"
+        )

@@ -1,9 +1,10 @@
 from .algorithms import FullyFactorized as FullyFactorized
-from .algorithms import LinearRegionGraph as LinearRegionGraph
+from .algorithms import LinearTree as LinearTree
 from .algorithms import PoonDomingos as PoonDomingos
 from .algorithms import QuadGraph as QuadGraph
+from .algorithms import QuadTree as QuadTree
 from .algorithms import RandomBinaryTree as RandomBinaryTree
-from .region_graph import RegionGraph as RegionGraph
-from .rg_node import PartitionNode as PartitionNode
-from .rg_node import RegionNode as RegionNode
-from .rg_node import RGNode as RGNode
+from .graph import PartitionNode as PartitionNode
+from .graph import RegionGraph as RegionGraph
+from .graph import RegionGraphNode
+from .graph import RegionNode as RegionNode

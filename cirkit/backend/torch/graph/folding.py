@@ -5,17 +5,24 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.graph.address_book import AddressBookEntry, FoldIndexInfo
-from cirkit.backend.torch.graph.modules import AbstractTorchModule, TorchModule
+from cirkit.backend.torch.graph.modules import (
+    AbstractTorchModule,
+    AddressBookEntry,
+    FoldIndexInfo,
+    TorchModule,
+)
 
 
-def build_fold_index_info(
+def build_unfold_index_info(
     ordering: Iterable[TorchModule],
     *,
     outputs: Iterable[TorchModule],
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
     in_address_fn: Optional[Callable[[TorchModule], List[int]]] = None,
 ) -> FoldIndexInfo:
+    # The topological ordering of modules
+    ordering: List[TorchModule] = list(ordering)
+
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
     # (ii) a 'slice_idx' (a natural number) within the output of the folded module,
@@ -31,6 +38,10 @@ def build_fold_index_info(
     # Build the fold index information data structure, by following the topological ordering
     cur_module_id = 0
     for m in ordering:
+        if m.num_folds > 1:
+            raise ValueError(
+                f"Expected modules with fold dimension equal to one, found {m.num_folds}"
+            )
         # Retrieve the input modules
         in_modules: List[AbstractTorchModule] = incomings_fn(m)
 
@@ -53,7 +64,7 @@ def build_fold_index_info(
     # Instantiate the information on how aggregate the outputs in a single tensor
     out_fold_idx = list(map(fold_idx.get, outputs))
 
-    return FoldIndexInfo(in_fold_idx, out_fold_idx)
+    return FoldIndexInfo(ordering, in_fold_idx, out_fold_idx)
 
 
 def build_folded_graph(
@@ -131,7 +142,7 @@ def build_folded_graph(
     # Construct the sequence of folded output modules
     outputs = list(dict.fromkeys(modules[fi[0]] for fi in out_fold_idx))
 
-    return modules, in_modules, outputs, FoldIndexInfo(in_fold_idx, out_fold_idx)
+    return modules, in_modules, outputs, FoldIndexInfo(modules, in_fold_idx, out_fold_idx)
 
 
 def group_foldable_modules(
@@ -151,7 +162,11 @@ def group_foldable_modules(
 
 
 def build_address_book_stacked_entry(
-    in_fold_idx: List[List[Tuple[int, int]]], *, num_folds: Dict[int, int], output: bool = False
+    module: Optional[TorchModule],
+    in_fold_idx: List[List[Tuple[int, int]]],
+    *,
+    num_folds: Dict[int, int],
+    output: bool = False,
 ) -> AddressBookEntry:
     # Retrieve the unique fold indices that reference the module inputs
     in_module_ids = list(dict.fromkeys(idx[0] for fi in in_fold_idx for idx in fi))
@@ -172,7 +187,7 @@ def build_address_book_stacked_entry(
     if output:
         assert len(cum_fold_idx) == 1
         cum_fold_idx_t = torch.tensor(cum_fold_idx[0])
-        return AddressBookEntry([in_module_ids], [cum_fold_idx_t])
+        return AddressBookEntry(module, [in_module_ids], [cum_fold_idx_t])
 
     # If we are computing a non-output stacked address book entry,
     # then check if the fold index would be equivalent to an 'unsqueeze' on dimension 0.
@@ -183,11 +198,14 @@ def build_address_book_stacked_entry(
         useless_fold_idx = cum_fold_idx[0] == list(range(fold_size))
     cum_fold_idx_t = None if useless_fold_idx else torch.tensor(cum_fold_idx)
 
-    return AddressBookEntry([in_module_ids], [cum_fold_idx_t])
+    return AddressBookEntry(module, [in_module_ids], [cum_fold_idx_t])
 
 
 def build_address_book_entry(
-    in_fold_idx: List[List[Tuple[int, int]]], *, num_folds: Dict[int, int]
+    module: Optional[TorchModule],
+    in_fold_idx: List[List[Tuple[int, int]]],
+    *,
+    num_folds: Dict[int, int],
 ) -> AddressBookEntry:
     # Transpose the index information, since we will build the
     # address book information for each operand independently
@@ -216,4 +234,4 @@ def build_address_book_entry(
         cum_fold_i_idx_t = None if useless_fold_idx else torch.tensor(cum_fold_i_idx)
         cum_fold_idx_t.append(cum_fold_i_idx_t)
 
-    return AddressBookEntry(in_module_ids, cum_fold_idx_t)
+    return AddressBookEntry(module, in_module_ids, cum_fold_idx_t)
