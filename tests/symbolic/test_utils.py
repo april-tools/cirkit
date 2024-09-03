@@ -1,5 +1,5 @@
 import itertools
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 
@@ -31,14 +31,14 @@ def build_structured_monotonic_cpt_pc(
     if input_layer == "bernoulli":
         if parameterize:
             if normalized:
-                logits_factory = lambda shape: Parameter.from_leaf(
-                    TensorParameter(*shape, initializer=NormalInitializer())
-                )
-                probs_factory = None
-            else:
                 logits_factory = lambda shape: Parameter.from_unary(
                     LogSoftmaxParameter(shape),
                     TensorParameter(*shape, initializer=NormalInitializer()),
+                )
+                probs_factory = None
+            else:
+                logits_factory = lambda shape: Parameter.from_leaf(
+                    TensorParameter(*shape, initializer=NormalInitializer())
                 )
                 probs_factory = None
         else:
@@ -127,9 +127,9 @@ def build_structured_monotonic_cpt_pc(
     return circuit
 
 
-def build_monotonic_structured_categorical_cpt_pc() -> (
-    Tuple[Circuit, Dict[Tuple[int, ...], float], float]
-):
+def build_monotonic_structured_categorical_cpt_pc(
+    return_ground_truth: bool = False,
+) -> Union[Circuit, Tuple[Circuit, Dict[str, Dict[Tuple[int, ...], float]], float]]:
     # The probabilities of Bernoulli layers
     bernoulli_probs: Dict[Tuple[int, ...], np.ndarray] = {
         (0,): np.array([[[0.5, 0.5]], [[0.4, 0.6]]]),
@@ -162,6 +162,9 @@ def build_monotonic_structured_categorical_cpt_pc() -> (
         next(sl.weight.inputs).initializer = ConstantTensorInitializer(
             dense_weights[tuple(sl.scope)]
         )
+
+    if not return_ground_truth:
+        return circuit
 
     # Input: (0, 0, 0, 0, 0)
     # Outputs:
@@ -201,6 +204,25 @@ def build_monotonic_structured_categorical_cpt_pc() -> (
     #   - (0, 1, 2, 3): [0.3560 * 4 + 0.7455 * 3, 0.3560 + 0.7455] = [3.6605, 1.1015]
     #   - (0, 1, 2, 3, 4): [0.36605 * 4 + 0.88120 * 2] = 3.2266
     #
+    # Input: (1, 0, 1, 1, -1)
+    # Outputs:
+    # - Categorical layers:
+    #   - 0: [0.5, 0.6]
+    #   - 1: [0.2, 0.3]
+    #   - 2: [0.7, 0.9]
+    #   - 3: [0.5, 0.5]
+    #   - 4: [1.0, 1.0]
+    # - Product layers:
+    #   - (0, 2): [0.35, 0.54]
+    #   - (1, 3): [0.10, 0.15]
+    #   - (0, 1, 2, 3): [0.89 * 0.40, 2.13 * 0.35] = [0.3560, 0.7455]
+    #   - (0, 1, 2, 3, 4): [3.6605, 1.1015] = [3.6605, 1.1015]
+    # - Sum layers:
+    #   - (0, 2): [0.35 + 0.54, 1.05 + 1.08] = [0.89, 2.13]
+    #   - (1, 3): [0.10 + 0.30, 0.20 + 0.15] = [0.40, 0.35]
+    #   - (0, 1, 2, 3): [0.3560 * 4 + 0.7455 * 3, 0.3560 + 0.7455] = [3.6605, 1.1015]
+    #   - (0, 1, 2, 3, 4): [3.6605 * 4 + 1.1015 * 2] = 16.845
+    #
     # Partition function
     # Outputs:
     # - Categorical layers:
@@ -221,9 +243,9 @@ def build_monotonic_structured_categorical_cpt_pc() -> (
     #   - (0, 1, 2, 3, 4): [69 * 4 + 21 * 2] = 318.0
 
     # The ground truth outputs we expect and the partition function
-    gt_outputs = {
-        (0, 0, 0, 0, 0): 0.7626,
-        (1, 0, 1, 1, 0): 3.2266,
+    gt_outputs: Dict[str, Dict[Tuple[int, ...] : float]] = {
+        "evi": {(0, 0, 0, 0, 0): 0.7626, (1, 0, 1, 1, 0): 3.2266},
+        "mar": {(1, 0, 1, 1, -1): 16.845},
     }
     gt_partition_func = 318.0
     return circuit, gt_outputs, gt_partition_func

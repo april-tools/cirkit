@@ -34,6 +34,7 @@ def test_build_circuit_qg_3x3_cp():
     assert sc.is_smooth
     assert sc.is_decomposable
     assert not sc.is_structured_decomposable
+    assert not sc.is_omni_compatible
     assert len(list(sc.inputs)) == 9
     assert all(isinstance(sl, CategoricalLayer) and len(sl.scope) == 1 for sl in sc.inputs)
     assert len(list(sc.product_layers)) == 14

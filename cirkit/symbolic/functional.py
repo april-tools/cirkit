@@ -127,6 +127,9 @@ def integrate(
 def multiply(
     lhs_sc: Circuit, rhs_sc: Circuit, registry: Optional[OperatorRegistry] = None
 ) -> Circuit:
+    if lhs_sc.scope != rhs_sc.scope:
+        raise NotImplementedError("Only the product of circuits over the same scope is implemented")
+    scope = lhs_sc.scope
     if not is_compatible(lhs_sc, rhs_sc):
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
@@ -198,7 +201,7 @@ def multiply(
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
-        lhs_sc.scope | rhs_sc.scope,
+        scope,
         lhs_sc.num_channels,
         blocks,
         in_blocks,

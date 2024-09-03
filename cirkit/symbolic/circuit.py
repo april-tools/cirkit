@@ -509,6 +509,8 @@ def is_compatible(sc1: Circuit, sc2: Circuit) -> bool:
         return False
     sfs1 = _scope_factorizations(sc1)
     sfs2 = _scope_factorizations(sc2)
+    print(sfs1)
+    print(sfs2)
     return _are_compatible(sfs1, sfs2)
 
 

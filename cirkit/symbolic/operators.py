@@ -7,8 +7,6 @@ from cirkit.symbolic.layers import (
     DenseLayer,
     GaussianLayer,
     HadamardLayer,
-    IndexLayer,
-    KroneckerLayer,
     Layer,
     LayerOperation,
     LogPartitionLayer,
@@ -187,32 +185,30 @@ def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
 
 
 def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Hadamard layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
     sl = HadamardLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         arity=max(sl1.arity, sl2.arity),
     )
     return CircuitBlock.from_layer(sl)
 
 
-def multiply_kronecker_layers(sl1: KroneckerLayer, sl2: KroneckerLayer) -> CircuitBlock:
-    sl = KroneckerLayer(
-        sl1.scope | sl2.scope,
-        sl1.num_input_units * sl2.num_input_units,
-        arity=max(sl1.arity, sl2.arity),
-    )
-    # The product of kronecker layers is a kronecker layer followed by a permutation
-    idx: List[int] = []  # TODO
-    sil = IndexLayer(sl1.scope | sl2.scope, sl.num_output_units, sl.num_output_units, indices=idx)
-    return CircuitBlock.from_layer_composition(sl, sil)
-
-
 def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Dense layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = DenseLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.num_output_units * sl2.num_output_units,
         weight=weight,
@@ -221,11 +217,16 @@ def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
 
 
 def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Mixing layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = MixingLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.arity * sl2.arity,
         weight=weight,
@@ -257,7 +258,6 @@ DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
         multiply_categorical_layers,
         multiply_gaussian_layers,
         multiply_hadamard_layers,
-        multiply_kronecker_layers,
         multiply_dense_layers,
         multiply_mixing_layers,
     ],
