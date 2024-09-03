@@ -6,7 +6,7 @@ import cirkit.symbolic.functional as SF
 from cirkit.symbolic.circuit import is_compatible
 from cirkit.symbolic.layers import DenseLayer, HadamardLayer, LogPartitionLayer
 from cirkit.symbolic.parameters import ConjugateParameter, KroneckerParameter, ReferenceParameter
-from tests.symbolic.test_utils import build_structured_monotonic_cpt_pc
+from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
 
 
 @pytest.mark.parametrize(
@@ -14,7 +14,9 @@ from tests.symbolic.test_utils import build_structured_monotonic_cpt_pc
     itertools.product([1, 3], ["bernoulli", "gaussian"]),
 )
 def test_integrate_circuit(num_units: int, input_layer: str):
-    sc = build_structured_monotonic_cpt_pc(num_units=num_units, input_layer=input_layer)
+    sc = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer
+    )
     int_sc = SF.integrate(sc)
     assert int_sc.is_smooth
     assert int_sc.is_decomposable
@@ -32,8 +34,12 @@ def test_integrate_circuit(num_units: int, input_layer: str):
     itertools.product([1, 3], ["bernoulli", "gaussian"]),
 )
 def test_multiply_circuits(num_units: int, input_layer: str):
-    sc1 = build_structured_monotonic_cpt_pc(num_units=num_units, input_layer=input_layer)
-    sc2 = build_structured_monotonic_cpt_pc(num_units=num_units * 2 + 1, input_layer=input_layer)
+    sc1 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer
+    )
+    sc2 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units * 2 + 1, input_layer=input_layer
+    )
     prod_num_units = num_units * (num_units * 2 + 1)
     sc = SF.multiply(sc1, sc2)
     assert is_compatible(sc1, sc) and is_compatible(sc, sc1)
@@ -61,8 +67,12 @@ def test_multiply_circuits(num_units: int, input_layer: str):
     itertools.product([1, 3], ["bernoulli", "gaussian"]),
 )
 def test_multiply_integrate_circuits(num_units: int, input_layer: str):
-    sc1 = build_structured_monotonic_cpt_pc(num_units=num_units, input_layer=input_layer)
-    sc2 = build_structured_monotonic_cpt_pc(num_units=num_units * 2 + 1, input_layer=input_layer)
+    sc1 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer
+    )
+    sc2 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units * 2 + 1, input_layer=input_layer
+    )
     prod_num_units = num_units * (num_units * 2 + 1)
     sc = SF.multiply(sc1, sc2)
     int_sc = SF.integrate(sc)
@@ -87,7 +97,9 @@ def test_multiply_integrate_circuits(num_units: int, input_layer: str):
     itertools.product([1, 3], ["bernoulli", "gaussian"]),
 )
 def test_conjugate_circuit(num_units: int, input_layer: str):
-    sc1 = build_structured_monotonic_cpt_pc(num_units=num_units, input_layer=input_layer)
+    sc1 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer
+    )
     sc = SF.conjugate(sc1)
     assert len(list(sc.inputs)) == len(list(sc.inputs))
     assert len(list(sc.inner_layers)) == len(list(sc.inner_layers))

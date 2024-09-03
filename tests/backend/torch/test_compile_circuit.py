@@ -2,8 +2,10 @@ import itertools
 from collections import Counter
 from typing import Dict, Tuple
 
+import numpy as np
 import pytest
 import torch
+from scipy import integrate
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
@@ -24,12 +26,13 @@ from cirkit.templates.region_graph import QuadGraph
 from cirkit.utils.scope import Scope
 from tests.floats import isclose
 from tests.symbolic.test_utils import (
+    build_monotonic_bivariate_gaussian_hadamard_dense_pc,
     build_monotonic_structured_categorical_cpt_pc,
-    build_structured_monotonic_cpt_pc,
+    build_multivariate_monotonic_structured_cpt_pc,
 )
 
 
-def check_evi_ground_truth(
+def check_discrete_ground_truth(
     tc: TorchCircuit,
     int_tc: TorchConstantCircuit,
     semiring: Semiring,
@@ -58,6 +61,28 @@ def check_evi_ground_truth(
     assert isclose(int_tc(), semiring.map_from(torch.tensor(gt_partition_func), SumProductSemiring))
 
 
+def check_continuous_ground_truth(
+    tc: TorchCircuit,
+    int_tc: TorchConstantCircuit,
+    semiring: Semiring,
+    gt_outputs: Dict[Tuple[int, ...], float],
+    gt_partition_func: float,
+):
+    for x, y in gt_outputs.items():
+        sample = torch.Tensor(x).unsqueeze(dim=0).unsqueeze(dim=-2)
+        tc_output = tc(sample)
+        assert isclose(
+            tc_output, semiring.map_from(torch.tensor(y), SumProductSemiring)
+        ), f"Input: {x}"
+
+    # Test the integral of the circuit (using a quadrature rule)
+    assert isclose(int_tc(), semiring.map_from(torch.tensor(gt_partition_func), SumProductSemiring))
+    df = lambda y, x: torch.exp(tc(torch.Tensor([[[x, y]]]))).squeeze()
+    int_a, int_b = -np.inf, np.inf
+    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b)
+    assert isclose(ig, gt_partition_func)
+
+
 def categorical_layer_factory(
     scope: Scope, num_units: int, num_channels: int, *, num_categories: int = 2
 ) -> CategoricalLayer:
@@ -77,7 +102,7 @@ def categorical_layer_factory(
 @pytest.mark.parametrize("fold,optimize", itertools.product([False, True], [False, True]))
 def test_circuit_parameters(fold: bool, optimize: bool):
     compiler = TorchCompiler(fold=fold)
-    sc = build_structured_monotonic_cpt_pc()
+    sc = build_multivariate_monotonic_structured_cpt_pc()
     tc: TorchCircuit = compiler.compile(sc)
     parameters = list(tc.parameters())
     assert len(parameters) == (4 if fold else 9)
@@ -96,7 +121,21 @@ def test_compile_monotonic_structured_categorical_pc(fold: bool, optimize: bool,
     int_sc = SF.integrate(sc)
     tc: TorchCircuit = compiler.compile(sc)
     int_tc: TorchConstantCircuit = compiler.compile(int_sc)
-    check_evi_ground_truth(tc, int_tc, compiler.semiring, gt_outputs["evi"], gt_partition_func)
+    check_discrete_ground_truth(tc, int_tc, compiler.semiring, gt_outputs["evi"], gt_partition_func)
+
+
+@pytest.mark.slow
+def test_compile_monotonic_structured_gaussian_pc():
+    compiler = TorchCompiler(fold=True, optimize=True, semiring="lse-sum")
+    sc, gt_outputs, gt_partition_func = build_monotonic_bivariate_gaussian_hadamard_dense_pc(
+        return_ground_truth=True
+    )
+    int_sc = SF.integrate(sc)
+    tc: TorchCircuit = compiler.compile(sc)
+    int_tc: TorchConstantCircuit = compiler.compile(int_sc)
+    check_continuous_ground_truth(
+        tc, int_tc, compiler.semiring, gt_outputs["evi"], gt_partition_func
+    )
 
 
 def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():

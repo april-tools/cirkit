@@ -8,7 +8,7 @@ import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from tests.floats import allclose, isclose
-from tests.symbolic.test_utils import build_structured_monotonic_cpt_pc
+from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
 
 
 @pytest.mark.parametrize(
@@ -24,7 +24,7 @@ def test_compile_product_integrate_pc_discrete(
     scs, tcs = [], []
     last_sc = None
     for i in range(num_products):
-        sci = build_structured_monotonic_cpt_pc(num_units=2 + i, normalized=normalized)
+        sci = build_multivariate_monotonic_structured_cpt_pc(num_units=2 + i, normalized=normalized)
         tci = compiler.compile(sci)
         scs.append(sci)
         tcs.append(tci)
