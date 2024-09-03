@@ -234,9 +234,8 @@ class TorchCompiler(AbstractCompiler):
         # optionally apply optimizations to it and then fold it
         cc = self._post_process_circuit(cc)
 
-        # Initialize some stuff
+        # Allocate & initialize the parameters
         cc.reset_parameters()
-        cc.initialize_address_book()
 
         # Register the compiled circuit
         self.register_compiled_circuit(sc, cc)
