@@ -1,4 +1,3 @@
-import itertools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union, cast
@@ -6,7 +5,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union, c
 import torch
 from torch import Tensor, nn
 
-from cirkit.utils.algorithms import DiAcyclicGraph, NodeType
+from cirkit.utils.algorithms import DiAcyclicGraph
 
 
 class AbstractTorchModule(nn.Module, ABC):
