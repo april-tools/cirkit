@@ -517,19 +517,17 @@ class Circuit(DiAcyclicGraph[Layer]):
             cls,
             order: Iterator[int],
             input_factory: InputLayerFactory,
-            sum_factory: SumLayerFactory,
-            prod_factory: ProductLayerFactory,
+            dense_weight_factory: Optional[ParameterFactory] = None,
             num_channels: int = 1,
             num_units: int = 1,
             num_classes: int = 1,
     ) -> "Circuit":
         """Construct a symbolic circuit mimicking an HMM of set order.
+            Product Layers assumed Hadamard Layers, and Sum Layers assumed Dense Layers.
 
         Args:
             order: The input order of variables of the HMM.
-            input_factory: A factory that builds an input layer.        
-            sum_factory: A factory that builds a sum layer. It can be None.
-            prod_factory: A factory that builds a product layer. It can be None.
+            input_factory: A factory that builds an input layer.
             num_channels: The number of channels for each variable.
             num_units: The number of sum units per sum layer.
             num_classes: The number of output classes.
@@ -540,17 +538,16 @@ class Circuit(DiAcyclicGraph[Layer]):
         Raises:
             ValueError: order must consists of consistent numbers, starting from 0.
         """
+        
         if max(order) != len(order) - 1 or min(order) != 0:
-            raise ValueError(
-                "Inconsistent 'order' input"
-            )
+            raise ValueError("Inconsistent 'order' input")
 
         layers: List[Layer] = []
         in_layers: Dict[Layer, List[Layer]] = {}
 
         input_sl = input_factory(Scope([order[0]]), num_units, num_channels)
         layers.append(input_sl)
-        sum_sl = sum_factory(Scope([order[0]]), num_units, num_units)
+        sum_sl = DenseLayer(Scope([order[0]]), num_units, num_units, weight_factory=dense_weight_factory)
         layers.append(sum_sl)
         in_layers[sum_sl] = [input_sl]
 
@@ -562,12 +559,12 @@ class Circuit(DiAcyclicGraph[Layer]):
 
             input_sl = input_factory(Scope([order[i]]), num_units, num_channels)
             layers.append(input_sl)
-            prod_sl = prod_factory(Scope(order[: (i + 1)]), num_units, 2)
+            prod_sl = HadamardLayer(Scope(order[: (i + 1)]), num_units, 2)
             layers.append(prod_sl)
             in_layers[prod_sl] = [last_dense, input_sl]
 
             num_units_out = num_units if i != num_variable - 1 else num_classes
-            sum_sl = sum_factory(Scope(order[: (i + 1)]), num_units, num_units_out)
+            sum_sl = DenseLayer(Scope(order[: (i + 1)]), num_units, num_units_out, weight_factory=dense_weight_factory)
             layers.append(sum_sl)
             in_layers[sum_sl] = [prod_sl]
 
