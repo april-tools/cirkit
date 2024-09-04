@@ -10,7 +10,14 @@ from cirkit.symbolic.initializers import (
     NormalInitializer,
     UniformInitializer,
 )
-from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, GaussianLayer, HadamardLayer, Layer
+from cirkit.symbolic.layers import (
+    CategoricalLayer,
+    DenseLayer,
+    GaussianLayer,
+    HadamardLayer,
+    Layer,
+    PolynomialLayer,
+)
 from cirkit.symbolic.parameters import (
     ExpParameter,
     LogSoftmaxParameter,
@@ -179,6 +186,23 @@ def build_multivariate_monotonic_structured_cpt_pc(
                 num_output_units=num_units,
                 num_channels=1,
                 stddev_factory=stddev_factory,
+            )
+            for vid in range(5)
+        }
+    elif input_layer == "polynomial":
+        if parameterize:
+            coeff_factory = None
+        else:
+            coeff_factory = lambda shape: Parameter.from_leaf(
+                TensorParameter(*shape, initializer=UniformInitializer())
+            )
+        input_layers = {
+            (vid,): PolynomialLayer(
+                Scope([vid]),
+                num_output_units=num_units,
+                num_channels=1,
+                degree=2,  # TODO: currently hard-coded
+                coeff_factory=coeff_factory,
             )
             for vid in range(5)
         }

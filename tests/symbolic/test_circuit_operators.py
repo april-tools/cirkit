@@ -1,11 +1,17 @@
 import itertools
+from typing import Iterable, Tuple, TypeVar
 
 import pytest
 
 import cirkit.symbolic.functional as SF
 from cirkit.symbolic.circuit import are_compatible
-from cirkit.symbolic.layers import DenseLayer, HadamardLayer, LogPartitionLayer
-from cirkit.symbolic.parameters import ConjugateParameter, KroneckerParameter, ReferenceParameter
+from cirkit.symbolic.layers import DenseLayer, HadamardLayer, LogPartitionLayer, PolynomialLayer
+from cirkit.symbolic.parameters import (
+    ConjugateParameter,
+    KroneckerParameter,
+    PolynomialDifferential,
+    ReferenceParameter,
+)
 from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
 
 
@@ -31,7 +37,7 @@ def test_integrate_circuit(num_units: int, input_layer: str):
 
 @pytest.mark.parametrize(
     "num_units,input_layer",
-    itertools.product([1, 3], ["bernoulli", "gaussian"]),
+    itertools.product([1, 3], ["bernoulli", "gaussian", "polynomial"]),
 )
 def test_multiply_circuits(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
@@ -60,6 +66,13 @@ def test_multiply_circuits(num_units: int, input_layer: str):
     assert all(isinstance(l, HadamardLayer) for l in prod_layers)
     assert all(l.num_input_units == prod_num_units for l in dense_layers if sc.layer_outputs(l))
     assert all(l.num_output_units == prod_num_units for l in dense_layers if sc.layer_outputs(l))
+    # Additional check of degree for polynomial
+    if input_layer == "polynomial":
+        for in_1, in_2, in_prod in zip(sc1.inputs, sc2.inputs, sc.inputs):
+            assert isinstance(in_1, PolynomialLayer)
+            assert isinstance(in_2, PolynomialLayer)
+            assert isinstance(in_prod, PolynomialLayer)
+            assert in_prod.degree == in_1.degree + in_2.degree
 
 
 @pytest.mark.parametrize(
@@ -94,7 +107,7 @@ def test_multiply_integrate_circuits(num_units: int, input_layer: str):
 
 @pytest.mark.parametrize(
     "num_units,input_layer",
-    itertools.product([1, 3], ["bernoulli", "gaussian"]),
+    itertools.product([1, 3], ["bernoulli", "gaussian", "polynomial"]),
 )
 def test_conjugate_circuit(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
@@ -112,3 +125,43 @@ def test_conjugate_circuit(num_units: int, input_layer: str):
     assert all(isinstance(l, HadamardLayer) for l in prod_layers)
     assert all(l.num_input_units == num_units for l in dense_layers if sc.layer_outputs(l))
     assert all(l.num_output_units == num_units for l in dense_layers if sc.layer_outputs(l))
+
+
+_T_co = TypeVar("_T_co", covariant=True)  # TODO: for _batched. move together
+
+
+# TODO: this can be made public and moved to utils, might be used elsewhere.
+# itertools.batched introduced in 3.12
+def _batched(iterable: Iterable[_T_co], n: int) -> Iterable[Tuple[_T_co, ...]]:
+    if n < 1:
+        raise ValueError("n must be at least one")
+    iterator = iter(iterable)
+    while batch := tuple(itertools.islice(iterator, n)):
+        yield batch
+
+
+@pytest.mark.parametrize("num_units", [1, 3])
+def test_differentiate_circuit(num_units: int) -> None:
+    sc = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer="polynomial"
+    )
+    diff_sc = SF.differentiate(sc)
+    assert diff_sc.is_smooth
+    assert diff_sc.is_decomposable
+    assert diff_sc.is_structured_decomposable
+    assert not diff_sc.is_omni_compatible
+    sc_inputs = list(sc.inputs)
+    diff_inputs = list(diff_sc.inputs)
+    sc_inner = list(sc.inner_layers)
+    diff_inner = list(diff_sc.inner_layers)
+    assert len(diff_inputs) == len(sc_inputs) * 2  # diff and self
+    assert all(
+        isinstance(dl.coeff.output, PolynomialDifferential)
+        and isinstance(sl.coeff.output, ReferenceParameter)
+        for dl, sl in _batched(diff_inputs, 2)
+    )
+    assert len(diff_inner) == sum(len(l.scope) for l in sc_inner) + len(sc_inner)
+    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), diff_sc.inner_layers))
+    assert dense_layers
+    assert all(isinstance(r, ReferenceParameter) for l in dense_layers for r in l.weight.inputs)
+    # TODO: should we keep more info for diff layer ordering? i.e. testing order wrt each var
