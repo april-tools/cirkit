@@ -18,6 +18,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchOuterProductParameter,
     TorchOuterSumParameter,
     TorchPointerParameter,
+    TorchPolynomialProduct,
     TorchReduceLSEParameter,
     TorchReduceProductParameter,
     TorchReduceSumParameter,
@@ -44,6 +45,7 @@ from cirkit.symbolic.parameters import (
     LogSoftmaxParameter,
     OuterProductParameter,
     OuterSumParameter,
+    PolynomialProduct,
     ReduceLSEParameter,
     ReduceProductParameter,
     ReduceSumParameter,
@@ -234,6 +236,12 @@ def compile_gaussian_product_log_partition(
     return TorchGaussianProductLogPartition(*p.in_shapes)
 
 
+def compile_polynomial_product(
+    compiler: "TorchCompiler", p: PolynomialProduct
+) -> TorchPolynomialProduct:
+    return TorchPolynomialProduct(*p.in_shapes)
+
+
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
@@ -259,4 +267,5 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     GaussianProductMean: compile_gaussian_product_mean,
     GaussianProductStddev: compile_gaussian_product_stddev,
     GaussianProductLogPartition: compile_gaussian_product_log_partition,
+    PolynomialProduct: compile_polynomial_product,
 }

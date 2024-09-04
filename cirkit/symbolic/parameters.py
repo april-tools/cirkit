@@ -547,3 +547,14 @@ class GaussianProductLogPartition(ParameterOp):
             self.in_shapes[0][0] * self.in_shapes[1][0],
             self.in_shapes[0][1],
         )
+
+
+class PolynomialProduct(BinaryParameterOp):
+    # Use default __init__
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0] * self.in_shapes[1][0],  # dim Ko
+            self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim deg+1
+        )

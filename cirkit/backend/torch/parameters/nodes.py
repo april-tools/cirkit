@@ -763,3 +763,37 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         sq_mahalanobis = torch.square(mean1.unsqueeze(dim=2) - mean2.unsqueeze(dim=1)) * inv_var12
         log_partition = -0.5 * (self._log_two_pi + torch.log(var12) + sq_mahalanobis)
         return log_partition.view(-1, *self.shape)  # (F, K1 * K2, C)
+
+
+class TorchPolynomialProduct(TorchBinaryParameterOp):
+    # Use default __init__
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (
+            self.in_shapes[0][0] * self.in_shapes[1][0],  # dim K
+            self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim dp1
+        )
+
+    def forward(self, coeff1: Tensor, coeff2: Tensor) -> Tensor:
+        # TODO: torch typing issue.
+        fft: Callable[..., Tensor]  # type: ignore[misc]
+        ifft: Callable[..., Tensor]  # type: ignore[misc]
+        if coeff1.is_complex() or coeff2.is_complex():
+            fft = torch.fft.fft
+            ifft = torch.fft.ifft
+        else:
+            fft = torch.fft.rfft
+            ifft = torch.fft.irfft
+
+        degp1 = coeff1.shape[-1] + coeff2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
+
+        spec1 = fft(coeff1, n=degp1, dim=-1)  # shape (F, K1, dp1).
+        spec2 = fft(coeff2, n=degp1, dim=-1)  # shape (F, K2, dp1).
+
+        # shape (F, K1, 1, dp1), (F, 1, K2, dp1) -> (F, K1, K2, dp1) -> (F, K1*K2, dp1).
+        spec = torch.flatten(
+            spec1.unsqueeze(dim=2) * spec2.unsqueeze(dim=1), start_dim=1, end_dim=2
+        )
+
+        return ifft(spec, n=degp1, dim=-1)  # shape (F, K1*K2, dp1).

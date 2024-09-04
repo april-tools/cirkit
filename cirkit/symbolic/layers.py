@@ -301,6 +301,47 @@ class GaussianLayer(InputLayer):
         return params
 
 
+class PolynomialLayer(InputLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int,
+        *,
+        degree: int,
+        coeff: Optional[Parameter] = None,
+        coeff_factory: Optional[ParameterFactory] = None,
+    ):
+        if len(scope) != 1:
+            raise ValueError("The Polynomial layer encodes a univariate distribution")
+        if num_channels != 1:
+            raise ValueError("The Polynomial layer encodes a univariate distribution")
+        super().__init__(scope, num_output_units, num_channels)
+        self.degree = degree
+        if coeff is None:
+            if coeff_factory is None:
+                coeff = Parameter.from_leaf(
+                    TensorParameter(*self._coeff_shape, initializer=NormalInitializer())
+                )
+            else:
+                coeff = coeff_factory(self._coeff_shape)
+        if coeff.shape != self._coeff_shape:
+            raise ValueError(f"Expected parameter shape {self._coeff_shape}, found {coeff.shape}")
+        self.coeff = coeff
+
+    @property
+    def _coeff_shape(self) -> Tuple[int, ...]:
+        return self.num_output_units, self.degree + 1
+
+    @property
+    def config(self) -> dict:
+        return {**super().config, "degree": self.degree}
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        return {"coeff": self.coeff}
+
+
 class LogPartitionLayer(InputLayer):
     """A symbolic layer computing a log-partition function."""
 
