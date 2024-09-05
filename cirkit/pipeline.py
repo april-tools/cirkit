@@ -112,11 +112,13 @@ class PipelineContext(AbstractContextManager):
         prod_sc = SF.multiply(lhs_sc, rhs_sc, registry=self._op_registry)
         return self.compile(prod_sc)
 
-    def differentiate(self, cc: CompiledCircuit) -> CompiledCircuit:
+    def differentiate(self, cc: CompiledCircuit, *, order: int = 1) -> CompiledCircuit:
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
+        if order <= 0:
+            raise ValueError("The order of differentiation must be positive.")
         sc = self._compiler.get_symbolic_circuit(cc)
-        diff_sc = SF.differentiate(sc, registry=self._op_registry)
+        diff_sc = SF.differentiate(sc, registry=self._op_registry, order=order)
         return self.compile(diff_sc)
 
     def conjugate(self, cc: CompiledCircuit) -> CompiledCircuit:
@@ -157,10 +159,12 @@ def multiply(
     return ctx.multiply(lhs_cc, rhs_cc)
 
 
-def differentiate(cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
+def differentiate(
+    cc: CompiledCircuit, ctx: Optional[PipelineContext] = None, *, order: int = 1
+) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
-    return ctx.differentiate(cc)
+    return ctx.differentiate(cc, order=order)
 
 
 def conjugate(cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:

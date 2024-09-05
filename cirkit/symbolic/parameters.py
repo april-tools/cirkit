@@ -558,3 +558,19 @@ class PolynomialProduct(BinaryParameterOp):
             self.in_shapes[0][0] * self.in_shapes[1][0],  # dim Ko
             self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim deg+1
         )
+
+
+class PolynomialDifferential(UnaryParameterOp):
+    def __init__(self, in_shape: Tuple[int, ...], *, order: int = 1):
+        if order <= 0:
+            raise ValueError("The order of differentiation must be positive.")
+        super().__init__(in_shape)
+        self.order = order
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        # if dp1>order, i.e., deg>=order, then diff, else const 0.
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] - self.order if self.in_shapes[0][1] > self.order else 1,
+        )

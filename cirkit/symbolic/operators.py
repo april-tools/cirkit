@@ -22,6 +22,7 @@ from cirkit.symbolic.parameters import (
     LogParameter,
     OuterSumParameter,
     Parameter,
+    PolynomialDifferential,
     PolynomialProduct,
     ReduceLSEParameter,
     ReduceSumParameter,
@@ -193,6 +194,22 @@ def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> Ci
     return CircuitBlock.from_layer(sl)
 
 
+def differentiate_polynomial_layer(
+    sl: PolynomialLayer, *, var_idx: int, ch_idx: int, order: int = 1
+) -> CircuitBlock:
+    # PolynomialLayer is constructed univariate, but we still take the 2 idx for unified interface
+    assert (var_idx, ch_idx) == (0, 0), "This should not happen"
+    if order <= 0:
+        raise ValueError("The order of differentiation must be positive.")
+    coeff = Parameter.from_unary(
+        PolynomialDifferential(sl.coeff.shape, order=order), sl.coeff.ref()
+    )
+    sl = PolynomialLayer(
+        sl.scope, sl.num_output_units, sl.num_channels, degree=coeff.shape[-1] - 1, coeff=coeff
+    )
+    return CircuitBlock.from_layer(sl)
+
+
 def conjugate_categorical_layer(sl: CategoricalLayer) -> CircuitBlock:
     logits = sl.logits.ref() if sl.logits is not None else None
     probs = sl.probs.ref() if sl.probs is not None else None
@@ -291,7 +308,7 @@ class LayerOperatorFunc(Protocol):
 
 DEFAULT_OPERATOR_RULES: Dict[LayerOperator, List[LayerOperatorFunc]] = {
     LayerOperator.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
-    LayerOperator.DIFFERENTIATION: [],
+    LayerOperator.DIFFERENTIATION: [differentiate_polynomial_layer],
     LayerOperator.MULTIPLICATION: [
         multiply_categorical_layers,
         multiply_gaussian_layers,

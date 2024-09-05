@@ -797,3 +797,33 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
         )
 
         return ifft(spec, n=degp1, dim=-1)  # shape (F, K1*K2, dp1).
+
+
+class TorchPolynomialDifferential(TorchUnaryParameterOp):
+    def __init__(self, in_shape: Tuple[int, ...], *, num_folds: int = 1, order: int = 1) -> None:
+        if order <= 0:
+            raise ValueError("The order of differentiation must be positive.")
+        super().__init__(in_shape, num_folds=num_folds)
+        self.order = order
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        # if dp1>order, i.e., deg>=order, then diff, else const 0.
+        return (
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] - self.order if self.in_shapes[0][1] > self.order else 1,
+        )
+
+    @classmethod
+    def _diff_once(cls, x: Tensor) -> Tensor:
+        degp1 = x.shape[-1]  # x shape (F, K, dp1).
+        arange = torch.arange(1, degp1).to(x)  # shape (deg,).
+        return x[..., 1:] * arange  # a_n x^n -> n a_n x^(n-1), with a_0 disappeared.
+
+    def forward(self, coeff: Tensor) -> Tensor:
+        if coeff.shape[-1] <= self.order:
+            return torch.zeros_like(coeff[..., :1])  # shape (F, K, 1).
+
+        for _ in range(self.order):
+            coeff = self._diff_once(coeff)
+        return coeff  # shape (F, K, dp1-ord).
