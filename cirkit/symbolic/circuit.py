@@ -118,8 +118,20 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
 
 
 class InputLayerFactory(Protocol):
+    """The protocol of a factory that constructs input layers."""
+
     def __call__(self, scope: Scope, num_units: int, num_channels: int) -> InputLayer:
-        ...
+        """
+        Constructs an input layer.
+
+        Args:
+            scope: The scope of the layer.
+            num_units: The number of input units composing the layers.
+            num_channels: The number of channel variables.
+
+        Returns:
+            InputLayer: The built input layer.
+        """
 
 
 class SumLayerFactory(Protocol):
