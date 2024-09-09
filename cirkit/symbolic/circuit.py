@@ -286,7 +286,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         *,
         input_factory: InputLayerFactory,
         sum_product: Optional[str] = None,
-        weight_factory: Optional[ParameterFactory] = None,
+        sum_weight_factory: Optional[ParameterFactory] = None,
         sum_factory: Optional[SumLayerFactory] = None,
         prod_factory: Optional[ProductLayerFactory] = None,
         mixing_factory: Optional[MixingLayerFactory] = None,
@@ -294,7 +294,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
-        factorize_inputs: bool = True,
+        factorize_multivariate: bool = True,
     ) -> "Circuit":
         """Construct a symbolic circuit from a region graph.
             There are two ways to use this method. The first one is to specify a sum-product layer
@@ -308,7 +308,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             region_graph: The region graph.
             input_factory: A factory that builds an input layer.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
-            weight_factory: The factory to construct the weight of the sum-product layer abstraction and mixing layers.
+            sum_weight_factory: The factory to construct the weight of the sum-product layer abstraction and mixing layers.
                 It can be None, or a parameter factory, i.e., a map from a shape to a symbolic parameter.
             sum_factory: A factory that builds a sum layer. It can be None.
             prod_factory: A factory that builds a product layer. It can be None.
@@ -318,7 +318,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
             num_classes: The number of output classes.
-            factorize_inputs: Whether to fully factorize input layers, when they depend on more than one variable.
+            factorize_multivariate: Whether to fully factorize input layers, when they depend on more than one variable.
 
         Returns:
             Circuit: A symbolic circuit.
@@ -357,7 +357,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                     rgn_in.scope,
                     node_to_layer[rgn_in].num_output_units,
                     num_output_units,
-                    weight_factory=weight_factory,
+                    weight_factory=sum_weight_factory,
                 )
                 for rgn_in in rgn_partitioning
             ]
@@ -381,7 +381,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             hadamard = HadamardLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
             dense = DenseLayer(
-                rgn.scope, num_in_units[0], num_output_units, weight_factory=weight_factory
+                rgn.scope, num_in_units[0], num_output_units, weight_factory=sum_weight_factory
             )
             layers.append(hadamard)
             layers.append(dense)
@@ -401,7 +401,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             kronecker = KroneckerLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
             dense = DenseLayer(
-                rgn.scope, num_in_units[0], num_output_units, weight_factory=weight_factory
+                rgn.scope, num_in_units[0], num_output_units, weight_factory=sum_weight_factory
             )
             layers.append(kronecker)
             layers.append(dense)
@@ -427,7 +427,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             node_inputs = region_graph.node_inputs(node)
             node_outputs = region_graph.node_outputs(node)
             if isinstance(node, RegionNode) and not node_inputs:  # Input region node
-                if factorize_inputs and len(node.scope) > 1:
+                if factorize_multivariate and len(node.scope) > 1:
                     factorized_input_sls = [
                         input_factory(Scope([sc]), num_input_units, num_channels)
                         for sc in node.scope
@@ -491,7 +491,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                     ]
                 if mixing_factory is None:
                     mix_sl = MixingLayer(
-                        node.scope, num_units, len(mix_ins), weight_factory=weight_factory
+                        node.scope, num_units, len(mix_ins), weight_factory=sum_weight_factory
                     )
                 else:
                     mix_sl = mixing_factory(node.scope, num_units, len(mix_ins))
