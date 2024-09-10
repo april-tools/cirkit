@@ -16,7 +16,7 @@ from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
+def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
     # Retrieve the number of channels
     assert len(set(sc.num_channels for sc in scs)) == 1
     num_channels = scs[0].num_channels
@@ -55,7 +55,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
         blocks,
         in_blocks,
         output_blocks,
-        operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
+        operation=CircuitOperation(operator=CircuitOperator.CONCATENATE, operands=tuple(scs)),
     )
 
 

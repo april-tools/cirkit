@@ -1,4 +1,5 @@
 import itertools
+import math
 from collections import defaultdict, deque
 from typing import Deque, Dict, List, Optional, Sequence, Tuple, Union, cast
 
@@ -11,8 +12,65 @@ from cirkit.templates.region_graph.graph import (
     RegionGraphNode,
     RegionNode,
 )
-from cirkit.templates.region_graph.utils import HyperCube, HypercubeToScope
 from cirkit.utils.scope import Scope
+
+HyperCube = Tuple[Tuple[int, ...], Tuple[int, ...]]  # Just to shorten the annotation.
+"""A hypercube represented by "top-left" and "bottom-right" coordinates (cut points)."""
+
+
+class HypercubeToScope(Dict[HyperCube, Scope]):
+    """Helper class to map sub-hypercubes to scopes with caching for variables arranged in a \
+    hypercube.
+
+    This is implemented as a dict subclass with customized __missing__, so that:
+        - If a hypercube is already queried, the corresponding scope is retrieved the dict;
+        - If it's not in the dict yet, the scope is calculated and cached to the dict.
+    """
+
+    def __init__(self, shape: Sequence[int]) -> None:
+        """Init class.
+
+        Note that this does not accept initial elements and is initialized empty.
+
+        Args:
+            shape (Sequence[int]): The shape of the whole hypercube.
+        """
+        super().__init__()
+        self.ndims = len(shape)
+        self.shape = tuple(shape)
+        # We assume it's feasible to save the whole hypercube, since it should be the whole region.
+        # ANNOTATE: Numpy has typing issues.
+        self.hypercube: NDArray[np.int64] = np.arange(math.prod(shape), dtype=np.int64).reshape(
+            shape
+        )
+
+    def __missing__(self, key: HyperCube) -> Scope:
+        """Construct the item when not exist in the dict.
+
+        Args:
+            key (HyperCube): The key that is missing from the dict, i.e., a hypercube that is \
+                visited for the first time.
+
+        Returns:
+            Scope: The value for the key, i.e., the corresponding scope.
+        """
+        point1, point2 = key  # HyperCube is from point1 to point2.
+
+        assert (
+            len(point1) == len(point2) == self.ndims
+        ), "The dimension of the HyperCube is not correct."
+        assert all(
+            0 <= x1 < x2 <= shape for x1, x2, shape in zip(point1, point2, self.shape)
+        ), "The HyperCube is empty."
+
+        # IGNORE: Numpy has typing issues.
+        return Scope(
+            self.hypercube[  # type: ignore[misc]
+                tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))
+            ]
+            .reshape(-1)
+            .tolist()
+        )
 
 
 # DISABLE: We use function name with upper case to mimic a class constructor.
@@ -26,6 +84,9 @@ def FullyFactorized(num_variables: int, *, num_repetitions: int = 1) -> RegionGr
 
     Returns:
         RegionGraph: The fully-factorized region graph.
+
+    Raises:
+        ValueError: If either the number of variables or number of reptitions are not positive.
     """
     if num_variables <= 0:
         raise ValueError("The number of variables must be positive")
@@ -49,6 +110,7 @@ def FullyFactorized(num_variables: int, *, num_repetitions: int = 1) -> RegionGr
     return RegionGraph(nodes, in_nodes, [root])
 
 
+# pylint: disable-next=invalid-name
 def LinearTree(
     num_variables: int,
     *,
@@ -57,6 +119,24 @@ def LinearTree(
     randomize: bool = False,
     seed: int = 42,
 ) -> RegionGraph:
+    """Construct a linear tree region graph, where each partitioning conditions on a single
+     variable at a time.
+
+    Args:
+        num_variables: The number of variables in the RG.
+        num_repetitions: The number of repeated linear trees. Defaults to 1.
+        ordering: The ordering of variables. If it is None, then it is assumed to be the natural
+            ordering.
+        randomize: Whether to randomize the variable ordering for each repetition.
+        seed: The seed to use in case of randomize being True.
+
+    Returns:
+        RegionGraph: The linear tree region graph.
+
+    Raises:
+        ValueError: If either the number of variables or number of reptitions are not positive.
+        ValueError: If the given variable ordering is not valid.
+    """
     if num_variables <= 0:
         raise ValueError("The number of variables must be positive")
     if num_repetitions <= 0:
@@ -96,6 +176,7 @@ def LinearTree(
     return RegionGraph(nodes, in_nodes, [root])
 
 
+# pylint: disable-next=invalid-name
 def RandomBinaryTree(
     num_variables: int, *, depth: Optional[int] = None, num_repetitions: int = 1, seed: int = 42
 ) -> RegionGraph:
@@ -111,9 +192,14 @@ def RandomBinaryTree(
         num_variables (int): The number of variables in the RG.
         depth (int): The depth of the binary tree. If None, the maximum possible depth is used.
         num_repetitions (int): The number of repetitions of binary trees (degree of root).
+        seed: The seed to initialize the random state.
 
     Returns:
-        RegionGraph: The RBT RG.
+        RegionGraph: A randomized binary tree region graph.
+
+    Raises:
+        ValueError: If either the number of variables or number of reptitions are not positive.
+        ValueError: If the given depth is either negative or greate than the maximum allowed one.
     """
     if num_variables <= 0:
         raise ValueError("The number of variables must be positive")
@@ -165,8 +251,8 @@ def RandomBinaryTree(
                 scopes.append(Scope(scope[l:r]))
 
         if len(scopes) == 1:
-            # Only one region, meaning cannot partition anymore, and we just keep the original node as
-            # the leaf.
+            # Only one region, meaning cannot partition anymore, and we just keep the original
+            # node as the leaf.
             return [Scope(scope)]
 
         return scopes
@@ -191,11 +277,37 @@ def RandomBinaryTree(
     return RegionGraph(nodes, in_nodes, outputs=[root])
 
 
+# pylint: disable-next=invalid-name
 def QuadTree(shape: Tuple[int, int], *, num_patch_splits: int = 2) -> RegionGraph:
+    """Constructs a Quad Tree region graph.
+
+    Args:
+        shape: The image shape (H, W), where H is the height and W is the width.
+        num_patch_splits: The number of splits per patitioning, it can be either 2 or 4.
+
+    Returns:
+        RegionGraph: A Quad Tree region graph.
+
+    Raises:
+        ValueError: The image shape is not valid.
+        ValueError: The number of patches to split is not valid.
+    """
     return _QuadBuilder(shape, is_tree=True, num_patch_splits=num_patch_splits)
 
 
+# pylint: disable-next=invalid-name
 def QuadGraph(shape: Tuple[int, int]) -> RegionGraph:
+    """Constructs a Quad Graph region graph.
+
+    Args:
+        shape: The image shape (H, W), where H is the height and W is the width.
+
+    Returns:
+        RegionGraph: A Quad Graph region graph.
+
+    Raises:
+        ValueError: The image shape is not valid.
+    """
     return _QuadBuilder(shape, is_tree=False)
 
 
@@ -215,9 +327,13 @@ def _QuadBuilder(
 
     Returns:
         RegionGraph: The QT RG.
+
+    Raises:
+        ValueError: The image shape is not valid.
+        ValueError: The number of patches to split is not valid.
     """
     if len(shape) != 2:
-        raise ValueError("QT only works for 2D image.")
+        raise ValueError("Quad Tree and Quad Graph region graphs only works for 2D images")
     height, width = shape
     if height <= 0 or width <= 0:
         raise ValueError("Height and width must be positive integers")
@@ -247,7 +363,7 @@ def _QuadBuilder(
 
     def merge_regions_(rgn_in: List[RegionNode]) -> RegionNode:
         """Merge 2 or 4 regions to a larger region."""
-        assert len(rgn_in) in [2, 4]
+        assert len(rgn_in) in {2, 4}
         scope = Scope.union(*tuple(rgn.scope for rgn in rgn_in))
         rgn = RegionNode(scope)
         ptn = PartitionNode(scope)
@@ -258,9 +374,9 @@ def _QuadBuilder(
         return rgn
 
     def merge_4_regions_tree_(rgn_in: List[RegionNode], *, num_patch_splits: int) -> RegionNode:
-        """Merge 4 regions to a larger region, with structured-decomposablility."""
+        # Merge 4 regions to a larger region, with structured-decomposablility
         assert len(rgn_in) == 4
-        assert num_patch_splits in [2, 4]
+        assert num_patch_splits in {2, 4}
 
         if num_patch_splits == 2:
             # Merge horizontally.
@@ -275,7 +391,7 @@ def _QuadBuilder(
         return merge_regions_(rgn_in)
 
     def merge_4_regions_dag_(rgn_in: List[RegionNode]) -> RegionNode:
-        """Merge 4 regions to a larger region, with non-structured-decomposable mixutre."""
+        # Merge 4 regions to a larger region, with non-structured-decomposable mix
         assert len(rgn_in) == 4
 
         # Merge horizontally, and then vertically.
@@ -379,7 +495,7 @@ def PoonDomingos(
     axes: Optional[Sequence[int]] = None,
     max_depth: Optional[int] = None,
 ) -> RegionGraph:
-    """Construct a RG with the Poon-Domingos structure.
+    """Constructs a region graph with the Poon-Domingos structure.
 
     See:
         Sum-Product Networks: A New Deep Architecture.
@@ -397,7 +513,7 @@ def PoonDomingos(
             Defaults to None.
 
     Returns:
-        RegionGraph: The PD RG.
+        RegionGraph: The Poon-Domingos region grpah.
     """
     if axes is None:
         axes = tuple(range(len(shape)))
@@ -439,13 +555,14 @@ def PoonDomingos(
         cut_points: Union[int, Sequence[int]],
         hypercube_to_scope: HypercubeToScope,
     ) -> List[HyperCube]:
-        """Cut a hypercube along given axis at given cut points, and add corresponding regions to RG.
+        """Cut a hypercube along given axis at given cut points, and add corresponding regions to
+         the region graph.
 
         Args:
             hypercube (HyperCube): The hypercube to cut.
             axis (int): The axis to cut along.
-            cut_points (Union[int, Sequence[int]]): The points to cut at, can be a single number for a \
-                single cut.
+            cut_points (Union[int, Sequence[int]]): The points to cut at, can be a single number
+                for a single cut.
             hypercube_to_scope (HypercubeToScope): The mapping from hypercube to scope.
 
         Returns:
