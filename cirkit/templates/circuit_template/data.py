@@ -1,5 +1,5 @@
 import functools
-from typing import Optional, Tuple
+from typing import Tuple
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.templates._factories import (
@@ -20,7 +20,6 @@ def image_data(
     sum_product_layer: str,
     num_sum_units: int,
     sum_weight_param: str,
-    sum_weight_init: Optional[str] = None,
 ) -> Circuit:
     """Constructs a symbolic circuit whose structure is tailored for image data sets.
 
@@ -45,10 +44,6 @@ def image_data(
         sum_weight_param: The method to use to parameterize the weights of sum layers. It can be
          one of the following: 'id' (identity, i.e., no parameterization), 'softmax',
          'positive-clamp' (equivalent to max(., 1e-18)).
-        sum_weight_init: The optional method to use to initialize the weights of the sum layers.
-         It can be one of the following: 'uniform' (within the interval 0-1), 'normal'
-         (with mean 0 and standard deviation 1), 'dirichlet' (with concentration parameters 1).
-         By default, it is 'normal' if sum_weight_param is 'softmax' and 'uniform' otherwise.
 
     Returns:
         Circuit: A symbolic circuit.
@@ -62,8 +57,6 @@ def image_data(
         raise ValueError(f"Unknown input layer called {input_layer}")
     if sum_weight_param not in ["id", "softmax", "positive-clamp"]:
         raise ValueError(f"Unknown sum weight parameterization called {region_graph}")
-    if sum_weight_init is not None and sum_weight_init not in ["uniform", "normal", "dirichlet"]:
-        raise ValueError(f"Unknown sum weight initialization method called {sum_weight_init}")
 
     # Construct the image-tailored region graph
     rg = build_image_region_graph(region_graph, (image_shape[1], image_shape[2]))
@@ -72,8 +65,7 @@ def image_data(
     input_factory = name_to_input_layer_factory(input_layer, num_categories=256)
 
     # Get the dense and mixing layers parameterization factory
-    if sum_weight_init is None:
-        sum_weight_init = "normal" if sum_weight_param == "softmax" else "uniform"
+    sum_weight_init = "normal" if sum_weight_param == "softmax" else "uniform"
     initializer_kwargs = {"axis": -1} if sum_weight_init in {"dirichlet"} else {}
     initializer = name_to_initializer(sum_weight_init, **initializer_kwargs)
     sum_weight_factory = name_to_parameter_factory(sum_weight_param, initializer=initializer)
