@@ -7,6 +7,7 @@ from cirkit.symbolic.parameters import (
     Parameter,
     ParameterFactory,
     ScaledSigmoidParameter,
+    SoftmaxParameter,
     TensorParameter,
 )
 from cirkit.utils.scope import Scope
@@ -105,9 +106,10 @@ class CategoricalLayer(InputLayer):
                 logits = logits_factory(self.probs_logits_shape)
             elif probs_factory is not None:
                 probs = probs_factory(self.probs_logits_shape)
-            else:
-                logits = Parameter.from_leaf(
-                    TensorParameter(*self.probs_logits_shape, initializer=NormalInitializer())
+            else:  # Defaults to probs with softmax parameterization
+                probs = Parameter.from_unary(
+                    SoftmaxParameter(self.probs_logits_shape),
+                    TensorParameter(*self.probs_logits_shape, initializer=NormalInitializer()),
                 )
         if logits is not None and logits.shape != self.probs_logits_shape:
             raise ValueError(
