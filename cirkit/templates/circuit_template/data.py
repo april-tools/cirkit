@@ -12,7 +12,7 @@ from cirkit.templates._factories import (
 
 
 def image_data(
-    image_shape: Tuple[int, ...],
+    image_shape: Tuple[int, int, int],
     *,
     region_graph: str = "quad-tree-4",
     input_layer: str,
@@ -22,8 +22,7 @@ def image_data(
     sum_weight_param: str,
     sum_weight_init: Optional[str] = None,
 ) -> Circuit:
-    """
-    Constructs a symbolic circuit whose structure is tailored for image data sets.
+    """Constructs a symbolic circuit whose structure is tailored for image data sets.
 
     Args:
         image_shape: The image shape (C, H, W), where C is the number of channels, H is the height
@@ -53,6 +52,9 @@ def image_data(
 
     Returns:
         Circuit: A symbolic circuit.
+
+    Raises:
+        ValueError: If one of the arguments is not one of the specified allowed ones.
     """
     if region_graph not in ["quad-tree-2", "quad-tree-4", "quad-graph", "poon-domingos"]:
         raise ValueError(f"Unknown region graph called {region_graph}")
@@ -64,8 +66,7 @@ def image_data(
         raise ValueError(f"Unknown sum weight initialization method called {sum_weight_init}")
 
     # Construct the image-tailored region graph
-    num_channels, image_height, image_width = image_shape
-    rg = build_image_region_graph(region_graph, (image_height, image_width))
+    rg = build_image_region_graph(region_graph, (image_shape[1], image_shape[2]))
 
     # Get the input layer factory
     input_factory = name_to_input_layer_factory(input_layer, num_categories=256)
@@ -73,7 +74,7 @@ def image_data(
     # Get the dense and mixing layers parameterization factory
     if sum_weight_init is None:
         sum_weight_init = "normal" if sum_weight_param == "softmax" else "uniform"
-    initializer_kwargs = {"axis": -1} if sum_weight_init in ["dirichlet"] else {}
+    initializer_kwargs = {"axis": -1} if sum_weight_init in {"dirichlet"} else {}
     initializer = name_to_initializer(sum_weight_init, **initializer_kwargs)
     sum_weight_factory = name_to_parameter_factory(sum_weight_param, initializer=initializer)
 
@@ -87,7 +88,7 @@ def image_data(
         sum_product=sum_product_layer,
         sum_weight_factory=sum_weight_factory,
         mixing_factory=mixing_factory,
-        num_channels=num_channels,
+        num_channels=image_shape[0],
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
         num_classes=1,
