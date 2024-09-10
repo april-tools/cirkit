@@ -14,7 +14,7 @@ from cirkit.templates._factories import (
 def image_data(
     image_shape: Tuple[int, int, int],
     *,
-    region_graph: str = "quad-tree-4",
+    region_graph: str = "quad-graph",
     input_layer: str,
     num_input_units: int,
     sum_product_layer: str,
@@ -25,25 +25,25 @@ def image_data(
 
     Args:
         image_shape: The image shape (C, H, W), where C is the number of channels, H is the height
-         of the images, and W is their width.
+            of the images, and W is their width.
         region_graph: The name of the region graph to use. It can be one of the following:
-         'quad-tree-2' (the Quad-Tree with two splits per region node),
-         'quad-tree-4' (the Quad-Tree with four splits per region node),
-         'quad-graph'  (the Quad-Graph region graph),
-         'poon-domingos' (the Poon-Domingos architecture).
+            'quad-tree-2' (the Quad-Tree with two splits per region node),
+            'quad-tree-4' (the Quad-Tree with four splits per region node),
+            'quad-graph'  (the Quad-Graph region graph),
+            'poon-domingos' (the Poon-Domingos architecture).
         input_layer: The name of the input layer. It can be one of the following: 'categorical'.
         num_input_units: The number of input units per input layer.
         sum_product_layer: The name of the sum-product inner layer. It can be one of the following:
-         'cp' (the canonical decomposition layer, consisting of dense layers followed by a
-         hadamard product layer), 'cpt' (the transposed canonical decomposition layer, consisting
-         of a hadamard product layer followed by a single dense layer), 'tucker' (the Tucker
-         decomposition layer, consisting of a kronecker product layer followed by a single dense
-         layer).
+            'cp' (the canonical decomposition layer, consisting of dense layers followed by a
+            hadamard product layer), 'cpt' (the transposed canonical decomposition layer, consisting
+            of a hadamard product layer followed by a single dense layer), 'tucker' (the Tucker
+            decomposition layer, consisting of a kronecker product layer followed by a single dense
+            layer).
         num_sum_units: The number of sum units in each sum layer, i.e., either dense or mixing
-         layer.
+            layer.
         sum_weight_param: The method to use to parameterize the weights of sum layers. It can be
-         one of the following: 'id' (identity, i.e., no parameterization), 'softmax',
-         'positive-clamp' (equivalent to max(., 1e-18)).
+            one of the following: 'id' (identity, i.e., no parameterization), 'softmax',
+            'positive-clamp' (equivalent to max(., 1e-18)).
 
     Returns:
         Circuit: A symbolic circuit.
