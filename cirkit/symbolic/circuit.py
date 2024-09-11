@@ -18,6 +18,7 @@ from typing import (
     cast,
 )
 
+from cirkit.symbolic.initializers import ConstantInitializer
 from cirkit.symbolic.layers import (
     DenseLayer,
     HadamardLayer,
@@ -28,7 +29,7 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import ParameterFactory
+from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
 from cirkit.utils.algorithms import DiAcyclicGraph, RootedDiAcyclicGraph, bfs, topological_ordering
 from cirkit.utils.scope import Scope
@@ -518,9 +519,12 @@ class Circuit(DiAcyclicGraph[Layer]):
                 to a symbolic parameter.
             sum_factory: A factory that builds a sum layer. It can be None.
             prod_factory: A factory that builds a product layer. It can be None.
-            mixing_factory: A factory that builds a mixing layer. It can be None if the given
-                region graph does not have any region node being decomposed into more than one
-                partitioning.
+            mixing_factory: A factory that builds a mixing layer, i.e., a layer used to parameterize
+                a region node that is decomposed into more than one partitioning. If it is None,
+                then it is assumed to be a factory that builds a
+                [MixingLayer][cirkit.symbolic.layers.MixingLayer] whose weight parameters are not
+                learnable and are initialized to the constant 1/H, where H is the arity of the
+                mixing layer, i.e., the number of input layers.
             num_channels: The number of channels for each variable.
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
@@ -557,6 +561,17 @@ class Circuit(DiAcyclicGraph[Layer]):
         layers: List[Layer] = []
         in_layers: Dict[Layer, List[Layer]] = {}
         node_to_layer: Dict[RegionGraphNode, Layer] = {}
+
+        def default_mixing_layer_factory(scope: Scope, num_units: int, arity: int) -> MixingLayer:
+            weight = Parameter.from_leaf(
+                TensorParameter(
+                    num_units,
+                    arity,
+                    initializer=ConstantInitializer(1.0 / arity),
+                    learnable=False,
+                )
+            )
+            return MixingLayer(scope, num_units, arity, weight=weight)
 
         def build_cp_(
             rgn: RegionNode, rgn_partitioning: List[RegionNode], num_output_units: int
@@ -620,6 +635,11 @@ class Circuit(DiAcyclicGraph[Layer]):
             node_to_layer[rgn] = dense
             return dense
 
+        # Set the mixing factory as the default one (see above), if not given
+        if mixing_factory is None:
+            mixing_factory = default_mixing_layer_factory
+
+        # Set the sum-product layer builder, if necessary
         sum_prod_builder_: Optional[Callable[[RegionNode, List[RegionNode], int], Layer]]
         if sum_product is None:
             sum_prod_builder_ = None
@@ -700,12 +720,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                         )
                         for ptn in node_inputs
                     ]
-                if mixing_factory is None:
-                    mix_sl = MixingLayer(
-                        node.scope, num_units, len(mix_ins), weight_factory=weight_factory
-                    )
-                else:
-                    mix_sl = mixing_factory(node.scope, num_units, len(mix_ins))
+                mix_sl = mixing_factory(node.scope, num_units, len(mix_ins))
                 layers.append(mix_sl)
                 in_layers[mix_sl] = mix_ins
                 node_to_layer[node] = mix_sl
