@@ -5,12 +5,12 @@ from types import TracebackType
 from typing import Dict, Iterable, Optional, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
-from cirkit.symbolic.layers import AbstractLayerOperator, Layer
+from cirkit.symbolic.layers import Layer, LayerOperator
 from cirkit.symbolic.operators import DEFAULT_OPERATOR_RULES, LayerOperatorFunc, LayerOperatorSpecs
 
 
 class OperatorNotFound(Exception):
-    def __init__(self, op: AbstractLayerOperator):
+    def __init__(self, op: LayerOperator):
         super().__init__()
         self._operator = op
 
@@ -19,7 +19,7 @@ class OperatorNotFound(Exception):
 
 
 class OperatorSignatureNotFound(Exception):
-    def __init__(self, op: AbstractLayerOperator, *signature: Type[Layer]):
+    def __init__(self, op: LayerOperator, *signature: Type[Layer]):
         super().__init__()
         self._operator = op
         self._signature = tuple(signature)
@@ -33,7 +33,7 @@ class OperatorSignatureNotFound(Exception):
 class OperatorRegistry(AbstractContextManager):
     def __init__(self):
         # The symbolic operator rule specifications, for each symbolic operator over layers
-        self._rules: Dict[AbstractLayerOperator, LayerOperatorSpecs] = defaultdict(dict)
+        self._rules: Dict[LayerOperator, LayerOperatorSpecs] = defaultdict(dict)
 
         # The token used to restore the operator registry context
         self._token: Optional[Token[OperatorRegistry]] = None
@@ -47,7 +47,7 @@ class OperatorRegistry(AbstractContextManager):
         return registry
 
     @property
-    def operators(self) -> Iterable[AbstractLayerOperator]:
+    def operators(self) -> Iterable[LayerOperator]:
         return self._rules.keys()
 
     def __enter__(self) -> "OperatorRegistry":
@@ -64,7 +64,7 @@ class OperatorRegistry(AbstractContextManager):
         self._token = None
         return None
 
-    def has_rule(self, op: AbstractLayerOperator, *signature: Type[Layer]) -> bool:
+    def has_rule(self, op: LayerOperator, *signature: Type[Layer]) -> bool:
         if op not in self._rules:
             return False
         op_rules = self._rules[op]
@@ -78,9 +78,7 @@ class OperatorRegistry(AbstractContextManager):
                 return True
         return False
 
-    def retrieve_rule(
-        self, op: AbstractLayerOperator, *signature: Type[Layer]
-    ) -> LayerOperatorFunc:
+    def retrieve_rule(self, op: LayerOperator, *signature: Type[Layer]) -> LayerOperatorFunc:
         if op not in self._rules:
             raise OperatorNotFound(op)
         op_rules = self._rules[op]
@@ -89,7 +87,7 @@ class OperatorRegistry(AbstractContextManager):
             return op_rules[signature]
         raise OperatorSignatureNotFound(op, *signature)
 
-    def add_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
+    def add_rule(self, op: LayerOperator, func: LayerOperatorFunc):
         args = func.__annotations__.copy()
         arg_names = args.keys()
         if "return" not in arg_names or not issubclass(args["return"], CircuitBlock):
