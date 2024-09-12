@@ -14,7 +14,7 @@ from cirkit.backend.compiler import (
     ParameterCompilationFunc,
 )
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import AbstractLayerOperator
+from cirkit.symbolic.layers import LayerOperator
 from cirkit.symbolic.operators import LayerOperatorFunc
 from cirkit.symbolic.registry import OperatorRegistry
 
@@ -72,7 +72,7 @@ class PipelineContext(AbstractContextManager):
     ) -> "PipelineContext":
         ...
 
-    def add_operator_rule(self, op: AbstractLayerOperator, func: LayerOperatorFunc):
+    def add_operator_rule(self, op: LayerOperator, func: LayerOperatorFunc):
         self._op_registry.add_rule(op, func)
 
     def add_layer_compilation_rule(self, func: LayerCompilationFunc):
