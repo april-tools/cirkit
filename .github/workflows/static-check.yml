@@ -37,6 +37,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev]
           bash ./benchmark/install_submodule.sh all
-      - name: Run linters
-        run: |
-          bash scripts/check.sh --verbose
+      - name: black
+        run: bash scripts/check.sh black
+      - name: isort
+        run: bash scripts/check.sh isort
+      - name: pydocstyle
+        run: bash scripts/check.sh pydocstyle
+      - name: pylint
+        run: bash scripts/check.sh pylint
+      - name: mypy
+        run: bash scripts/check.sh mypy

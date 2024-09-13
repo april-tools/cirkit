@@ -50,10 +50,10 @@ Locate youself in the repository root.
 Then, run the following for executing the linters and other static code checkers.
 
 ```shell
-bash scripts/check.sh [--verbose] [file ...]
+bash scripts/check.sh [--tool linting-tool] [file ...]
 ```
 Optionally,
-1. Use the `--verbose` flag to enable more verbose output.
+1. Specify `--tool` to select the linting tool to use. If no one is given, then all of them will be run, i.e., black, isort, pydocstyle, pylint, mypy.
 2. Add files to lint part of the repo. If none is specified then, all tracked directiories will be checked. 
 
 ### Run Unit Tests and Check the Coverage 
