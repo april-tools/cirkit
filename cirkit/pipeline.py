@@ -1,8 +1,7 @@
-import os
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 from types import TracebackType
-from typing import IO, Any, Iterable, Optional, Type, Union
+from typing import Iterable, Optional, Type
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.compiler import (
@@ -40,7 +39,7 @@ class PipelineContext(AbstractContextManager):
     def from_default_backend(cls) -> "PipelineContext":
         return PipelineContext(backend="torch", semiring="lse-sum", fold=True, optimize=True)
 
-    def __getitem__(self, sc: Circuit) -> Any:
+    def __getitem__(self, sc: Circuit) -> CompiledCircuit:
         return self._compiler.get_compiled_circuit(sc)
 
     def __enter__(self) -> "PipelineContext":
@@ -58,19 +57,6 @@ class PipelineContext(AbstractContextManager):
         _PIPELINE_CONTEXT.reset(self._token)
         self._token = None
         return ret
-
-    def save(
-        self,
-        sym_fp: Union[IO, os.PathLike, str],
-        state_fp: Optional[Union[IO, os.PathLike, str]] = None,
-    ):
-        ...
-
-    @staticmethod
-    def load(
-        sym_fp: Union[IO, os.PathLike, str], state_fp: Optional[Union[IO, os.PathLike, str]] = None
-    ) -> "PipelineContext":
-        ...
 
     def add_operator_rule(self, op: LayerOperator, func: LayerOperatorFunc):
         self._op_registry.add_rule(op, func)
@@ -99,14 +85,24 @@ class PipelineContext(AbstractContextManager):
     def get_symbolic_circuit(self, cc: CompiledCircuit) -> Circuit:
         return self._compiler.get_symbolic_circuit(cc)
 
-    def integrate(self, cc: Any, scope: Optional[Iterable[int]] = None) -> Any:
+    def concatenate(self, *cc: CompiledCircuit) -> CompiledCircuit:
+        for i, cci in enumerate(cc):
+            if not self._compiler.has_symbolic(cci):
+                raise ValueError(f"The {i}-th given compiled circuit is not known in this pipeline")
+        sc = [self._compiler.get_symbolic_circuit(cci) for cci in cc]
+        cat_sc = SF.concatenate(*sc, registry=self._op_registry)
+        return self.compile(cat_sc)
+
+    def integrate(
+        self, cc: CompiledCircuit, scope: Optional[Iterable[int]] = None
+    ) -> CompiledCircuit:
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(cc)
         int_sc = SF.integrate(sc, scope=scope, registry=self._op_registry)
         return self.compile(int_sc)
 
-    def multiply(self, lhs_cc: Any, rhs_cc: Any) -> Any:
+    def multiply(self, lhs_cc: CompiledCircuit, rhs_cc: CompiledCircuit) -> CompiledCircuit:
         if not self._compiler.has_symbolic(lhs_cc):
             raise ValueError("The given LHS compiled circuit is not known in this pipeline")
         if not self._compiler.has_symbolic(rhs_cc):
@@ -116,14 +112,14 @@ class PipelineContext(AbstractContextManager):
         prod_sc = SF.multiply(lhs_sc, rhs_sc, registry=self._op_registry)
         return self.compile(prod_sc)
 
-    def differentiate(self, cc: Any) -> Any:
+    def differentiate(self, cc: CompiledCircuit) -> CompiledCircuit:
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(cc)
         diff_sc = SF.differentiate(sc, registry=self._op_registry)
         return self.compile(diff_sc)
 
-    def conjugate(self, cc: Any) -> Any:
+    def conjugate(self, cc: CompiledCircuit) -> CompiledCircuit:
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(cc)
@@ -131,33 +127,43 @@ class PipelineContext(AbstractContextManager):
         return self.compile(conj_sc)
 
 
-def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> Any:
+def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.compile(sc)
 
 
+def concatenate(*cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
+    if ctx is None:
+        ctx = _PIPELINE_CONTEXT.get()
+    return ctx.concatenate(cc)
+
+
 def integrate(
-    cc: Any, scope: Optional[Iterable[int]] = None, ctx: Optional[PipelineContext] = None
-) -> Any:
+    cc: CompiledCircuit,
+    scope: Optional[Iterable[int]] = None,
+    ctx: Optional[PipelineContext] = None,
+) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.integrate(cc, scope=scope)
 
 
-def multiply(lhs_cc: Any, rhs_cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+def multiply(
+    lhs_cc: CompiledCircuit, rhs_cc: CompiledCircuit, ctx: Optional[PipelineContext] = None
+) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.multiply(lhs_cc, rhs_cc)
 
 
-def differentiate(cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+def differentiate(cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.differentiate(cc)
 
 
-def conjugate(cc: Any, ctx: Optional[PipelineContext] = None) -> Any:
+def conjugate(cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.conjugate(cc)

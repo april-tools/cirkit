@@ -1,14 +1,87 @@
-from abc import abstractmethod
-from typing import Any, Dict, Optional
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional, Tuple
 
 import torch
 from torch import Tensor, distributions
 from torch.nn import functional as F
 
-from cirkit.backend.torch.layers.input.base import TorchInputLayer
+from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import LSESumSemiring, Semiring
 from cirkit.utils.scope import Scope
+
+
+class TorchInputLayer(TorchLayer, ABC):
+    """The abstract base class for input layers."""
+
+    # NOTE: We use exactly the sae interface (F, H, B, K) -> (F, B, K) for __call__ of input layers:
+    #           1. Define arity(H)=num_channels(C), reusing the H dimension.
+    #           2. Define num_input_units(K)=num_vars(D), which reuses the K dimension.
+    #       For dimension D (variables), we should parse the input in circuit according to the
+    #       scope of the corresponding region node/symbolic input layer.
+
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        *,
+        num_channels: int = 1,
+        num_folds: int = 1,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        """Init class.
+
+        Args:
+            scope (Scope): The scope the input layer is defined on.
+            num_output_units (int): The number of output units.
+            num_channels (int): The number of channels. Defaults to 1.
+            num_folds (int): The number of channels. Defaults to 1.
+        """
+        super().__init__(
+            len(scope), num_output_units, arity=num_channels, num_folds=num_folds, semiring=semiring
+        )
+        self.scope = scope
+
+    @property
+    def num_variables(self) -> int:
+        return self.num_input_units
+
+    @property
+    def num_channels(self) -> int:
+        return self.arity
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.num_variables, self.num_channels, self.num_output_units
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_folds": self.num_folds,
+        }
+
+    @property
+    def params(self) -> Dict[str, TorchParameter]:
+        return {}
+
+    def extra_repr(self) -> str:
+        return (
+            "  ".join(
+                [
+                    f"folds: {self.num_folds}",
+                    f"channels: {self.num_channels}",
+                    f"variables: {self.num_variables}",
+                    f"output-units: {self.num_output_units}",
+                ]
+            )
+            + "\n"
+            + f"input-shape: {(self.num_folds, self.arity, -1, self.num_input_units)}"
+            + "\n"
+            + f"output-shape: {(self.num_folds, -1, self.num_output_units)}"
+        )
 
 
 class TorchExpFamilyLayer(TorchInputLayer):
@@ -171,8 +244,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         *,
         num_channels: int = 1,
         num_folds: int = 1,
-        mean: Optional[TorchParameter],
-        stddev: Optional[TorchParameter],
+        mean: TorchParameter,
+        stddev: TorchParameter,
         log_partition: Optional[TorchParameter] = None,
         semiring: Optional[Semiring] = None,
     ) -> None:
@@ -229,3 +302,60 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             log_partition = self.log_partition()  # (F, K, C)
             x = x + torch.sum(log_partition, dim=-1).unsqueeze(dim=1)
         return x
+
+
+class TorchLogPartitionLayer(TorchInputLayer):
+    """The constant input layer, with no parameters."""
+
+    # We still accept any Reparameterization instance for reparam, but it will be ignored.
+    # DISABLE: It's designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        *,
+        num_channels: int = 1,
+        num_folds: int = 1,
+        value: TorchParameter,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        """Init class.
+
+        Args:
+            scope (Scope): The scope of the layer.
+            num_output_units (int): The number of output units.
+            num_channels (int): The number of channels. Defaults to 1.
+            num_folds (int): The number of channels. Defaults to 1.
+            value (Optional[Reparameterization], optional): Ignored. This layer has no parameters.
+        """
+        assert value.num_folds == num_folds
+        assert value.shape == (num_output_units,)
+        super().__init__(
+            scope,
+            num_output_units,
+            num_channels=num_channels,
+            num_folds=num_folds,
+            semiring=semiring,
+        )
+        self.value = value
+
+    @property
+    def params(self) -> Dict[str, TorchParameter]:
+        params = super().params
+        params.update(value=self.value)
+        return params
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
+
+        Args:
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
+
+        Returns:
+            Tensor: The output of this layer, shape (F, B, Ko).
+        """
+        value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
+        # (F, Ko) -> (F, B, O)
+        value = value.expand(value.shape[0], x.shape[2], value.shape[2])
+        return self.semiring.map_from(value, LSESumSemiring)
