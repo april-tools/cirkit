@@ -28,8 +28,8 @@ then
     else
         files=$(git ls-files "*.py")
     fi
-    run_linter "black" --check --verbose --diff
-    run_linter "isort" --check --verbose --diff
+    run_linter "black" --check --verbose
+    run_linter "isort" --check --verbose
     run_linter "pydocstyle" --verbose
     run_linter "pylint" --verbose
     run_linter "mypy"
@@ -57,7 +57,7 @@ else
         run_linter "pydocstyle" --verbose
     elif [ $tool == "pylint" ]
     then
-        run_linter "pylint" --fail-under 9 --verbose
+        run_linter "pylint" --verbose
     elif [ $tool == "mypy" ]
     then
         run_linter "mypy"

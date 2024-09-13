@@ -112,6 +112,7 @@ evaluation = """
     1, fatal + (5 * error + warning + refactor + convention + 0.1 * info) / statement
   )
 """  # take into account `info`
+fail-under = 9
 load-plugins = [  # as available in pylint/extensions
   "pylint.extensions.bad_builtin",
   "pylint.extensions.broad_try_clause",
