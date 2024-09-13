@@ -10,12 +10,8 @@ from scipy import integrate
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.layers import (
-    TorchCategoricalLayer,
-    TorchDenseLayer,
-    TorchHadamardLayer,
-    TorchMixingLayer,
-)
+from cirkit.backend.torch.layers import TorchDenseLayer, TorchHadamardLayer, TorchMixingLayer
+from cirkit.backend.torch.layers.input import TorchCategoricalLayer
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.circuit import Circuit
