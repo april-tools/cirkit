@@ -21,7 +21,7 @@ from torch import Tensor
 from cirkit.backend.torch.utils import csafelog
 
 Ts = TypeVarTuple("Ts")
-Semiring = TypeVar("Semiring", bound=Type["SemiringImpl"])
+SemiringT = TypeVar("SemiringT", bound=Type["SemiringImpl"])
 
 
 class SemiringImpl(ABC):
@@ -43,7 +43,7 @@ class SemiringImpl(ABC):
 
     @final
     @staticmethod
-    def register(name: str) -> Callable[[Semiring], Semiring]:
+    def register(name: str) -> Callable[[SemiringT], SemiringT]:
         """Register a concrete semiring implementation by its name.
 
         Args:
@@ -74,7 +74,7 @@ class SemiringImpl(ABC):
     @final
     @classmethod
     def register_map_from(
-        cls, other: Semiring
+        cls, other: SemiringT
     ) -> Callable[[Callable[[Tensor], Tensor]], Callable[[Tensor], Tensor]]:
         """Register a concrete semiring morphism implementation.
 
@@ -111,7 +111,7 @@ class SemiringImpl(ABC):
 
     @final
     @staticmethod
-    def from_name(name: str) -> Semiring:
+    def from_name(name: str) -> SemiringT:
         """Get a semiring by its registered name.
 
         Args:
@@ -128,7 +128,7 @@ class SemiringImpl(ABC):
 
     @final
     @classmethod
-    def map_from(cls, x: Tensor, semiring: Semiring) -> Tensor:
+    def map_from(cls, x: Tensor, semiring: SemiringT) -> Tensor:
         """Map a tensor from the given semiring to `this` semiring.
 
         Args:
@@ -283,6 +283,9 @@ class SemiringImpl(ABC):
         Returns:
             Tensor: The sum result.
         """
+
+
+Semiring = Type[SemiringImpl]
 
 
 @SemiringImpl.register("sum-product")
