@@ -2,7 +2,7 @@ import functools
 from typing import Tuple
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.templates._factories import (
+from cirkit.templates.circuit_templates._factories import (
     build_image_region_graph,
     mixing_layer_factory,
     name_to_initializer,
