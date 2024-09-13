@@ -317,7 +317,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
     @classmethod
     def from_leaf(cls, p: ParameterInput) -> "Parameter":
-        return Parameter([p], {}, [p], topologically_ordered=True)
+        return Parameter([p], {}, [p])
 
     @classmethod
     def from_sequence(
@@ -329,9 +329,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         in_nodes = dict(p.nodes_inputs)
         for i, n in enumerate(ns):
             in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.output]
-        return Parameter(
-            nodes, in_nodes, [ns[-1]], topologically_ordered=p.is_topologically_ordered
-        )
+        return Parameter(nodes, in_nodes, [ns[-1]])
 
     @classmethod
     def from_nary(cls, n: ParameterOp, *ps: Union[ParameterInput, "Parameter"]) -> "Parameter":
@@ -339,13 +337,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
         in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
         in_nodes[n] = list(p.output for p in ps)
-        topologically_ordered = all(p.is_topologically_ordered for p in ps)
-        return Parameter(
-            p_nodes,
-            in_nodes,
-            [n],
-            topologically_ordered=topologically_ordered,
-        )
+        return Parameter(p_nodes, in_nodes, [n])
 
     @classmethod
     def from_unary(cls, n: UnaryParameterOp, p: Union[ParameterInput, "Parameter"]) -> "Parameter":
@@ -380,7 +372,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         nodes, in_nodes, outputs = topologically_process_nodes(
             self.topological_ordering(), self.outputs, process_fn, incomings_fn=self.node_inputs
         )
-        return Parameter(nodes, in_nodes, outputs, topologically_ordered=True)
+        return Parameter(nodes, in_nodes, outputs)
 
 
 class ParameterFactory(Protocol):

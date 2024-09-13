@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 def isclose(
     a: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
     b: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
-    rtol: float = 1e-10,
+    rtol: float = 1e-8,
     atol: float = 1e-12,
 ) -> NDArray[np.bool_]:
     """Proxy torch.isclose/np.isclose with a different global default rtol and atol.
@@ -18,7 +18,7 @@ def isclose(
             The first to compare.
         b (Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor]): \
             The second to compare.
-        rtol (float, optional): The relative tolerance. Defaults to 1e-10.
+        rtol (float, optional): The relative tolerance. Defaults to 1e-8.
         atol (float, optional): The absolute tolerance. Defaults to 1e-12.
 
     Returns:
@@ -38,7 +38,7 @@ def isclose(
 def allclose(
     a: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
     b: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
-    rtol: float = 1e-10,
+    rtol: float = 1e-8,
     atol: float = 1e-12,
 ) -> bool:
     """Proxy torch.allclose/np.allclose with a different global default rtol and atol.
@@ -48,7 +48,7 @@ def allclose(
             The first to compare.
         b (Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor]): \
             The second to compare.
-        rtol (float, optional): The relative tolerance. Defaults to 1e-10.
+        rtol (float, optional): The relative tolerance. Defaults to 1e-8.
         atol (float, optional): The absolute tolerance. Defaults to 1e-12.
 
     Returns:

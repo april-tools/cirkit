@@ -58,6 +58,7 @@ class PatternMatcherFunc(Protocol):
         pattern: GraphOptPattern[TorchModule],
         *,
         incomings_fn: Callable[[TorchModule], List[TorchModule]],
+        outcomings_fn: Callable[[TorchModule], List[TorchModule]],
     ) -> Optional[GraphOptMatch[TorchModule]]:
         ...
 
@@ -76,6 +77,7 @@ def optimize_graph(
     patterns: Iterable[GraphOptPattern],
     *,
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], List[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
     match_optimizer_fn: MatchOptimizerFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
@@ -93,6 +95,7 @@ def optimize_graph(
         outputs,
         patterns,
         incomings_fn=incomings_fn,
+        outcomings_fn=outcomings_fn,
         pattern_matcher_fn=pattern_matcher_fn,
         strategy=strategy,
     )
@@ -169,6 +172,7 @@ def match_optimization_patterns(
     patterns: Iterable[GraphOptPattern[TorchModule]],
     *,
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], List[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
 ) -> Tuple[List[GraphOptMatch[TorchModule]], Dict[TorchModule, GraphOptMatch[TorchModule]]]:
@@ -183,7 +187,11 @@ def match_optimization_patterns(
         # Get an iterator of matches, for a given pattern
         modules = outputs if pattern.is_output() else ordering
         for match in _match_pattern_graph(
-            modules, pattern, incomings_fn=incomings_fn, pattern_matcher_fn=pattern_matcher_fn
+            modules,
+            pattern,
+            incomings_fn=incomings_fn,
+            outcomings_fn=outcomings_fn,
+            pattern_matcher_fn=pattern_matcher_fn,
         ):
             # For each module found in a match, update the map from modules to found matches
             for matched_module in match.entries:
@@ -247,10 +255,14 @@ def _match_pattern_graph(
     pattern: GraphOptPattern[TorchModule],
     *,
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], List[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
 ) -> Iterator[GraphOptMatch[TorchModule]]:
     # Tries to match a pattern by rooting it in all the modules of the computational graph
     optional_matches = map(
-        lambda m: pattern_matcher_fn(m, pattern, incomings_fn=incomings_fn), modules
+        lambda m: pattern_matcher_fn(
+            m, pattern, incomings_fn=incomings_fn, outcomings_fn=outcomings_fn
+        ),
+        modules,
     )
     return filter(lambda match: match is not None, optional_matches)

@@ -236,6 +236,8 @@ class HadamardLayer(ProductLayer):
     """The Symbolic Hadamard product layer."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
+        if arity < 2:
+            raise ValueError("The arity should be at least 2")
         super().__init__(
             scope, num_input_units, HadamardLayer.num_prod_units(num_input_units), arity=arity
         )
@@ -339,26 +341,3 @@ class MixingLayer(SumLayer):
     @property
     def params(self) -> Dict[str, Parameter]:
         return dict(weight=self.weight)
-
-
-class IndexLayer(SumLayer):
-    def __init__(
-        self,
-        scope: Scope,
-        num_input_units: int,
-        num_output_units: int,
-        indices: List[int],
-    ):
-        assert num_output_units == len(indices)
-        assert 0 <= min(indices) and max(indices) < num_input_units
-        super().__init__(scope, num_input_units, num_output_units, arity=1)
-        self.indices = indices
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "scope": self.scope,
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "indices": self.indices,
-        }

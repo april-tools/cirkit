@@ -62,3 +62,19 @@ class TorchInputLayer(TorchLayer, ABC):
     @property
     def params(self) -> Dict[str, TorchParameter]:
         return {}
+
+    def extra_repr(self) -> str:
+        return (
+            "  ".join(
+                [
+                    f"folds: {self.num_folds}",
+                    f"channels: {self.num_channels}",
+                    f"variables: {self.num_variables}",
+                    f"output-units: {self.num_output_units}",
+                ]
+            )
+            + "\n"
+            + f"input-shape: {(self.num_folds, self.arity, -1, self.num_input_units)}"
+            + "\n"
+            + f"output-shape: {(self.num_folds, -1, self.num_output_units)}"
+        )

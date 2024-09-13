@@ -9,6 +9,7 @@ from cirkit.symbolic.circuit import (
     CircuitOperation,
     CircuitOperator,
     StructuralPropertyError,
+    is_compatible,
 )
 from cirkit.symbolic.layers import InputLayer, Layer, LayerOperation, ProductLayer, SumLayer
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
@@ -55,7 +56,6 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
         in_blocks,
         output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
-        topologically_ordered=True,
     )
 
 
@@ -121,14 +121,16 @@ def integrate(
             operands=(sc,),
             metadata=dict(scope=scope),
         ),
-        topologically_ordered=True,
     )
 
 
 def multiply(
     lhs_sc: Circuit, rhs_sc: Circuit, registry: Optional[OperatorRegistry] = None
 ) -> Circuit:
-    if not lhs_sc.is_compatible(rhs_sc):
+    if lhs_sc.scope != rhs_sc.scope:
+        raise NotImplementedError("Only the product of circuits over the same scope is implemented")
+    scope = lhs_sc.scope
+    if not is_compatible(lhs_sc, rhs_sc):
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
@@ -199,7 +201,7 @@ def multiply(
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
-        lhs_sc.scope | rhs_sc.scope,
+        scope,
         lhs_sc.num_channels,
         blocks,
         in_blocks,
@@ -207,7 +209,6 @@ def multiply(
         operation=CircuitOperation(
             operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
         ),
-        topologically_ordered=True,
     )
 
 
@@ -268,5 +269,4 @@ def conjugate(
         in_blocks,
         output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.CONJUGATION, operands=(sc,)),
-        topologically_ordered=True,
     )
