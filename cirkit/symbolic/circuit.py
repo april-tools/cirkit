@@ -626,7 +626,10 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             kronecker = KroneckerLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
             dense = DenseLayer(
-                rgn.scope, kronecker.num_output_units, num_output_units, weight_factory=weight_factory
+                rgn.scope,
+                kronecker.num_output_units,
+                num_output_units,
+                weight_factory=weight_factory,
             )
             layers.append(kronecker)
             layers.append(dense)
