@@ -38,12 +38,12 @@ jobs:
           pip install -e .[dev]
           bash ./benchmark/install_submodule.sh all
       - name: black
-        run: bash scripts/check.sh black
+        run: bash scripts/check.sh --tool black
       - name: isort
-        run: bash scripts/check.sh isort
+        run: bash scripts/check.sh --tool isort
       - name: pydocstyle
-        run: bash scripts/check.sh pydocstyle
+        run: bash scripts/check.sh --tool pydocstyle
       - name: pylint
-        run: bash scripts/check.sh pylint
+        run: bash scripts/check.sh --tool pylint
       - name: mypy
-        run: bash scripts/check.sh mypy
+        run: bash scripts/check.sh --tool mypy
