@@ -170,18 +170,3 @@ class AbstractCompiler(ABC):
     @abstractmethod
     def compile_pipeline(self, sc: Circuit) -> CompiledCircuit:
         ...
-
-    @abstractmethod
-    def save(
-        self,
-        sym_filepath: Union[IO, os.PathLike, str],
-        compiled_filepath: Union[IO, os.PathLike, str],
-    ):
-        ...
-
-    @staticmethod
-    @abstractmethod
-    def load(
-        sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]
-    ) -> "AbstractCompiler":
-        ...

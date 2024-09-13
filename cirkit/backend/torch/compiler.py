@@ -1,8 +1,7 @@
 import functools
-import os
 from collections import defaultdict
 from itertools import chain
-from typing import IO, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Callable, Dict, List, Optional, Tuple, cast
 
 from torch import Tensor
 
@@ -256,19 +255,6 @@ class TorchCompiler(AbstractCompiler):
             del cc
             cc = opt_cc
         return cc
-
-    def save(
-        self,
-        sym_filepath: Union[IO, os.PathLike, str],
-        compiled_filepath: Union[IO, os.PathLike, str],
-    ):
-        ...
-
-    @staticmethod
-    def load(
-        sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]
-    ) -> "TorchCompiler":
-        ...
 
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:

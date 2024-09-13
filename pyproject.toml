@@ -33,6 +33,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "mkdocs",
+  "mkdocs-material",
+  "mkdocstrings-python",
   "black[jupyter]~=23.0",
   "mypy==1.7.1",  # should be specific version for stable typing
   "pylint~=3.0.0",
@@ -149,10 +152,11 @@ enable= [
   "useless-suppression",
 ]
 disable = [
+  "too-many-arguments",
   "missing-module-docstring",
   "no-member",
   "fixme",
-  "duplicate-code",
+  "duplicate-code"
 ]
 per-file-ignores = [  # TODO: wait for native support in pylint
     "/tests/:missing-function-docstring,missing-return-doc",
@@ -170,8 +174,8 @@ default-docstring-type = "google"
 
 # type checking
 [tool.mypy]
-python_version = "3.9"
-mypy_path = "3rd-party-stubs"  # TODO: for old version, check deprecation for cirkit.new
+python_version = "3.8"
+mypy_path = "3rd-party-stubs"  # TODO: do we still need this?
 follow_imports = "silent"
 follow_imports_for_stubs = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous
@@ -180,7 +184,7 @@ warn_unused_configs = true
 disallow_any_unimported = true
 disallow_any_expr = true
 disallow_any_decorated = true
-disallow_any_explicit = true
+disallow_any_explicit = false
 disallow_any_generics = true
 disallow_subclassing_any = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#untyped-definitions-and-calls

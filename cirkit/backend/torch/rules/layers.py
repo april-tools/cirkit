@@ -1,14 +1,17 @@
 from typing import TYPE_CHECKING, Dict
 
 from cirkit.backend.compiler import LayerCompilationFunc, LayerCompilationSign
-from cirkit.backend.torch.layers import TorchCategoricalLayer, TorchLogPartitionLayer
 from cirkit.backend.torch.layers.inner import (
     TorchDenseLayer,
     TorchHadamardLayer,
     TorchKroneckerLayer,
     TorchMixingLayer,
 )
-from cirkit.backend.torch.layers.input.ef import TorchGaussianLayer
+from cirkit.backend.torch.layers.input import (
+    TorchCategoricalLayer,
+    TorchGaussianLayer,
+    TorchLogPartitionLayer,
+)
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,

@@ -36,110 +36,238 @@ from cirkit.utils.scope import Scope
 
 
 class StructuralPropertyError(Exception):
+    """An exception that is raised when an error regarding one circuit structural property
+    occurs."""
+
     def __init__(self, msg: str):
+        """Initializes a structural property error with a message.
+
+        Args:
+            msg: The message.
+        """
         super().__init__(msg)
 
 
-AbstractCircuitOperator = IntEnum  # TODO: switch to StrEnum (>=py3.11) or better alternative
+class CircuitOperator(IntEnum):
+    """The available symbolic operators defined over circuits."""
 
-
-class CircuitOperator(AbstractCircuitOperator):
-    """Types of Symolic operations on circuits."""
-
-    def _generate_next_value_(self, start: int, count: int, last_values: list) -> int:
-        return -(
-            count + 1
-        )  # Enumerate negative integers as the user can extend them with non-negative ones
-
-    MERGE = auto()
+    CONCATENATE = auto()
+    """The concatenation operator defined over many circuits."""
     INTEGRATION = auto()
+    """The integration operator defined over a circuit."""
     DIFFERENTIATION = auto()
+    """The differentiation operator defined over a circuit."""
     MULTIPLICATION = auto()
+    """The multiplication operator defined over two circuits."""
     CONJUGATION = auto()
+    """The conjugatation operator defined over a circuit computing a complex function."""
 
 
 @dataclass(frozen=True)
 class CircuitOperation:
-    """The Symbolic operation applied on a SymCircuit."""
+    """The symbolic operation that is applied to obtain a symbolic circuit."""
 
-    operator: AbstractCircuitOperator
+    operator: CircuitOperator
+    """The circuit operator of the operation."""
     operands: Tuple["Circuit", ...]
+    """The circuit operands of the operation."""
     metadata: Dict[str, Any] = field(default_factory=dict)
+    """Optional metadata of the operation."""
 
 
 class CircuitBlock(RootedDiAcyclicGraph[Layer]):
+    """The circuit block data structure. A circuit block is a fragment of a symbolic circuit,
+    consisting of a single root (or output) layer. A circuit block can be of only two types:
+    (1) a circuit block whose layers that do not have any inputs must all be input layers, and
+    (2) a circuit block where there is one and only one layer that does not have any other input,
+    which can be either a sum or product layer.
+    """
+
     def __init__(self, layers: List[Layer], in_layers: Dict[Layer, List[Layer]], output: Layer):
+        """Initializes a circuit block.
+
+        Args:
+            layers: The list of layers in the block.
+            in_layers: A dictionary containing the list of inputs to each layer.
+            output: The root (or output) of the circuit block.
+        """
         super().__init__(layers, in_layers, [output])
 
     def layer_inputs(self, l: Layer) -> List[Layer]:
+        """Retrieves the inputs to a layer.
+
+        Args:
+            l: The layer.
+
+        Returns:
+            List[Layer]: The list of inputs.
+        """
         return self.node_inputs(l)
 
     def layer_outputs(self, l: Layer) -> List[Layer]:
+        """Retrieves the outputs of a layer.
+
+        Args:
+            l: The layer.
+
+        Returns:
+            List[Layer]: The list of outputs.
+        """
         return self.node_outputs(l)
 
     @property
     def layers_inputs(self) -> Dict[Layer, List[Layer]]:
+        """Retrieves the dictionary containing the list of inputs to each layer.
+
+        Returns:
+            Dict[Layer, List[Layer]]:
+        """
         return self.nodes_inputs
 
     @property
     def layers_outputs(self) -> Dict[Layer, List[Layer]]:
+        """Retrieves the dictionary containing the list of outputs of each layer.
+
+        Returns:
+            Dict[Layer, List[Layer]]:
+        """
         return self.nodes_outputs
 
     @property
     def layers(self) -> List[Layer]:
+        """Retrieves the list of layers.
+
+        Returns:
+            List[layer]:
+        """
         return self.nodes
 
     @property
     def inner_layers(self) -> Iterator[Union[SumLayer, ProductLayer]]:
-        """Inner (non-input) layers in the circuit."""
+        """Retrieves an iterator over inner layers (i.e., layers that have at least one input).
+
+        Returns:
+            Iterator[Union[SumLayer, ProductLayer]]:
+        """
         return (l for l in self.layers if isinstance(l, (SumLayer, ProductLayer)))
 
     @property
     def sum_layers(self) -> Iterator[SumLayer]:
-        """Sum layers in the circuit, which are always inner layers."""
+        """Retrieves an iterator over sum layers.
+
+        Returns:
+            Iterator[SumLayer]:
+        """
         return (l for l in self.layers if isinstance(l, SumLayer))
 
     @property
     def product_layers(self) -> Iterator[ProductLayer]:
-        """Product layers in the circuit, which are always inner layers."""
+        """Retrieves an iterator over product layers.
+
+        Returns:
+            Iterator[ProductLayer]:
+        """
         return (l for l in self.layers if isinstance(l, ProductLayer))
 
     @staticmethod
-    def from_layer(sl: Layer) -> "CircuitBlock":
-        return CircuitBlock([sl], {}, sl)
+    def from_layer(l: Layer) -> "CircuitBlock":
+        """Instantiate a circuit block from a single layer.
+
+        Args:
+            l: The layer.
+
+        Returns:
+            CircuitBlock: The circuit block consisting of only one layer.
+        """
+        return CircuitBlock([l], {}, l)
 
     @staticmethod
-    def from_layer_composition(*sl: Layer) -> "CircuitBlock":
-        layers = list(sl)
+    def from_layer_composition(*ls: Layer) -> "CircuitBlock":
+        """Instantiate a circuit block from a composition of multiple layers.
+         The ordering of the composition is given by the ordering of the layers.
+
+        Args:
+            ls: A sequence of layers.
+
+        Returns:
+            CircuitBlock: The circuit block consisting of a composition of layers.
+        """
+        layers = list(ls)
         in_layers = {}
         assert len(layers) > 1, "Expected a composition of at least 2 layers"
         for i, l in enumerate(layers):
             in_layers[l] = [layers[i - 1]] if i - 1 >= 0 else []
-        return CircuitBlock(layers, in_layers, sl[-1])
+        return CircuitBlock(layers, in_layers, layers[-1])
 
 
-class InputLayerFactory(Protocol):
+class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs input layers."""
+
     def __call__(self, scope: Scope, num_units: int, num_channels: int) -> InputLayer:
-        ...
+        """Constructs an input layer.
+
+        Args:
+            scope: The scope of the layer.
+            num_units: The number of input units composing the layer.
+            num_channels: The number of channel variables.
+
+        Returns:
+            InputLayer: An input layer.
+        """
 
 
-class SumLayerFactory(Protocol):
+class SumLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs sum layers."""
+
     def __call__(self, scope: Scope, num_input_units: int, num_output_units: int) -> SumLayer:
-        ...
+        """Constructs a sum layer.
+
+        Args:
+            scope: The scope of the layer.
+            num_input_units: The number of units in each layer that is an input.
+            num_output_units: The number of sum units in the layer.
+
+        Returns:
+            SumLayer: A sum layer.
+        """
 
 
-class ProductLayerFactory(Protocol):
+class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs product layers."""
+
     def __call__(self, scope: Scope, num_input_units: int, arity: int) -> ProductLayer:
-        ...
+        """Constructs a product layer.
+
+        Args:
+            scope: The scope of the layer.
+            num_input_units: The number of units in each layer that is an input.
+            arity: The number of input layers.
+
+        Returns:
+            ProductLayer: A product layer.
+        """
 
 
-class MixingLayerFactory(Protocol):
+class MixingLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs mixing layers,
+    i.e., layers computing a linear sum over two or more input layers, and
+    that have the same number of sum units as the units in each input layer."""
+
     def __call__(self, scope: Scope, num_units: int, arity: int) -> SumLayer:
-        ...
+        """Constructs a mixing layer.
+
+        Args:
+            scope: The scope of the layer.
+            num_units: The number of units in each layer that is an input.
+            arity: The number of input layers.
+
+        Returns:
+            SumLayer: A mixing layer.
+        """
 
 
 class Circuit(DiAcyclicGraph[Layer]):
-    """The symbolic representation of a circuit."""
+    """The symbolic circuit representation."""
 
     def __init__(
         self,
@@ -151,6 +279,16 @@ class Circuit(DiAcyclicGraph[Layer]):
         *,
         operation: Optional[CircuitOperation] = None,
     ) -> None:
+        """Initializes a symbolic circuit.
+
+        Args:
+            scope: The variables scope of the circuit.
+            num_channels: The number of channels for each variable.
+            layers: The list of symbolic layers.
+            in_layers: A dictionary containing the list of inputs to each layer.
+            outputs: The output layers of the circuit.
+            operation: The optional operation the circuit has been obtained through.
+        """
         super().__init__(layers, in_layers, outputs)
         self.scope = scope
         self.num_channels = num_channels
@@ -158,51 +296,98 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     @property
     def num_variables(self) -> int:
-        return len(self.scope)
+        """Retrieves the number of variables the circuit is defined on.
+
+        Returns:
+            int:
+        """
+        return len(self.scope) * self.num_channels
 
     def layer_inputs(self, l: Layer) -> List[Layer]:
+        """Retrieves the inputs to a layer.
+
+        Args:
+            l: The layer.
+
+        Returns:
+            List[Layer]: The list of inputs.
+        """
         return self.node_inputs(l)
 
     def layer_outputs(self, l: Layer) -> List[Layer]:
+        """Retrieves the outputs of a layer.
+
+        Args:
+            l: The layer.
+
+        Returns:
+            List[Layer]: The list of outputs.
+        """
         return self.node_outputs(l)
 
     @property
     def layers_inputs(self) -> Dict[Layer, List[Layer]]:
+        """Retrieves the dictionary containing the list of inputs to each layer.
+
+        Returns:
+            Dict[Layer, List[Layer]]:
+        """
         return self.nodes_inputs
 
     @property
     def layers_outputs(self) -> Dict[Layer, List[Layer]]:
+        """Retrieves the dictionary containing the list of outputs of each layer.
+
+        Returns:
+            Dict[Layer, List[Layer]]:
+        """
         return self.nodes_outputs
 
     @property
     def layers(self) -> List[Layer]:
-        return self.nodes
+        """Retrieves the list of layers.
 
-    #######################################    Layer views    ######################################
-    # These are iterable views of the nodes in the SymC, and the topological order is guaranteed
-    # (by a stronger ordering). For efficiency, all these views are iterators (implemented as a
-    # container iter or a generator), so that they can be chained for iteration without
-    # instantiating intermediate containers.
+        Returns:
+            List[layer]:
+        """
+        return self.nodes
 
     @property
     def inner_layers(self) -> Iterator[Union[SumLayer, ProductLayer]]:
-        """Inner (non-input) layers in the circuit."""
+        """Retrieves an iterator over inner layers (i.e., non-input layers).
+
+        Returns:
+            Iterator[Union[SumLayer, ProductLayer]]:
+        """
         return (l for l in self.layers if isinstance(l, (SumLayer, ProductLayer)))
 
     @property
     def sum_layers(self) -> Iterator[SumLayer]:
-        """Sum layers in the circuit, which are always inner layers."""
+        """Retrieves an iterator over sum layers.
+
+        Returns:
+            Iterator[SumLayer]:
+        """
         return (l for l in self.layers if isinstance(l, SumLayer))
 
     @property
     def product_layers(self) -> Iterator[ProductLayer]:
-        """Product layers in the circuit, which are always inner layers."""
+        """Retrieves an iterator over product layers.
+
+        Returns:
+            Iterator[ProductLayer]:
+        """
         return (l for l in self.layers if isinstance(l, ProductLayer))
 
     ##################################### Structural properties ####################################
 
     @cached_property
     def is_smooth(self) -> bool:
+        """Check if the circuit is smooth.
+
+        Returns:
+            bool: True if the circuit is smooth and False otherwise.
+        """
         return all(
             sum_sl.scope == in_sl.scope
             for sum_sl in self.sum_layers
@@ -211,6 +396,11 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     @cached_property
     def is_decomposable(self) -> bool:
+        """Check if the circuit is decomposable.
+
+        Returns:
+            bool: True if the circuit is decomposable and False otherwise.
+        """
         return not any(
             lhs_in_sl.scope & rhs_in_sl.scope
             for prod_sl in self.product_layers
@@ -219,6 +409,11 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     @cached_property
     def is_structured_decomposable(self) -> bool:
+        """Check if the circuit is structured-decomposable.
+
+        Returns:
+            bool: True if the circuit is structured-decomposable and False otherwise.
+        """
         if not self.is_smooth:
             return False
         if not self.is_decomposable:
@@ -228,13 +423,18 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     @cached_property
     def is_omni_compatible(self) -> bool:
+        """Check if the circuit is omni-compatible.
+
+        Returns:
+            bool: True if the circuit is omni-compatible and False otherwise.
+        """
         if not self.is_smooth:
             return False
         if not self.is_decomposable:
             return False
         scope_factorizations = _scope_factorizations(self)
-        vars = Scope(range(self.num_variables))
-        return _are_compatible(scope_factorizations, {vars: {tuple(Scope([vid]) for vid in vars)}})
+        vs = Scope(range(self.num_variables))
+        return _are_compatible(scope_factorizations, {vs: {tuple(Scope([vid]) for vid in vs)}})
 
     @classmethod
     def from_operation(
@@ -246,7 +446,24 @@ class Circuit(DiAcyclicGraph[Layer]):
         output_blocks: List[CircuitBlock],
         *,
         operation: CircuitOperation,
-    ):
+    ) -> "Circuit":
+        """Constructs a circuit that resulted from an operation over other circuits.
+
+        Args:
+            scope: The variables scope the circuit is defined on.
+            num_channels: The number of channels per variable.
+            blocks: The list of circuit blocks.
+            in_blocks: A dictionary containing the list of block inputs to each circuit block.
+            output_blocks: The outputs blocks of the circuit.
+            operation: A circuit operation containing the information of the operation.
+
+        Returns:
+            Circuit: A symbolic circuit.
+
+        Raises:
+            ValueError: If there is a circuit block having more than one layer with no inputs that
+                are not input layers (i.e., they are either sum of product layers).
+        """
         # Unwrap blocks into layers (as well as their connections)
         layers = [l for b in blocks for l in b.layers]
         in_layers = defaultdict(list)
@@ -261,7 +478,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 in_layers[b_input].extend(bi.output for bi in block_ins)
             elif len(block_ins) > 0:
                 raise ValueError(
-                    f"A circuit block having multiple inputs cannot be a non-input block"
+                    "A circuit block having multiple inputs cannot be a non-input block"
                 )
             for l in b.layers:
                 in_layers[l].extend(b.layer_inputs(l))
@@ -297,8 +514,9 @@ class Circuit(DiAcyclicGraph[Layer]):
             region_graph: The region graph.
             input_factory: A factory that builds an input layer.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
-            weight_factory: The factory to construct the weight of the sum-product layer abstraction and mixing layers.
-                It can be None, or a parameter factory, i.e., a map from a shape to a symbolic parameter.
+            weight_factory: The factory to construct the weight of the sum-product layer abstraction
+                and mixing layers. It can be None, or a parameter factory, i.e., a map from a shape
+                to a symbolic parameter.
             sum_factory: A factory that builds a sum layer. It can be None.
             prod_factory: A factory that builds a product layer. It can be None.
             mixing_factory: A factory that builds a mixing layer, i.e., a layer used to parameterize
@@ -311,7 +529,8 @@ class Circuit(DiAcyclicGraph[Layer]):
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
             num_classes: The number of output classes.
-            factorize_inputs: Whether to fully factorize input layers, when they depend on more than one variable.
+            factorize_inputs: Whether to fully factorize input layers, when they depend on more
+                than one variable.
 
         Returns:
             Circuit: A symbolic circuit.
@@ -330,11 +549,13 @@ class Circuit(DiAcyclicGraph[Layer]):
             )
         if sum_product is None and (sum_factory is None or prod_factory is None):
             raise ValueError(
-                "If 'sum_product' is not given, then both 'sum_factory' and 'prod_factory' must be specified"
+                "If 'sum_product' is not given, then both 'sum_factory' and 'prod_factory'"
+                " must be specified"
             )
         if sum_product is not None and (sum_factory is not None or prod_factory is not None):
             raise ValueError(
-                "At most one between 'sum_product' and the pair 'sum_factory' and 'prod_factory' must be specified"
+                "At most one between 'sum_product' and the pair 'sum_factory' and 'prod_factory'"
+                " must be specified"
             )
 
         layers: List[Layer] = []
@@ -378,7 +599,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             rgn: RegionNode, rgn_partitioning: List[RegionNode], num_output_units: int
         ) -> DenseLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
-            num_in_units = list(set([li.num_output_units for li in layer_ins]))
+            num_in_units = list(set(li.num_output_units for li in layer_ins))
             if len(num_in_units) > 1:
                 raise ValueError(
                     "Cannot build a CP transposed layer, as the inputs would have different units"
@@ -398,14 +619,17 @@ class Circuit(DiAcyclicGraph[Layer]):
             rgn: RegionNode, rgn_partitioning: List[RegionNode], num_output_units: int
         ) -> DenseLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
-            num_in_units = list(set([li.num_output_units for li in layer_ins]))
+            num_in_units = list(set(li.num_output_units for li in layer_ins))
             if len(num_in_units) > 1:
                 raise ValueError(
                     "Cannot build a Tucker layer, as the inputs would have different units"
                 )
             kronecker = KroneckerLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
             dense = DenseLayer(
-                rgn.scope, kronecker.num_output_units, num_output_units, weight_factory=weight_factory
+                rgn.scope,
+                kronecker.num_output_units,
+                num_output_units,
+                weight_factory=weight_factory,
             )
             layers.append(kronecker)
             layers.append(dense)
@@ -459,7 +683,8 @@ class Circuit(DiAcyclicGraph[Layer]):
                 in_layers[sum_sl] = [input_sl]
                 node_to_layer[node] = sum_sl
             elif isinstance(node, PartitionNode):  # Partition node
-                # If a sum-product layer abstraction has been specified, then just skip partition nodes
+                # If a sum-product layer abstraction has been specified,
+                # then just skip partition nodes
                 if sum_prod_builder_ is not None:
                     continue
                 assert prod_factory is not None
@@ -516,19 +741,23 @@ class Circuit(DiAcyclicGraph[Layer]):
     @classmethod
     def from_hmm(
         cls,
-        order: Sequence[int],
+        ordering: Sequence[int],
         input_factory: InputLayerFactory,
-        dense_weight_factory: Optional[ParameterFactory] = None,
+        weight_factory: Optional[ParameterFactory] = None,
         num_channels: int = 1,
         num_units: int = 1,
         num_classes: int = 1,
     ) -> "Circuit":
-        """Construct a symbolic circuit mimicking an HMM of set order.
-            Product Layers assumed Hadamard Layers, and Sum Layers assumed Dense Layers.
+        """Construct a symbolic circuit mimicking a hidden markov model (HMM) of
+          a given variable ordering. Product Layers are of type
+          [HadamardLayer][cirkit.symbolic.layers.HadamardLayer], and sum layers are of type
+          [DenseLayer][cirkit.symbolic.layers.DenseLayer].
 
         Args:
-            order: The input order of variables of the HMM.
-            input_factory: A factory that builds an input layer.
+            ordering: The input order of variables of the HMM.
+            input_factory: A factory that builds input layers.
+            weight_factory: The factory to construct the weight of sum layers. It can be None,
+                or a parameter factory, i.e., a map from a shape to a symbolic parameter.
             num_channels: The number of channels for each variable.
             num_units: The number of sum units per sum layer.
             num_classes: The number of output classes.
@@ -539,47 +768,54 @@ class Circuit(DiAcyclicGraph[Layer]):
         Raises:
             ValueError: order must consists of consistent numbers, starting from 0.
         """
-
-        if max(order) != len(order) - 1 or min(order) != 0:
-            raise ValueError("Inconsistent 'order' input")
+        if max(ordering) != len(ordering) - 1 or min(ordering):
+            raise ValueError("The 'ordering' of variables is not valid")
 
         layers: List[Layer] = []
         in_layers: Dict[Layer, List[Layer]] = {}
 
-        input_sl = input_factory(Scope([order[0]]), num_units, num_channels)
+        input_sl = input_factory(Scope([ordering[0]]), num_units, num_channels)
         layers.append(input_sl)
         sum_sl = DenseLayer(
-            Scope([order[0]]), num_units, num_units, weight_factory=dense_weight_factory
+            Scope([ordering[0]]), num_units, num_units, weight_factory=weight_factory
         )
         layers.append(sum_sl)
         in_layers[sum_sl] = [input_sl]
 
-        num_variable = len(order)
-
-        # Loop over num_variables
-        for i in range(1, num_variable):
+        # Loop over the number of variables
+        for i in range(1, len(ordering)):
             last_dense = layers[-1]
 
-            input_sl = input_factory(Scope([order[i]]), num_units, num_channels)
+            input_sl = input_factory(Scope([ordering[i]]), num_units, num_channels)
             layers.append(input_sl)
-            prod_sl = HadamardLayer(Scope(order[: (i + 1)]), num_units, 2)
+            prod_sl = HadamardLayer(Scope(ordering[: (i + 1)]), num_units, 2)
             layers.append(prod_sl)
             in_layers[prod_sl] = [last_dense, input_sl]
 
-            num_units_out = num_units if i != num_variable - 1 else num_classes
+            num_units_out = num_units if i != len(ordering) - 1 else num_classes
             sum_sl = DenseLayer(
-                Scope(order[: (i + 1)]),
+                Scope(ordering[: (i + 1)]),
                 num_units,
                 num_units_out,
-                weight_factory=dense_weight_factory,
+                weight_factory=weight_factory,
             )
             layers.append(sum_sl)
             in_layers[sum_sl] = [prod_sl]
 
-        return cls(Scope(order), num_channels, layers, in_layers, [layers[-1]])
+        return cls(Scope(ordering), num_channels, layers, in_layers, [layers[-1]])
 
 
 def is_compatible(sc1: Circuit, sc2: Circuit) -> bool:
+    """Check if two symbolic circuits are compatible.
+     Note that compatibility is a commutative property of circuits.
+
+    Args:
+        sc1: The first symbolic circuit.
+        sc2: The second symbolic circuit.
+
+    Returns:
+        bool: True if the first symbolic circuit is compatible with the second one.
+    """
     if not sc1.is_smooth:
         return False
     if not sc1.is_decomposable:
@@ -594,6 +830,16 @@ def is_compatible(sc1: Circuit, sc2: Circuit) -> bool:
 
 
 def pipeline_topological_ordering(roots: Sequence[Circuit]) -> Iterator[Circuit]:
+    """Retrieves the topological ordering of circuits in a pipeline, given a sequence of
+     root (or output) symbolic circuits in a pipeline.
+
+    Args:
+        roots: The sequence of root (or output) symbolic circuits in a pipeline.
+
+    Returns:
+        Iterator[Circuit]: An iterator of the topological ordering of circuits in a pipeline.
+    """
+
     def operands_fn(sc: Circuit) -> Tuple[Circuit, ...]:
         return () if sc.operation is None else sc.operation.operands
 
@@ -601,6 +847,7 @@ def pipeline_topological_ordering(roots: Sequence[Circuit]) -> Iterator[Circuit]
 
 
 def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:
+    # For each product layer, retrieves how it factorizes its scope
     scope_factorizations: Dict[Scope, Set[Tuple[Scope, ...]]] = defaultdict(set)
     for sl in sc.product_layers:
         scope_factorizations[sl.scope].add(tuple(sorted(sli.scope for sli in sc.layer_inputs(sl))))
@@ -610,6 +857,8 @@ def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:
 def _are_compatible(
     sfs1: Dict[Scope, Set[Tuple[Scope, ...]]], sfs2: Dict[Scope, Set[Tuple[Scope, ...]]]
 ) -> bool:
+    # Check if two scope factorizations are compatible
+    # TODO: how to allow for possible product layer rearrangements?
     for scope, fs1 in sfs1.items():
         fs2 = sfs2.get(scope, None)
         if fs2 is None:

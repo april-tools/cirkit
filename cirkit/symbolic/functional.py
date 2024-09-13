@@ -11,12 +11,12 @@ from cirkit.symbolic.circuit import (
     StructuralPropertyError,
     is_compatible,
 )
-from cirkit.symbolic.layers import InputLayer, Layer, LayerOperation, ProductLayer, SumLayer
+from cirkit.symbolic.layers import InputLayer, Layer, LayerOperator, ProductLayer, SumLayer
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
+def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
     # Retrieve the number of channels
     assert len(set(sc.num_channels for sc in scs)) == 1
     num_channels = scs[0].num_channels
@@ -55,7 +55,7 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
         blocks,
         in_blocks,
         output_blocks,
-        operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
+        operation=CircuitOperation(operator=CircuitOperator.CONCATENATE, operands=tuple(scs)),
     )
 
 
@@ -92,7 +92,7 @@ def integrate(
     for sl in sc.topological_ordering():
         # Input layers get integrated over
         if isinstance(sl, InputLayer) and sl.scope & scope:
-            func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
+            func = registry.retrieve_rule(LayerOperator.INTEGRATION, type(sl))
             int_block = func(sl, scope=scope)
             blocks.append(int_block)
             layers_to_block[sl] = int_block
@@ -185,7 +185,7 @@ def multiply(
 
         # In case all the input have been multiplied, then construct the product layer
         prod_signature = type(lhs_layer), type(rhs_layer)
-        func = registry.retrieve_rule(LayerOperation.MULTIPLICATION, *prod_signature)
+        func = registry.retrieve_rule(LayerOperator.MULTIPLICATION, *prod_signature)
         prod_block = func(lhs_layer, rhs_layer)
         blocks.append(prod_block)
         # Make the connections
@@ -252,7 +252,7 @@ def conjugate(
         # We are not taking the conjugation of a non-product layer
         # Retrieve the conjugation rule from the registry and apply it
         assert isinstance(sl, (InputLayer, SumLayer))
-        func = registry.retrieve_rule(LayerOperation.CONJUGATION, type(sl))
+        func = registry.retrieve_rule(LayerOperator.CONJUGATION, type(sl))
         conj_block = func(sl)
         blocks.append(conj_block)
         layers_to_block[sl] = conj_block

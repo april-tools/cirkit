@@ -2,13 +2,12 @@ from typing import Dict, List, Protocol, Tuple, Type
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
-    AbstractLayerOperator,
     CategoricalLayer,
     DenseLayer,
     GaussianLayer,
     HadamardLayer,
     Layer,
-    LayerOperation,
+    LayerOperator,
     LogPartitionLayer,
     MixingLayer,
 )
@@ -251,17 +250,17 @@ class LayerOperatorFunc(Protocol):
         ...
 
 
-DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
-    LayerOperation.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
-    LayerOperation.DIFFERENTIATION: [],
-    LayerOperation.MULTIPLICATION: [
+DEFAULT_OPERATOR_RULES: Dict[LayerOperator, List[LayerOperatorFunc]] = {
+    LayerOperator.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
+    LayerOperator.DIFFERENTIATION: [],
+    LayerOperator.MULTIPLICATION: [
         multiply_categorical_layers,
         multiply_gaussian_layers,
         multiply_hadamard_layers,
         multiply_dense_layers,
         multiply_mixing_layers,
     ],
-    LayerOperation.CONJUGATION: [
+    LayerOperator.CONJUGATION: [
         conjugate_categorical_layer,
         conjugate_gaussian_layer,
         conjugate_dense_layer,
