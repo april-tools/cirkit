@@ -259,20 +259,12 @@ class TorchCompiler(AbstractCompiler):
 
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
-    def fold_in_address_fn(layer: TorchInputLayer) -> List[int]:
-        if layer.num_folds != 1:
-            raise ValueError(
-                f"Expected un-folded layers, but found {type(layer)} of {layer.num_folds} folds"
-            )
-        return layer.scope_idx[0].tolist()
-
     # Fold the layers in the given circuit, by following the layer-wise topological ordering
     layers, in_layers, outputs, fold_idx_info = build_folded_graph(
         cc.layerwise_topological_ordering(),
         outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
         fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
-        in_address_fn=fold_in_address_fn,
     )
 
     # Instantiate a folded circuit

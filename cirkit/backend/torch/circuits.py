@@ -18,21 +18,17 @@ from cirkit.utils.scope import Scope
 
 
 class LayerAddressBook(AddressBook):
-    def __init__(
-        self, entries: List[AddressBookEntry], *, in_graph_fn: Callable[[Tensor, Tensor], Tensor]
-    ):
+    def __init__(self, entries: List[AddressBookEntry]):
         super().__init__(entries)
-        self._in_graph_fn = in_graph_fn
 
     def lookup(
         self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Iterator[Tuple[Optional[TorchLayer], Tuple[Tensor, ...]]]:
         # Loop through the entries and yield inputs
         for entry in self._entries:
-            (in_fold_idx,) = entry.in_fold_idx
-
             # Catch the case there are some inputs coming from other modules
             if entry.in_module_ids:
+                (in_fold_idx,) = entry.in_fold_idx
                 (in_module_ids,) = entry.in_module_ids
                 if len(in_module_ids) == 1:
                     x = module_outputs[in_module_ids[0]]
@@ -43,17 +39,18 @@ class LayerAddressBook(AddressBook):
                 continue
 
             # Catch the case there are no inputs coming from other modules
-            assert in_graph is not None and in_fold_idx is not None
-            x = self._in_graph_fn(in_graph, in_fold_idx)
+            # That is, we are gathering the inputs of input layers
+            assert in_graph is not None
+            assert isinstance(entry.module, TorchInputLayer)
+            # in_graph: An input batch (assignments to variables) of shape (B, C, D)
+            # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
+            # x: (B, C, D) -> (B, C, F, D') -> (F, C, B, D')
+            x = in_graph[..., entry.module.scope_idx].permute(2, 1, 0, 3)
             yield entry.module, (x,)
 
     @classmethod
     def from_index_info(
-        cls,
-        fold_idx_info: FoldIndexInfo,
-        *,
-        incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
-        in_graph_fn: Callable[[Tensor, Tensor], Tensor],
+        cls, fold_idx_info: FoldIndexInfo, *, incomings_fn: Callable[[TorchLayer], List[TorchLayer]]
     ) -> "LayerAddressBook":
         # The address book entries being built
         entries: List[AddressBookEntry] = []
@@ -71,11 +68,10 @@ class LayerAddressBook(AddressBook):
                 entry = build_address_book_stacked_entry(
                     m, in_modules_fold_idx, num_folds=num_folds
                 )
-            # Catch the case of a folded module having the input of the network as input
             else:
-                input_idx = [[idx[1] for idx in fi] for fi in in_modules_fold_idx]
-                input_idx_t = torch.tensor(input_idx)
-                entry = AddressBookEntry(m, [], [input_idx_t])
+                # Catch the case of a folded module having the input of the network as input
+                # That is, this is the case of an input layer
+                entry = AddressBookEntry(m, [], [])
 
             num_folds[mid] = m.num_folds
             entries.append(entry)
@@ -86,7 +82,7 @@ class LayerAddressBook(AddressBook):
         )
         entries.append(entry)
 
-        return LayerAddressBook(entries, in_graph_fn=in_graph_fn)
+        return LayerAddressBook(entries)
 
 
 class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
@@ -138,32 +134,12 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         return self.nodes_outputs
 
     def _build_unfold_index_info(self) -> FoldIndexInfo:
-        def unfold_in_address_fn(layer: TorchInputLayer) -> List[int]:
-            if layer.num_folds != 1:
-                raise ValueError(
-                    f"Expected un-folded layers, but found {type(layer)} of {layer.num_folds} folds"
-                )
-            return layer.scope_idx[0].tolist()
-
         return build_unfold_index_info(
-            self.topological_ordering(),
-            outputs=self.outputs,
-            incomings_fn=self.node_inputs,
-            in_address_fn=unfold_in_address_fn,
+            self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
         )
 
     def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> LayerAddressBook:
-        def index_input(x: Tensor, idx: Tensor) -> Tensor:
-            # Index and process the input tensor, before feeding it to the input layers
-            # x: (B, C, D)
-            # idx: (F, D'), D' < D
-            return x[..., idx].permute(2, 1, 0, 3)  # (F, C, B, D')
-
-        return LayerAddressBook.from_index_info(
-            fold_idx_info,
-            incomings_fn=self.layer_inputs,
-            in_graph_fn=index_input,
-        )
+        return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
 
     def _evaluate_layers(self, x: Tensor) -> Tensor:
         # Evaluate layers on the given input
