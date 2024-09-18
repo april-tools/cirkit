@@ -13,7 +13,7 @@ from cirkit.backend.torch.graph.modules import (
     FoldIndexInfo,
     TorchDiAcyclicGraph,
 )
-from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.utils.scope import Scope
 
 
@@ -138,11 +138,18 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         return self.nodes_outputs
 
     def _build_unfold_index_info(self) -> FoldIndexInfo:
+        def unfold_in_address_fn(layer: TorchInputLayer) -> List[int]:
+            if layer.num_folds != 1:
+                raise ValueError(
+                    f"Expected un-folded layers, but found {type(layer)} of {layer.num_folds} folds"
+                )
+            return layer.scope_idx[0].tolist()
+
         return build_unfold_index_info(
             self.topological_ordering(),
             outputs=self.outputs,
             incomings_fn=self.node_inputs,
-            in_address_fn=lambda l: l.scope,
+            in_address_fn=unfold_in_address_fn,
         )
 
     def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> LayerAddressBook:

@@ -3,6 +3,7 @@ from collections import defaultdict
 from itertools import chain
 from typing import Callable, Dict, List, Optional, Tuple, cast
 
+import torch
 from torch import Tensor
 
 from cirkit.backend.compiler import (
@@ -20,7 +21,7 @@ from cirkit.backend.torch.graph.optimize import (
     optimize_graph,
 )
 from cirkit.backend.torch.initializers import stacked_initializer_
-from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.backend.torch.optimization.layers import (
     DEFAULT_LAYER_FUSE_OPT_RULES,
     DEFAULT_LAYER_SHATTER_OPT_RULES,
@@ -258,13 +259,20 @@ class TorchCompiler(AbstractCompiler):
 
 
 def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> AbstractTorchCircuit:
+    def fold_in_address_fn(layer: TorchInputLayer) -> List[int]:
+        if layer.num_folds != 1:
+            raise ValueError(
+                f"Expected un-folded layers, but found {type(layer)} of {layer.num_folds} folds"
+            )
+        return layer.scope_idx[0].tolist()
+
     # Fold the layers in the given circuit, by following the layer-wise topological ordering
     layers, in_layers, outputs, fold_idx_info = build_folded_graph(
         cc.layerwise_topological_ordering(),
         outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
         fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
-        in_address_fn=lambda l: l.scope,
+        in_address_fn=fold_in_address_fn,
     )
 
     # Instantiate a folded circuit
@@ -282,8 +290,12 @@ def _fold_layers_group(layers: List[TorchLayer], *, compiler: TorchCompiler) -> 
     # Retrieve the class of the folded layer, as well as the configuration attributes
     fold_layer_cls = type(layers[0])
     fold_layer_conf = layers[0].config
-    num_folds = len(layers)
-    fold_layer_conf.update(num_folds=num_folds)
+
+    # If we are folding input layers, then concatenate the variables scope index tensors
+    if issubclass(fold_layer_cls, TorchInputLayer):
+        fold_layer_conf.update(scope_idx=torch.cat([l.scope_idx for l in layers]))
+    else:  # We are folding sum or product layers, so simply set the number of folds
+        fold_layer_conf.update(num_folds=len(layers))
 
     # Retrieve the parameters of each layer
     layer_params: Dict[str, List[TorchParameter]] = defaultdict(list)

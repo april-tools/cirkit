@@ -8,7 +8,6 @@ from torch.nn import functional as F
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import LSESumSemiring, Semiring
-from cirkit.utils.scope import Scope
 
 
 class TorchInputLayer(TorchLayer, ABC):
@@ -22,25 +21,39 @@ class TorchInputLayer(TorchLayer, ABC):
 
     def __init__(
         self,
-        scope: Scope,
+        scope_idx: Tensor,
         num_output_units: int,
         *,
         num_channels: int = 1,
-        num_folds: int = 1,
         semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
         Args:
-            scope (Scope): The scope the input layer is defined on.
-            num_output_units (int): The number of output units.
-            num_channels (int): The number of channels. Defaults to 1.
-            num_folds (int): The number of channels. Defaults to 1.
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels. Defaults to 1.
         """
+        if len(scope_idx.shape) == 1:
+            scope_idx = scope_idx.unsqueeze(dim=0)
+        elif len(scope_idx.shape) > 2:
+            raise ValueError(f"The scope index must be a matrix, but found shape {scope_idx.shape}")
+        num_folds, num_variables = scope_idx.shape
         super().__init__(
-            len(scope), num_output_units, arity=num_channels, num_folds=num_folds, semiring=semiring
+            num_variables,
+            num_output_units,
+            arity=num_channels,
+            num_folds=num_folds,
+            semiring=semiring,
         )
-        self.scope = scope
+        self._scope_idx = scope_idx
+
+    @property
+    def scope_idx(self) -> Tensor:
+        return self._scope_idx
 
     @property
     def num_variables(self) -> int:
@@ -57,10 +70,9 @@ class TorchInputLayer(TorchLayer, ABC):
     @property
     def config(self) -> Dict[str, Any]:
         return {
-            "scope": self.scope,
+            "scope_idx": self.scope_idx,
             "num_output_units": self.num_output_units,
             "num_channels": self.num_channels,
-            "num_folds": self.num_folds,
         }
 
     @property
@@ -110,26 +122,26 @@ class TorchExpFamilyLayer(TorchInputLayer):
 
     def __init__(
         self,
-        scope: Scope,
+        scope_idx: Tensor,
         num_output_units: int,
         *,
         num_channels: int = 1,
-        num_folds: int = 1,
         semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
         Args:
-            scope (Scope): The scope the input layer is defined on.
-            num_output_units (int): The number of output units.
-            num_channels (int): The number of channels. Defaults to 1.
-            num_folds (int): The number of channels. Defaults to 1.
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels. Defaults to 1.
         """
         super().__init__(
-            scope,
+            scope_idx,
             num_output_units,
             num_channels=num_channels,
-            num_folds=num_folds,
             semiring=semiring,
         )
 
@@ -146,7 +158,8 @@ class TorchExpFamilyLayer(TorchInputLayer):
         return self.semiring.map_from(x, LSESumSemiring)
 
     def integrate(self) -> Tensor:
-        return self.log_partition()
+        log_partition = self.log_partition()
+        return self.semiring.map_from(log_partition, LSESumSemiring)
 
     @abstractmethod
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
@@ -167,11 +180,10 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     # pylint: disable-next=too-many-arguments
     def __init__(
         self,
-        scope: Scope,
+        scope_idx: Tensor,
         num_output_units: int,
         *,
         num_channels: int = 1,
-        num_folds: int = 1,
         num_categories: int = 2,
         probs: Optional[TorchParameter] = None,
         logits: Optional[TorchParameter] = None,
@@ -180,27 +192,28 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         """Init class.
 
         Args:
-            scope (Scope): The scope the input layer is defined on.
-            num_output_units (int): The number of output units.
-            num_channels (int): The number of channels.
-            num_folds (int): The number of channels. Defaults to 1.
-            num_categories (int): The number of categories for Categorical distribution. Defaults to 2.
-            logits (TorchParameter): The reparameterization for layer parameters.
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels.
+            num_categories: The number of categories for Categorical distribution. Defaults to 2.
+            logits: The reparameterization for layer parameters.
         """
-        if len(scope) != 1:
+        num_variables = scope_idx.shape[-1]
+        if num_variables != 1:
             raise ValueError("The Gaussian layer encodes a univariate distribution")
         if num_categories <= 0:
             raise ValueError(
                 "The number of categories for Categorical distribution must be positive"
             )
         super().__init__(
-            scope,
+            scope_idx,
             num_output_units,
             num_channels=num_channels,
-            num_folds=num_folds,
             semiring=semiring,
         )
-        self.num_folds = num_folds
         self.num_categories = num_categories
         if not ((logits is None) ^ (probs is None)):
             raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
@@ -262,11 +275,10 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
     def __init__(
         self,
-        scope: Scope,
+        scope_idx: Tensor,
         num_output_units: int,
         *,
         num_channels: int = 1,
-        num_folds: int = 1,
         mean: TorchParameter,
         stddev: TorchParameter,
         log_partition: Optional[TorchParameter] = None,
@@ -275,20 +287,22 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         """Init class.
 
         Args:
-            scope (Scope): The scope the input layer is defined on.
-            num_output_units (int): The number of output units.
-            num_channels (int): The number of channels. Defaults to 1.
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels. Defaults to 1.
             mean (AbstractTorchParameter): The reparameterization for layer parameters.
             stddev (AbstractTorchParameter): The reparameterization for layer parameters.
-            num_folds (int): The number of channels. Defaults to 1.
         """
-        if len(scope) != 1:
+        num_variables = scope_idx.shape[-1]
+        if num_variables != 1:
             raise ValueError("The Gaussian layer encodes a univariate distribution")
         super().__init__(
-            scope,
+            scope_idx,
             num_output_units,
             num_channels=num_channels,
-            num_folds=num_folds,
             semiring=semiring,
         )
         if not self._valid_parameters_shape(mean):
@@ -334,7 +348,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 class TorchLogPartitionLayer(TorchInputLayer):
     def __init__(
         self,
-        scope: Scope,
+        scope_idx: Tensor,
         num_output_units: int,
         *,
         num_channels: int = 1,
@@ -345,21 +359,22 @@ class TorchLogPartitionLayer(TorchInputLayer):
         """Init class.
 
         Args:
-            scope (Scope): The scope of the layer.
-            num_output_units (int): The number of output units.
-            num_channels (int): The number of channels. Defaults to 1.
-            num_folds (int): The number of channels. Defaults to 1.
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels. Defaults to 1.
             value (Optional[Reparameterization], optional): Ignored. This layer has no parameters.
         """
-        assert value.num_folds == num_folds
-        assert value.shape == (num_output_units,)
         super().__init__(
-            scope,
+            scope_idx,
             num_output_units,
             num_channels=num_channels,
-            num_folds=num_folds,
             semiring=semiring,
         )
+        assert value.num_folds == self.num_folds
+        assert value.shape == (num_output_units,)
         self.value = value
 
     @property
