@@ -67,6 +67,14 @@ class TorchInputLayer(TorchLayer, ABC):
     def params(self) -> Dict[str, TorchParameter]:
         return {}
 
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        ...
+
+    @abstractmethod
+    def integrate(self) -> Tensor:
+        ...
+
     def extra_repr(self) -> str:
         return (
             "  ".join(
@@ -137,8 +145,15 @@ class TorchExpFamilyLayer(TorchInputLayer):
         x = self.log_unnormalized_likelihood(x)
         return self.semiring.map_from(x, LSESumSemiring)
 
+    def integrate(self) -> Tensor:
+        return self.log_partition()
+
     @abstractmethod
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
+        ...
+
+    @abstractmethod
+    def log_partition(self) -> Tensor:
         ...
 
 
@@ -230,6 +245,14 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         x = torch.einsum("fcbi,fkci->fbk", x, logits)
         return x
 
+    def log_partition(self) -> Tensor:
+        if self.logits is None:
+            return torch.zeros(
+                size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
+            )
+        logits = self.logits()
+        return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
+
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
     """The Normal distribution layer.
@@ -297,19 +320,18 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, K, C)
         x = x.permute(0, 2, 3, 1)  # (F, C, B, 1) -> (F, B, 1, C)
         x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, K, C)
-        x = torch.sum(x, dim=-1)  # (F, B, K)
+        x = torch.sum(x, dim=2)  # (F, B, K)
         if self.log_partition is not None:
             log_partition = self.log_partition()  # (F, K, C)
-            x = x + torch.sum(log_partition, dim=-1).unsqueeze(dim=1)
+            x = x + torch.sum(log_partition, dim=2).unsqueeze(dim=1)
         return x
+
+    def log_partition(self) -> Tensor:
+        log_partition = self.log_partition()  # (F, K, C)
+        return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
 
 
 class TorchLogPartitionLayer(TorchInputLayer):
-    """The constant input layer, with no parameters."""
-
-    # We still accept any Reparameterization instance for reparam, but it will be ignored.
-    # DISABLE: It's designed to have these arguments.
-    # pylint: disable-next=too-many-arguments
     def __init__(
         self,
         scope: Scope,
@@ -358,4 +380,8 @@ class TorchLogPartitionLayer(TorchInputLayer):
         value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
         # (F, Ko) -> (F, B, O)
         value = value.expand(value.shape[0], x.shape[2], value.shape[2])
+        return self.semiring.map_from(value, LSESumSemiring)
+
+    def integrate(self) -> Tensor:
+        value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
         return self.semiring.map_from(value, LSESumSemiring)

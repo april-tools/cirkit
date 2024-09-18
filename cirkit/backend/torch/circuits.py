@@ -158,9 +158,9 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             in_graph_fn=index_input,
         )
 
-    def _eval_layers(self, x: Tensor) -> Tensor:
-        # Evaluate layers
-        y = self._eval_forward(x)  # (O, B, K)
+    def _evaluate_layers(self, x: Tensor) -> Tensor:
+        # Evaluate layers on the given input
+        y = self.evaluate(x)  # (O, B, K)
         return y.transpose(0, 1)  # (B, O, K)
 
 
@@ -183,7 +183,7 @@ class TorchCircuit(AbstractTorchCircuit):
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     def forward(self, x: Tensor) -> Tensor:
-        return self._eval_layers(x)
+        return self._evaluate_layers(x)
 
 
 class TorchConstantCircuit(AbstractTorchCircuit):
@@ -202,6 +202,7 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
+        # Evaluate the layers using some dummy input
         x = torch.empty(size=(1, self.num_channels, self.num_variables), device=self.device)
-        x = self._eval_layers(x)  # (B, O, K)
+        x = self._evaluate_layers(x)  # (B, O, K)
         return x.squeeze(dim=0)  # (O, K)
