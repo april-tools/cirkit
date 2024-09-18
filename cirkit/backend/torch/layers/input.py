@@ -341,6 +341,10 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return x
 
     def log_partition(self) -> Tensor:
+        if self.log_partition is None:
+            return torch.zeros(
+                size=(self.num_folds, 1, self.num_output_units), device=self.mean.device
+            )
         log_partition = self.log_partition()  # (F, K, C)
         return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
 
