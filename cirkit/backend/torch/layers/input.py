@@ -398,5 +398,4 @@ class TorchLogPartitionLayer(TorchInputLayer):
         return self.semiring.map_from(value, LSESumSemiring)
 
     def integrate(self) -> Tensor:
-        value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
-        return self.semiring.map_from(value, LSESumSemiring)
+        raise ValueError("Cannot integrate a layer computing a log-partition function")
