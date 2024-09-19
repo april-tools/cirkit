@@ -158,7 +158,7 @@ class TorchExpFamilyLayer(TorchInputLayer):
         return self.semiring.map_from(x, LSESumSemiring)
 
     def integrate(self) -> Tensor:
-        log_partition = self.log_partition()
+        log_partition = self.log_partition_function()
         return self.semiring.map_from(log_partition, LSESumSemiring)
 
     @abstractmethod
@@ -166,7 +166,7 @@ class TorchExpFamilyLayer(TorchInputLayer):
         ...
 
     @abstractmethod
-    def log_partition(self) -> Tensor:
+    def log_partition_function(self) -> Tensor:
         ...
 
 
@@ -258,7 +258,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         x = torch.einsum("fcbi,fkci->fbk", x, logits)
         return x
 
-    def log_partition(self) -> Tensor:
+    def log_partition_function(self) -> Tensor:
         if self.logits is None:
             return torch.zeros(
                 size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
@@ -334,13 +334,13 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, K, C)
         x = x.permute(0, 2, 3, 1)  # (F, C, B, 1) -> (F, B, 1, C)
         x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, K, C)
-        x = torch.sum(x, dim=2)  # (F, B, K)
+        x = torch.sum(x, dim=3)  # (F, B, K)
         if self.log_partition is not None:
             log_partition = self.log_partition()  # (F, K, C)
             x = x + torch.sum(log_partition, dim=2).unsqueeze(dim=1)
         return x
 
-    def log_partition(self) -> Tensor:
+    def log_partition_function(self) -> Tensor:
         if self.log_partition is None:
             return torch.zeros(
                 size=(self.num_folds, 1, self.num_output_units), device=self.mean.device
