@@ -60,17 +60,15 @@ class AddressBook(ABC):
     def __iter__(self) -> Iterator[AddressBookEntry]:
         return iter(self._entries)
 
-    def set_device(self, device: Optional[Union[str, torch.device, int]] = None) -> "AddressBook":
-        self._entries = list(
-            map(
-                lambda entry: AddressBookEntry(
-                    entry.module,
-                    entry.in_module_ids,
-                    [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
-                ),
-                self._entries,
+    def set_device(self, device: Union[str, torch.device, int]) -> "AddressBook":
+        def set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
+            return AddressBookEntry(
+                entry.module,
+                entry.in_module_ids,
+                [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
             )
-        )
+
+        self._entries = list(map(set_book_entry_device, self._entries))
         return self
 
     @abstractmethod
@@ -124,6 +122,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             fold_idx_info = self._build_unfold_index_info()
         self._address_book = self._build_address_book(fold_idx_info)
 
+    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+        self._address_book.set_device(device)
+        self._device = device
+
     @property
     def device(self) -> Optional[Union[str, torch.device, int]]:
         """Retrieve the device the module is allocated to.
@@ -160,8 +162,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             Itself.
         """
         if device is not None:
-            self._address_book.set_device(device)
-            self._device = device
+            self._set_device(device)
         return cast(TorchDiAcyclicGraph, super().to(device, dtype, non_blocking))
 
     def evaluate(

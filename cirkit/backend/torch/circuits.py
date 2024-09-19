@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -105,15 +105,15 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self.scope = scope
         self.num_channels = num_channels
 
-    @property
-    def num_variables(self) -> int:
-        return len(self.scope)
-
     def reset_parameters(self) -> None:
         # For each layer, initialize its parameters, if any
         for l in self.layers:
-            for _, p in l.params.items():
+            for p in l.params.values():
                 p.reset_parameters()
+
+    @property
+    def num_variables(self) -> int:
+        return len(self.scope)
 
     def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
         return self.node_inputs(l)
@@ -132,6 +132,12 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     @property
     def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
         return self.nodes_outputs
+
+    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+        for l in self.layers:
+            for p in l.params.values():
+                p._set_device(device)
+        super()._set_device(device)
 
     def _build_unfold_index_info(self) -> FoldIndexInfo:
         return build_unfold_index_info(
