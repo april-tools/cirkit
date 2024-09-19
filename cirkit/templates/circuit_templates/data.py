@@ -56,7 +56,7 @@ def image_data(
     if input_layer not in ["categorical"]:
         raise ValueError(f"Unknown input layer called {input_layer}")
     if sum_weight_param not in ["id", "softmax", "positive-clamp"]:
-        raise ValueError(f"Unknown sum weight parameterization called {region_graph}")
+        raise ValueError(f"Unknown sum weight parameterization called {sum_weight_param}")
 
     # Construct the image-tailored region graph
     rg = build_image_region_graph(region_graph, (image_shape[1], image_shape[2]))
