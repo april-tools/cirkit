@@ -41,6 +41,6 @@ def test_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, o
     )
     mar_scores1 = mar_tc(mar_worlds)
     mar_query = IntegrateQuery(tc)
-    mar_scores2 = mar_query(mar_worlds, vs=Scope([4]))
+    mar_scores2 = mar_query(mar_worlds, integrate_vars=Scope([4]))
     assert mar_scores1.shape == mar_scores2.shape
     assert allclose(mar_scores1, mar_scores2)
