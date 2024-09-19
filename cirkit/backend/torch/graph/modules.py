@@ -68,7 +68,7 @@ class AddressBook(ABC):
                 [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
             )
 
-        self._entries = list(map(set_book_entry_device, self._entries))
+        self._entries = [set_book_entry_device(entry) for entry in self._entries]
         return self
 
     @abstractmethod
@@ -180,6 +180,9 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         Returns:
             The output tensor of the Torch graph.
             If the Torch graph has multiple outputs, then they will be stacked.
+
+        Raises:
+            RuntimeError: If the address book is somehow not well-formed.
         """
         # Evaluate the computational graph by following the topological ordering,
         # and by using the book address information to retrieve the inputs to each
