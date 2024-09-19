@@ -49,7 +49,7 @@ class TorchInputLayer(TorchLayer, ABC):
             num_folds=num_folds,
             semiring=semiring,
         )
-        self._scope_idx = scope_idx
+        self.register_buffer("_scope_idx", scope_idx)
 
     @property
     def scope_idx(self) -> Tensor:

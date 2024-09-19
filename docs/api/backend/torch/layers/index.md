@@ -1,3 +1,3 @@
 # cirkit
 
-[backend.torch.layers.input](input/index.md)
+[backend.torch.layers.input](input.md)
