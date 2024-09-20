@@ -452,6 +452,12 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     @cached_property
     def properties(self) -> StructuralProperties:
+        """Retrieves all the structural properties of the circuit: smoothness,
+        decomposability, structured-decomposability and omni-compatibility.
+
+        Returns:
+            The structural properties.
+        """
         return StructuralProperties(
             self.is_smooth,
             self.is_decomposable,
@@ -832,7 +838,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         return cls(Scope(ordering), num_channels, layers, in_layers, [layers[-1]])
 
 
-def is_compatible(sc1: Circuit, sc2: Circuit) -> bool:
+def are_compatible(sc1: Circuit, sc2: Circuit) -> bool:
     """Check if two symbolic circuits are compatible.
      Note that compatibility is a commutative property of circuits.
 
@@ -867,10 +873,10 @@ def pipeline_topological_ordering(roots: Sequence[Circuit]) -> Iterator[Circuit]
         Iterator[Circuit]: An iterator of the topological ordering of circuits in a pipeline.
     """
 
-    def operands_fn(sc: Circuit) -> Tuple[Circuit, ...]:
+    def _operands_fn(sc: Circuit) -> Tuple[Circuit, ...]:
         return () if sc.operation is None else sc.operation.operands
 
-    return topological_ordering(bfs(roots, incomings_fn=operands_fn), incomings_fn=operands_fn)
+    return topological_ordering(bfs(roots, incomings_fn=_operands_fn), incomings_fn=_operands_fn)
 
 
 def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:

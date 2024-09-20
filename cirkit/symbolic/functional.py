@@ -1,6 +1,4 @@
-import functools
 import itertools
-import operator
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from cirkit.symbolic.circuit import (
@@ -9,7 +7,7 @@ from cirkit.symbolic.circuit import (
     CircuitOperation,
     CircuitOperator,
     StructuralPropertyError,
-    is_compatible,
+    are_compatible,
 )
 from cirkit.symbolic.layers import InputLayer, Layer, LayerOperator, ProductLayer, SumLayer
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
@@ -17,17 +15,30 @@ from cirkit.utils.scope import Scope
 
 
 def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
-    # Retrieve the number of channels
-    assert len(set(sc.num_channels for sc in scs)) == 1
-    num_channels = scs[0].num_channels
+    """Concatenates a sequence of symbolic circuits. Concatenating circuits means constructing
+    another circuit such that its output layers consists of the output layers of each circuit
+    (in the given order). This operator does not require the satisfaction of any structural
+    property by the given circuits.
 
-    # Retrieve the union of the scopes of the circuits
-    scope = functools.reduce(operator.or_, map(lambda sc: sc.scope, scs))
-    # TODO: refactor scope class, I (LL) do not understand why do we would have different implementations
-    #       of the Scope data structure. What is the difference between Scope and FrozenSetScope?
-    #       Why do not we have just a frozen set or a bitmap?
-    # assert scope == scs[0].scope
-    assert tuple(scope) == tuple(scs[0].scope)
+    Args:
+        scs: A sequence of symbolic circuits.
+        registry: A registry of symbolic layer operators. It is not used for this operator.
+
+    Returns:
+        A circuit obtained by concatenating circuits.
+
+    Raises:
+        ValueError: If the given circuits to concatenate have different number of channels per
+            variable.
+    """
+    # Retrieve the number of channels
+    num_channels_s = set(sc.num_channels for sc in scs)
+    if len(num_channels_s) != 1:
+        raise ValueError(
+            f"Only circuits with the same number of channels can be concatenated, "
+            f"but found a set of number of channels {num_channels_s}"
+        )
+    num_channels = scs[0].num_channels
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
     layers_to_block: Dict[Layer, CircuitBlock] = {}
@@ -48,6 +59,9 @@ def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = N
             layers_to_block[sl] = block
         output_blocks.extend(layers_to_block[sl] for sl in sc.outputs)
 
+    # Retrieve the union of the scopes of the circuits
+    scope = Scope.union(*tuple(sc.scope for sc in scs))
+
     # Construct the symbolic circuit obtained by merging multiple circuits
     return Circuit.from_operation(
         scope,
@@ -64,6 +78,25 @@ def integrate(
     scope: Optional[Scope] = None,
     registry: Optional[OperatorRegistry] = None,
 ) -> Circuit:
+    """Integrate the function computed by a circuit, and represent it as another circuit.
+    This operator requires the given circuit to be both smooth and decomposable.
+
+    Args:
+        sc: A symbolic circuit.
+        scope: The varaibles scope to integrate over. If it is None, then all variables on
+            which the given circuit is defined on will be integrated over.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        The symbolic circuit reprenting the integration operation of the given circuit.
+
+    Raises:
+        StructuralPropertyError: If the given circuit is not smooth and decomposable.
+        ValueError: If the scope to integrate over is not a subset of the scope of the circuit.
+    """
     # Check for structural properties
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
@@ -73,7 +106,7 @@ def integrate(
     # Check the variable
     if scope is None:
         scope = sc.scope
-    elif (scope | sc.scope) != sc.scope:
+    elif not scope <= sc.scope:
         raise ValueError(
             "The variables scope to integrate must be a subset of the scope of the circuit"
         )
@@ -119,18 +152,37 @@ def integrate(
         operation=CircuitOperation(
             operator=CircuitOperator.INTEGRATION,
             operands=(sc,),
-            metadata=dict(scope=scope),
+            metadata={"scope": scope},
         ),
     )
 
 
-def multiply(
-    lhs_sc: Circuit, rhs_sc: Circuit, registry: Optional[OperatorRegistry] = None
-) -> Circuit:
-    if lhs_sc.scope != rhs_sc.scope:
+def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = None) -> Circuit:
+    """Multiply two symbolic circuit and represent it as another circuit.
+    This operator requires the input circuits to be smooth, decomposable and compatible.
+    The resulting circuit will be smooth and decomposable. Moreover, if the input circuits
+    are structured decomposable, then the resulting circuit will also be structured.
+
+    Args:
+        sc1: The first symbolic circuit.
+        sc2: The second symbolic circuit.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        The symbolic circuit representing the multiplication of the given circuits.
+
+    Raises:
+        NotImplementedError: If the given circuits have different scope.
+        StructuralPropertyError: If the given circuits are not smooth and decomposable,
+            or if they are not compatible with each other.
+    """
+    if sc1.scope != sc2.scope:
         raise NotImplementedError("Only the product of circuits over the same scope is implemented")
-    scope = lhs_sc.scope
-    if not is_compatible(lhs_sc, rhs_sc):
+    scope = sc1.scope
+    if not are_compatible(sc1, sc2):
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
@@ -148,8 +200,8 @@ def multiply(
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
-    for lhs_out, rhs_out in itertools.product(lhs_sc.outputs, rhs_sc.outputs):
-        to_multiply.append((lhs_out, rhs_out))
+    for l1, l2 in itertools.product(sc1.outputs, sc2.outputs):
+        to_multiply.append((l1, l2))
 
     # Using a stack in place of recursion for better memory efficiency and debugging
     while to_multiply:
@@ -157,36 +209,38 @@ def multiply(
         if pair in layers_to_block:
             to_multiply.pop()
             continue
-        lhs_layer, rhs_layer = pair
-        lhs_inputs = lhs_sc.layer_inputs(lhs_layer)
-        rhs_inputs = rhs_sc.layer_inputs(rhs_layer)
-        if isinstance(lhs_layer, InputLayer):
+        l1, l2 = pair
+        l1_inputs = sc1.layer_inputs(l1)
+        l2_inputs = sc2.layer_inputs(l2)
+        if isinstance(l1, InputLayer):
             # TODO: generalize product between input and inner layers
             next_to_multiply = []
-        elif isinstance(lhs_layer, SumLayer):
+        elif isinstance(l1, SumLayer):
             # TODO: generalize product between input and inner layers
-            next_to_multiply = list(itertools.product(lhs_inputs, rhs_inputs))
-        elif isinstance(lhs_layer, ProductLayer):
+            next_to_multiply = list(itertools.product(l1_inputs, l2_inputs))
+        elif isinstance(l1, ProductLayer):
             # TODO: generalize product such that it can multiply layers of different arity
-            #       this is related to the much more relaxed definition of compatibility between circuits
-            assert len(lhs_inputs) == len(rhs_inputs)
+            #       this is related to the much more relaxed definition of compatibility between
+            #       circuits
+            assert len(l1_inputs) == len(l2_inputs)
             # Sort layers based on the scope, such that we can multiply layers with matching scopes
-            lhs_inputs = sorted(lhs_inputs, key=lambda sl: sl.scope)
-            rhs_inputs = sorted(rhs_inputs, key=lambda sl: sl.scope)
-            next_to_multiply = list(zip(lhs_inputs, rhs_inputs))
+            l1_inputs = sorted(l1_inputs, key=lambda sl: sl.scope)
+            l2_inputs = sorted(l2_inputs, key=lambda sl: sl.scope)
+            next_to_multiply = list(zip(l1_inputs, l2_inputs))
         else:
             assert False
 
-        # Check if at least one pair of layers needs to be multiplied before going up in the recursion
-        not_yet_multiplied = list(filter(lambda p: p not in layers_to_block, next_to_multiply))
+        # Check if at least one pair of layers needs to be multiplied before going up in the
+        # recursion
+        not_yet_multiplied = [p for p in next_to_multiply if p not in layers_to_block]
         if len(not_yet_multiplied) > 0:
             to_multiply.extend(not_yet_multiplied)
             continue
 
         # In case all the input have been multiplied, then construct the product layer
-        prod_signature = type(lhs_layer), type(rhs_layer)
+        prod_signature = type(l1), type(l2)
         func = registry.retrieve_rule(LayerOperator.MULTIPLICATION, *prod_signature)
-        prod_block = func(lhs_layer, rhs_layer)
+        prod_block = func(l1, l2)
         blocks.append(prod_block)
         # Make the connections
         in_blocks[prod_block] = [layers_to_block[p] for p in next_to_multiply]
@@ -195,20 +249,17 @@ def multiply(
 
     # Construct the sequence of output blocks
     output_blocks = [
-        layers_to_block[(lhs_out, rhs_out)]
-        for lhs_out, rhs_out in itertools.product(lhs_sc.outputs, rhs_sc.outputs)
+        layers_to_block[(l1, l2)] for l1, l2 in itertools.product(sc1.outputs, sc2.outputs)
     ]
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
         scope,
-        lhs_sc.num_channels,
+        sc1.num_channels,
         blocks,
         in_blocks,
         output_blocks,
-        operation=CircuitOperation(
-            operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
-        ),
+        operation=CircuitOperation(operator=CircuitOperator.MULTIPLICATION, operands=(sc1, sc2)),
     )
 
 
@@ -228,6 +279,20 @@ def conjugate(
     sc: Circuit,
     registry: Optional[OperatorRegistry] = None,
 ) -> Circuit:
+    """Apply the complex conjugation operator to a symbolic circuit, and represent it as another
+    circuit. This operator does not require the satisfaction of structural properties. Moreover,
+    the resulting circuit will inherit the structural property of the given circuit.
+
+    Args:
+        sc: A symbolic circuit.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        The symbolic circuit representing the complex conjugation operation of the given circuit.
+    """
     # Use the registry in the current context, if not specified otherwise
     if registry is None:
         registry = OPERATOR_REGISTRY.get()

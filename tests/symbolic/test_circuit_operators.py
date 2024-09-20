@@ -3,7 +3,7 @@ import itertools
 import pytest
 
 import cirkit.symbolic.functional as SF
-from cirkit.symbolic.circuit import is_compatible
+from cirkit.symbolic.circuit import are_compatible
 from cirkit.symbolic.layers import DenseLayer, HadamardLayer, LogPartitionLayer
 from cirkit.symbolic.parameters import ConjugateParameter, KroneckerParameter, ReferenceParameter
 from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
@@ -42,8 +42,8 @@ def test_multiply_circuits(num_units: int, input_layer: str):
     )
     prod_num_units = num_units * (num_units * 2 + 1)
     sc = SF.multiply(sc1, sc2)
-    assert is_compatible(sc1, sc) and is_compatible(sc, sc1)
-    assert is_compatible(sc2, sc) and is_compatible(sc, sc2)
+    assert are_compatible(sc1, sc) and are_compatible(sc, sc1)
+    assert are_compatible(sc2, sc) and are_compatible(sc, sc2)
     assert len(list(sc.inputs)) == len(list(sc1.inputs))
     assert len(list(sc.inputs)) == len(list(sc2.inputs))
     assert len(list(sc.inner_layers)) == len(list(sc1.inner_layers))

@@ -154,6 +154,7 @@ enable= [
 ]
 disable = [
   "too-many-arguments",
+  "too-few-public-methods",
   "missing-module-docstring",
   "no-member",
   "fixme",
