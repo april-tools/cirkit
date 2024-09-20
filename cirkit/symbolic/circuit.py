@@ -233,11 +233,10 @@ class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
 class SumLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
     """The protocol of a factory that constructs sum layers."""
 
-    def __call__(self, scope: Scope, num_input_units: int, num_output_units: int) -> SumLayer:
+    def __call__(self, num_input_units: int, num_output_units: int) -> SumLayer:
         """Constructs a sum layer.
 
         Args:
-            scope: The scope of the layer.
             num_input_units: The number of units in each layer that is an input.
             num_output_units: The number of sum units in the layer.
 
@@ -249,11 +248,10 @@ class SumLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
 class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
     """The protocol of a factory that constructs product layers."""
 
-    def __call__(self, scope: Scope, num_input_units: int, arity: int) -> ProductLayer:
+    def __call__(self, num_input_units: int, arity: int) -> ProductLayer:
         """Constructs a product layer.
 
         Args:
-            scope: The scope of the layer.
             num_input_units: The number of units in each layer that is an input.
             arity: The number of input layers.
 
@@ -267,11 +265,10 @@ class MixingLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
     i.e., layers computing a linear sum over two or more input layers, and
     that have the same number of sum units as the units in each input layer."""
 
-    def __call__(self, scope: Scope, num_units: int, arity: int) -> SumLayer:
+    def __call__(self, num_units: int, arity: int) -> SumLayer:
         """Constructs a mixing layer.
 
         Args:
-            scope: The scope of the layer.
             num_units: The number of units in each layer that is an input.
             arity: The number of input layers.
 
@@ -285,7 +282,6 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     def __init__(
         self,
-        scope: Scope,
         num_channels: int,
         layers: List[Layer],
         in_layers: Dict[Layer, List[Layer]],
@@ -296,7 +292,6 @@ class Circuit(DiAcyclicGraph[Layer]):
         """Initializes a symbolic circuit.
 
         Args:
-            scope: The variables scope of the circuit.
             num_channels: The number of channels for each variable.
             layers: The list of symbolic layers.
             in_layers: A dictionary containing the list of inputs to each layer.
@@ -304,9 +299,17 @@ class Circuit(DiAcyclicGraph[Layer]):
             operation: The optional operation the circuit has been obtained through.
         """
         super().__init__(layers, in_layers, outputs)
-        self.scope = scope
         self.num_channels = num_channels
         self.operation = operation
+
+        # Build scopes bottom-up
+        self._scopes: Dict[Layer, Scope] = {}
+        for l in self.topological_ordering():
+            if isinstance(l, InputLayer):
+                self._scopes[l] = l.scope
+                continue
+            self._scopes[l] = Scope.union(*tuple(self._scopes[li] for li in self.layer_inputs(l)))
+        self.scope = Scope.union(*tuple(self._scopes[l] for l in self.outputs))
 
     @property
     def num_variables(self) -> int:
@@ -316,6 +319,17 @@ class Circuit(DiAcyclicGraph[Layer]):
             int:
         """
         return len(self.scope) * self.num_channels
+
+    def layer_scope(self, l: Layer) -> Scope:
+        """Retrieves the scope of a layer.
+
+        Args:
+            l: The layer.
+
+        Returns:
+            The scope of the given layer.
+        """
+        return self._scopes[l]
 
     def layer_inputs(self, l: Layer) -> List[Layer]:
         """Retrieves the inputs to a layer.
@@ -403,7 +417,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             bool: True if the circuit is smooth and False otherwise.
         """
         return all(
-            sum_sl.scope == in_sl.scope
+            self.layer_scope(sum_sl) == self.layer_scope(in_sl)
             for sum_sl in self.sum_layers
             for in_sl in self.layer_inputs(sum_sl)
         )
@@ -416,9 +430,9 @@ class Circuit(DiAcyclicGraph[Layer]):
             bool: True if the circuit is decomposable and False otherwise.
         """
         return not any(
-            lhs_in_sl.scope & rhs_in_sl.scope
+            self.layer_scope(in_sl1) & self.layer_scope(in_sl2)
             for prod_sl in self.product_layers
-            for lhs_in_sl, rhs_in_sl in itertools.combinations(self.layer_inputs(prod_sl), 2)
+            for in_sl1, in_sl2 in itertools.combinations(self.layer_inputs(prod_sl), 2)
         )
 
     @cached_property
@@ -468,7 +482,6 @@ class Circuit(DiAcyclicGraph[Layer]):
     @classmethod
     def from_operation(
         cls,
-        scope: Scope,
         num_channels: int,
         blocks: List[CircuitBlock],
         in_blocks: Dict[CircuitBlock, List[CircuitBlock]],
@@ -479,7 +492,6 @@ class Circuit(DiAcyclicGraph[Layer]):
         """Constructs a circuit that resulted from an operation over other circuits.
 
         Args:
-            scope: The variables scope the circuit is defined on.
             num_channels: The number of channels per variable.
             blocks: The list of circuit blocks.
             in_blocks: A dictionary containing the list of block inputs to each circuit block.
@@ -487,7 +499,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             operation: A circuit operation containing the information of the operation.
 
         Returns:
-            Circuit: A symbolic circuit.
+            Circuit: A symbolic circuit.Ki
 
         Raises:
             ValueError: If there is a circuit block having more than one layer with no inputs that
@@ -512,7 +524,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             for l in b.layers:
                 in_layers[l].extend(b.layer_inputs(l))
         # Build the circuit and set the operation
-        return cls(scope, num_channels, layers, in_layers, outputs, operation=operation)
+        return cls(num_channels, layers, in_layers, outputs, operation=operation)
 
     @classmethod
     def from_region_graph(
@@ -593,7 +605,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         in_layers: Dict[Layer, List[Layer]] = {}
         node_to_layer: Dict[RegionGraphNode, Layer] = {}
 
-        def default_mixing_layer_factory(scope: Scope, num_units: int, arity: int) -> MixingLayer:
+        def default_mixing_layer_factory(num_units: int, arity: int) -> MixingLayer:
             if sum_weight_factory is None:
                 weight = Parameter.from_leaf(
                     TensorParameter(
@@ -603,8 +615,8 @@ class Circuit(DiAcyclicGraph[Layer]):
                         learnable=False,
                     )
                 )
-                return MixingLayer(scope, num_units, arity, weight=weight)
-            return MixingLayer(scope, num_units, arity, weight_factory=sum_weight_factory)
+                return MixingLayer(num_units, arity, weight=weight)
+            return MixingLayer(num_units, arity, weight_factory=sum_weight_factory)
 
         def build_cp_(
             rgn: RegionNode, rgn_partitioning: List[RegionNode], num_output_units: int
@@ -612,14 +624,13 @@ class Circuit(DiAcyclicGraph[Layer]):
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             denses = [
                 DenseLayer(
-                    rgn_in.scope,
                     node_to_layer[rgn_in].num_output_units,
                     num_output_units,
                     weight_factory=sum_weight_factory,
                 )
                 for rgn_in in rgn_partitioning
             ]
-            hadamard = HadamardLayer(rgn.scope, num_output_units, arity=len(rgn_partitioning))
+            hadamard = HadamardLayer(num_output_units, arity=len(rgn_partitioning))
             layers.extend(denses)
             layers.append(hadamard)
             in_layers[hadamard] = denses
@@ -637,10 +648,8 @@ class Circuit(DiAcyclicGraph[Layer]):
                 raise ValueError(
                     "Cannot build a CP transposed layer, as the inputs would have different units"
                 )
-            hadamard = HadamardLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
-            dense = DenseLayer(
-                rgn.scope, num_in_units[0], num_output_units, weight_factory=sum_weight_factory
-            )
+            hadamard = HadamardLayer(num_in_units[0], arity=len(rgn_partitioning))
+            dense = DenseLayer(num_in_units[0], num_output_units, weight_factory=sum_weight_factory)
             layers.append(hadamard)
             layers.append(dense)
             in_layers[hadamard] = layer_ins
@@ -657,9 +666,8 @@ class Circuit(DiAcyclicGraph[Layer]):
                 raise ValueError(
                     "Cannot build a Tucker layer, as the inputs would have different units"
                 )
-            kronecker = KroneckerLayer(rgn.scope, num_in_units[0], arity=len(rgn_partitioning))
+            kronecker = KroneckerLayer(num_in_units[0], arity=len(rgn_partitioning))
             dense = DenseLayer(
-                rgn.scope,
                 kronecker.num_output_units,
                 num_output_units,
                 weight_factory=sum_weight_factory,
@@ -698,9 +706,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                         input_factory(Scope([sc]), num_input_units, num_channels)
                         for sc in node.scope
                     ]
-                    input_sl = HadamardLayer(
-                        node.scope, num_input_units, arity=len(factorized_input_sls)
-                    )
+                    input_sl = HadamardLayer(num_input_units, arity=len(factorized_input_sls))
                     layers.extend(factorized_input_sls)
                     in_layers[input_sl] = factorized_input_sls
                 else:
@@ -710,7 +716,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                     layers.append(input_sl)
                     node_to_layer[node] = input_sl
                     continue
-                sum_sl = sum_factory(node.scope, num_input_units, num_output_units)
+                sum_sl = sum_factory(num_input_units, num_output_units)
                 layers.append(input_sl)
                 layers.append(sum_sl)
                 in_layers[sum_sl] = [input_sl]
@@ -722,7 +728,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                     continue
                 assert prod_factory is not None
                 prod_inputs = [node_to_layer[rgn] for rgn in node_inputs]
-                prod_sl = prod_factory(node.scope, num_sum_units, len(prod_inputs))
+                prod_sl = prod_factory(num_sum_units, len(prod_inputs))
                 layers.append(prod_sl)
                 in_layers[prod_sl] = prod_inputs
                 node_to_layer[node] = prod_sl
@@ -756,7 +762,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                         )
                         for ptn in node_inputs
                     ]
-                mix_sl = mixing_factory(node.scope, num_units, len(mix_ins))
+                mix_sl = mixing_factory(num_units, len(mix_ins))
                 layers.append(mix_sl)
                 in_layers[mix_sl] = mix_ins
                 node_to_layer[node] = mix_sl
@@ -769,7 +775,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 raise ValueError("Region graph nodes must be either region or partition nodes")
 
         outputs = [node_to_layer[rgn] for rgn in region_graph.outputs]
-        return cls(region_graph.scope, num_channels, layers, in_layers, outputs)
+        return cls(num_channels, layers, in_layers, outputs)
 
     @classmethod
     def from_hmm(
@@ -809,9 +815,7 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         input_sl = input_factory(Scope([ordering[0]]), num_units, num_channels)
         layers.append(input_sl)
-        sum_sl = DenseLayer(
-            Scope([ordering[0]]), num_units, num_units, weight_factory=weight_factory
-        )
+        sum_sl = DenseLayer(num_units, num_units, weight_factory=weight_factory)
         layers.append(sum_sl)
         in_layers[sum_sl] = [input_sl]
 
@@ -821,13 +825,12 @@ class Circuit(DiAcyclicGraph[Layer]):
 
             input_sl = input_factory(Scope([ordering[i]]), num_units, num_channels)
             layers.append(input_sl)
-            prod_sl = HadamardLayer(Scope(ordering[: (i + 1)]), num_units, 2)
+            prod_sl = HadamardLayer(num_units, 2)
             layers.append(prod_sl)
             in_layers[prod_sl] = [last_dense, input_sl]
 
             num_units_out = num_units if i != len(ordering) - 1 else num_classes
             sum_sl = DenseLayer(
-                Scope(ordering[: (i + 1)]),
                 num_units,
                 num_units_out,
                 weight_factory=weight_factory,
@@ -835,7 +838,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             layers.append(sum_sl)
             in_layers[sum_sl] = [prod_sl]
 
-        return cls(Scope(ordering), num_channels, layers, in_layers, [layers[-1]])
+        return cls(num_channels, layers, in_layers, [layers[-1]])
 
 
 def are_compatible(sc1: Circuit, sc2: Circuit) -> bool:
@@ -883,7 +886,9 @@ def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:
     # For each product layer, retrieves how it factorizes its scope
     scope_factorizations: Dict[Scope, Set[Tuple[Scope, ...]]] = defaultdict(set)
     for sl in sc.product_layers:
-        scope_factorizations[sl.scope].add(tuple(sorted(sli.scope for sli in sc.layer_inputs(sl))))
+        scope_factorizations[sc.layer_scope(sl)].add(
+            tuple(sorted(sc.layer_scope(sli) for sli in sc.layer_inputs(sl)))
+        )
     return scope_factorizations
 
 

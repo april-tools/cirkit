@@ -29,8 +29,8 @@ class TorchLayer(AbstractTorchModule, ABC):
             arity (int, optional): The arity of the layer. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.
         """
-        if num_input_units <= 0:
-            raise ValueError("The number of input units must be positive")
+        if num_input_units < 0:
+            raise ValueError("The number of input units must be non-negative")
         if num_output_units <= 0:
             raise ValueError("The number of output units must be positive")
         if arity <= 0:

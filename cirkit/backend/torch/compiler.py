@@ -211,17 +211,9 @@ class TorchCompiler(AbstractCompiler):
             in_layers[layer] = ins
             compiled_layers_map[sl] = layer
 
-        # If the symbolic circuit being compiled has been obtained by integrating
-        # another circuit over all the variables it is defined on,
+        # If the symbolic circuit being compiled has empty scope,
         # then return a 'constant circuit' whose interface does not require inputs
-        if (
-            sc.operation is not None
-            and sc.operation.operator == CircuitOperator.INTEGRATION
-            and sc.operation.metadata["scope"] == sc.scope
-        ):
-            cc_cls = TorchConstantCircuit
-        else:
-            cc_cls = TorchCircuit
+        cc_cls = TorchCircuit if sc.scope else TorchConstantCircuit
 
         # Construct the sequence of output layers
         outputs = [compiled_layers_map[sl] for sl in sc.outputs]
@@ -293,9 +285,11 @@ def _fold_layers_group(layers: List[TorchLayer], *, compiler: TorchCompiler) -> 
 
     # If we are folding input layers, then concatenate the variables scope index tensors
     if issubclass(fold_layer_cls, TorchInputLayer):
-        fold_layer_conf.update(scope_idx=torch.cat([l.scope_idx for l in layers]))
-    else:  # We are folding sum or product layers, so simply set the number of folds
-        fold_layer_conf.update(num_folds=len(layers))
+        if "scope_idx" in fold_layer_conf:
+            fold_layer_conf["scope_idx"] = torch.cat([l.scope_idx for l in layers])
+    elif "num_folds" in fold_layer_conf:
+        # We are folding sum or product layers, so simply set the number of folds
+        fold_layer_conf["num_folds"] = sum(l.num_folds for l in layers)
 
     # Retrieve the parameters of each layer
     layer_params: Dict[str, List[TorchParameter]] = defaultdict(list)

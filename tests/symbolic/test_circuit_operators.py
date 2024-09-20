@@ -22,6 +22,7 @@ def test_integrate_circuit(num_units: int, input_layer: str):
     assert int_sc.is_decomposable
     assert int_sc.is_structured_decomposable
     assert not int_sc.is_omni_compatible
+    assert not int_sc.scope
     assert len(list(int_sc.inputs)) == len(list(sc.inputs))
     assert all(isinstance(isl, LogPartitionLayer) for isl in int_sc.inputs)
     assert len(list(int_sc.inner_layers)) == len(list(sc.inner_layers))
@@ -76,6 +77,7 @@ def test_multiply_integrate_circuits(num_units: int, input_layer: str):
     prod_num_units = num_units * (num_units * 2 + 1)
     sc = SF.multiply(sc1, sc2)
     int_sc = SF.integrate(sc)
+    assert not int_sc.scope
     assert len(list(int_sc.inputs)) == len(list(sc.inputs))
     assert all(isinstance(isl, LogPartitionLayer) for isl in int_sc.inputs)
     assert len(list(int_sc.inner_layers)) == len(list(sc.inner_layers))

@@ -131,7 +131,9 @@ class DirichletInitializer(Initializer):
         """
         if not isinstance(alpha, (float, list)):
             raise ValueError("The concentration parameters should be either a scalar or a list")
-        if (isinstance(alpha, float) and alpha <= 0.0) or any(a <= 0.0 for a in alpha):
+        if (isinstance(alpha, float) and alpha <= 0.0) or (
+            isinstance(alpha, list) and any(a <= 0.0 for a in alpha)
+        ):
             raise ValueError("The concentration parameters should be positive")
         self.alpha = alpha
         self.axis = axis

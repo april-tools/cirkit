@@ -33,9 +33,7 @@ def compile_log_partition_layer(
 ) -> TorchLogPartitionLayer:
     value = compiler.compile_parameter(sl.value)
     return TorchLogPartitionLayer(
-        torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
-        num_channels=sl.num_channels,
         value=value,
         semiring=compiler.semiring,
     )

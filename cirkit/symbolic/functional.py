@@ -59,12 +59,8 @@ def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = N
             layers_to_block[sl] = block
         output_blocks.extend(layers_to_block[sl] for sl in sc.outputs)
 
-    # Retrieve the union of the scopes of the circuits
-    scope = Scope.union(*tuple(sc.scope for sc in scs))
-
     # Construct the symbolic circuit obtained by merging multiple circuits
     return Circuit.from_operation(
-        scope,
         num_channels,
         blocks,
         in_blocks,
@@ -144,7 +140,6 @@ def integrate(
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit.from_operation(
-        sc.scope,
         sc.num_channels,
         blocks,
         in_blocks,
@@ -181,7 +176,6 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
     """
     if sc1.scope != sc2.scope:
         raise NotImplementedError("Only the product of circuits over the same scope is implemented")
-    scope = sc1.scope
     if not are_compatible(sc1, sc2):
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
@@ -224,8 +218,8 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
             #       circuits
             assert len(l1_inputs) == len(l2_inputs)
             # Sort layers based on the scope, such that we can multiply layers with matching scopes
-            l1_inputs = sorted(l1_inputs, key=lambda sl: sl.scope)
-            l2_inputs = sorted(l2_inputs, key=lambda sl: sl.scope)
+            l1_inputs = sorted(l1_inputs, key=sc1.layer_scope)
+            l2_inputs = sorted(l2_inputs, key=sc2.layer_scope)
             next_to_multiply = list(zip(l1_inputs, l2_inputs))
         else:
             assert False
@@ -254,7 +248,6 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
-        scope,
         sc1.num_channels,
         blocks,
         in_blocks,
@@ -328,7 +321,6 @@ def conjugate(
 
     # Construct the conjugate symbolic circuit
     return Circuit.from_operation(
-        sc.scope,
         sc.num_channels,
         blocks,
         in_blocks,

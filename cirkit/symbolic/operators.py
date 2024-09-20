@@ -40,7 +40,7 @@ def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> Circui
         reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=2)
         reduce_channels = ReduceSumParameter(reduce_lse.shape, axis=1)
         log_partition = Parameter.from_sequence(sl.logits.ref(), reduce_lse, reduce_channels)
-    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+    sl = LogPartitionLayer(sl.num_output_units, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
 
@@ -55,7 +55,7 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock
     else:
         reduce_channels = ReduceSumParameter(sl.log_partition.shape, axis=1)
         log_partition = Parameter.from_unary(reduce_channels, sl.log_partition.ref())
-    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+    sl = LogPartitionLayer(sl.num_output_units, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
 
@@ -184,13 +184,7 @@ def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
 
 
 def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitBlock:
-    if sl1.scope != sl2.scope:
-        raise ValueError(
-            f"Expected Hadamard layers to have the same scope,"
-            f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
     sl = HadamardLayer(
-        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         arity=max(sl1.arity, sl2.arity),
     )
@@ -198,16 +192,10 @@ def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitB
 
 
 def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
-    if sl1.scope != sl2.scope:
-        raise ValueError(
-            f"Expected Dense layers to have the same scope,"
-            f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = DenseLayer(
-        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.num_output_units * sl2.num_output_units,
         weight=weight,
@@ -216,16 +204,10 @@ def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
 
 
 def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
-    if sl1.scope != sl2.scope:
-        raise ValueError(
-            f"Expected Mixing layers to have the same scope,"
-            f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = MixingLayer(
-        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.arity * sl2.arity,
         weight=weight,
@@ -235,13 +217,13 @@ def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
 
 def conjugate_dense_layer(sl: DenseLayer) -> CircuitBlock:
     weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
-    sl = DenseLayer(sl.scope, sl.num_input_units, sl.num_output_units, weight=weight)
+    sl = DenseLayer(sl.num_input_units, sl.num_output_units, weight=weight)
     return CircuitBlock.from_layer(sl)
 
 
 def conjugate_mixing_layer(sl: MixingLayer) -> CircuitBlock:
     weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
-    sl = MixingLayer(sl.scope, sl.num_input_units, sl.arity, weight=weight)
+    sl = MixingLayer(sl.num_input_units, sl.arity, weight=weight)
     return CircuitBlock.from_layer(sl)
 
 
