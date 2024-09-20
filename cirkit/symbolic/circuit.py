@@ -48,6 +48,20 @@ class StructuralPropertyError(Exception):
         super().__init__(msg)
 
 
+@dataclass(frozen=True)
+class StructuralProperties:
+    """The available structural properties of a circuit."""
+
+    smooth: bool
+    """Whether the circuit is smooth."""
+    decomposable: bool
+    """Whether the circuit is decomposable."""
+    structured_decomposable: bool
+    """Whether the circuit is structured-decomposable, i.e., is compatible with itself."""
+    omni_compatible: bool
+    """Whether the circuit is omni-compatible, i.e., compatible to a fully-factorized circuit."""
+
+
 class CircuitOperator(IntEnum):
     """The available symbolic operators defined over circuits."""
 
@@ -435,6 +449,15 @@ class Circuit(DiAcyclicGraph[Layer]):
         scope_factorizations = _scope_factorizations(self)
         vs = Scope(range(self.num_variables))
         return _are_compatible(scope_factorizations, {vs: {tuple(Scope([vid]) for vid in vs)}})
+
+    @cached_property
+    def properties(self) -> StructuralProperties:
+        return StructuralProperties(
+            self.is_smooth,
+            self.is_decomposable,
+            self.is_structured_decomposable,
+            self.is_omni_compatible,
+        )
 
     @classmethod
     def from_operation(

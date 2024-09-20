@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Dict
 
+import torch
+
 from cirkit.backend.compiler import LayerCompilationFunc, LayerCompilationSign
 from cirkit.backend.torch.layers.inner import (
     TorchDenseLayer,
@@ -31,7 +33,7 @@ def compile_log_partition_layer(
 ) -> TorchLogPartitionLayer:
     value = compiler.compile_parameter(sl.value)
     return TorchLogPartitionLayer(
-        sl.scope,
+        torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
         num_channels=sl.num_channels,
         value=value,
@@ -49,7 +51,7 @@ def compile_categorical_layer(
         probs = None
         logits = compiler.compile_parameter(sl.logits)
     return TorchCategoricalLayer(
-        sl.scope,
+        torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
         num_channels=sl.num_channels,
         num_categories=sl.num_categories,
@@ -67,7 +69,7 @@ def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> Torc
     else:
         log_partition = None
     return TorchGaussianLayer(
-        sl.scope,
+        torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
         num_channels=sl.num_channels,
         mean=mean,

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union, cast
+from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple, TypeVar, Union, cast
 
 import torch
 from torch import Tensor, nn
@@ -60,17 +60,15 @@ class AddressBook(ABC):
     def __iter__(self) -> Iterator[AddressBookEntry]:
         return iter(self._entries)
 
-    def set_device(self, device: Optional[Union[str, torch.device, int]] = None) -> "AddressBook":
-        self._entries = list(
-            map(
-                lambda entry: AddressBookEntry(
-                    entry.module,
-                    entry.in_module_ids,
-                    [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
-                ),
-                self._entries,
+    def set_device(self, device: Union[str, torch.device, int]) -> "AddressBook":
+        def set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
+            return AddressBookEntry(
+                entry.module,
+                entry.in_module_ids,
+                [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
             )
-        )
+
+        self._entries = [set_book_entry_device(entry) for entry in self._entries]
         return self
 
     @abstractmethod
@@ -78,6 +76,21 @@ class AddressBook(ABC):
         self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Iterator[Tuple[Optional[TorchModule], Tuple[Tensor, ...]]]:
         ...
+
+
+class ModuleEvalFunctional(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a function that evaluates a module on some inputs."""
+
+    def __call__(self, module: TorchModule, *inputs: Tensor) -> Tensor:
+        """Evaluate a module on some inputs.
+
+        Args:
+            module: The module to evaluate.
+            inputs: The tensor inputs to the module
+
+        Returns:
+            Tensor: The output of the module as specified by this functional.
+        """
 
 
 class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
@@ -109,6 +122,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             fold_idx_info = self._build_unfold_index_info()
         self._address_book = self._build_address_book(fold_idx_info)
 
+    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+        self._address_book.set_device(device)
+        self._device = device
+
     @property
     def device(self) -> Optional[Union[str, torch.device, int]]:
         """Retrieve the device the module is allocated to.
@@ -117,6 +134,15 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             A device, which can be a string, and integer or a torch.device object.
         """
         return self._device
+
+    @property
+    def address_book(self) -> AddressBook:
+        """Retrieve the address book object of the computational graph.
+
+        Returns:
+            The address book.
+        """
+        return self._address_book
 
     def to(
         self,
@@ -136,20 +162,27 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             Itself.
         """
         if device is not None:
-            self._address_book.set_device(device)
-            self._device = device
+            self._set_device(device)
         return cast(TorchDiAcyclicGraph, super().to(device, dtype, non_blocking))
 
-    def _eval_forward(self, x: Optional[Tensor] = None) -> Tensor:
+    def evaluate(
+        self, x: Optional[Tensor] = None, module_fn: Optional[ModuleEvalFunctional] = None
+    ) -> Tensor:
         """Evaluate the Torch graph by following the topological ordering,
             and by using the address book information to retrieve the inputs to each module.
 
         Args:
-            x: The input of the Torch graph. It can be None.
+            x: The input of the Torch computational graph. It can be None.
+            module_fn: A functional over modules that overrides the forward method defined by a
+                module. It can be None. If it is None, then the ```__call__``` method defined by
+                the module itself is used.
 
         Returns:
             The output tensor of the Torch graph.
             If the Torch graph has multiple outputs, then they will be stacked.
+
+        Raises:
+            RuntimeError: If the address book is somehow not well-formed.
         """
         # Evaluate the computational graph by following the topological ordering,
         # and by using the book address information to retrieve the inputs to each
@@ -159,7 +192,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             if module is None:
                 (output,) = inputs
                 return output
-            y = module(*inputs)
+            if module_fn is None:
+                y = module(*inputs)
+            else:
+                y = module_fn(module, *inputs)
             module_outputs.append(y)
         raise RuntimeError("The address book is malformed")
 

@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -13,26 +13,23 @@ from cirkit.backend.torch.graph.modules import (
     FoldIndexInfo,
     TorchDiAcyclicGraph,
 )
-from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.symbolic.circuit import StructuralProperties
 from cirkit.utils.scope import Scope
 
 
 class LayerAddressBook(AddressBook):
-    def __init__(
-        self, entries: List[AddressBookEntry], *, in_graph_fn: Callable[[Tensor, Tensor], Tensor]
-    ):
+    def __init__(self, entries: List[AddressBookEntry]):
         super().__init__(entries)
-        self._in_graph_fn = in_graph_fn
 
     def lookup(
         self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
     ) -> Iterator[Tuple[Optional[TorchLayer], Tuple[Tensor, ...]]]:
         # Loop through the entries and yield inputs
         for entry in self._entries:
-            (in_fold_idx,) = entry.in_fold_idx
-
             # Catch the case there are some inputs coming from other modules
             if entry.in_module_ids:
+                (in_fold_idx,) = entry.in_fold_idx
                 (in_module_ids,) = entry.in_module_ids
                 if len(in_module_ids) == 1:
                     x = module_outputs[in_module_ids[0]]
@@ -43,17 +40,18 @@ class LayerAddressBook(AddressBook):
                 continue
 
             # Catch the case there are no inputs coming from other modules
-            assert in_graph is not None and in_fold_idx is not None
-            x = self._in_graph_fn(in_graph, in_fold_idx)
+            # That is, we are gathering the inputs of input layers
+            assert in_graph is not None
+            assert isinstance(entry.module, TorchInputLayer)
+            # in_graph: An input batch (assignments to variables) of shape (B, C, D)
+            # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
+            # x: (B, C, D) -> (B, C, F, D') -> (F, C, B, D')
+            x = in_graph[..., entry.module.scope_idx].permute(2, 1, 0, 3)
             yield entry.module, (x,)
 
     @classmethod
     def from_index_info(
-        cls,
-        fold_idx_info: FoldIndexInfo,
-        *,
-        incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
-        in_graph_fn: Callable[[Tensor, Tensor], Tensor],
+        cls, fold_idx_info: FoldIndexInfo, *, incomings_fn: Callable[[TorchLayer], List[TorchLayer]]
     ) -> "LayerAddressBook":
         # The address book entries being built
         entries: List[AddressBookEntry] = []
@@ -71,11 +69,10 @@ class LayerAddressBook(AddressBook):
                 entry = build_address_book_stacked_entry(
                     m, in_modules_fold_idx, num_folds=num_folds
                 )
-            # Catch the case of a folded module having the input of the network as input
             else:
-                input_idx = [[idx[1] for idx in fi] for fi in in_modules_fold_idx]
-                input_idx_t = torch.tensor(input_idx)
-                entry = AddressBookEntry(m, [], [input_idx_t])
+                # Catch the case of a folded module having the input of the network as input
+                # That is, this is the case of an input layer
+                entry = AddressBookEntry(m, [], [])
 
             num_folds[mid] = m.num_folds
             entries.append(entry)
@@ -86,7 +83,7 @@ class LayerAddressBook(AddressBook):
         )
         entries.append(entry)
 
-        return LayerAddressBook(entries, in_graph_fn=in_graph_fn)
+        return LayerAddressBook(entries)
 
 
 class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
@@ -98,6 +95,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         in_layers: Dict[TorchLayer, List[TorchLayer]],
         outputs: List[TorchLayer],
         *,
+        properties: StructuralProperties,
         fold_idx_info: Optional[FoldIndexInfo] = None,
     ) -> None:
         super().__init__(
@@ -106,18 +104,25 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             outputs,
             fold_idx_info=fold_idx_info,
         )
-        self.scope = scope
-        self.num_channels = num_channels
+        self._scope = scope
+        self._num_channels = num_channels
+        self._properties = properties
+
+    @property
+    def scope(self) -> Scope:
+        return self._scope
 
     @property
     def num_variables(self) -> int:
         return len(self.scope)
 
-    def reset_parameters(self) -> None:
-        # For each layer, initialize its parameters, if any
-        for l in self.layers:
-            for _, p in l.params.items():
-                p.reset_parameters()
+    @property
+    def num_channels(self) -> int:
+        return self._num_channels
+
+    @property
+    def properties(self) -> StructuralProperties:
+        return self._properties
 
     def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
         return self.node_inputs(l)
@@ -137,30 +142,29 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
         return self.nodes_outputs
 
+    def reset_parameters(self) -> None:
+        # For each layer, initialize its parameters, if any
+        for l in self.layers:
+            for p in l.params.values():
+                p.reset_parameters()
+
+    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+        for l in self.layers:
+            for p in l.params.values():
+                p._set_device(device)
+        super()._set_device(device)
+
     def _build_unfold_index_info(self) -> FoldIndexInfo:
         return build_unfold_index_info(
-            self.topological_ordering(),
-            outputs=self.outputs,
-            incomings_fn=self.node_inputs,
-            in_address_fn=lambda l: l.scope,
+            self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
         )
 
     def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> LayerAddressBook:
-        def index_input(x: Tensor, idx: Tensor) -> Tensor:
-            # Index and process the input tensor, before feeding it to the input layers
-            # x: (B, C, D)
-            # idx: (F, D'), D' < D
-            return x[..., idx].permute(2, 1, 0, 3)  # (F, C, B, D')
+        return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
 
-        return LayerAddressBook.from_index_info(
-            fold_idx_info,
-            incomings_fn=self.layer_inputs,
-            in_graph_fn=index_input,
-        )
-
-    def _eval_layers(self, x: Tensor) -> Tensor:
-        # Evaluate layers
-        y = self._eval_forward(x)  # (O, B, K)
+    def _evaluate_layers(self, x: Tensor) -> Tensor:
+        # Evaluate layers on the given input
+        y = self.evaluate(x)  # (O, B, K)
         return y.transpose(0, 1)  # (B, O, K)
 
 
@@ -183,7 +187,7 @@ class TorchCircuit(AbstractTorchCircuit):
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     def forward(self, x: Tensor) -> Tensor:
-        return self._eval_layers(x)
+        return self._evaluate_layers(x)
 
 
 class TorchConstantCircuit(AbstractTorchCircuit):
@@ -202,6 +206,7 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
+        # Evaluate the layers using some dummy input
         x = torch.empty(size=(1, self.num_channels, self.num_variables), device=self.device)
-        x = self._eval_layers(x)  # (B, O, K)
+        x = self._evaluate_layers(x)  # (B, O, K)
         return x.squeeze(dim=0)  # (O, K)

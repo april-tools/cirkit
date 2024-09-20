@@ -18,7 +18,6 @@ def build_unfold_index_info(
     *,
     outputs: Iterable[TorchModule],
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
-    in_address_fn: Optional[Callable[[TorchModule], List[int]]] = None,
 ) -> FoldIndexInfo:
     # The topological ordering of modules
     ordering: List[TorchModule] = list(ordering)
@@ -44,17 +43,8 @@ def build_unfold_index_info(
             )
         # Retrieve the input modules
         in_modules: List[AbstractTorchModule] = incomings_fn(m)
-
-        # Check if we are folding input modules
-        # If that is the case, we index some other input tensor, if specified.
-        # If that is not the case, we retrieve the input index from one of the useful maps.
-        in_modules_idx: List[Tuple[int, int]]
-        if in_modules:
-            in_modules_idx = [fold_idx[mi] for mi in in_modules]
-        elif in_address_fn is None:
-            in_modules_idx = []
-        else:
-            in_modules_idx = [(-1, j) for j in in_address_fn(m)]
+        # Check if we are folding non-input modules
+        in_modules_idx = [fold_idx[mi] for mi in in_modules] if in_modules else []
 
         # Update the data structures
         fold_idx[m] = (cur_module_id, 0)
@@ -73,7 +63,6 @@ def build_folded_graph(
     outputs: Iterable[TorchModule],
     incomings_fn: Callable[[TorchModule], List[TorchModule]],
     fold_group_fn: Callable[[List[TorchModule]], TorchModule],
-    in_address_fn: Optional[Callable[[TorchModule], List[int]]] = None,
 ) -> Tuple[
     List[TorchModule],
     Dict[TorchModule, List[TorchModule]],
@@ -117,15 +106,11 @@ def build_folded_graph(
             in_modules[folded_module] = folded_in_modules
 
             # Check if we are folding input modules
-            # If that is the case, we index some other input tensor, if specified.
-            # If that is not the case, we retrieve the input index from one of the useful maps.
             in_modules_idx: List[List[Tuple[int, int]]]
             if in_group_modules[0]:
                 in_modules_idx = [[fold_idx[mi] for mi in msi] for msi in in_group_modules]
-            elif in_address_fn is None:
-                in_modules_idx = []
             else:
-                in_modules_idx = [[(-1, j) for j in in_address_fn(m)] for m in group]
+                in_modules_idx = []
 
             # Update the data structures
             cur_module_id = len(modules)
