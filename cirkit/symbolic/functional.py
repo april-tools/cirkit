@@ -7,7 +7,7 @@ from cirkit.symbolic.circuit import (
     CircuitOperation,
     CircuitOperator,
     StructuralPropertyError,
-    is_compatible,
+    are_compatible,
 )
 from cirkit.symbolic.layers import InputLayer, Layer, LayerOperator, ProductLayer, SumLayer
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
@@ -182,7 +182,7 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
     if sc1.scope != sc2.scope:
         raise NotImplementedError("Only the product of circuits over the same scope is implemented")
     scope = sc1.scope
-    if not is_compatible(sc1, sc2):
+    if not are_compatible(sc1, sc2):
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
