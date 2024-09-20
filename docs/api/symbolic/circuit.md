@@ -7,4 +7,4 @@
 ::: cirkit.symbolic.circuit.ProductLayerFactory
 ::: cirkit.symbolic.circuit.MixingLayerFactory
 ::: cirkit.symbolic.circuit.Circuit
-::: cirkit.symbolic.circuit.is_compatible
+::: cirkit.symbolic.circuit.are_compatible
