@@ -91,7 +91,8 @@ def integrate(
 
     Raises:
         StructuralPropertyError: If the given circuit is not smooth and decomposable.
-        ValueError: If the scope to integrate over is not a subset of the scope of the circuit.
+        ValueError: If the scope to integrate over is not a subset of the scope of the circuit,
+            or if it is empty.
     """
     # Check for structural properties
     if not sc.is_smooth or not sc.is_decomposable:
@@ -99,9 +100,11 @@ def integrate(
             "Only smooth and decomposable circuits can be efficiently integrated."
         )
 
-    # Check the variable
+    # Check the variables to integrate
     if scope is None:
         scope = sc.scope
+    if not scope:
+        raise ValueError("There are no variables to integrate over")
     elif not scope <= sc.scope:
         raise ValueError(
             "The variables scope to integrate must be a subset of the scope of the circuit"
