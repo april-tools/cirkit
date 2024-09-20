@@ -228,7 +228,14 @@ class TorchCompiler(AbstractCompiler):
 
         # Construct the tensorized circuit
         layers = [compiled_layers_map[sl] for sl in compiled_layers_map.keys()]
-        cc = cc_cls(sc.scope, sc.num_channels, layers=layers, in_layers=in_layers, outputs=outputs)
+        cc = cc_cls(
+            sc.scope,
+            sc.num_channels,
+            layers=layers,
+            in_layers=in_layers,
+            outputs=outputs,
+            properties=sc.properties,
+        )
 
         # Post-process the compiled circuit, i.e.,
         # optionally apply optimizations to it and then fold it
@@ -274,6 +281,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         layers,
         in_layers,
         outputs,
+        properties=cc.properties,
         fold_idx_info=fold_idx_info,
     )
 
@@ -483,7 +491,7 @@ def _optimize_layers(
     if optimize_result is None:
         return cc, False
     layers, in_layers, outputs = optimize_result
-    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs)
+    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs, properties=cc.properties)
     return cc, True
 
 

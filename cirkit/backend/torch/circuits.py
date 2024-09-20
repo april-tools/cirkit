@@ -14,6 +14,7 @@ from cirkit.backend.torch.graph.modules import (
     TorchDiAcyclicGraph,
 )
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.symbolic.circuit import StructuralProperties
 from cirkit.utils.scope import Scope
 
 
@@ -94,6 +95,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         in_layers: Dict[TorchLayer, List[TorchLayer]],
         outputs: List[TorchLayer],
         *,
+        properties: StructuralProperties,
         fold_idx_info: Optional[FoldIndexInfo] = None,
     ) -> None:
         super().__init__(
@@ -102,18 +104,25 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             outputs,
             fold_idx_info=fold_idx_info,
         )
-        self.scope = scope
-        self.num_channels = num_channels
+        self._scope = scope
+        self._num_channels = num_channels
+        self._properties = properties
 
-    def reset_parameters(self) -> None:
-        # For each layer, initialize its parameters, if any
-        for l in self.layers:
-            for p in l.params.values():
-                p.reset_parameters()
+    @property
+    def scope(self) -> Scope:
+        return self._scope
 
     @property
     def num_variables(self) -> int:
         return len(self.scope)
+
+    @property
+    def num_channels(self) -> int:
+        return self._num_channels
+
+    @property
+    def properties(self) -> StructuralProperties:
+        return self._properties
 
     def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
         return self.node_inputs(l)
@@ -132,6 +141,12 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     @property
     def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
         return self.nodes_outputs
+
+    def reset_parameters(self) -> None:
+        # For each layer, initialize its parameters, if any
+        for l in self.layers:
+            for p in l.params.values():
+                p.reset_parameters()
 
     def _set_device(self, device: Union[str, torch.device, int]) -> None:
         for l in self.layers:

@@ -24,7 +24,15 @@ class IntegrateQuery(Query):
 
         Args:
             circuit: The circuit to integrate over.
+
+        Raises:
+            ValueError: If the circuit to integrate is not smooth or not decomposable.
         """
+        if not circuit.properties.smooth or not circuit.properties.decomposable:
+            raise ValueError(
+                f"The circuit to integrate must be smooth and decomposable, "
+                f"but found {circuit.properties}"
+            )
         super().__init__()
         self._circuit = circuit
 
