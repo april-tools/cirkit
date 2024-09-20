@@ -330,9 +330,22 @@ class LogPartitionLayer(InputLayer):
 
 
 class ProductLayer(Layer, ABC):
-    """The abstract base class for Symbolic product layers."""
+    """The abstract base class for symbolic product layers."""
 
     def __init__(self, scope: Scope, num_input_units: int, num_output_units: int, arity: int = 2):
+        """Initializes a product layer.
+
+        Args:
+            scope: The variables scope of the layer.
+            num_input_units: The number of units in each input layer.
+            num_output_units: The number of product units in the product layer.
+            arity: The arity of the layer, i.e., the number of input layers to the product layer.
+
+        Raises:
+            ValueError: If the arity is less than two.
+        """
+        if arity < 2:
+            raise ValueError("The arity should be at least 2")
         super().__init__(scope, num_input_units, num_output_units, arity)
 
     @property
@@ -345,42 +358,58 @@ class ProductLayer(Layer, ABC):
 
 
 class HadamardLayer(ProductLayer):
-    """The symbolic Hadamard product layer."""
+    """The symbolic element-wise product (or Hadamard) layer. This layer computes the element-wise
+    product of the vectors given in output by some input layers. Therefore, the number of product
+    units in the layer is equal to the number of units in each input layer."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
-        if arity < 2:
-            raise ValueError("The arity should be at least 2")
-        super().__init__(
-            scope, num_input_units, HadamardLayer.num_prod_units(num_input_units), arity=arity
-        )
+        """Initializes a Hadamard product layer.
 
-    @staticmethod
-    def num_prod_units(in_num_units: int) -> int:
-        return in_num_units
+        Args:
+            scope: The variables scope of the layer.
+            num_input_units: The number of units in each input layer.
+            arity: The arity of the layer, i.e., the number of input layers to the product layer.
+
+        Raises:
+            ValueError: If the arity is less than two.
+        """
+        super().__init__(scope, num_input_units, num_input_units, arity=arity)
 
 
 class KroneckerLayer(ProductLayer):
-    """The symbolic Kronecker product layer."""
+    """The symbolic outer product (or Kronecker) layer. This layer computes the outer
+    product of the vectors given in output by some input layers. Therefore, the number of product
+    units in the layer is equal to the product of the number of units in each input layer.
+    Note that the output of a Kronecker layer is a vector."""
 
     def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
+        """Initializes a Kronecker product layer.
+
+        Args:
+            scope: The variables scope of the layer.
+            num_input_units: The number of units in each input layer.
+            arity: The arity of the layer, i.e., the number of input layers to the product layer.
+
+        Raises:
+            ValueError: If the arity is less than two.
+        """
+        if arity < 2:
+            raise ValueError("The arity should be at least 2")
         super().__init__(
             scope,
             num_input_units,
-            KroneckerLayer.num_prod_units(num_input_units, arity),
+            cast(int, num_input_units**arity),
             arity=arity,
         )
 
-    @staticmethod
-    def num_prod_units(in_num_units: int, arity: int) -> int:
-        return cast(int, in_num_units**arity)
-
 
 class SumLayer(Layer, ABC):
-    """The abstract base class for Symbolic sum layers."""
+    """The abstract base class for symbolic sum layers."""
 
 
 class DenseLayer(SumLayer):
-    """The Symbolic dense sum layer."""
+    """The symbolic dense layer. A dense layer computes a matrix-by-vector product W * u,
+    where W is a SxK matrix and u is the output vector of length K of another layer."""
 
     def __init__(
         self,
@@ -390,20 +419,33 @@ class DenseLayer(SumLayer):
         weight: Optional[Parameter] = None,
         weight_factory: Optional[ParameterFactory] = None,
     ):
+        """Initializes a dense layer.
+
+        Args:
+            scope: The variables scope of the layer.
+            num_input_units: The number of units of the input layer.
+            num_output_units: The number of sum units in the dense layer.
+            weight: The symbolic weight matrix parameter, having shape (S, K), where S is the
+                number of output units and K is the number of input units. It can be None.
+            weight_factory: A factory that constructs the symbolic weight matrix parameter,
+                if the given weight is None. If this factory is also None, then a weight
+                parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
+                as initializer will be instantiated.
+        """
         super().__init__(scope, num_input_units, num_output_units, arity=1)
         if weight is None:
             if weight_factory is None:
                 weight = Parameter.from_leaf(
-                    TensorParameter(*self.weight_shape, initializer=NormalInitializer())
+                    TensorParameter(*self._weight_shape, initializer=NormalInitializer())
                 )
             else:
-                weight = weight_factory(self.weight_shape)
-        if weight.shape != self.weight_shape:
-            raise ValueError(f"Expected parameter shape {self.weight_shape}, found {weight.shape}")
+                weight = weight_factory(self._weight_shape)
+        if weight.shape != self._weight_shape:
+            raise ValueError(f"Expected parameter shape {self._weight_shape}, found {weight.shape}")
         self.weight = weight
 
     @property
-    def weight_shape(self) -> Tuple[int, ...]:
+    def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_input_units
 
     @property
@@ -420,7 +462,9 @@ class DenseLayer(SumLayer):
 
 
 class MixingLayer(SumLayer):
-    """The Symbolic mixing sum layer."""
+    """The symbolic mixing sum layer. A mixing layer takes N layers as inputs, where each one
+    outputs a K-dimensional vector, and computes a weighted sum over them. Therefore, the
+    output of a mixing layer is also a K-dimensional vector."""
 
     def __init__(
         self,
@@ -430,20 +474,33 @@ class MixingLayer(SumLayer):
         weight: Optional[Parameter] = None,
         weight_factory: Optional[ParameterFactory] = None,
     ):
+        """Initializes a mixing layer.
+
+        Args:
+            scope: The variables scope of the layer.
+            num_units: The number of units in each of the input layers.
+            arity: The arity of the layer, i.e., the number of input layers to the mixing layer.
+            weight: The symbolic weight matrix parameter, having shape (K, R), where K is the
+                number of units and R is the arity. It can be None.
+            weight_factory: A factory that constructs the symbolic weight matrix parameter,
+                if the given weight is None. If this factory is also None, then a weight
+                parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
+                as initializer will be instantiated.
+        """
         super().__init__(scope, num_units, num_units, arity)
         if weight is None:
             if weight_factory is None:
                 weight = Parameter.from_leaf(
-                    TensorParameter(*self.weight_shape, initializer=NormalInitializer())
+                    TensorParameter(*self._weight_shape, initializer=NormalInitializer())
                 )
             else:
-                weight = weight_factory(self.weight_shape)
-        if weight.shape != self.weight_shape:
-            raise ValueError(f"Expected parameter shape {self.weight_shape}, found {weight.shape}")
+                weight = weight_factory(self._weight_shape)
+        if weight.shape != self._weight_shape:
+            raise ValueError(f"Expected parameter shape {self._weight_shape}, found {weight.shape}")
         self.weight = weight
 
     @property
-    def weight_shape(self) -> Tuple[int, ...]:
+    def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_input_units, self.arity
 
     @property
