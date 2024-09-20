@@ -20,7 +20,7 @@ jobs:
       - name: Truncate pyproject for hashing
         run: |
           sed -n '1,/#\{80\}/p' pyproject.toml > pyproject-hash.toml
-      - name: Set up Python dependencies
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.8'
@@ -46,7 +46,7 @@ jobs:
         run: bash scripts/check.sh --tool pydocstyle
       - name: pylint
         id: tool-pylint
-        if: steps.tool-black.outcome == 'success' && steps.tool-isort.outcome == 'success' && steps.tool-pydocstyle.outcome == 'success'
+        if: steps.tool-black.outcome == 'success' && steps.tool-isort.outcome == 'success'
         run: bash scripts/check.sh --tool pylint
       - name: mypy-cache
         id: mypy-cache-setup
