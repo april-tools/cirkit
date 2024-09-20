@@ -35,6 +35,17 @@ pip install .[notebooks]
 
 ## Development
 
+### Build Documentation Locally
+
+Whenever you write documentation, you can check how it would look like by building HTML pages locally.
+To do so, run the following at the root level of the repository directory.
+
+```shell
+mkdocs serve
+```
+
+After waiting a few seconds, you can then navigate the rendered documentation at the link http://127.0.0.1:8000/.
+
 ### Automatic Code Formatting
 
 We try to follow a consistent formatting across the library.
