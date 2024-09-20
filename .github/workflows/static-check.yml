@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  Linting-Typing-Docs-Checks:
+  Static-Checks:
     runs-on: ubuntu-latest
     steps:
       - name: Check out with submodules
@@ -20,30 +20,43 @@ jobs:
       - name: Truncate pyproject for hashing
         run: |
           sed -n '1,/#\{80\}/p' pyproject.toml > pyproject-hash.toml
-      - name: Set up Python
+      - name: Set up Python dependencies
         uses: actions/setup-python@v5
         with:
           python-version: '3.8'
           cache: 'pip'
           cache-dependency-path: pyproject-hash.toml
-      - name: Cache mypy_cache
+      - name: Install dependencies
+        id: python-env-setup
+        run: |
+          python -m pip install -U pip
+          pip install -e .[dev]
+          bash ./benchmark/install_submodule.sh all
+      - name: black
+        id: tool-black
+        if: steps.python-env-setup.outcome == 'success'
+        run: bash scripts/check.sh --tool black
+      - name: isort
+        id: tool-isort
+        if: failure() || steps.python-env-setup.outcome == 'success'
+        run: bash scripts/check.sh --tool isort
+      - name: pydocstyle
+        id: tool-pydocstyle
+        if: failure() || steps.python-env-setup.outcome == 'success'
+        run: bash scripts/check.sh --tool pydocstyle
+      - name: pylint
+        id: tool-pylint
+        if: steps.tool-black.outcome == 'success' && steps.tool-isort.outcome == 'success' && steps.tool-pydocstyle.outcome == 'success'
+        run: bash scripts/check.sh --tool pylint
+      - name: mypy-cache
+        id: mypy-cache-setup
+        if: steps.tool-pylint.outcome == 'success'
         uses: actions/cache@v4
         with:
           path: .mypy_cache
           key: mypy_cache-${{ hashFiles('pyproject-hash.toml') }}
           restore-keys: mypy_cache-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[dev]
-          bash ./benchmark/install_submodule.sh all
-      - name: black
-        run: bash scripts/check.sh --tool black
-      - name: isort
-        run: bash scripts/check.sh --tool isort
-      - name: pydocstyle
-        run: bash scripts/check.sh --tool pydocstyle
-      - name: pylint
-        run: bash scripts/check.sh --tool pylint
       - name: mypy
+        id: tool-mypy
+        if: steps.mypy-cache-setup.outcome == 'success'
         run: bash scripts/check.sh --tool mypy
