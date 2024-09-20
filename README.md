@@ -21,7 +21,7 @@ source venv/bin/activate
 Then install the required dependencies in [development mode](https://setuptools.pypa.io/en/latest/userguide/development_mode.html).
 ```shell
 pip install -U pip        # update pip
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 This will install not only the core dependencies of the library itself (e.g., PyTorch) but also additional dependencies useful for development (e.g., PyTest).
 It also installs other development tools, such as PyLint and MyPy.
@@ -30,7 +30,7 @@ It also installs other development tools, such as PyLint and MyPy.
 
 If you want to execute the Jupyter notebooks in the ```notebooks/``` directory, then install the additional dependencies with:
 ```shell
-pip install .[notebooks]
+pip install ".[notebooks]"
 ```
 
 ## Development
