@@ -46,11 +46,10 @@ jobs:
         run: bash scripts/check.sh --tool pydocstyle
       - name: pylint
         id: tool-pylint
-        if: steps.tool-black.outcome == 'success' && steps.tool-isort.outcome == 'success'
+        if: failure() || (steps.tool-black.outcome == 'success' && steps.tool-isort.outcome == 'success')
         run: bash scripts/check.sh --tool pylint
       - name: mypy-cache
         id: mypy-cache-setup
-        if: steps.tool-pylint.outcome == 'success'
         uses: actions/cache@v4
         with:
           path: .mypy_cache
@@ -58,5 +57,4 @@ jobs:
           restore-keys: mypy_cache-
       - name: mypy
         id: tool-mypy
-        if: steps.mypy-cache-setup.outcome == 'success'
         run: bash scripts/check.sh --tool mypy
