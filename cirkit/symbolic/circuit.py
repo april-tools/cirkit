@@ -18,7 +18,7 @@ from typing import (
     cast,
 )
 
-from cirkit.symbolic.initializers import ConstantInitializer
+from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.symbolic.layers import (
     DenseLayer,
     HadamardLayer,
@@ -67,6 +67,8 @@ class CircuitOperator(IntEnum):
 
     CONCATENATE = auto()
     """The concatenation operator defined over many circuits."""
+    EVIDENCE = auto()
+    """The evidence operator defined over a circuit."""
     INTEGRATION = auto()
     """The integration operator defined over a circuit."""
     DIFFERENTIATION = auto()
@@ -205,13 +207,34 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
 
         Returns:
             CircuitBlock: The circuit block consisting of a composition of layers.
+
+        Raises:
+            ValueError: If the given sequence of layers consists of less than two layers.
         """
         layers = list(ls)
         in_layers = {}
-        assert len(layers) > 1, "Expected a composition of at least 2 layers"
+        if len(layers) <= 1:
+            raise ValueError("Expected a composition of at least 2 layers")
         for i, l in enumerate(layers):
             in_layers[l] = [layers[i - 1]] if i - 1 >= 0 else []
         return CircuitBlock(layers, in_layers, layers[-1])
+
+    @staticmethod
+    def from_nary_layer(lout: Layer, *ls: InputLayer) -> "CircuitBlock":
+        """Instantiate a circuit block consisting of an output layer having
+        multiple layers as inputs.
+
+        Args:
+            lout: The output layer.
+            *ls: A sequence of inpput layers.
+
+        Returns:
+            CircuitBlock: The circuit block consisting of an output layer with several
+                input layers as inputs.
+        """
+        layers = [lout, *ls]
+        in_layers = {lout: list(ls)}
+        return CircuitBlock(layers, in_layers, lout)
 
 
 class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
@@ -607,11 +630,12 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         def default_mixing_layer_factory(num_units: int, arity: int) -> MixingLayer:
             if sum_weight_factory is None:
+                initializer = ConstantTensorInitializer(1.0 / arity)
                 weight = Parameter.from_leaf(
                     TensorParameter(
                         num_units,
                         arity,
-                        initializer=ConstantInitializer(1.0 / arity),
+                        initializer=initializer,
                         learnable=False,
                     )
                 )
@@ -886,9 +910,13 @@ def _scope_factorizations(sc: Circuit) -> Dict[Scope, Set[Tuple[Scope, ...]]]:
     # For each product layer, retrieves how it factorizes its scope
     scope_factorizations: Dict[Scope, Set[Tuple[Scope, ...]]] = defaultdict(set)
     for sl in sc.product_layers:
-        scope_factorizations[sc.layer_scope(sl)].add(
-            tuple(sorted(sc.layer_scope(sli) for sli in sc.layer_inputs(sl)))
-        )
+        sl_scope = sc.layer_scope(sl)
+        fs = tuple(sorted(sc.layer_scope(sli) for sli in sc.layer_inputs(sl)))
+        # Remove empty scopes that appear in the factorization
+        fs = tuple(s for s in fs if s)
+        # Add it to the scope factorizations only if it is a factorization
+        if len(fs) > 1:
+            scope_factorizations[sl_scope].add(fs)
     return scope_factorizations
 
 

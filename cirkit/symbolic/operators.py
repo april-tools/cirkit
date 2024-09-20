@@ -4,8 +4,10 @@ from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
+    EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
+    KroneckerLayer,
     Layer,
     LayerOperator,
     LogPartitionLayer,
@@ -57,6 +59,15 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock
         log_partition = Parameter.from_unary(reduce_channels, sl.log_partition.ref())
     sl = LogPartitionLayer(sl.num_output_units, value=log_partition)
     return CircuitBlock.from_layer(sl)
+
+
+def multiply_evidence_layers(sl1: EvidenceLayer, sl2: EvidenceLayer) -> CircuitBlock:
+    if sl1.num_output_units != sl2.num_output_units:
+        raise NotImplementedError(
+            "The product of evidence layer with " "different number of units is not supported"
+        )
+    kronecker = KroneckerLayer(sl1.num_output_units, arity=2)
+    return CircuitBlock.from_nary_layer(kronecker, sl1, sl2)
 
 
 def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) -> CircuitBlock:
@@ -236,6 +247,7 @@ DEFAULT_OPERATOR_RULES: Dict[LayerOperator, List[LayerOperatorFunc]] = {
     LayerOperator.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
     LayerOperator.DIFFERENTIATION: [],
     LayerOperator.MULTIPLICATION: [
+        multiply_evidence_layers,
         multiply_categorical_layers,
         multiply_gaussian_layers,
         multiply_hadamard_layers,

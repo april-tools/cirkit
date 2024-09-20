@@ -21,7 +21,7 @@ class LayerOperator(IntEnum):
     DIFFERENTIATION = auto()
     """The differentiation operator defined over layers."""
     MULTIPLICATION = auto()
-    """The multiplication operator defined over layers."""
+    """The multiplication (Kronecker product) operator defined over layers."""
     CONJUGATION = auto()
     """The conjugation opereator defined over sum and input layers."""
 
@@ -153,9 +153,54 @@ class ConstantLayer(InputLayer):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {
-            "num_output_units": self.num_output_units,
-        }
+        return {"num_output_units": self.num_output_units}
+
+
+class EvidenceLayer(ConstantLayer):
+    """The symbolic layer computing the output of an input layer given by a complete observation.
+    The only parameter of an evidence layer is a complete observation of the variables."""
+
+    def __init__(self, layer: InputLayer, *, observation: Parameter):
+        """Initializes a symbolic evidence layer.
+
+        Args:
+            layer: The symbolic input layer to condition, i.e., to evaluate on the observation.
+            observation: The observation stored as a parameter that outputs a constant (i.e.,
+                non-learnable) tensor of shape (C, D), where D is the number of variable the
+                symbolic input layer is defined on, and C is the number of channels per variable.
+
+        Raises:
+            ValueError: If the observation parameter shape has not two dimensions, or if the
+                number of its channels (resp. variables) does not match the number of channels
+                (resp. variables) of the symbolic input layer.
+        """
+        if len(observation.shape) != 2:
+            raise ValueError(
+                f"Expected observation of shape (num_channels, num_variables), "
+                f"but found {observation.shape}"
+            )
+        num_channels, num_variables = observation.shape
+        if num_channels != layer.num_channels:
+            raise ValueError(
+                f"Expected an observation with number of channels {layer.num_channels}, "
+                f"but found {num_channels}"
+            )
+        if num_variables != layer.num_variables:
+            raise ValueError(
+                f"Expected an observation with number of variables {layer.num_variables}, "
+                f"but found {num_variables}"
+            )
+        super().__init__(layer.num_output_units)
+        self.layer = layer
+        self.observation = observation
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {"layer": self.layer}
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        return {"observation": self.observation}
 
 
 class CategoricalLayer(InputLayer):

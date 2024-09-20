@@ -6,8 +6,10 @@ from itertools import chain
 from numbers import Number
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union, final
 
+import numpy as np
+
 from cirkit.symbolic.dtypes import DataType, dtype_value
-from cirkit.symbolic.initializers import ConstantInitializer, Initializer
+from cirkit.symbolic.initializers import ConstantTensorInitializer, Initializer
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, topologically_process_nodes
 
 
@@ -58,10 +60,11 @@ class TensorParameter(ParameterInput):
 
 
 class ConstantParameter(TensorParameter):
-    def __init__(self, *shape: int, value: Number = 0.0):
+    def __init__(self, *shape: int, value: Union[Number, np.ndarray] = 0.0):
+        initializer = ConstantTensorInitializer(value)
         super().__init__(
             *shape,
-            initializer=ConstantInitializer(value),
+            initializer=initializer,
             learnable=False,
             dtype=dtype_value(value),
         )

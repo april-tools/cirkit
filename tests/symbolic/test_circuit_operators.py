@@ -4,9 +4,46 @@ import pytest
 
 import cirkit.symbolic.functional as SF
 from cirkit.symbolic.circuit import are_compatible
-from cirkit.symbolic.layers import DenseLayer, HadamardLayer, LogPartitionLayer
+from cirkit.symbolic.layers import (
+    CategoricalLayer,
+    DenseLayer,
+    EvidenceLayer,
+    GaussianLayer,
+    HadamardLayer,
+    LogPartitionLayer,
+)
 from cirkit.symbolic.parameters import ConjugateParameter, KroneckerParameter, ReferenceParameter
+from cirkit.utils.scope import Scope
 from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
+
+
+@pytest.mark.parametrize(
+    "num_units,input_layer",
+    itertools.product([1, 3], ["bernoulli", "gaussian"]),
+)
+def test_evidence_circuit(num_units: int, input_layer: str):
+    sc = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer
+    )
+    obs = {4: 1 if input_layer == "bernoulli" else 1.23}
+    evi_sc = SF.evidence(sc, obs=obs)
+    assert evi_sc.scope == Scope([0, 1, 2, 3])
+    assert evi_sc.is_smooth
+    assert evi_sc.is_decomposable
+    assert evi_sc.is_structured_decomposable
+    assert not evi_sc.is_omni_compatible
+    assert len(list(evi_sc.inputs)) == len(list(sc.inputs))
+    evi_layers = [l for l in evi_sc.inputs if evi_sc.layer_scope(l) == Scope([])]
+    assert len(evi_layers) == 1
+    evi_layer = evi_layers[0]
+    assert isinstance(evi_layer, EvidenceLayer)
+    assert isinstance(
+        evi_layer.layer, CategoricalLayer if input_layer == "bernoulli" else GaussianLayer
+    )
+    assert evi_layer.observation.shape == (1, 1)
+    assert len(list(evi_sc.inner_layers)) == len(list(sc.inner_layers))
+    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), evi_sc.inner_layers))
+    assert all(isinstance(r, ReferenceParameter) for l in dense_layers for r in l.weight.inputs)
 
 
 @pytest.mark.parametrize(
@@ -21,7 +58,6 @@ def test_integrate_circuit(num_units: int, input_layer: str):
     assert int_sc.is_smooth
     assert int_sc.is_decomposable
     assert int_sc.is_structured_decomposable
-    assert not int_sc.is_omni_compatible
     assert not int_sc.scope
     assert len(list(int_sc.inputs)) == len(list(sc.inputs))
     assert all(isinstance(isl, LogPartitionLayer) for isl in int_sc.inputs)
