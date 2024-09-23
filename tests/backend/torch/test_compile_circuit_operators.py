@@ -8,6 +8,7 @@ from scipy import integrate
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
+from cirkit.backend.torch.layers.input import TorchEvidenceLayer
 from cirkit.backend.torch.semiring import SumProductSemiring
 from tests.floats import allclose, isclose
 from tests.symbolic.test_utils import (
@@ -25,12 +26,14 @@ def test_compile_evidence_integrate_pc_categorical(semiring: str, fold: bool, op
     compiler = TorchCompiler(fold=fold, optimize=optimize, semiring=semiring)
     sc, gt_outputs, _ = build_monotonic_structured_categorical_cpt_pc(return_ground_truth=True)
 
-    tc: TorchCircuit = compiler.compile(sc)
-
     for x, y in gt_outputs["evi"].items():
         evi_sc = SF.evidence(sc, obs={i: v for i, v in enumerate(x)})
         evi_tc = compiler.compile(evi_sc)
         assert isinstance(evi_tc, TorchConstantCircuit)
+        if fold:
+            assert len([l for l in evi_tc.inputs if isinstance(l, TorchEvidenceLayer)]) == 1
+        else:
+            assert len([l for l in evi_tc.inputs if isinstance(l, TorchEvidenceLayer)]) == 5
         evi_tc_output = evi_tc()
         assert isclose(
             evi_tc_output.item(), compiler.semiring.map_from(torch.tensor(y), SumProductSemiring)
@@ -41,6 +44,12 @@ def test_compile_evidence_integrate_pc_categorical(semiring: str, fold: bool, op
         mar_sc = SF.integrate(evi_sc)  # Integrate the remaining set of variables
         mar_tc = compiler.compile(mar_sc)
         assert isinstance(mar_tc, TorchConstantCircuit)
+        if fold:
+            assert len([l for l in mar_tc.inputs if isinstance(l, TorchEvidenceLayer)]) == 1
+        else:
+            assert len([l for l in mar_tc.inputs if isinstance(l, TorchEvidenceLayer)]) == len(
+                evi_sc.operation.metadata["scope"]
+            )
         mar_tc_output = mar_tc()
         assert isclose(
             mar_tc_output.item(), compiler.semiring.map_from(torch.tensor(y), SumProductSemiring)
