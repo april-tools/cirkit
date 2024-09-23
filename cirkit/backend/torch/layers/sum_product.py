@@ -1,3 +1,4 @@
+from cirkit.backend.torch import Tensor
 import torch
 import einops as E
 
@@ -83,6 +84,9 @@ class TorchTuckerLayer(TorchSumProductLayer):
             dim=-1,
             keepdim=True,
         )
+    
+    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
+        raise NotImplementedError("Sampling not implemented for Tucker layers.")
 
 
 class TorchCPLayer(TorchSumProductLayer):
@@ -141,11 +145,17 @@ class TorchCPLayer(TorchSumProductLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
-    def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
+    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
         x = self.semiring.prod(x, dim=1, keepdim=False)
 
-        normalisation = self.weight().sum(-1).abs().mean()
-        if normalisation < 1 - 1e-6 or normalisation > 1 + 1e-6:
+        negative = self.weight() < 0
+        negative = negative.any()
+
+        unnormalised = self.weight().sum(-1)
+        unnormalised = unnormalised < 1 - 1e-6 or unnormalised > 1 + 1e-6
+        unnormalised = unnormalised.any()
+
+        if negative or unnormalised:
             raise ValueError("Sampling only works with a normalised parametrisation!")
 
         c = x.shape[2]
