@@ -87,7 +87,7 @@ class TorchHadamardLayer(TorchProductLayer):
         """
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
-    def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
+    def sample(self, num_samples: int, x: Tensor) -> Tensor:
         return self.semiring.prod(x, dim=1, keepdim=False)
 
 
@@ -135,7 +135,7 @@ class TorchKroneckerLayer(TorchProductLayer):
         # shape (F, B, Ki, Ki) -> (F, B, Ko=Ki**2).
         return self.semiring.mul(x0, x1).flatten(start_dim=-2)
 
-    def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
+    def sample(self, num_samples: int, x: Tensor) -> Tensor:
         raise NotImplementedError("Sampling of Kronecker layer is not implemented.")
 
 
@@ -193,12 +193,18 @@ class TorchDenseLayer(TorchSumLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, Ko).
 
-    def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
+    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
         if self.arity != 1:
             raise NotImplementedError("Sampling of Dense layer only implemented for arity 1.")
 
-        normalisation = self.weight().sum(-1).abs().mean()
-        if normalisation < 1 - 1e-6 or normalisation > 1 + 1e-6:
+        negative = self.weight() < 0
+        negative = negative.any()
+
+        unnormalised = self.weight().sum(-1)
+        unnormalised = unnormalised < 1 - 1e-6 or unnormalised > 1 + 1e-6
+        unnormalised = unnormalised.any()
+
+        if negative or unnormalised:
             raise ValueError("Sampling only works with a normalised parametrisation!")
 
         c = x.shape[2]
@@ -271,9 +277,15 @@ class TorchMixingLayer(TorchSumLayer):
             "fhbk,fkh->fbk", inputs=(x,), operands=(weight,), dim=1, keepdim=False
         )
 
-    def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
-        normalisation = self.weight().sum(-1).abs().mean()
-        if normalisation < 1 - 1e-6 or normalisation > 1 + 1e-6:
+    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
+        negative = self.weight() < 0
+        negative = negative.any()
+
+        unnormalised = self.weight().sum(-1)
+        unnormalised = unnormalised < 1 - 1e-6 or unnormalised > 1 + 1e-6
+        unnormalised = unnormalised.any()
+
+        if negative or unnormalised:
             raise ValueError("Sampling only works with a normalised parametrisation!")
 
         c = x.shape[2]

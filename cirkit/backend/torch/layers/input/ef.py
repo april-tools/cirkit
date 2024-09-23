@@ -71,16 +71,9 @@ class TorchExpFamilyLayer(TorchInputLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         ...
 
-    def sample_forward(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
-        raise NotImplementedError()
-
-    def sample_backward(
-        self,
-        sample_dict: Dict[TorchLayer, List[Tensor]],
-        unit_dict: Dict[TorchLayer, List[Tensor]],
-        num_samples: int,
-    ) -> Tensor:
-        raise NotImplementedError()
+    @abstractmethod
+    def sample(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
+        ...
 
 
 class TorchCategoricalLayer(TorchExpFamilyLayer):
@@ -169,7 +162,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         x = torch.einsum("fcbdi,fdkci->fbk", x, logits)
         return x
 
-    def sample_forward(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
+    def sample(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
         if len(self.scope) > 1:
             raise NotImplementedError("Multivariate Categorical sampling is not implemented yet!")
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
@@ -178,25 +171,6 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         samples = distribution.sample((num_samples,))  # (N, F, D = 1, K, C)
         samples = E.rearrange(samples[..., 0, :, :], "n f k c -> f c k n")  # (F, C, K, N)
         return samples
-
-    def sample_backward(
-        self,
-        sample_dict: Dict[TorchLayer, List[Tensor]],
-        unit_dict: Dict[TorchLayer, List[Tensor]],
-        num_samples: int,
-    ) -> Tensor:
-        # TODO: if possible, implement sampling without torch distributions
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
-
-        sample_idx = sample_dict[self]
-        unit_idx = unit_dict[self]
-
-        pairs = torch.vstack([sample_idx, unit_idx])
-
-        raise NotImplementedError("Backward sampling is not fully implemented yet!")
-
-    def extended_forward(self, x: Tensor) -> Tensor:
-        return self.log_unnormalized_likelihood(x)
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):

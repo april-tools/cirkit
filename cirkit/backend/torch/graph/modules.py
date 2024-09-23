@@ -152,7 +152,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             raise NotImplementedError("Padding for arbitrary folds not supported!")
         return padded_samples
 
-    def _sample_forward(self, num_samples: int) -> Tuple[Tensor, List[Tensor]]:
+    def _sample(self, num_samples: int) -> Tuple[Tensor, List[Tensor]]:
         """
         Sample the computational graph by following the topological ordering forwards
 
@@ -171,11 +171,11 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 return output, mixture_outputs
             elif inputs == ():
                 # input nodes take no inputs for sampling
-                y = module.sample_forward(num_samples)
+                y = module.sample(num_samples)
                 y = self._pad_samples(y, module.scope)
             else:
                 # inner nodes take inputs for sampling
-                y = module.sample_forward(num_samples, *inputs)
+                y = module.sample(num_samples, *inputs)
             if type(y) is tuple:
                 module_outputs.append(y[0])
                 mixture_outputs.append(y[1])

@@ -168,24 +168,13 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         y = self._eval_forward(x)  # (O, B, K)
         return y.transpose(0, 1)  # (B, O, K)
 
-    def _extended_eval_layers(self, x: Tensor, branches: List[Tensor]) -> Tensor:
-        # Evaluate layers
-        y = self._extended_eval_forward(x, branches)
-        return y.squeeze(dim=0).transpose(0, 1)  # (B, num_classes, K)
-
-    def _sample_layers_forward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
+    def _sample_layers(self, num_samples: int) -> Tuple[Tensor, Tensor]:
         # Sample layers
-        y = self._sample_forward(num_samples)
+        y = self._sample(num_samples)
         samples = y[0][0, 0, :, :]  # (C, N, D)
         samples = E.rearrange(samples, "c n d -> n c d")  # (N, C, D
         mixture_samples = y[1]
         return samples, mixture_samples  # (N, C, D)
-
-    def _sample_layers_backward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
-        # TODO: check dimensions
-        # Sample layers
-        y = self._sample_backward(num_samples)  # (N, num_classes, B, K)
-        return E.rearrange(y, "s n b k -> b n k s")  # (B, num_classes, K, N)
 
 
 class TorchCircuit(AbstractTorchCircuit):
@@ -208,16 +197,7 @@ class TorchCircuit(AbstractTorchCircuit):
 
     def forward(self, x: Tensor) -> Tensor:
         return self._eval_layers(x)
-
-    def extended_forward(self, x: Tensor, branches: List[Tensor]) -> Tensor:
-        return self._extended_eval_layers(x, branches)
-
-    def sample_forward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
-        return self._sample_layers_forward(num_samples)
-
-    def sample_backward(self, num_samples: int) -> Tuple[Tensor, Tensor]:
-        return self._sample_layers_backward(num_samples)
-
+    
 
 class TorchConstantCircuit(AbstractTorchCircuit):
     """The tensorized circuit with concrete computational graph in PyTorch.

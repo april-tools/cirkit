@@ -158,7 +158,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         x = dist.log_prob(x.transpose(1, 2)).sum(-1)
         return x
 
-    def sample_forward(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
+    def sample(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
         if len(self.scope) > 1:
             raise NotImplementedError("Multivariate Binomial sampling is not implemented yet!")
 
@@ -168,9 +168,6 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         samples = distribution.sample((num_samples,))  # (N, F, D = 1, K, C)
         samples = E.rearrange(samples[..., 0, :, :], "n f k c -> f c k n")  # (F, C, K, N)
         return samples
-
-    def extended_forward(self, x: Tensor) -> Tensor:
-        return self.log_unnormalized_likelihood(x)
 
 
 def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> TorchBinomialLayer:
