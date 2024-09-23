@@ -87,9 +87,6 @@ class TorchHadamardLayer(TorchProductLayer):
         """
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
-    def extended_forward(self, x: Tensor) -> Tensor:
-        return self.forward(x)
-
     def sample_forward(self, num_samples: int, x: Tensor) -> Tensor:
         return self.semiring.prod(x, dim=1, keepdim=False)
 
@@ -196,16 +193,6 @@ class TorchDenseLayer(TorchSumLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, Ko).
 
-    def extended_forward(self, x: Tensor, branches: Tensor) -> Tensor:
-        x = self.forward(x)
-
-        branches_log_p = torch.gather(self.weight(), -1, branches)
-        branches_log_p = E.rearrange(branches_log_p, "f o n -> f n o")
-
-        # Probably this might have to be a semiring.product in general
-        joint_log_p = x + branches_log_p
-        return joint_log_p.squeeze(dim=1)
-
     def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
         if self.arity != 1:
             raise NotImplementedError("Sampling of Dense layer only implemented for arity 1.")
@@ -283,16 +270,6 @@ class TorchMixingLayer(TorchSumLayer):
         return self.semiring.einsum(
             "fhbk,fkh->fbk", inputs=(x,), operands=(weight,), dim=1, keepdim=False
         )
-
-    def extended_forward(self, x: Tensor, branches: Tensor) -> Tensor:
-        x_log_p = self.forward(x)
-
-        branches_log_p = torch.gather(self.weight(), -1, branches)
-        branches_log_p = E.rearrange(branches_log_p, "f o n -> f n o")
-
-        # Probably this might have to be a semiring.product in general
-        joint_log_p = x_log_p + branches_log_p
-        return joint_log_p
 
     def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
         normalisation = self.weight().sum(-1).abs().mean()
