@@ -63,22 +63,6 @@ class TorchInputLayer(TorchLayer, ABC):
     def num_channels(self) -> int:
         return self.arity
 
-    @property
-    def fold_settings(self) -> Tuple[Any, ...]:
-        return self.num_variables, self.num_channels, self.num_output_units
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "scope_idx": self.scope_idx,
-            "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
-        }
-
-    @property
-    def params(self) -> Dict[str, TorchParameter]:
-        return {}
-
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
         ...
@@ -116,12 +100,8 @@ class TorchConstantLayer(TorchInputLayer, ABC):
             torch.empty(size=(num_folds, 0), dtype=torch.int64), num_output_units, semiring=semiring
         )
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"num_output_units": self.num_output_units, "num_folds": self.num_folds}
-
     def integrate(self) -> Tensor:
-        raise ValueError("Cannot integrate a layer computing a log-partition function")
+        raise ValueError("Cannot integrate a layer computing a constant function")
 
 
 class TorchExpFamilyLayer(TorchInputLayer):
@@ -164,6 +144,18 @@ class TorchExpFamilyLayer(TorchInputLayer):
             num_channels=num_channels,
             semiring=semiring,
         )
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "scope_idx": self.scope_idx,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+        }
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self.num_variables, self.num_channels, self.num_output_units
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -210,16 +202,16 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
-
-        Args:
-            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
-                D is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
-                as a tensor of shape (1, D), i.e., with F = 1.
-            num_output_units: The number of output units.
-            num_channels: The number of channels.
-            num_categories: The number of categories for Categorical distribution. Defaults to 2.
-            logits: The reparameterization for layer parameters.
+        log-partition
+                Args:
+                    scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                        D is the number of variables on which the input layers in each fold are defined on.
+                        Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                        as a tensor of shape (1, D), i.e., with F = 1.
+                    num_output_units: The number of output units.
+                    num_channels: The number of channels.
+                    num_categories: The number of categories for Categorical distribution. Defaults to 2.
+                    logits: The reparameterization for layer parameters.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
@@ -261,6 +253,12 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         config = super().config
         config.update(num_categories=self.num_categories)
         return config
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        settings = super().fold_settings
+        settings = (*settings, self.num_categories)
+        return settings
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
@@ -397,6 +395,10 @@ class TorchLogPartitionLayer(TorchConstantLayer):
         return {"num_output_units": self.num_output_units}
 
     @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return (self.num_output_units,)
+
+    @property
     def params(self) -> Dict[str, TorchParameter]:
         return {"value": self.value}
 
@@ -413,3 +415,59 @@ class TorchLogPartitionLayer(TorchConstantLayer):
         # (F, Ko) -> (F, B, O)
         value = value.expand(value.shape[0], x.shape[2], value.shape[2])
         return self.semiring.map_from(value, LSESumSemiring)
+
+
+class TorchEvidenceLayer(TorchConstantLayer):
+    def __init__(
+        self,
+        layer: TorchInputLayer,
+        *,
+        observation: TorchParameter,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        if observation.num_folds != layer.num_folds:
+            raise ValueError(
+                f"The number of folds in the observation and in the layer should be the same, "
+                f"but found {observation.num_folds} and {layer.num_folds} respectively"
+            )
+        if len(observation.shape) != 2:
+            raise ValueError(
+                f"Expected observation of shape (num_channels, num_variables), "
+                f"but found {observation.shape}"
+            )
+        num_channels, num_variables = observation.shape
+        if num_channels != layer.num_channels:
+            raise ValueError(
+                f"Expected an observation with number of channels {layer.num_channels}, "
+                f"but found {num_channels}"
+            )
+        if num_variables != layer.num_variables:
+            raise ValueError(
+                f"Expected an observation with number of variables {layer.num_variables}, "
+                f"but found {num_variables}"
+            )
+        super().__init__(layer.num_output_units, layer.num_folds, semiring=semiring)
+        self.layer = layer
+        self.observation = observation
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return ()
+
+    @property
+    def sub_modules(self) -> Dict[str, TorchInputLayer]:
+        return {"layer": self.layer}
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {}
+
+    @property
+    def params(self) -> Dict[str, TorchParameter]:
+        return {"observation": self.observation}
+
+    def forward(self, x: Tensor) -> Tensor:
+        obs = self.observation()  # (F, C, D)
+        obs = obs.unsqueeze(dim=2)  # (F, C, 1, D)
+        obs = obs.expand(obs.shape[0], obs.shape[1], x.shape[2], obs.shape[3])  # (F, C, B, D)
+        return self.layer(obs)  # (F, B, K)

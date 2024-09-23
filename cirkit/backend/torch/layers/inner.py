@@ -77,6 +77,14 @@ class TorchHadamardLayer(TorchProductLayer):
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )
 
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
+
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
@@ -118,6 +126,14 @@ class TorchKroneckerLayer(TorchProductLayer):
         super().__init__(
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -223,6 +239,14 @@ class TorchMixingLayer(TorchSumLayer):
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )
         self.weight = weight
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

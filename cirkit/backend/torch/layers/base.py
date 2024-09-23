@@ -42,13 +42,19 @@ class TorchLayer(AbstractTorchModule, ABC):
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
     @property
+    @abstractmethod
     def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "arity": self.arity,
-            "num_folds": self.num_folds,
-        }
+        ...
+
+    @property
+    def sub_modules(self) -> Dict[str, "TorchLayer"]:
+        """Retrieve a dictionary mapping string identifiers to torch sub-module layers.,
+        that must be passed to the ```__init__``` method of the top-level layer
+
+        Returns:
+            A dictionary of torch modules.
+        """
+        return {}
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

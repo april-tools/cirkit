@@ -50,7 +50,7 @@ from cirkit.backend.torch.rules import (
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
 from cirkit.backend.torch.semiring import Semiring, SemiringImpl
-from cirkit.symbolic.circuit import Circuit, CircuitOperator, pipeline_topological_ordering
+from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import Parameter, ParameterNode, TensorParameter
@@ -150,6 +150,11 @@ class TorchCompiler(AbstractCompiler):
     def state(self) -> TorchCompilerState:
         return self._state
 
+    def compile_layer(self, layer: Layer) -> TorchLayer:
+        signature = type(layer)
+        rule = self.retrieve_layer_rule(signature)
+        return cast(TorchLayer, rule(self, layer))
+
     def compile_parameter(self, parameter: Parameter) -> TorchParameter:
         # A map from symbolic to compiled parameters
         compiled_nodes_map: Dict[ParameterNode, TorchParameterNode] = {}
@@ -184,11 +189,6 @@ class TorchCompiler(AbstractCompiler):
         registry = self.retrieve_optimization_registry(kind)
         return registry.retrieve_rule(pattern)
 
-    def _compile_layer(self, layer: Layer) -> TorchLayer:
-        signature = type(layer)
-        rule = self.retrieve_layer_rule(signature)
-        return cast(TorchLayer, rule(self, layer))
-
     def _compile_parameter_node(self, node: ParameterNode) -> TorchParameterNode:
         signature = type(node)
         rule = self.retrieve_parameter_rule(signature)
@@ -204,7 +204,7 @@ class TorchCompiler(AbstractCompiler):
         # Compile layers by following the topological ordering
         for sl in sc.topological_ordering():
             # Compile the layer, for any layer types
-            layer = self._compile_layer(sl)
+            layer = self.compile_layer(sl)
 
             # Build the connectivity between compiled layers
             ins = [compiled_layers_map[sli] for sli in sc.layer_inputs(sl)]
@@ -291,19 +291,33 @@ def _fold_layers_group(layers: List[TorchLayer], *, compiler: TorchCompiler) -> 
         # We are folding sum or product layers, so simply set the number of folds
         fold_layer_conf["num_folds"] = sum(l.num_folds for l in layers)
 
-    # Retrieve the parameters of each layer
+    # Retrieve the parameters of each layer, and
+    # retrieve the sub-module layers of each layer
     layer_params: Dict[str, List[TorchParameter]] = defaultdict(list)
+    layer_submodules: Dict[str, List[TorchLayer]] = defaultdict(list)
     for l in layers:
         for n, p in l.params.items():
             layer_params[n].append(p)
+        for n, sub_l in l.sub_modules.items():
+            layer_submodules[n].append(sub_l)
 
     # Fold the parameters, if the layers have any
     fold_layer_parameters: Dict[str, TorchParameter] = {
         n: _fold_parameters(compiler, ps) for n, ps in layer_params.items()
     }
 
+    # Fold all sub-module layers, if the layers have any
+    fold_layer_submodules: Dict[str, TorchLayer] = {
+        n: _fold_layers_group(ls, compiler=compiler) for n, ls in layer_submodules.items()
+    }
+
     # Instantiate a new folded layer, using the folded layer configuration and the folded parameters
-    return fold_layer_cls(**fold_layer_conf, **fold_layer_parameters, semiring=compiler.semiring)
+    return fold_layer_cls(
+        **fold_layer_conf,
+        **fold_layer_submodules,
+        **fold_layer_parameters,
+        semiring=compiler.semiring,
+    )
 
 
 def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) -> TorchParameter:

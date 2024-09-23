@@ -138,9 +138,10 @@ def evidence(
 
         # Check if we have to construct the evidence of an input layer
         if isinstance(sl, InputLayer) and sl.scope & scope:
-            if sl.scope != scope:
+            if not sl.scope <= scope:
                 raise NotImplementedError(
-                    "Only complete evidence of multivariate input layers is supported"
+                    f"Only complete evidence of multivariate input layers is supported, "
+                    f"found {sl.scope} but computing the evidence over {scope}"
                 )
 
             # Build the observation parameter, as a constant tensor that

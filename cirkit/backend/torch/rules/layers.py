@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, cast
 
 import torch
 
@@ -11,12 +11,15 @@ from cirkit.backend.torch.layers.inner import (
 )
 from cirkit.backend.torch.layers.input import (
     TorchCategoricalLayer,
+    TorchEvidenceLayer,
     TorchGaussianLayer,
+    TorchInputLayer,
     TorchLogPartitionLayer,
 )
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
+    EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
@@ -26,17 +29,6 @@ from cirkit.symbolic.layers import (
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
-
-
-def compile_log_partition_layer(
-    compiler: "TorchCompiler", sl: LogPartitionLayer
-) -> TorchLogPartitionLayer:
-    value = compiler.compile_parameter(sl.value)
-    return TorchLogPartitionLayer(
-        sl.num_output_units,
-        value=value,
-        semiring=compiler.semiring,
-    )
 
 
 def compile_categorical_layer(
@@ -107,12 +99,32 @@ def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMix
     )
 
 
+def compile_log_partition_layer(
+    compiler: "TorchCompiler", sl: LogPartitionLayer
+) -> TorchLogPartitionLayer:
+    value = compiler.compile_parameter(sl.value)
+    return TorchLogPartitionLayer(
+        sl.num_output_units,
+        value=value,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> TorchEvidenceLayer:
+    layer = compiler.compile_layer(sl.layer)
+    observation = compiler.compile_parameter(sl.observation)
+    return TorchEvidenceLayer(
+        cast(TorchInputLayer, layer), observation=observation, semiring=compiler.semiring
+    )
+
+
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
-    LogPartitionLayer: compile_log_partition_layer,
     CategoricalLayer: compile_categorical_layer,
     GaussianLayer: compile_gaussian_layer,
     HadamardLayer: compile_hadamard_layer,
     KroneckerLayer: compile_kronecker_layer,
     DenseLayer: compile_dense_layer,
     MixingLayer: compile_mixing_layer,
+    LogPartitionLayer: compile_log_partition_layer,
+    EvidenceLayer: compile_evidence_layer,
 }

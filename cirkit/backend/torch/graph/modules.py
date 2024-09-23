@@ -29,6 +29,16 @@ class AbstractTorchModule(nn.Module, ABC):
             A tuple of attributes.
         """
 
+    @property
+    def sub_modules(self) -> Dict[str, "AbstractTorchModule"]:
+        """Retrieve a dictionary mapping string identifiers to torch sub-modules,
+        that must be passed to the ```__init__``` method of the top-level torch module.
+
+        Returns:
+            A dictionary of torch modules.
+        """
+        return {}
+
 
 TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)
 """TypeVar: A torch module type that subclasses

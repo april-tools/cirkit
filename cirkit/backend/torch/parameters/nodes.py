@@ -29,6 +29,11 @@ class TorchParameterNode(AbstractTorchModule, ABC):
     def config(self) -> Dict[str, Any]:
         return {}
 
+    @final
+    @property
+    def sub_modules(self) -> Dict[str, "AbstractTorchModule"]:
+        return {}
+
     @torch.no_grad()
     def reset_parameters(self) -> None:
         ...

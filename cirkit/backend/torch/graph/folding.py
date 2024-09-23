@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -133,6 +133,13 @@ def build_folded_graph(
 def group_foldable_modules(
     modules: List[TorchModule],
 ) -> List[List[TorchModule]]:
+    def _gather_fold_settings(module: TorchModule) -> Tuple[Any, ...]:
+        ss = [type(m), *m.fold_settings]
+        for _, sub_module in module.sub_modules.items():
+            sub_ss = _gather_fold_settings(sub_module)
+            ss.extend(sub_ss)
+        return tuple(ss)
+
     # A dictionary mapping a module fold settings,
     # which uniquely identifies a group of modules that can be folded,
     # into a group of modules.
@@ -140,7 +147,7 @@ def group_foldable_modules(
 
     # For each module, either create a new group or insert it into an existing one
     for m in modules:
-        m_settings = (type(m), *m.fold_settings)
+        m_settings = _gather_fold_settings(m)
         groups[m_settings].append(m)
 
     return list(groups.values())
