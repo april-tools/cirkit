@@ -60,7 +60,7 @@ class Layer(ABC):
 
     @property
     def config(self) -> Dict[str, Any]:
-        """Retrieves the configuartion of the layer, i.e., a dictionary mapping hyperparameters
+        """Retrieves the configuration of the layer, i.e., a dictionary mapping hyperparameters
         of the layer to their values. The hyperparameter names must match the argument names in
         the ```__init__``` method.
 

@@ -12,25 +12,52 @@ from cirkit.utils.algorithms import RootedDiAcyclicGraph, topologically_process_
 
 
 class ParameterNode(ABC):
+    """The abstract parameter node class. A parameter node is a node in the computational
+    graph that computes parameters. See [Parameter][cirkit.symbolic.parameters.Parameter]
+    for more details."""
+
     @abstractmethod
     def __copy__(self) -> "ParameterNode":
-        ...
+        """The shallow copy operation of a parameter node.
+
+        Returns:
+            The copy of the parameter node.
+        """
 
     @property
     @abstractmethod
     def shape(self) -> Tuple[int, ...]:
-        ...
+        """Retrieves the shape of the output of the parameter node.
+
+        Returns:
+            The shape of the output.
+        """
 
     @property
     def config(self) -> Dict[str, Any]:
+        """Retrieves the configuration of the parameter node, i.e., a dictionary mapping
+        hyperparameters of the parameter node to their values. The hyperparameter names must
+        match the argument names in the ```__init__``` method.
+
+        Returns:
+            Dict[str, Any]: A dictionary from hyperparameter names to their value.
+        """
         return {}
 
 
 class ParameterInput(ParameterNode, ABC):
-    ...
+    """The abstract parameter input class. A parameter input is a parameter node in the
+    computational graph that comptues parameter that does __not__ have inputs. See
+    [Parameter][cirkit.symbolic.parameters.Parameter] for more details."""
 
 
 class TensorParameter(ParameterInput):
+    """A symbolic tensor parameter is an object storing information about a dense
+    tensor parameter, i.e., its shape, its initialization method, whether it is
+    learnable (or if it is a constant tensor), and its data type. Note that the
+    symbolic tensor parmater does __not__ allocate any tensor, but only stores
+    the mentioned information about it."""
+
     def __init__(
         self,
         *shape: int,
@@ -38,7 +65,20 @@ class TensorParameter(ParameterInput):
         learnable: bool = True,
         dtype: DataType = DataType.REAL,
     ):
+        """Initializes a symbolic tensor parameter.
+
+        Args:
+            *shape: The shape of the tensor parameter.
+            initializer: The initializer object.
+            learnable: Whether the tensor parameter is learnable or not.
+            dtype: The data type.
+
+        Raises:
+            ValueError: If the shape contains dimensions that are not positive.
+        """
         super().__init__()
+        if any(d <= 0 for d in shape):
+            raise ValueError(f"The given shape {shape} is not valid")
         self._shape = tuple(shape)
         self.initializer = initializer
         self.learnable = learnable
@@ -54,7 +94,7 @@ class TensorParameter(ParameterInput):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(initializer=self.initializer, learnable=self.learnable, dtype=self.dtype)
+        return {"initializer": self.initializer, "learnable": self.learnable, "dtype": self.dtype}
 
 
 class ConstantParameter(TensorParameter):
@@ -73,7 +113,7 @@ class ConstantParameter(TensorParameter):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(value=self.value)
+        return {"value": self.value}
 
 
 @final
@@ -131,7 +171,7 @@ class ReduceParameterOp(UnaryParameterOp, ABC):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(axis=self.axis)
+        return {"axis": self.axis}
 
 
 class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
@@ -143,7 +183,7 @@ class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(axis=self.axis)
+        return {"axis": self.axis}
 
 
 class IndexParameter(UnaryParameterOp):
@@ -165,7 +205,7 @@ class IndexParameter(UnaryParameterOp):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(indices=self.indices, axis=self.axis)
+        return {"indices": self.indices, "axis": self.axis}
 
 
 class SumParameter(BinaryParameterOp):
@@ -219,7 +259,7 @@ class OuterParameterOp(BinaryParameterOp):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(axis=self.axis)
+        return {"axis": self.axis}
 
 
 class OuterProductParameter(OuterParameterOp):
@@ -258,7 +298,7 @@ class ScaledSigmoidParameter(EntrywiseParameterOp):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return dict(vmin=self.vmin, vmax=self.vmax)
+        return {"vmin": self.vmin, "vmax": self.vmax}
 
 
 class ClampParameter(EntrywiseParameterOp):
@@ -278,7 +318,7 @@ class ClampParameter(EntrywiseParameterOp):
 
     @property
     def config(self) -> Dict[str, Any]:
-        config = dict()
+        config = {}
         if self.vmin is not None:
             config.update(vmin=self.vmin)
         if self.vmax is not None:
@@ -311,18 +351,45 @@ class LogSoftmaxParameter(EntrywiseReduceParameterOp):
 
 
 class Parameter(RootedDiAcyclicGraph[ParameterNode]):
+    """The symbolic parameter computational graph. A symbolic parameter is a computational graph
+    consisting of symbolic nodes, which represent how to compute a tensor parameter."""
+
     @property
     def shape(self) -> Tuple[int, ...]:
+        """Retrieves the shape of the output tensor.
+
+        Returns:
+            The shape of the output of the computational graph.
+        """
         return self.output.shape
 
     @classmethod
     def from_leaf(cls, p: ParameterInput) -> "Parameter":
+        """Constructs a parameter from a leaf symbolic node only.
+
+        Args:
+            p: The symbolic parameter input.
+
+        Returns:
+            A symbolic parameter encapsulating the given parameter input.
+        """
         return Parameter([p], {}, [p])
 
     @classmethod
     def from_sequence(
         cls, p: Union[ParameterInput, "Parameter"], *ns: ParameterNode
     ) -> "Parameter":
+        """Constructs a parameter from a composition of symbolic parameter nodes.
+
+        Args:
+            p: The entry point of the sequence, which can be either a symbolic parameter
+                input or another symbolic parameter.
+            *ns: A sequence of symbolic parameter nodes.
+
+        Returns:
+            A symbolic parameter that encodes the composition of the symbolic parameter nodes,
+                starting from the given entry point of the sequence.
+        """
         if isinstance(p, ParameterInput):
             p = Parameter.from_leaf(p)
         nodes = p.nodes + list(ns)
@@ -333,6 +400,16 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
     @classmethod
     def from_nary(cls, n: ParameterOp, *ps: Union[ParameterInput, "Parameter"]) -> "Parameter":
+        """Constructs a parameter by using a parameter operation node and by specifying its inputs.
+
+        Args:
+            n: The parameter operation node.
+            *ps: A sequence of symbolic parameter input nodes or parameters.
+
+        Returns:
+            A symbolic parameter that encodes the application of the given parameter operation node
+                to the outputs given by the symbolic parameter input nodes or parameters.
+        """
         ps = tuple(Parameter.from_leaf(p) if isinstance(p, ParameterInput) else p for p in ps)
         p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
         in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
@@ -341,6 +418,17 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
     @classmethod
     def from_unary(cls, n: UnaryParameterOp, p: Union[ParameterInput, "Parameter"]) -> "Parameter":
+        """Constructs a parameter by using a unary parameter operation node and by specifying its
+        inputs.
+
+        Args:
+            n: The unary parameter operation node.
+            p: The symbolic parameter input node, or another parameter.
+
+        Returns:
+            A symbolic parameter that encodes the application of the given parameter operation
+                node to the output given by the symbolic parameter input node or parameter.
+        """
         return Parameter.from_sequence(p, n)
 
     @classmethod
@@ -350,9 +438,27 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         p1: Union[ParameterInput, "Parameter"],
         p2: Union[ParameterInput, "Parameter"],
     ) -> "Parameter":
+        """Constructs a parameter by using a binary parameter operation node and by specifying
+        its inputs.
+
+        Args:
+            n: The binary parameter operation node.
+            p1: The first symbolic parameter input node, or another parameter.
+            p2: The second symbolic parameter input node, or another parameter.
+
+        Returns:
+            A symbolic parameter that encodes the application of the given parameter operation
+                node to the two outputs given by the symbolic parameter inputs or parameters.
+        """
         return Parameter.from_nary(n, p1, p2)
 
     def copy(self) -> "Parameter":
+        """Constructs a shallow copy of the parameter.
+
+        Returns:
+            A shallow copy of the parameter nodes.
+        """
+
         # Build a new symbolic parameter's computational graph, by coping nodes.
         def replace_copy(n: ParameterNode) -> ParameterNode:
             return shallowcopy(n)
@@ -360,6 +466,14 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return self._process_nodes(replace_copy)
 
     def ref(self) -> "Parameter":
+        """Constructs a shallow copy of the parameter, where the tensor parameters
+            are replace with reference parameters to them.
+
+        Returns:
+            A shallow copy of the parameter nodes, with the exception that tensor parameter nodes
+                are replaced with symbolic references to them.
+        """
+
         # Build a new symbolic parameter's computational graph, where the parameter tensors
         # become references to the tensors of the 'self' parameter's computational graph.
         # All the other nodes are new objects.
@@ -369,6 +483,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         return self._process_nodes(replace_ref_or_copy)
 
     def _process_nodes(self, process_fn: Callable[[ParameterNode], ParameterNode]) -> "Parameter":
+        # Process all the nodes by following the topological ordering and using a function
         nodes, in_nodes, outputs = topologically_process_nodes(
             self.topological_ordering(), self.outputs, process_fn, incomings_fn=self.node_inputs
         )
@@ -376,8 +491,17 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 
 
 class ParameterFactory(Protocol):
+    """A factory that constucts symbolic parameter given a shape."""
+
     def __call__(self, shape: Tuple[int, ...]) -> Parameter:
-        ...
+        """Constructs a symbolic parameter given the parameter shape.
+
+        Args:
+            shape: The shape.
+
+        Returns:
+            A parameter whose output shape is equal to the given shape.
+        """
 
 
 class GaussianProductMean(ParameterOp):
