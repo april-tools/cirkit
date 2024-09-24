@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -89,6 +89,8 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         return next(self.outputs).shape
 
     def subgraph(self, *roots: TorchParameterNode) -> "TorchParameter":
+        if self.is_folded:
+            raise ValueError("Cannot extract a sub-computational graph from a folded one")
         nodes, in_nodes = subgraph(roots, self.node_inputs)
         return TorchParameter(nodes, in_nodes, outputs=roots)
 
@@ -104,9 +106,6 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def forward(self) -> Tensor:
         return self.evaluate()  # (F, d1, d2, ..., dk)
 
-    def extra_repr(self) -> str:
-        return f"shape: {(self.num_folds, *self.shape)}"
-
     def _build_unfold_index_info(self) -> FoldIndexInfo:
         return build_unfold_index_info(
             self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
@@ -114,3 +113,6 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
 
     def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
         return ParameterAddressBook.from_index_info(fold_idx_info)
+
+    def extra_repr(self) -> str:
+        return f"shape: {(self.num_folds, *self.shape)}"

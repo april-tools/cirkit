@@ -140,13 +140,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         super().__init__()
         super(nn.Module, self).__init__(modules, in_modules, outputs)
         self._device = None
+        self._is_folded = fold_idx_info is not None
         if fold_idx_info is None:
             fold_idx_info = self._build_unfold_index_info()
         self._address_book = self._build_address_book(fold_idx_info)
-
-    def _set_device(self, device: Union[str, torch.device, int]) -> None:
-        self._address_book.set_device(device)
-        self._device = device
 
     @property
     def device(self) -> Optional[Union[str, torch.device, int]]:
@@ -158,6 +155,15 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         return self._device
 
     @property
+    def is_folded(self) -> bool:
+        """Retrieves whether the computational graph is folded or not.
+
+        Returns:
+            True if it is folded, False otherwise.
+        """
+        return self._is_folded
+
+    @property
     def address_book(self) -> AddressBook:
         """Retrieve the address book object of the computational graph.
 
@@ -167,6 +173,8 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         return self._address_book
 
     def subgraph(self, *roots: TorchModule) -> "TorchDiAcyclicGraph[TorchModule]":
+        if self.is_folded:
+            raise ValueError("Cannot extract a sub-computational graph from a folded one")
         nodes, in_nodes = subgraph(roots, self.node_inputs)
         return TorchDiAcyclicGraph[TorchModule](nodes, in_nodes, outputs=roots)
 
@@ -224,6 +232,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 y = module_fn(module, *inputs)
             module_outputs.append(y)
         raise RuntimeError("The address book is malformed")
+
+    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+        self._address_book.set_device(device)
+        self._device = device
 
     @abstractmethod
     def _build_unfold_index_info(self) -> FoldIndexInfo:
