@@ -1,7 +1,7 @@
 import functools
 from collections import defaultdict
 from itertools import chain
-from typing import Callable, Dict, List, Optional, Tuple, cast
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 import torch
 from torch import Tensor
@@ -328,7 +328,7 @@ def _fold_parameters(compiler: TorchCompiler, parameters: List[TorchParameter]) 
     # Retrieve:
     # (i)  the parameter nodes and the input to each node;
     # (ii) the layer-wise (aka bottom-up) topological orderings of parameter nodes
-    in_nodes: Dict[TorchParameterNode, List[TorchParameterNode]] = {}
+    in_nodes: Dict[TorchParameterNode, Sequence[TorchParameterNode]] = {}
     for pi in parameters:
         in_nodes.update(pi.nodes_inputs)
     ordering: List[List[TorchParameterNode]] = []
@@ -511,8 +511,8 @@ def _match_parameter_nodes_pattern(
     node: TorchParameterNode,
     pattern: ParameterOptPattern,
     *,
-    incomings_fn: Callable[[TorchParameterNode], List[TorchParameterNode]],
-    outcomings_fn: Callable[[TorchParameterNode], List[TorchParameterNode]],
+    incomings_fn: Callable[[TorchParameterNode], Sequence[TorchParameterNode]],
+    outcomings_fn: Callable[[TorchParameterNode], Sequence[TorchParameterNode]],
 ) -> Optional[ParameterOptMatch]:
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
@@ -540,8 +540,8 @@ def _match_layer_pattern(
     layer: TorchLayer,
     pattern: LayerOptPattern,
     *,
-    incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
-    outcomings_fn: Callable[[TorchLayer], List[TorchLayer]],
+    incomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
+    outcomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
 ) -> Optional[LayerOptMatch]:
     ppatterns = pattern.ppatterns()
     pattern_entries = pattern.entries()

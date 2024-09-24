@@ -105,11 +105,11 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
     which can be either a sum or product layer.
     """
 
-    def __init__(self, layers: List[Layer], in_layers: Dict[Layer, List[Layer]], output: Layer):
+    def __init__(self, layers: Sequence[Layer], in_layers: Dict[Layer, List[Layer]], output: Layer):
         """Initializes a circuit block.
 
         Args:
-            layers: The list of layers in the block.
+            layers: The sequence of layers in the block.
             in_layers: A dictionary containing the list of inputs to each layer.
             output: The root (or output) of the circuit block.
         """
@@ -156,11 +156,11 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
         return self.nodes_outputs
 
     @property
-    def layers(self) -> List[Layer]:
-        """Retrieves the list of layers.
+    def layers(self) -> Sequence[Layer]:
+        """Retrieves a sequence of layers.
 
         Returns:
-            List[layer]:
+            Sequence[layer]:
         """
         return self.nodes
 
@@ -312,7 +312,7 @@ class Circuit(DiAcyclicGraph[Layer]):
     def __init__(
         self,
         num_channels: int,
-        layers: List[Layer],
+        layers: Sequence[Layer],
         in_layers: Dict[Layer, Sequence[Layer]],
         outputs: Sequence[Layer],
         *,
@@ -401,11 +401,11 @@ class Circuit(DiAcyclicGraph[Layer]):
         return self.nodes_outputs
 
     @property
-    def layers(self) -> List[Layer]:
-        """Retrieves the list of layers.
+    def layers(self) -> Sequence[Layer]:
+        """Retrieves a sequence of layers.
 
         Returns:
-            List[layer]:
+            Sequence[layer]:
         """
         return self.nodes
 

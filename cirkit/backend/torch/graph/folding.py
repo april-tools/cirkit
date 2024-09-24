@@ -61,7 +61,7 @@ def build_folded_graph(
     ordering: Iterable[List[TorchModule]],
     *,
     outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
     fold_group_fn: Callable[[List[TorchModule]], TorchModule],
 ) -> Tuple[
     List[TorchModule],
@@ -97,7 +97,7 @@ def build_folded_graph(
             folded_module = fold_group_fn(group)
 
             # For each module in the group, retrieve the unfolded input modules
-            in_group_modules: List[List[AbstractTorchModule]] = [incomings_fn(m) for m in group]
+            in_group_modules: List[Sequence[AbstractTorchModule]] = [incomings_fn(m) for m in group]
 
             # Set the input modules
             folded_in_modules = list(

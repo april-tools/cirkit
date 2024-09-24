@@ -120,7 +120,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
     def __init__(
         self,
-        modules: List[TorchModule],
+        modules: Sequence[TorchModule],
         in_modules: Dict[TorchModule, Sequence[TorchModule]],
         outputs: Sequence[TorchModule],
         *,
@@ -136,7 +136,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 not folded. This will be consumed (i.e., set to None) when the address book data
                 structure is built.
         """
-        modules: List = nn.ModuleList(modules)  # type: ignore
+        modules: List[TorchModule] = nn.ModuleList(modules)  # type: ignore
         super().__init__()
         super(nn.Module, self).__init__(modules, in_modules, outputs)
         self._device = None

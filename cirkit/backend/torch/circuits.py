@@ -94,7 +94,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self,
         scope: Scope,
         num_channels: int,
-        layers: List[TorchLayer],
+        layers: Sequence[TorchLayer],
         in_layers: Dict[TorchLayer, Sequence[TorchLayer]],
         outputs: Sequence[TorchLayer],
         *,
@@ -128,7 +128,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         return self._properties
 
     @property
-    def layers(self) -> List[TorchLayer]:
+    def layers(self) -> Sequence[TorchLayer]:
         return self.nodes
 
     def layer_inputs(self, l: TorchLayer) -> Sequence[TorchLayer]:

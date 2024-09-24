@@ -1,5 +1,4 @@
 from collections import deque
-from functools import cached_property
 from typing import (
     Callable,
     Dict,
@@ -47,7 +46,7 @@ def bfs(
 
 def subgraph(
     roots: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
-) -> Tuple[List[NodeType], Dict[NodeType, Sequence[NodeType]]]:
+) -> Tuple[Sequence[NodeType], Dict[NodeType, Sequence[NodeType]]]:
     nodes = list(bfs(roots, incomings_fn))
     incomings: Dict[NodeType, Sequence[NodeType]] = {}
     for n in nodes:
@@ -129,7 +128,7 @@ def topologically_process_nodes(
 class Graph(Generic[NodeType]):
     def __init__(
         self,
-        nodes: List[NodeType],
+        nodes: Sequence[NodeType],
         in_nodes: Dict[NodeType, Sequence[NodeType]],
     ):
         self._nodes = nodes
@@ -143,7 +142,7 @@ class Graph(Generic[NodeType]):
         return self._out_nodes.get(n, [])
 
     @property
-    def nodes(self) -> List[NodeType]:
+    def nodes(self) -> Sequence[NodeType]:
         return self._nodes
 
     @property
@@ -162,7 +161,7 @@ class Graph(Generic[NodeType]):
 class DiAcyclicGraph(Graph[NodeType]):
     def __init__(
         self,
-        nodes: List[NodeType],
+        nodes: Sequence[NodeType],
         in_nodes: Dict[NodeType, Sequence[NodeType]],
         outputs: Sequence[NodeType],
     ):
@@ -185,12 +184,19 @@ class DiAcyclicGraph(Graph[NodeType]):
 
 
 class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
-    @cached_property
-    def output(self) -> NodeType:
-        outputs = list(self.outputs)
+    def __init__(
+        self,
+        nodes: Sequence[NodeType],
+        in_nodes: Dict[NodeType, Sequence[NodeType]],
+        outputs: Sequence[NodeType],
+    ):
         if len(outputs) != 1:
             raise ValueError("The graph should have exactly one output node.")
-        (output,) = outputs
+        super().__init__(nodes, in_nodes, outputs)
+
+    @property
+    def output(self) -> NodeType:
+        (output,) = self._outputs
         return output
 
 
