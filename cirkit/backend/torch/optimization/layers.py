@@ -113,7 +113,9 @@ def _apply_tensordot_rule(
 ) -> Tuple[TorchTensorDotLayer, TorchTensorDotLayer]:
     # Build new torch parameter computational graphs by taking
     # the sub-computational graph rooted at the inputs of the kronecker parameter node
-    weight1, weight2 = weight.extract_subgraphs(*weight.node_inputs(kronecker))
+    in_kronecker1, in_kronecker2 = weight.node_inputs(kronecker)
+    weight1 = weight.subgraph(in_kronecker1)
+    weight2 = weight.subgraph(in_kronecker2)
 
     # Instantiate two tensor dot layers
     num_inner_units = weight1.shape[0] * (num_input_units // weight1.shape[1])

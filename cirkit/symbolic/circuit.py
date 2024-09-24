@@ -31,7 +31,13 @@ from cirkit.symbolic.layers import (
 )
 from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
-from cirkit.utils.algorithms import DiAcyclicGraph, RootedDiAcyclicGraph, bfs, topological_ordering
+from cirkit.utils.algorithms import (
+    DiAcyclicGraph,
+    RootedDiAcyclicGraph,
+    bfs,
+    subgraph,
+    topological_ordering,
+)
 from cirkit.utils.scope import Scope
 
 
@@ -109,43 +115,43 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
         """
         super().__init__(layers, in_layers, [output])
 
-    def layer_inputs(self, l: Layer) -> List[Layer]:
+    def layer_inputs(self, l: Layer) -> Sequence[Layer]:
         """Retrieves the inputs to a layer.
 
         Args:
             l: The layer.
 
         Returns:
-            List[Layer]: The list of inputs.
+            Sequence[Layer]: The sequence of inputs.
         """
         return self.node_inputs(l)
 
-    def layer_outputs(self, l: Layer) -> List[Layer]:
+    def layer_outputs(self, l: Layer) -> Sequence[Layer]:
         """Retrieves the outputs of a layer.
 
         Args:
             l: The layer.
 
         Returns:
-            List[Layer]: The list of outputs.
+            Sequence[Layer]: The sequence of outputs.
         """
         return self.node_outputs(l)
 
     @property
-    def layers_inputs(self) -> Dict[Layer, List[Layer]]:
-        """Retrieves the dictionary containing the list of inputs to each layer.
+    def layers_inputs(self) -> Dict[Layer, Sequence[Layer]]:
+        """Retrieves the dictionary containing the sequence of inputs to each layer.
 
         Returns:
-            Dict[Layer, List[Layer]]:
+            Dict[Layer, Sequence[Layer]]:
         """
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> Dict[Layer, List[Layer]]:
-        """Retrieves the dictionary containing the list of outputs of each layer.
+    def layers_outputs(self) -> Dict[Layer, Sequence[Layer]]:
+        """Retrieves the dictionary containing the sequence of outputs of each layer.
 
         Returns:
-            Dict[Layer, List[Layer]]:
+            Dict[Layer, Sequence[Layer]]:
         """
         return self.nodes_outputs
 
@@ -307,8 +313,8 @@ class Circuit(DiAcyclicGraph[Layer]):
         self,
         num_channels: int,
         layers: List[Layer],
-        in_layers: Dict[Layer, List[Layer]],
-        outputs: List[Layer],
+        in_layers: Dict[Layer, Sequence[Layer]],
+        outputs: Sequence[Layer],
         *,
         operation: Optional[CircuitOperation] = None,
     ) -> None:
@@ -354,43 +360,43 @@ class Circuit(DiAcyclicGraph[Layer]):
         """
         return self._scopes[l]
 
-    def layer_inputs(self, l: Layer) -> List[Layer]:
+    def layer_inputs(self, l: Layer) -> Sequence[Layer]:
         """Retrieves the inputs to a layer.
 
         Args:
             l: The layer.
 
         Returns:
-            List[Layer]: The list of inputs.
+            Sequence[Layer]: The list of inputs.
         """
         return self.node_inputs(l)
 
-    def layer_outputs(self, l: Layer) -> List[Layer]:
+    def layer_outputs(self, l: Layer) -> Sequence[Layer]:
         """Retrieves the outputs of a layer.
 
         Args:
             l: The layer.
 
         Returns:
-            List[Layer]: The list of outputs.
+            Sequence[Layer]: The list of outputs.
         """
         return self.node_outputs(l)
 
     @property
-    def layers_inputs(self) -> Dict[Layer, List[Layer]]:
+    def layers_inputs(self) -> Dict[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the list of inputs to each layer.
 
         Returns:
-            Dict[Layer, List[Layer]]:
+            Dict[Layer, Sequence[Layer]]:
         """
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> Dict[Layer, List[Layer]]:
+    def layers_outputs(self) -> Dict[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the list of outputs of each layer.
 
         Returns:
-            Dict[Layer, List[Layer]]:
+            Dict[Layer, Sequence[Layer]]:
         """
         return self.nodes_outputs
 
@@ -429,6 +435,10 @@ class Circuit(DiAcyclicGraph[Layer]):
             Iterator[ProductLayer]:
         """
         return (l for l in self.layers if isinstance(l, ProductLayer))
+
+    def subgraph(self, *roots: Layer) -> "Circuit":
+        layers, in_layers = subgraph(roots, self.layer_inputs)
+        return type(self)(self.num_channels, layers, in_layers, outputs=roots)
 
     ##################################### Structural properties ####################################
 

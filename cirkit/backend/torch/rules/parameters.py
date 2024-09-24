@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Union
 
 import torch
 
@@ -47,7 +47,6 @@ from cirkit.symbolic.parameters import (
     ReduceLSEParameter,
     ReduceProductParameter,
     ReduceSumParameter,
-    ReferenceParameter,
     ScaledSigmoidParameter,
     SigmoidParameter,
     SoftmaxParameter,
@@ -73,32 +72,56 @@ def _retrieve_dtype(dtype: DataType) -> torch.dtype:
     )
 
 
-def compile_tensor_parameter(compiler: "TorchCompiler", p: TensorParameter) -> TorchTensorParameter:
+def compile_tensor_parameter(
+    compiler: "TorchCompiler", p: TensorParameter
+) -> Union[TorchTensorParameter, TorchPointerParameter]:
+    # First, check if the given symbolic tensor parameter has been already compiled before
+    # If that is, the case, then construct a pointer to it rather than constructing a new one.
+    # This is crucial to ensure parameter sharing across circuits in the compiled pipeline
+    if compiler.state.has_compiled_parameter(p):
+        compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p)
+        return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+    # Otherwise, compile the symbolic tensor parameter from scratch, by compiling
+    # its initializer and retrieving its data type
     initializer_ = compiler.compile_initializer(p.initializer)
     dtype = _retrieve_dtype(p.dtype)
     compiled_p = TorchTensorParameter(
         *p.shape, requires_grad=p.learnable, initializer_=initializer_, dtype=dtype
     )
+
+    # Finally, register the newly-compiled parameter to the state of the compiler
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p
 
 
 def compile_constant_parameter(
     compiler: "TorchCompiler", p: ConstantParameter
-) -> TorchTensorParameter:
+) -> Union[TorchTensorParameter, TorchPointerParameter]:
+    # First, check if the given symbolic tensor parameter has been already compiled before
+    # If that is, the case, then construct a pointer to it rather than constructing a new one.
+    # This is crucial to ensure parameter sharing across circuits in the compiled pipeline
+    if compiler.state.has_compiled_parameter(p):
+        compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p)
+        return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+    # Otherwise, compile the symbolic tensor parameter from scratch, by compiling
+    # its initializer and retrieving its data type
     initializer_ = compiler.compile_initializer(p.initializer)
     compiled_p = TorchTensorParameter(*p.shape, requires_grad=False, initializer_=initializer_)
     compiler.state.register_compiled_parameter(p, compiled_p)
+
+    # Finally, register the newly-compiled parameter to the state of the compiler
     return compiled_p
 
 
-def compile_reference_parameter(
-    compiler: "TorchCompiler", p: ReferenceParameter
-) -> TorchPointerParameter:
-    # Obtain the other parameter's graph (and its fold index),
-    # and wrap it in a pointer parameter node.
-    compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
-    return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+# def compile_reference_parameter(
+#     compiler: "TorchCompiler", p: ReferenceParameter
+# ) -> TorchPointerParameter:
+#     # Obtain the other parameter's graph (and its fold index),
+#     # and wrap it in a pointer parameter node.
+#     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
+#     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
 
 
 def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
@@ -237,7 +260,6 @@ def compile_gaussian_product_log_partition(
 DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
-    ReferenceParameter: compile_reference_parameter,
     IndexParameter: compile_index_parameter,
     SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,

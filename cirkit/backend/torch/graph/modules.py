@@ -1,11 +1,23 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple, TypeVar, Union, cast
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.utils.algorithms import DiAcyclicGraph
+from cirkit.utils.algorithms import DiAcyclicGraph, subgraph
 
 
 class AbstractTorchModule(nn.Module, ABC):
@@ -109,8 +121,8 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
     def __init__(
         self,
         modules: List[TorchModule],
-        in_modules: Dict[TorchModule, List[TorchModule]],
-        outputs: List[TorchModule],
+        in_modules: Dict[TorchModule, Sequence[TorchModule]],
+        outputs: Sequence[TorchModule],
         *,
         fold_idx_info: Optional[FoldIndexInfo] = None,
     ):
@@ -153,6 +165,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             The address book.
         """
         return self._address_book
+
+    def subgraph(self, *roots: TorchModule) -> "TorchDiAcyclicGraph[TorchModule]":
+        nodes, in_nodes = subgraph(roots, self.node_inputs)
+        return TorchDiAcyclicGraph[TorchModule](nodes, in_nodes, outputs=roots)
 
     def to(
         self,

@@ -12,7 +12,7 @@ from cirkit.symbolic.layers import (
     HadamardLayer,
     LogPartitionLayer,
 )
-from cirkit.symbolic.parameters import ConjugateParameter, KroneckerParameter, ReferenceParameter
+from cirkit.symbolic.parameters import ConjugateParameter, KroneckerParameter
 from cirkit.utils.scope import Scope
 from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
 
@@ -42,8 +42,6 @@ def test_evidence_circuit(num_units: int, input_layer: str):
     )
     assert evi_layer.observation.shape == (1, 1)
     assert len(list(evi_sc.inner_layers)) == len(list(sc.inner_layers))
-    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), evi_sc.inner_layers))
-    assert all(isinstance(r, ReferenceParameter) for l in dense_layers for r in l.weight.inputs)
 
 
 @pytest.mark.parametrize(
@@ -62,8 +60,6 @@ def test_integrate_circuit(num_units: int, input_layer: str):
     assert len(list(int_sc.inputs)) == len(list(sc.inputs))
     assert all(isinstance(isl, LogPartitionLayer) for isl in int_sc.inputs)
     assert len(list(int_sc.inner_layers)) == len(list(sc.inner_layers))
-    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), int_sc.inner_layers))
-    assert all(isinstance(r, ReferenceParameter) for l in dense_layers for r in l.weight.inputs)
 
 
 @pytest.mark.parametrize(

@@ -1,30 +1,21 @@
 from abc import ABC, abstractmethod
 from collections import ChainMap
-from copy import copy as shallowcopy
 from functools import cached_property
 from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union, final
+from typing import List, Optional, Protocol, Tuple, Union
 
 import numpy as np
 
 from cirkit.symbolic.dtypes import DataType, dtype_value
 from cirkit.symbolic.initializers import ConstantTensorInitializer, Initializer
-from cirkit.utils.algorithms import RootedDiAcyclicGraph, topologically_process_nodes
+from cirkit.utils.algorithms import RootedDiAcyclicGraph
 
 
 class ParameterNode(ABC):
     """The abstract parameter node class. A parameter node is a node in the computational
     graph that computes parameters. See [Parameter][cirkit.symbolic.parameters.Parameter]
     for more details."""
-
-    @abstractmethod
-    def __copy__(self) -> "ParameterNode":
-        """The shallow copy operation of a parameter node.
-
-        Returns:
-            The copy of the parameter node.
-        """
 
     @property
     @abstractmethod
@@ -34,17 +25,6 @@ class ParameterNode(ABC):
         Returns:
             The shape of the output.
         """
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Retrieves the configuration of the parameter node, i.e., a dictionary mapping
-        hyperparameters of the parameter node to their values. The hyperparameter names must
-        match the argument names in the ```__init__``` method.
-
-        Returns:
-            Dict[str, Any]: A dictionary from hyperparameter names to their value.
-        """
-        return {}
 
 
 class ParameterInput(ParameterNode, ABC):
@@ -86,17 +66,9 @@ class TensorParameter(ParameterInput):
         self.learnable = learnable
         self.dtype = dtype
 
-    def __copy__(self) -> "TensorParameter":
-        cls = self.__class__
-        return cls(*self._shape, **self.config)
-
     @property
     def shape(self) -> Tuple[int, ...]:
         return self._shape
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"initializer": self.initializer, "learnable": self.learnable, "dtype": self.dtype}
 
 
 class ConstantParameter(TensorParameter):
@@ -110,40 +82,10 @@ class ConstantParameter(TensorParameter):
         )
         self.value = value
 
-    def __copy__(self) -> "ConstantParameter":
-        cls = self.__class__
-        return cls(*self._shape, value=self.value)
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"value": self.value}
-
-
-@final
-class ReferenceParameter(ParameterInput):
-    def __init__(self, parameter: TensorParameter):
-        super().__init__()
-        self._parameter = parameter
-
-    def __copy__(self) -> "ReferenceParameter":
-        cls = self.__class__
-        return cls(self._parameter)
-
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        return self._parameter.shape
-
-    def deref(self) -> TensorParameter:
-        return self._parameter
-
 
 class ParameterOp(ParameterNode, ABC):
     def __init__(self, *in_shape: Tuple[int, ...], **kwargs):
         self.in_shapes = in_shape
-
-    def __copy__(self) -> "ParameterOp":
-        cls = self.__class__
-        return cls(*self.in_shapes, **self.config)
 
 
 class UnaryParameterOp(ParameterOp, ABC):
@@ -172,10 +114,6 @@ class ReduceParameterOp(UnaryParameterOp, ABC):
     def shape(self) -> Tuple[int, ...]:
         return *self.in_shapes[0][: self.axis], *self.in_shapes[0][self.axis + 1 :]
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"axis": self.axis}
-
 
 class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
     def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
@@ -183,10 +121,6 @@ class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
         axis = axis if axis >= 0 else axis + len(in_shape)
         assert 0 <= axis < len(in_shape)
         self.axis = axis
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"axis": self.axis}
 
 
 class IndexParameter(UnaryParameterOp):
@@ -205,10 +139,6 @@ class IndexParameter(UnaryParameterOp):
             len(self.indices),
             *self.in_shapes[0][self.axis + 1 :],
         )
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"indices": self.indices, "axis": self.axis}
 
 
 class SumParameter(BinaryParameterOp):
@@ -260,10 +190,6 @@ class OuterParameterOp(BinaryParameterOp):
         cross_dim = self.in_shapes[0][self.axis] * self.in_shapes[1][self.axis]
         return *self.in_shapes[0][: self.axis], cross_dim, *self.in_shapes[0][self.axis + 1 :]
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"axis": self.axis}
-
 
 class OuterProductParameter(OuterParameterOp):
     ...
@@ -299,10 +225,6 @@ class ScaledSigmoidParameter(EntrywiseParameterOp):
         self.vmin = vmin
         self.vmax = vmax
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"vmin": self.vmin, "vmax": self.vmax}
-
 
 class ClampParameter(EntrywiseParameterOp):
     """Clamp reparameterization."""
@@ -318,15 +240,6 @@ class ClampParameter(EntrywiseParameterOp):
         super().__init__(in_shape)
         self.vmin = vmin
         self.vmax = vmax
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        config = {}
-        if self.vmin is not None:
-            config.update(vmin=self.vmin)
-        if self.vmax is not None:
-            config.update(vmax=self.vmax)
-        return config
 
 
 class ConjugateParameter(EntrywiseParameterOp):
@@ -454,43 +367,6 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
                 node to the two outputs given by the symbolic parameter inputs or parameters.
         """
         return Parameter.from_nary(n, p1, p2)
-
-    def copy(self) -> "Parameter":
-        """Constructs a shallow copy of the parameter.
-
-        Returns:
-            A shallow copy of the parameter nodes.
-        """
-
-        # Build a new symbolic parameter's computational graph, by coping nodes.
-        def replace_copy(n: ParameterNode) -> ParameterNode:
-            return shallowcopy(n)
-
-        return self._process_nodes(replace_copy)
-
-    def ref(self) -> "Parameter":
-        """Constructs a shallow copy of the parameter, where the tensor parameters
-            are replace with reference parameters to them.
-
-        Returns:
-            A shallow copy of the parameter nodes, with the exception that tensor parameter nodes
-                are replaced with symbolic references to them.
-        """
-
-        # Build a new symbolic parameter's computational graph, where the parameter tensors
-        # become references to the tensors of the 'self' parameter's computational graph.
-        # All the other nodes are new objects.
-        def replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
-            return ReferenceParameter(n) if isinstance(n, TensorParameter) else shallowcopy(n)
-
-        return self._process_nodes(replace_ref_or_copy)
-
-    def _process_nodes(self, process_fn: Callable[[ParameterNode], ParameterNode]) -> "Parameter":
-        # Process all the nodes by following the topological ordering and using a function
-        nodes, in_nodes, outputs = topologically_process_nodes(
-            self.topological_ordering(), self.outputs, process_fn, incomings_fn=self.node_inputs
-        )
-        return Parameter(nodes, in_nodes, outputs)
 
 
 class ParameterFactory(Protocol):

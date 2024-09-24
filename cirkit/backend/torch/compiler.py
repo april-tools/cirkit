@@ -74,6 +74,10 @@ class TorchCompilerState:
         # Clear the map from (unfolded) compiled parameter tensors to symbolic ones
         self._symbolic_parameters.clear()
 
+    def has_compiled_parameter(self, p: TensorParameter) -> bool:
+        # Retrieve whether a tensor parameter has already been compiled
+        return p in self._compiled_parameters
+
     def retrieve_compiled_parameter(self, p: TensorParameter) -> Tuple[TorchTensorParameter, int]:
         # Retrieve the compiled parameter: we return the fold index as well.
         return self._compiled_parameters[p]

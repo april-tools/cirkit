@@ -59,11 +59,10 @@ def concatenate(scs: Sequence[Circuit], *, registry: Optional[OperatorRegistry] 
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
     output_blocks: List[CircuitBlock] = []
 
-    # Copy the symbolic layers, pick references to parameters and build the blocks
+    # Simply pass the symbolic layers references
     for sc in scs:
         for sl in sc.topological_ordering():
-            parameters = {name: p.ref() for name, p in sl.params.items()}
-            block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+            block = CircuitBlock.from_layer(sl)
             blocks.append(block)
             block_ins = [layers_to_block[sli] for sli in sc.layer_inputs(sl)]
             in_blocks[block] = block_ins
@@ -131,11 +130,6 @@ def evidence(
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
-        # Copy the symbolic layer and use parameter references to keep track
-        # of parameter sharing
-        parameters = {name: p.ref() for name, p in sl.params.items()}
-        ref_sl = type(sl)(**sl.config, **parameters)
-
         # Check if we have to construct the evidence of an input layer
         if isinstance(sl, InputLayer) and sl.scope & scope:
             if not sl.scope <= scope:
@@ -157,7 +151,7 @@ def evidence(
             obs_parameter = ConstantParameter(*obs_shape, value=obs_ndarray)
 
             # Build the evidence layer, with a reference to the input layer
-            evi_sl = EvidenceLayer(ref_sl, observation=Parameter.from_leaf(obs_parameter))
+            evi_sl = EvidenceLayer(sl, observation=Parameter.from_leaf(obs_parameter))
             evi_block = CircuitBlock.from_layer(evi_sl)
             blocks.append(evi_block)
             layers_to_block[sl] = evi_block
@@ -165,7 +159,7 @@ def evidence(
         # Sum/product layers and input layers whose scope does not
         # include variables to observe over are simply copied.
         # Note that to keep track of shared parameters, we use parameter references
-        evi_block = CircuitBlock.from_layer(ref_sl)
+        evi_block = CircuitBlock.from_layer(sl)
         blocks.append(evi_block)
         layers_to_block[sl] = evi_block
         in_blocks[evi_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
@@ -249,10 +243,8 @@ def integrate(
             layers_to_block[sl] = int_block
             continue
         # Sum/product layers and input layers whose scope does not
-        # include variables to integrate over are simply copied.
-        # Note that to keep track of shared parameters, we use parameter references
-        parameters = {name: p.ref() for name, p in sl.params.items()}
-        int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+        # include variables to integrate over are simply passed through
+        int_block = CircuitBlock.from_layer(sl)
         blocks.append(int_block)
         layers_to_block[sl] = int_block
         in_blocks[int_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
@@ -423,8 +415,7 @@ def conjugate(
     for sl in sc.topological_ordering():
         # The conjugation of a product layer is equivalent to the product of its conjugated inputs
         if isinstance(sl, ProductLayer):
-            parameters = {name: p.ref() for name, p in sl.params.items()}
-            conj_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+            conj_block = CircuitBlock.from_layer(sl)
             blocks.append(conj_block)
             layers_to_block[sl] = conj_block
             in_blocks[conj_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]

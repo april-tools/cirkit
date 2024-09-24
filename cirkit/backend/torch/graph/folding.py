@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import torch
 from torch import Tensor
@@ -17,7 +17,7 @@ def build_unfold_index_info(
     ordering: Iterable[TorchModule],
     *,
     outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
 ) -> FoldIndexInfo:
     # The topological ordering of modules
     ordering: List[TorchModule] = list(ordering)
@@ -42,7 +42,7 @@ def build_unfold_index_info(
                 f"Expected modules with fold dimension equal to one, found {m.num_folds}"
             )
         # Retrieve the input modules
-        in_modules: List[AbstractTorchModule] = incomings_fn(m)
+        in_modules: Sequence[AbstractTorchModule] = incomings_fn(m)
         # Check if we are folding non-input modules
         in_modules_idx = [fold_idx[mi] for mi in in_modules] if in_modules else []
 

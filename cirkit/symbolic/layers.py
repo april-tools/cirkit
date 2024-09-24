@@ -1,6 +1,6 @@
 from abc import ABC
 from enum import IntEnum, auto
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Optional, Tuple, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
@@ -28,14 +28,7 @@ class LayerOperator(IntEnum):
 
 class Layer(ABC):
     """The symbolic layer class. A symbolic layer consists of useful metadata of input, product
-    and sum layers. A layer that specializes this class must specify two property methods:
-        1. config(self) -> Dict[str, Any]: A dictionary mapping the non-parameter arguments to
-            the ```__init__``` method to the corresponding values, e.g., the arity.
-        2. params(self) -> Dict[str, Parameter]: A dictionary mapping the parameter arguments
-            the ```__init__``` method to the corresponding symbolic parameter, e.g., the mean and
-            standard deviations symbolic parameters in a
-            [GaussianLayer][cirkit.symbolic.layers.GaussianLayer].
-    """
+    and sum layers."""
 
     def __init__(
         self,
@@ -63,33 +56,6 @@ class Layer(ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Retrieves the configuration of the layer, i.e., a dictionary mapping hyperparameters
-        of the layer to their values. The hyperparameter names must match the argument names in
-        the ```__init__``` method.
-
-        Returns:
-            Dict[str, Any]: A dictionary from hyperparameter names to their value.
-        """
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "arity": self.arity,
-        }
-
-    @property
-    def params(self) -> Dict[str, Parameter]:
-        """Retrieve the symbolic parameters of the layer, i.e., a dictionary mapping the names of
-        the symbolic parameters to the actual symbolic parameter instance. The parameter names must
-        match the argument names in the```__init__``` method.
-
-        Returns:
-            Dict[str, Parameter]: A dictionary from parameter names to the corresponding symbolic
-                parameter instance.
-        """
-        return {}
 
 
 class InputLayer(Layer):
@@ -131,14 +97,6 @@ class InputLayer(Layer):
         """
         return self.arity
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "scope": self.scope,
-            "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
-        }
-
 
 class ConstantLayer(InputLayer):
     """The symbolic layer computing a constant vector, i.e., it does not depend on any variable."""
@@ -150,10 +108,6 @@ class ConstantLayer(InputLayer):
             num_output_units: The number of input units in the layer.
         """
         super().__init__(Scope([]), num_output_units)
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"num_output_units": self.num_output_units}
 
 
 class EvidenceLayer(ConstantLayer):
@@ -193,14 +147,6 @@ class EvidenceLayer(ConstantLayer):
         super().__init__(layer.num_output_units)
         self.layer = layer
         self.observation = observation
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"layer": self.layer}
-
-    @property
-    def params(self) -> Dict[str, Parameter]:
-        return {"observation": self.observation}
 
 
 class CategoricalLayer(InputLayer):
@@ -275,18 +221,6 @@ class CategoricalLayer(InputLayer):
     @property
     def _probs_logits_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_channels, self.num_categories
-
-    @property
-    def config(self) -> dict:
-        config = super().config
-        config.update(num_categories=self.num_categories)
-        return config
-
-    @property
-    def params(self) -> Dict[str, Parameter]:
-        if self.logits is None:
-            return {"probs": self.probs}
-        return {"logits": self.logits}
 
 
 class GaussianLayer(InputLayer):
@@ -369,13 +303,6 @@ class GaussianLayer(InputLayer):
     def _log_partition_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_channels
 
-    @property
-    def params(self) -> Dict[str, Parameter]:
-        params = {"mean": self.mean, "stddev": self.stddev}
-        if self.log_partition is not None:
-            params.update(log_partition=self.log_partition)
-        return params
-
 
 class LogPartitionLayer(ConstantLayer):
     """A symbolic layer computing a log-partition function."""
@@ -398,10 +325,6 @@ class LogPartitionLayer(ConstantLayer):
     def _value_shape(self) -> Tuple[int, ...]:
         return (self.num_output_units,)
 
-    @property
-    def params(self) -> Dict[str, Parameter]:
-        return {"value": self.value}
-
 
 class ProductLayer(Layer, ABC):
     """The abstract base class for symbolic product layers."""
@@ -420,13 +343,6 @@ class ProductLayer(Layer, ABC):
         if arity < 2:
             raise ValueError("The arity should be at least 2")
         super().__init__(num_input_units, num_output_units, arity)
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "arity": self.arity,
-        }
 
 
 class HadamardLayer(ProductLayer):
@@ -515,17 +431,6 @@ class DenseLayer(SumLayer):
     def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_input_units
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-        }
-
-    @property
-    def params(self) -> Dict[str, Parameter]:
-        return {"weight": self.weight}
-
 
 class MixingLayer(SumLayer):
     """The symbolic mixing sum layer. A mixing layer takes N layers as inputs, where each one
@@ -566,11 +471,3 @@ class MixingLayer(SumLayer):
     @property
     def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_input_units, self.arity
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"num_units": self.num_input_units, "arity": self.arity}
-
-    @property
-    def params(self) -> Dict[str, Parameter]:
-        return {"weight": self.weight}
