@@ -54,7 +54,7 @@ def apply_log_softmax(
     compiler: "TorchCompiler", match: ParameterOptMatch
 ) -> Tuple[TorchLogSoftmaxParameter]:
     softmax = cast(TorchSoftmaxParameter, match.entries[1])
-    log_softmax = TorchLogSoftmaxParameter(softmax.in_shapes[0], dim=softmax.dim)
+    log_softmax = TorchLogSoftmaxParameter(softmax.in_shape[0], dim=softmax.dim)
     return (log_softmax,)
 
 

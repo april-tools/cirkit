@@ -16,10 +16,10 @@ class TorchLayer(AbstractTorchModule, ABC):
         self,
         num_input_units: int,
         num_output_units: int,
-        *,
         arity: int = 1,
-        num_folds: int = 1,
+        *,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -42,13 +42,9 @@ class TorchLayer(AbstractTorchModule, ABC):
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
     @property
+    @abstractmethod
     def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "arity": self.arity,
-            "num_folds": self.num_folds,
-        }
+        ...
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

@@ -17,10 +17,10 @@ class TorchInnerLayer(TorchLayer, ABC):
         self,
         num_input_units: int,
         num_output_units: int,
-        *,
         arity: int = 2,
-        num_folds: int = 1,
+        *,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -31,12 +31,13 @@ class TorchInnerLayer(TorchLayer, ABC):
             num_folds (int): The number of channels. Defaults to 1.
         """
         super().__init__(
-            num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
+            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
 
     @property
     def fold_settings(self) -> Tuple[Any, ...]:
-        return self.num_input_units, self.num_output_units, self.arity
+        pshapes = [(n, p.shape) for n, p in self.params.items()]
+        return *self.config.items(), *pshapes
 
 
 class TorchProductLayer(TorchInnerLayer, ABC):
@@ -54,10 +55,10 @@ class TorchHadamardLayer(TorchProductLayer):
         self,
         num_input_units: int,
         num_output_units: int,
-        *,
         arity: int = 2,
-        num_folds: int = 1,
+        *,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -74,8 +75,15 @@ class TorchHadamardLayer(TorchProductLayer):
                 "The number of input and output units must be the same for Hadamard product"
             )
         super().__init__(
-            num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
+            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
+
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -96,10 +104,10 @@ class TorchKroneckerLayer(TorchProductLayer):
         self,
         num_input_units: int,
         num_output_units: int,
-        *,
         arity: int = 2,
-        num_folds: int = 1,
+        *,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -116,8 +124,15 @@ class TorchKroneckerLayer(TorchProductLayer):
         if arity != 2:
             raise NotImplementedError("Kronecker only implemented for binary product units.")
         super().__init__(
-            num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
+            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
+
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -142,32 +157,28 @@ class TorchDenseLayer(TorchSumLayer):
         num_input_units: int,
         num_output_units: int,
         *,
-        num_folds: int = 1,
         weight: TorchParameter,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
         Args:
             num_input_units (int): The number of input units.
             num_outpfrom functools import cached_propertyut_units (int): The number of output units.
-            num_folds (int): The number of channels. Defaults to 1.
             weight (TorchParameter): The reparameterization for layer parameters.
+            num_folds (int): The number of channels. Defaults to 1.
         """
         assert weight.num_folds == num_folds
         assert weight.shape == (num_output_units, num_input_units)
         super().__init__(
-            num_input_units, num_output_units, arity=1, num_folds=num_folds, semiring=semiring
+            num_input_units, num_output_units, arity=1, semiring=semiring, num_folds=num_folds
         )
         self.weight = weight
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "num_folds": self.num_folds,
-        }
+        return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
@@ -199,11 +210,11 @@ class TorchMixingLayer(TorchSumLayer):
         self,
         num_input_units: int,
         num_output_units: int,
-        *,
         arity: int = 2,
-        num_folds: int = 1,
+        *,
         weight: TorchParameter,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -211,8 +222,8 @@ class TorchMixingLayer(TorchSumLayer):
             num_input_units (int): The number of input units.
             num_output_units (int): The number of output units, must be the same as input.
             arity (int, optional): The arity of the layer. Defaults to 2.
-            num_folds (int): The number of channels. Defaults to 1.
             weight (TorchParameter): The reparameterization for layer parameters.
+            num_folds (int): The number of channels. Defaults to 1.
         """
         assert (
             num_output_units == num_input_units
@@ -220,9 +231,17 @@ class TorchMixingLayer(TorchSumLayer):
         assert weight.num_folds == num_folds
         assert weight.shape == (num_output_units, arity)
         super().__init__(
-            num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
+            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
         self.weight = weight
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

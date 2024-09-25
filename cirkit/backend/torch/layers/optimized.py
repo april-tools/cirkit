@@ -9,14 +9,7 @@ from cirkit.backend.torch.semiring import Semiring
 
 
 class TorchSumProductLayer(TorchInnerLayer, ABC):
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "arity": self.arity,
-            "num_folds": self.num_folds,
-        }
+    ...
 
 
 class TorchTuckerLayer(TorchSumProductLayer):
@@ -31,9 +24,9 @@ class TorchTuckerLayer(TorchSumProductLayer):
         num_output_units: int,
         arity: int = 2,
         *,
-        num_folds: int = 1,
         weight: TorchParameter,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -48,9 +41,17 @@ class TorchTuckerLayer(TorchSumProductLayer):
         assert weight.num_folds == num_folds
         assert weight.shape == (num_output_units, num_input_units * num_input_units)
         super().__init__(
-            num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
+            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
         self.weight = weight
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
@@ -91,9 +92,9 @@ class TorchCPTLayer(TorchSumProductLayer):
         num_output_units: int,
         arity: int = 2,
         *,
-        num_folds: int = 1,
         weight: TorchParameter,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -109,10 +110,18 @@ class TorchCPTLayer(TorchSumProductLayer):
             num_input_units,
             num_output_units,
             arity=arity,
-            num_folds=num_folds,
             semiring=semiring,
+            num_folds=num_folds,
         )
         self.weight = weight
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
@@ -142,9 +151,9 @@ class TorchTensorDotLayer(TorchSumLayer):
         num_input_units: int,
         num_output_units: int,
         *,
-        num_folds: int = 1,
         weight: TorchParameter,
         semiring: Optional[Semiring] = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -160,7 +169,11 @@ class TorchTensorDotLayer(TorchSumLayer):
         assert num_input_units % weight.shape[1] == 0
         assert num_output_units == weight.shape[0] * num_batch_units
         super().__init__(
-            num_input_units, num_output_units, arity=1, num_folds=num_folds, semiring=semiring
+            num_input_units,
+            num_output_units,
+            arity=1,
+            semiring=semiring,
+            num_folds=num_folds,
         )
         self._num_contract_units = num_contract_units
         self._num_batch_units = num_batch_units
@@ -168,15 +181,7 @@ class TorchTensorDotLayer(TorchSumLayer):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "num_folds": self.num_folds,
-        }
-
-    @property
-    def fold_settings(self) -> Tuple[Any, ...]:
-        return *super().fold_settings, self._num_batch_units
+        return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

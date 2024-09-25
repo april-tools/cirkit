@@ -64,20 +64,18 @@ class TorchInputLayer(TorchLayer, ABC):
         return self.arity
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
-        return self.num_variables, self.num_channels, self.num_output_units
-
-    @property
+    @abstractmethod
     def config(self) -> Dict[str, Any]:
-        return {
-            "scope_idx": self.scope_idx,
-            "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
-        }
+        ...
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
         return {}
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        pshapes = [(n, p.shape) for n, p in self.params.items()]
+        return self.num_variables, *self.config.items(), *pshapes
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
@@ -182,8 +180,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         self,
         scope_idx: Tensor,
         num_output_units: int,
-        *,
         num_channels: int = 1,
+        *,
         num_categories: int = 2,
         probs: Optional[TorchParameter] = None,
         logits: Optional[TorchParameter] = None,
@@ -238,15 +236,17 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
 
     @property
     def config(self) -> Dict[str, Any]:
-        config = super().config
-        config.update(num_categories=self.num_categories)
-        return config
+        return {
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_categories": self.num_categories,
+        }
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
         if self.logits is None:
-            return dict(probs=self.probs)
-        return dict(logits=self.logits)
+            return {"probs": self.probs}
+        return {"logits": self.logits}
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
@@ -277,8 +277,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         self,
         scope_idx: Tensor,
         num_output_units: int,
-        *,
         num_channels: int = 1,
+        *,
         mean: TorchParameter,
         stddev: TorchParameter,
         log_partition: Optional[TorchParameter] = None,
@@ -323,10 +323,14 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return p.shape == (self.num_output_units, self.num_channels)
 
     @property
+    def config(self) -> Dict[str, Any]:
+        return {"num_output_units": self.num_output_units, "num_channels": self.num_channels}
+
+    @property
     def params(self) -> Dict[str, TorchParameter]:
-        params = dict(mean=self.mean, stddev=self.stddev)
+        params = {"mean": self.mean, "stddev": self.stddev}
         if self.log_partition is not None:
-            params.update(log_partition=self.log_partition)
+            params["log_partition"] = self.log_partition
         return params
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
@@ -354,9 +358,8 @@ class TorchLogPartitionLayer(TorchInputLayer):
         self,
         scope_idx: Tensor,
         num_output_units: int,
-        *,
         num_channels: int = 1,
-        num_folds: int = 1,
+        *,
         value: TorchParameter,
         semiring: Optional[Semiring] = None,
     ) -> None:
@@ -382,10 +385,12 @@ class TorchLogPartitionLayer(TorchInputLayer):
         self.value = value
 
     @property
+    def config(self) -> Dict[str, Any]:
+        return {"num_output_units": self.num_output_units, "num_channels": self.num_channels}
+
+    @property
     def params(self) -> Dict[str, TorchParameter]:
-        params = super().params
-        params.update(value=self.value)
-        return params
+        return {"value": self.value}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

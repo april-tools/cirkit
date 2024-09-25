@@ -384,7 +384,7 @@ def _fold_parameter_nodes_group(
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)
-    return fold_node_cls(*group[0].in_shapes, num_folds=len(group), **group[0].config)
+    return fold_node_cls(**group[0].config, num_folds=len(group))
 
 
 def _optimize_circuit(
