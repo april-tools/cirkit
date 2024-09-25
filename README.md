@@ -4,6 +4,8 @@
 
 # cirkit
 
+![cirkit logo](./logo.png)
+
 LL: abstract
 
 ## Project Structure
