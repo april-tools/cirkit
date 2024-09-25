@@ -308,7 +308,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         """
         if isinstance(p, ParameterInput):
             p = Parameter.from_leaf(p)
-        nodes = p.nodes + list(ns)
+        nodes = list(p.nodes) + list(ns)
         in_nodes = dict(p.nodes_inputs)
         for i, n in enumerate(ns):
             in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.output]
