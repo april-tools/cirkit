@@ -113,7 +113,12 @@ class TorchTensorParameter(TorchParameterInput):
             "shape": self._shape,
             "requires_grad": self._requires_grad,
             "dtype": self._dtype,
+            "initializer_": self._initializer_,
         }
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return self._shape, self._requires_grad, self._dtype
 
     @torch.no_grad()
     def reset_parameters(self) -> None:
@@ -302,10 +307,6 @@ class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
         config["dim"] = self.dim
         return config
 
-    @property
-    def fold_settings(self) -> Tuple[Any, ...]:
-        return *super().fold_settings, self.dim
-
 
 class TorchEntrywiseReduceParameterOp(TorchEntrywiseParameterOp, ABC):
     """The base class for normalized reparameterization."""
@@ -329,10 +330,6 @@ class TorchEntrywiseReduceParameterOp(TorchEntrywiseParameterOp, ABC):
         config = super().config
         config["dim"] = self.dim
         return config
-
-    @property
-    def fold_settings(self) -> Tuple[Any, ...]:
-        return *super().fold_settings, self.dim
 
 
 class TorchIndexParameter(TorchUnaryParameterOp):
