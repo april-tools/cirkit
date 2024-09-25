@@ -1,5 +1,8 @@
 import itertools
-from typing import Dict, List, Optional, Sequence, Tuple
+from numbers import Number
+from typing import Dict, List, Optional, Sequence, Tuple, Union
+
+import numpy as np
 
 from cirkit.symbolic.circuit import (
     Circuit,
@@ -9,12 +12,20 @@ from cirkit.symbolic.circuit import (
     StructuralPropertyError,
     are_compatible,
 )
-from cirkit.symbolic.layers import InputLayer, Layer, LayerOperator, ProductLayer, SumLayer
+from cirkit.symbolic.layers import (
+    EvidenceLayer,
+    InputLayer,
+    Layer,
+    LayerOperator,
+    ProductLayer,
+    SumLayer,
+)
+from cirkit.symbolic.parameters import ConstantParameter, Parameter
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
+def concatenate(scs: Sequence[Circuit], *, registry: Optional[OperatorRegistry] = None) -> Circuit:
     """Concatenates a sequence of symbolic circuits. Concatenating circuits means constructing
     another circuit such that its output layers consists of the output layers of each circuit
     (in the given order). This operator does not require the satisfaction of any structural
@@ -48,23 +59,18 @@ def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = N
     in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
     output_blocks: List[CircuitBlock] = []
 
-    # Copy the symbolic layers, pick references to parameters and build the blocks
+    # Simply pass the symbolic layers references
     for sc in scs:
         for sl in sc.topological_ordering():
-            parameters = {name: p.ref() for name, p in sl.params.items()}
-            block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+            block = CircuitBlock.from_layer(sl)
             blocks.append(block)
             block_ins = [layers_to_block[sli] for sli in sc.layer_inputs(sl)]
             in_blocks[block] = block_ins
             layers_to_block[sl] = block
         output_blocks.extend(layers_to_block[sl] for sl in sc.outputs)
 
-    # Retrieve the union of the scopes of the circuits
-    scope = Scope.union(*tuple(sc.scope for sc in scs))
-
     # Construct the symbolic circuit obtained by merging multiple circuits
     return Circuit.from_operation(
-        scope,
         num_channels,
         blocks,
         in_blocks,
@@ -73,9 +79,112 @@ def concatenate(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = N
     )
 
 
+def evidence(
+    sc: Circuit,
+    obs: Dict[int, Union[Number, Tuple[Number, ...]]],
+    *,
+    registry: Optional[OperatorRegistry] = None,
+) -> Circuit:
+    """Observe the value of some variables in a symbolic circuit, and represent the given
+    evidence as another symbolic circuit.
+
+    Args:
+        sc: The symbolic circuit where some variables have to be observed.
+        obs: The observation data, stored as a dictionary mapping variable integer identifiers
+            to numbers, i.e., either integer, float or complex values. In the case the
+            circuit defines multiple channels per variable, then this is a dictionary mapping
+            variable integer identifiers to tuples of as many numbers as the number of channels.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        The symbolic circuit representing the observation of variables in the given circuit.
+
+    Raises:
+        ValueError: If the observation contains variables not defined in the scope of the circuit.
+    """
+    if not all(
+        (isinstance(value, Number) or len(value) == 1)
+        if sc.num_channels == 1
+        else len(value) == sc.num_channels
+        for (var, value) in obs.items()
+    ):
+        raise ValueError(
+            "The observation of each variable should contain as many "
+            "values as the number of channels"
+        )
+    # Check the variables to observe
+    scope = Scope(obs.keys())
+    if not scope:
+        raise ValueError("There are no variables to observe")
+    elif not scope <= sc.scope:
+        raise ValueError("The variables to observe must be a subset of the scope of the circuit")
+
+    # Mapping the symbolic circuit layers with blocks of circuit layers
+    layers_to_block: Dict[Layer, CircuitBlock] = {}
+
+    # For each new circuit block, keep track of its inputs
+    blocks: List[CircuitBlock] = []
+    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+
+    for sl in sc.topological_ordering():
+        # Check if we have to construct the evidence of an input layer
+        if isinstance(sl, InputLayer) and sl.scope & scope:
+            if not sl.scope <= scope:
+                raise NotImplementedError(
+                    f"Only complete evidence of multivariate input layers is supported, "
+                    f"found {sl.scope} but computing the evidence over {scope}"
+                )
+
+            # Build the observation parameter, as a constant tensor that
+            # contains assignments to the variables being observed
+            # The shape of the observation parameter is (C, D), where C is the
+            # number of channels and D is the number of variables the layer
+            # depends on
+            obs_shape = sc.num_channels, len(sl.scope)
+            # obs_ndarray: An array of shape either (D,) or (D, C)
+            obs_ndarray = np.array([obs[var] for var in sorted(sl.scope)])
+            obs_ndarray = obs_ndarray[None, :] if len(obs_ndarray.shape) == 1 else obs_ndarray.T
+            # A constant parameter of shape (C, D), where C can be 1.
+            obs_parameter = ConstantParameter(*obs_shape, value=obs_ndarray)
+
+            # Build the evidence layer, with a reference to the input layer
+            evi_sl = EvidenceLayer(sl, observation=Parameter.from_leaf(obs_parameter))
+            evi_block = CircuitBlock.from_layer(evi_sl)
+            blocks.append(evi_block)
+            layers_to_block[sl] = evi_block
+            continue
+        # Sum/product layers and input layers whose scope does not
+        # include variables to observe over are simply copied.
+        # Note that to keep track of shared parameters, we use parameter references
+        evi_block = CircuitBlock.from_layer(sl)
+        blocks.append(evi_block)
+        layers_to_block[sl] = evi_block
+        in_blocks[evi_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
+
+    # Construct the sequence of output blocks
+    output_blocks = [layers_to_block[sl] for sl in sc.outputs]
+
+    # Construct the evidence symbolic circuit and set the evidence operation metadata
+    return Circuit.from_operation(
+        sc.num_channels,
+        blocks,
+        in_blocks,
+        output_blocks,
+        operation=CircuitOperation(
+            operator=CircuitOperator.EVIDENCE,
+            operands=(sc,),
+            metadata={"scope": scope},
+        ),
+    )
+
+
 def integrate(
     sc: Circuit,
     scope: Optional[Scope] = None,
+    *,
     registry: Optional[OperatorRegistry] = None,
 ) -> Circuit:
     """Integrate the function computed by a circuit, and represent it as another circuit.
@@ -95,7 +204,8 @@ def integrate(
 
     Raises:
         StructuralPropertyError: If the given circuit is not smooth and decomposable.
-        ValueError: If the scope to integrate over is not a subset of the scope of the circuit.
+        ValueError: If the scope to integrate over is not a subset of the scope of the circuit,
+            or if it is empty.
     """
     # Check for structural properties
     if not sc.is_smooth or not sc.is_decomposable:
@@ -103,9 +213,11 @@ def integrate(
             "Only smooth and decomposable circuits can be efficiently integrated."
         )
 
-    # Check the variable
+    # Check the variables to integrate
     if scope is None:
         scope = sc.scope
+    if not scope:
+        raise ValueError("There are no variables to integrate over")
     elif not scope <= sc.scope:
         raise ValueError(
             "The variables scope to integrate must be a subset of the scope of the circuit"
@@ -131,10 +243,8 @@ def integrate(
             layers_to_block[sl] = int_block
             continue
         # Sum/product layers and input layers whose scope does not
-        # include variables to integrate over are simply copied.
-        # Note that this willTo keep track of shared parameters, we use parameter references
-        parameters = {name: p.ref() for name, p in sl.params.items()}
-        int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+        # include variables to integrate over are simply passed through
+        int_block = CircuitBlock.from_layer(sl)
         blocks.append(int_block)
         layers_to_block[sl] = int_block
         in_blocks[int_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
@@ -144,7 +254,6 @@ def integrate(
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit.from_operation(
-        sc.scope,
         sc.num_channels,
         blocks,
         in_blocks,
@@ -157,7 +266,7 @@ def integrate(
     )
 
 
-def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = None) -> Circuit:
+def multiply(sc1: Circuit, sc2: Circuit, *, registry: Optional[OperatorRegistry] = None) -> Circuit:
     """Multiply two symbolic circuit and represent it as another circuit.
     This operator requires the input circuits to be smooth, decomposable and compatible.
     The resulting circuit will be smooth and decomposable. Moreover, if the input circuits
@@ -181,7 +290,6 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
     """
     if sc1.scope != sc2.scope:
         raise NotImplementedError("Only the product of circuits over the same scope is implemented")
-    scope = sc1.scope
     if not are_compatible(sc1, sc2):
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
@@ -224,8 +332,8 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
             #       circuits
             assert len(l1_inputs) == len(l2_inputs)
             # Sort layers based on the scope, such that we can multiply layers with matching scopes
-            l1_inputs = sorted(l1_inputs, key=lambda sl: sl.scope)
-            l2_inputs = sorted(l2_inputs, key=lambda sl: sl.scope)
+            l1_inputs = sorted(l1_inputs, key=sc1.layer_scope)
+            l2_inputs = sorted(l2_inputs, key=sc2.layer_scope)
             next_to_multiply = list(zip(l1_inputs, l2_inputs))
         else:
             assert False
@@ -254,7 +362,6 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
-        scope,
         sc1.num_channels,
         blocks,
         in_blocks,
@@ -263,7 +370,7 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
     )
 
 
-def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> Circuit:
+def differentiate(sc: Circuit, *, registry: Optional[OperatorRegistry] = None) -> Circuit:
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
             "Only smooth and decomposable circuits can be efficiently differentiated."
@@ -277,6 +384,7 @@ def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> C
 
 def conjugate(
     sc: Circuit,
+    *,
     registry: Optional[OperatorRegistry] = None,
 ) -> Circuit:
     """Apply the complex conjugation operator to a symbolic circuit, and represent it as another
@@ -307,8 +415,7 @@ def conjugate(
     for sl in sc.topological_ordering():
         # The conjugation of a product layer is equivalent to the product of its conjugated inputs
         if isinstance(sl, ProductLayer):
-            parameters = {name: p.ref() for name, p in sl.params.items()}
-            conj_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
+            conj_block = CircuitBlock.from_layer(sl)
             blocks.append(conj_block)
             layers_to_block[sl] = conj_block
             in_blocks[conj_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
@@ -328,7 +435,6 @@ def conjugate(
 
     # Construct the conjugate symbolic circuit
     return Circuit.from_operation(
-        sc.scope,
         sc.num_channels,
         blocks,
         in_blocks,

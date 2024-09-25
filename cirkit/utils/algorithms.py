@@ -1,5 +1,4 @@
 from collections import deque
-from functools import cached_property
 from typing import (
     Callable,
     Dict,
@@ -18,7 +17,7 @@ NodeType = TypeVar("NodeType")
 
 def graph_nodes_outgoings(
     nodes: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
-) -> Dict[NodeType, List[NodeType]]:
+) -> Dict[NodeType, Sequence[NodeType]]:
     outgoings: Dict[NodeType, List[NodeType]] = {}
     for n in nodes:
         incomings = incomings_fn(n)
@@ -43,6 +42,16 @@ def bfs(
             if ch not in seen:
                 seen.add(ch)
                 to_visit.append(ch)
+
+
+def subgraph(
+    roots: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
+) -> Tuple[Sequence[NodeType], Dict[NodeType, Sequence[NodeType]]]:
+    nodes = list(bfs(roots, incomings_fn))
+    incomings: Dict[NodeType, Sequence[NodeType]] = {}
+    for n in nodes:
+        incomings[n] = incomings_fn(n)
+    return nodes, incomings
 
 
 def topological_ordering(
@@ -119,69 +128,75 @@ def topologically_process_nodes(
 class Graph(Generic[NodeType]):
     def __init__(
         self,
-        nodes: List[NodeType],
-        in_nodes: Dict[NodeType, List[NodeType]],
-        outputs: List[NodeType],
+        nodes: Sequence[NodeType],
+        in_nodes: Dict[NodeType, Sequence[NodeType]],
     ):
         self._nodes = nodes
         self._in_nodes = in_nodes
-        self._outputs = outputs
         self._out_nodes = graph_nodes_outgoings(nodes, self.node_inputs)
 
-    def node_inputs(self, n: NodeType) -> List[NodeType]:
+    def node_inputs(self, n: NodeType) -> Sequence[NodeType]:
         return self._in_nodes.get(n, [])
 
-    def node_outputs(self, n: NodeType) -> List[NodeType]:
+    def node_outputs(self, n: NodeType) -> Sequence[NodeType]:
         return self._out_nodes.get(n, [])
 
     @property
-    def nodes(self) -> List[NodeType]:
+    def nodes(self) -> Sequence[NodeType]:
         return self._nodes
 
     @property
-    def nodes_inputs(self) -> Dict[NodeType, List[NodeType]]:
+    def nodes_inputs(self) -> Dict[NodeType, Sequence[NodeType]]:
         return self._in_nodes
 
     @property
-    def nodes_outputs(self) -> Dict[NodeType, List[NodeType]]:
+    def nodes_outputs(self) -> Dict[NodeType, Sequence[NodeType]]:
         return self._out_nodes
 
     @property
     def inputs(self) -> Iterator[NodeType]:
         return (n for n in self._nodes if not self.node_inputs(n))
 
-    @property
-    def outputs(self) -> Iterator[NodeType]:
-        return iter(self._outputs)
-
 
 class DiAcyclicGraph(Graph[NodeType]):
     def __init__(
         self,
-        nodes: List[NodeType],
-        in_nodes: Dict[NodeType, List[NodeType]],
-        outputs: List[NodeType],
+        nodes: Sequence[NodeType],
+        in_nodes: Dict[NodeType, Sequence[NodeType]],
+        outputs: Sequence[NodeType],
     ):
-        super().__init__(nodes, in_nodes, outputs)
+        super().__init__(nodes, in_nodes)
+        self._outputs = outputs
 
-    def topological_ordering(
-        self, roots: Optional[Iterable[NodeType]] = None
-    ) -> Iterator[NodeType]:
-        nodes = self._nodes if roots is None else bfs(roots, self.node_inputs)
-        outcomings_fn = self.node_outputs if roots is None else None
-        return topological_ordering(nodes, self.node_inputs, outcomings_fn)
+    @property
+    def outputs(self) -> Iterator[NodeType]:
+        return iter(self._outputs)
+
+    def topological_ordering(self) -> Iterator[NodeType]:
+        return topological_ordering(self._nodes, self.node_inputs, self.node_outputs)
 
     def layerwise_topological_ordering(self) -> Iterator[List[NodeType]]:
         return layerwise_topological_ordering(self._nodes, self.node_inputs, self.node_outputs)
 
+    def subgraph(self, *roots: NodeType) -> "DiAcyclicGraph[NodeType]":
+        nodes, in_nodes = subgraph(roots, self.node_inputs)
+        return DiAcyclicGraph[NodeType](nodes, in_nodes, outputs=roots)
+
 
 class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
-    @cached_property
-    def output(self) -> NodeType:
-        outputs = list(self.outputs)
+    def __init__(
+        self,
+        nodes: Sequence[NodeType],
+        in_nodes: Dict[NodeType, Sequence[NodeType]],
+        outputs: Sequence[NodeType],
+    ):
         if len(outputs) != 1:
             raise ValueError("The graph should have exactly one output node.")
-        (output,) = outputs
+        super().__init__(nodes, in_nodes, outputs)
+
+    @property
+    def output(self) -> NodeType:
+        (output,) = self._outputs
         return output
 
 

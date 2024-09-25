@@ -102,6 +102,22 @@ class TorchInputLayer(TorchLayer, ABC):
         )
 
 
+class TorchConstantLayer(TorchInputLayer, ABC):
+    def __init__(
+        self,
+        num_output_units: int,
+        num_folds: int,
+        *,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        super().__init__(
+            torch.empty(size=(num_folds, 0), dtype=torch.int64), num_output_units, semiring=semiring
+        )
+
+    def integrate(self) -> Tensor:
+        raise ValueError("Cannot integrate a layer computing a constant function")
+
+
 class TorchExpFamilyLayer(TorchInputLayer):
     """The abstract base class for Exponential Family distribution layers.
 
@@ -142,6 +158,14 @@ class TorchExpFamilyLayer(TorchInputLayer):
             num_channels=num_channels,
             semiring=semiring,
         )
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "scope_idx": self.scope_idx,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+        }
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -188,16 +212,16 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
-
-        Args:
-            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
-                D is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
-                as a tensor of shape (1, D), i.e., with F = 1.
-            num_output_units: The number of output units.
-            num_channels: The number of channels.
-            num_categories: The number of categories for Categorical distribution. Defaults to 2.
-            logits: The reparameterization for layer parameters.
+        log-partition
+                Args:
+                    scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                        D is the number of variables on which the input layers in each fold are defined on.
+                        Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                        as a tensor of shape (1, D), i.e., with F = 1.
+                    num_output_units: The number of output units.
+                    num_channels: The number of channels.
+                    num_categories: The number of categories for Categorical distribution. Defaults to 2.
+                    logits: The reparameterization for layer parameters.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
@@ -353,12 +377,10 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
 
 
-class TorchLogPartitionLayer(TorchInputLayer):
+class TorchLogPartitionLayer(TorchConstantLayer):
     def __init__(
         self,
-        scope_idx: Tensor,
         num_output_units: int,
-        num_channels: int = 1,
         *,
         value: TorchParameter,
         semiring: Optional[Semiring] = None,
@@ -366,18 +388,12 @@ class TorchLogPartitionLayer(TorchInputLayer):
         """Init class.
 
         Args:
-            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
-                D is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
-                as a tensor of shape (1, D), i.e., with F = 1.
             num_output_units: The number of output units.
-            num_channels: The number of channels. Defaults to 1.
             value (Optional[Reparameterization], optional): Ignored. This layer has no parameters.
         """
         super().__init__(
-            scope_idx,
             num_output_units,
-            num_channels=num_channels,
+            value.num_folds,
             semiring=semiring,
         )
         assert value.num_folds == self.num_folds
@@ -396,7 +412,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki=0).
 
         Returns:
             Tensor: The output of this layer, shape (F, B, Ko).
@@ -406,5 +422,54 @@ class TorchLogPartitionLayer(TorchInputLayer):
         value = value.expand(value.shape[0], x.shape[2], value.shape[2])
         return self.semiring.map_from(value, LSESumSemiring)
 
-    def integrate(self) -> Tensor:
-        raise ValueError("Cannot integrate a layer computing a log-partition function")
+
+class TorchEvidenceLayer(TorchConstantLayer):
+    def __init__(
+        self,
+        layer: TorchInputLayer,
+        *,
+        observation: TorchParameter,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        if observation.num_folds != layer.num_folds:
+            raise ValueError(
+                f"The number of folds in the observation and in the layer should be the same, "
+                f"but found {observation.num_folds} and {layer.num_folds} respectively"
+            )
+        if len(observation.shape) != 2:
+            raise ValueError(
+                f"Expected observation of shape (num_channels, num_variables), "
+                f"but found {observation.shape}"
+            )
+        num_channels, num_variables = observation.shape
+        if num_channels != layer.num_channels:
+            raise ValueError(
+                f"Expected an observation with number of channels {layer.num_channels}, "
+                f"but found {num_channels}"
+            )
+        if num_variables != layer.num_variables:
+            raise ValueError(
+                f"Expected an observation with number of variables {layer.num_variables}, "
+                f"but found {num_variables}"
+            )
+        super().__init__(layer.num_output_units, layer.num_folds, semiring=semiring)
+        self.layer = layer
+        self.observation = observation
+
+    @property
+    def sub_modules(self) -> Dict[str, TorchInputLayer]:
+        return {"layer": self.layer}
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {}
+
+    @property
+    def params(self) -> Dict[str, TorchParameter]:
+        return {"observation": self.observation}
+
+    def forward(self, x: Tensor) -> Tensor:
+        obs = self.observation()  # (F, C, D)
+        obs = obs.unsqueeze(dim=2)  # (F, C, 1, D)
+        obs = obs.expand(obs.shape[0], obs.shape[1], x.shape[2], obs.shape[3])  # (F, C, B, D)
+        return self.layer(obs)  # (F, B, K)

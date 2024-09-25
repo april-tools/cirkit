@@ -78,6 +78,7 @@ class TorchHadamardLayer(TorchProductLayer):
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
 
+    @property
     def config(self) -> Dict[str, Any]:
         return {
             "num_input_units": self.num_input_units,
@@ -127,6 +128,7 @@ class TorchKroneckerLayer(TorchProductLayer):
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
 
+    @property
     def config(self) -> Dict[str, Any]:
         return {
             "num_input_units": self.num_input_units,

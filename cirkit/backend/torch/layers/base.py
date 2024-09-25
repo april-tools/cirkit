@@ -29,8 +29,8 @@ class TorchLayer(AbstractTorchModule, ABC):
             arity (int, optional): The arity of the layer. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.
         """
-        if num_input_units <= 0:
-            raise ValueError("The number of input units must be positive")
+        if num_input_units < 0:
+            raise ValueError("The number of input units must be non-negative")
         if num_output_units <= 0:
             raise ValueError("The number of output units must be positive")
         if arity <= 0:
@@ -48,6 +48,16 @@ class TorchLayer(AbstractTorchModule, ABC):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
+        return {}
+
+    @property
+    def sub_modules(self) -> Dict[str, "TorchLayer"]:
+        """Retrieve a dictionary mapping string identifiers to torch sub-module layers.,
+        that must be passed to the ```__init__``` method of the top-level layer
+
+        Returns:
+            A dictionary of torch modules.
+        """
         return {}
 
     # Expected to be fixed, so use cached property to avoid recalculation.

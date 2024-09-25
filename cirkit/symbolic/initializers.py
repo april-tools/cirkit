@@ -19,44 +19,22 @@ class Initializer(ABC):
         return {}
 
 
-class ConstantInitializer(Initializer):
-    """A symbolic constant initializer, which initializes all the entries of a tensor with the
-    same scalar value."""
-
-    def __init__(self, value: Number = 0.0) -> None:
-        """Initializes a constant initializer.
-
-        Args:
-            value: The value used for initialization, it can be either an integer, a real number
-                or a complex number.
-
-        Raises:
-            ValueError: If the initiaization value is not a number.
-        """
-        if not isinstance(value, Number):
-            raise ValueError("The value must be a number")
-        self.value = value
-
-    @property
-    def config(self) -> Dict[str, Any]:
-        return {"value": self.value}
-
-
 class ConstantTensorInitializer(Initializer):
-    """A symbolic constant tensor initializer, which initializes a tensor using a given
-    Numpy array of the same shape."""
+    """A symbolic constant initializer, which initializes all the entries of a tensor with the
+    same value, which can be either a scalar or a Numpy array of the same shape."""
 
-    def __init__(self, value: np.ndarray) -> None:
+    def __init__(self, value: Union[Number, np.ndarray]) -> None:
         """Initializes a constant tensor initializer.
 
         Args:
-            value: The value used for initialization, which must be a Numpy array.
+            value: The value used for initialization, which must be either an integer,
+                a real number, a complex number or a Numpy array.
 
         Raises:
-            ValueError: If the initiaization value is not a Numpy array.
+            ValueError: If the initiaization value is not of the allowed types.
         """
-        if not isinstance(value, np.ndarray):
-            raise ValueError("The value must be a Numpy array")
+        if not isinstance(value, (Number, np.ndarray)):
+            raise ValueError("The value must be either a number or a Numpy array")
         self.value = value
 
     @property

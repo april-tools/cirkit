@@ -1,6 +1,5 @@
-import os
 from abc import ABC, abstractmethod
-from typing import IO, Any, Protocol, Type, TypeVar, Union, cast
+from typing import Any, Protocol, Type, TypeVar, cast
 
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.symbolic.circuit import Circuit

@@ -33,6 +33,11 @@ class TorchParameterNode(AbstractTorchModule, ABC):
     def fold_settings(self) -> Tuple[Any, ...]:
         return (*self.config.items(),)
 
+    @final
+    @property
+    def sub_modules(self) -> Dict[str, "AbstractTorchModule"]:
+        return {}
+
     @torch.no_grad()
     def reset_parameters(self) -> None:
         ...
@@ -56,7 +61,6 @@ class TorchParameterInput(TorchParameterNode, ABC):
         ...
 
 
-@final
 class TorchTensorParameter(TorchParameterInput):
     """The leaf in reparameterizations that holds the parameter Tensor."""
 
@@ -142,7 +146,6 @@ class TorchTensorParameter(TorchParameterInput):
         return self._ptensor
 
 
-@final
 class TorchPointerParameter(TorchParameterInput):
     def __init__(
         self, parameter: TorchTensorParameter, *, fold_idx: Optional[Union[int, List[int]]] = None

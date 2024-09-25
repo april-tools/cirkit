@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import torch
 from torch import Tensor
@@ -17,7 +17,7 @@ def build_unfold_index_info(
     ordering: Iterable[TorchModule],
     *,
     outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
 ) -> FoldIndexInfo:
     # The topological ordering of modules
     ordering: List[TorchModule] = list(ordering)
@@ -42,7 +42,7 @@ def build_unfold_index_info(
                 f"Expected modules with fold dimension equal to one, found {m.num_folds}"
             )
         # Retrieve the input modules
-        in_modules: List[AbstractTorchModule] = incomings_fn(m)
+        in_modules: Sequence[AbstractTorchModule] = incomings_fn(m)
         # Check if we are folding non-input modules
         in_modules_idx = [fold_idx[mi] for mi in in_modules] if in_modules else []
 
@@ -61,7 +61,7 @@ def build_folded_graph(
     ordering: Iterable[List[TorchModule]],
     *,
     outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
     fold_group_fn: Callable[[List[TorchModule]], TorchModule],
 ) -> Tuple[
     List[TorchModule],
@@ -97,7 +97,7 @@ def build_folded_graph(
             folded_module = fold_group_fn(group)
 
             # For each module in the group, retrieve the unfolded input modules
-            in_group_modules: List[List[AbstractTorchModule]] = [incomings_fn(m) for m in group]
+            in_group_modules: List[Sequence[AbstractTorchModule]] = [incomings_fn(m) for m in group]
 
             # Set the input modules
             folded_in_modules = list(
@@ -133,6 +133,13 @@ def build_folded_graph(
 def group_foldable_modules(
     modules: List[TorchModule],
 ) -> List[List[TorchModule]]:
+    def _gather_fold_settings(module: TorchModule) -> Tuple[Any, ...]:
+        ss = [type(m), *m.fold_settings]
+        for _, sub_module in module.sub_modules.items():
+            sub_ss = _gather_fold_settings(sub_module)
+            ss.extend(sub_ss)
+        return tuple(ss)
+
     # A dictionary mapping a module fold settings,
     # which uniquely identifies a group of modules that can be folded,
     # into a group of modules.
@@ -140,7 +147,7 @@ def group_foldable_modules(
 
     # For each module, either create a new group or insert it into an existing one
     for m in modules:
-        m_settings = (type(m), *m.fold_settings)
+        m_settings = _gather_fold_settings(m)
         groups[m_settings].append(m)
 
     return list(groups.values())

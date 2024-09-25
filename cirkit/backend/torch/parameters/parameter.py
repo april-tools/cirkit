@@ -1,4 +1,3 @@
-from copy import copy as shallowcopy
 from functools import cached_property
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -16,12 +15,8 @@ from cirkit.backend.torch.graph.modules import (
     FoldIndexInfo,
     TorchDiAcyclicGraph,
 )
-from cirkit.backend.torch.parameters.nodes import (
-    TorchParameterNode,
-    TorchPointerParameter,
-    TorchTensorParameter,
-)
-from cirkit.utils.algorithms import topologically_process_nodes
+from cirkit.backend.torch.parameters.nodes import TorchParameterNode
+from cirkit.utils.algorithms import subgraph
 
 
 class ParameterAddressBook(AddressBook):
@@ -93,40 +88,11 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def shape(self) -> Tuple[int, ...]:
         return next(self.outputs).shape
 
-    def extract_subgraphs(self, *roots: TorchParameterNode) -> List["TorchParameter"]:
-        # The set of torch tensor nodes being observed
-        nodes_ptensor = set()
-
-        def replace_ref_or_copy(n: TorchParameterNode) -> TorchParameterNode:
-            if isinstance(n, TorchTensorParameter):
-                if n in nodes_ptensor:
-                    return TorchPointerParameter(n)
-                nodes_ptensor.add(n)
-            return shallowcopy(n)
-
-        # Extract parameter sub-computational graphs that are rooted by the provided roots
-        # If the sub-computational graphs would share torch tensor parameters (that are not pointers),
-        # then parameter sharing is ensured by introducing torch parameter pointers, based on the
-        # order specified by the roots.
-        pgraphs = []
-        for r in roots:
-            nodes, in_nodes, outputs = topologically_process_nodes(
-                self.topological_ordering(roots=[r]),
-                [r],
-                replace_ref_or_copy,
-                incomings_fn=self.node_inputs,
-            )
-            pgraph = TorchParameter(nodes, in_nodes, outputs)
-            pgraphs.append(pgraph)
-        return pgraphs
-
-    def _build_unfold_index_info(self) -> FoldIndexInfo:
-        return build_unfold_index_info(
-            self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
-        )
-
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
-        return ParameterAddressBook.from_index_info(fold_idx_info)
+    def subgraph(self, *roots: TorchParameterNode) -> "TorchParameter":
+        if self.is_folded:
+            raise ValueError("Cannot extract a sub-computational graph from a folded one")
+        nodes, in_nodes = subgraph(roots, self.node_inputs)
+        return TorchParameter(nodes, in_nodes, outputs=roots)
 
     def reset_parameters(self) -> None:
         """Reset the input parameters."""
@@ -139,6 +105,14 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
 
     def forward(self) -> Tensor:
         return self.evaluate()  # (F, d1, d2, ..., dk)
+
+    def _build_unfold_index_info(self) -> FoldIndexInfo:
+        return build_unfold_index_info(
+            self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
+        )
+
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
+        return ParameterAddressBook.from_index_info(fold_idx_info)
 
     def extra_repr(self) -> str:
         return f"shape: {(self.num_folds, *self.shape)}"
