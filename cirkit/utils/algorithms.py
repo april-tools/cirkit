@@ -169,8 +169,8 @@ class DiAcyclicGraph(Graph[NodeType]):
         self._outputs = outputs
 
     @property
-    def outputs(self) -> Iterator[NodeType]:
-        return iter(self._outputs)
+    def outputs(self) -> Sequence[NodeType]:
+        return self._outputs
 
     def topological_ordering(self) -> Iterator[NodeType]:
         return topological_ordering(self._nodes, self.node_inputs, self.node_outputs)

@@ -1,4 +1,3 @@
-from functools import cached_property
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import torch
@@ -80,13 +79,13 @@ class ParameterAddressBook(AddressBook):
 
 
 class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
-    @cached_property
+    @property
     def num_folds(self) -> int:
-        return sum(n.num_folds for n in self.outputs)
+        return self._address_book.num_outputs
 
-    @cached_property
+    @property
     def shape(self) -> Tuple[int, ...]:
-        return next(self.outputs).shape
+        return self.outputs[0].shape
 
     def subgraph(self, *roots: TorchParameterNode) -> "TorchParameter":
         if self.is_folded:

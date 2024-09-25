@@ -77,14 +77,31 @@ class AddressBookEntry:
 
 class AddressBook(ABC):
     def __init__(self, entries: List[AddressBookEntry]) -> None:
+        last_entry = entries[-1]
+        if last_entry.module is not None:
+            raise ValueError(
+                "The last entry of the address book must not have a module associated to it"
+            )
+        if len(last_entry.in_fold_idx) != 1:
+            raise ValueError(
+                "The last entry of the address book must have only one fold index tensor"
+            )
+        (out_fold_idx,) = last_entry.in_fold_idx
+        if len(out_fold_idx.shape) != 1:
+            raise ValueError("The output fold index tensor should be a 1-dimensional tensor")
         super().__init__()
         self._entries = entries
+        self._num_outputs = out_fold_idx.shape[0]
 
     def __len__(self) -> int:
         return len(self._entries)
 
     def __iter__(self) -> Iterator[AddressBookEntry]:
         return iter(self._entries)
+
+    @property
+    def num_outputs(self) -> int:
+        return self._num_outputs
 
     def set_device(self, device: Union[str, torch.device, int]) -> "AddressBook":
         def set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
