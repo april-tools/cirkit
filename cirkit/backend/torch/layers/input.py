@@ -402,7 +402,7 @@ class TorchLogPartitionLayer(TorchConstantLayer):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {"num_output_units": self.num_output_units, "num_channels": self.num_channels}
+        return {"num_output_units": self.num_output_units}
 
     @property
     def params(self) -> Dict[str, TorchParameter]:

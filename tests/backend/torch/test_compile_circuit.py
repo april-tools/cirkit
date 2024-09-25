@@ -100,6 +100,7 @@ def test_circuit_parameters(fold: bool, optimize: bool):
     compiler = TorchCompiler(fold=fold)
     sc = build_multivariate_monotonic_structured_cpt_pc()
     tc: TorchCircuit = compiler.compile(sc)
+    print(tc)
     parameters = list(tc.parameters())
     assert len(parameters) == (4 if fold else 9)
     tc.to("meta")

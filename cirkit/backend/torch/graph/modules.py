@@ -30,7 +30,11 @@ class AbstractTorchModule(nn.Module, ABC):
             num_folds: The number of folds computed by the module.
         """
         super().__init__()
-        self.num_folds = num_folds
+        self._num_folds = num_folds
+
+    @property
+    def num_folds(self) -> int:
+        return self._num_folds
 
     @property
     @abstractmethod

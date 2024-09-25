@@ -291,9 +291,9 @@ def _fold_layers_group(layers: List[TorchLayer], *, compiler: TorchCompiler) -> 
     # If we are folding input layers, then concatenate the variables scope index tensors
     kwargs = {}
     if issubclass(fold_layer_cls, TorchInputLayer):
-        if not isinstance(fold_layer_cls, TorchConstantLayer):
+        if not issubclass(fold_layer_cls, TorchConstantLayer):
             kwargs["scope_idx"] = torch.cat([l.scope_idx for l in layers])
-    elif "num_folds" in fold_layer_conf:
+    else:
         # We are folding sum or product layers, so simply set the number of folds
         kwargs["num_folds"] = sum(l.num_folds for l in layers)
 

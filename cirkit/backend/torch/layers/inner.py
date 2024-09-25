@@ -184,7 +184,7 @@ class TorchDenseLayer(TorchSumLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        return dict(weight=self.weight)
+        return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -247,7 +247,7 @@ class TorchMixingLayer(TorchSumLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        return dict(weight=self.weight)
+        return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.

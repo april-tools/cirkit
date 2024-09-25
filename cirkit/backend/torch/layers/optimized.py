@@ -55,7 +55,7 @@ class TorchTuckerLayer(TorchSumProductLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        return dict(weight=self.weight)
+        return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -125,7 +125,7 @@ class TorchCPTLayer(TorchSumProductLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        return dict(weight=self.weight)
+        return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -185,7 +185,7 @@ class TorchTensorDotLayer(TorchSumLayer):
 
     @property
     def params(self) -> Dict[str, TorchParameter]:
-        return dict(weight=self.weight)
+        return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
