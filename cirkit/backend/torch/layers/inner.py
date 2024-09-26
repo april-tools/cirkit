@@ -243,7 +243,6 @@ class TorchMixingLayer(TorchSumLayer):
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
             "arity": self.arity,
-            "num_folds": self.num_folds,
         }
 
     @property
