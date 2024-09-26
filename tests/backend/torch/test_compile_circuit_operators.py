@@ -101,10 +101,9 @@ def test_compile_product_integrate_pc_gaussian():
     assert np.isclose(ig, torch.exp(z).item(), atol=1e-15)
 
 
-# TODO: semiring="complex-lse-sum"?
 @pytest.mark.parametrize(
     "semiring,fold,optimize,num_products",
-    itertools.product(["sum-product"], [False, True], [False, True], [2, 3, 4]),
+    itertools.product(["sum-product", "complex-lse-sum"], [False, True], [False, True], [2, 3, 4]),
 )
 def test_compile_product_pc_polynomial(
     semiring: str, fold: bool, optimize: bool, num_products: int
@@ -137,19 +136,24 @@ def test_compile_product_pc_polynomial(
     # shape num_prod * (B, num_out=1, num_cls=1).
     assert zs.shape == (num_products, inputs.shape[0], 1, 1)
     zs = zs.squeeze()  # shape (num_prod, B).
+    zs = compiler.semiring.prod(zs, dim=0)  # shape (B,).
 
     # Test the partition function value
     z = tc(inputs)
     assert z.shape == (inputs.shape[0], 1, 1)  # shape (B, num_out=1, num_cls=1).
     z = z.squeeze()  # shape (B,).
 
-    assert allclose(compiler.semiring.prod(zs, dim=0), z)
+    if semiring == "sum-product":
+        assert allclose(zs, z)
+    elif semiring == "complex-lse-sum":
+        # Take exp to ingore +-pi
+        assert allclose(torch.exp(zs), torch.exp(z))
 
 
-# TODO: semiring="complex-lse-sum"?
 # TODO: test high-order?
 @pytest.mark.parametrize(
-    "semiring,fold,optimize", itertools.product(["sum-product"], [False, True], [False, True])
+    "semiring,fold,optimize",
+    itertools.product(["sum-product", "complex-lse-sum"], [False, True], [False, True]),
 )
 def test_compile_differentiate_pc_polynomial(semiring: str, fold: bool, optimize: bool) -> None:
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
@@ -183,7 +187,7 @@ def test_compile_differentiate_pc_polynomial(semiring: str, fold: bool, optimize
     if semiring == "sum-product":
         assert allclose(grad, grad_autodiff)
     elif semiring == "complex-lse-sum":
-        # TODO: is this correct?
-        assert allclose(torch.exp(grad), grad_autodiff)
+        # NOTE: grad = log ∂ C; grad_autodiff = ∂ log C = ∂ C / C = ∂ C / exp(output)
+        assert allclose(torch.exp(grad), grad_autodiff * torch.exp(output))
     else:
         assert False
