@@ -1,5 +1,6 @@
+import heapq
 import itertools
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, TypeVar
 
 from cirkit.symbolic.circuit import (
     Circuit,
@@ -263,16 +264,187 @@ def multiply(sc1: Circuit, sc2: Circuit, registry: Optional[OperatorRegistry] = 
     )
 
 
-def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> Circuit:
+class _ScopeVarAndBlockAndInputs(NamedTuple):
+    """The tuple of a scope variable and a circiut block for diff.
+
+    Used for differential of ProductLayer.
+    """
+
+    scope_var: int  # The id of a variable in the scope of THE ProductLayer.
+    diff_block: CircuitBlock  # The partial diff of THE ProductLayer w.r.t. the var.
+    diff_in_blocks: List[CircuitBlock]  # The inputs to the layer of diff_block.
+
+
+_T = TypeVar("_T")  # TODO: for _repeat. move together
+
+
+# TODO: this can be made public and moved to utils, might be used elsewhere.
+def _repeat(iterable: Iterable[_T], /, *, times: int) -> Iterable[_T]:
+    """Repeat each element of the given iterable by given times.
+
+    The elements are generated lazily. The iterable passed in will be iterated once.
+    This function differs from itertools in that it repeats an interable instead of only one elem.
+
+    Args:
+        iterable (Iterable[_T]): The iterable to generate the original elements.
+        times (int): The times to repeat each element.
+
+    Returns:
+        Iterable[_T]: The iterable with repeated elements.
+    """
+    return itertools.chain.from_iterable(itertools.repeat(elem, times=times) for elem in iterable)
+
+
+def differentiate(
+    sc: Circuit, registry: Optional[OperatorRegistry] = None, *, order: int = 1
+) -> Circuit:
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
             "Only smooth and decomposable circuits can be efficiently differentiated."
         )
+    if order <= 0:
+        raise ValueError("The order of differentiation must be positive.")
 
     # Use the registry in the current context, if not specified otherwise
     if registry is None:
         registry = OPERATOR_REGISTRY.get()
-    raise NotImplementedError()
+
+    # Mapping the symbolic circuit layers with blocks of circuit layers
+    layers_to_blocks: Dict[Layer, List[CircuitBlock]] = {}
+
+    # For each new circuit block, keep track of its inputs
+    in_blocks: Dict[CircuitBlock, Sequence[CircuitBlock]] = {}
+
+    for sl in sc.topological_ordering():
+        # "diff_blocks: List[CircuitBlock]" is the diff of sl wrt each variable and channel in order
+        #                                   and then at the end we append a copy of sl
+        sl_params = {name: p.ref() for name, p in sl.params.items()}
+
+        if isinstance(sl, InputLayer):
+            # TODO: no type hint for func, also cannot quick jump in static analysis
+            func = registry.retrieve_rule(LayerOperator.DIFFERENTIATION, type(sl))
+            diff_blocks = [
+                func(sl, var_idx=var_idx, ch_idx=ch_idx, order=order)
+                for var_idx, ch_idx in itertools.product(
+                    range(len(sl.scope)), range(sc.num_channels)
+                )
+            ]
+
+        elif isinstance(sl, SumLayer):
+            # Zip to transpose the generator into an iterable of length (num_vars * num_chs),
+            #   corresponding to each var to take diff.
+            # Each item is a tuple of length arity, which are inputs to that diff.
+            # TODO: typeshed issue?
+            # ANNOTATE: zip gives Any when using *iterables.
+            zip_blocks_in: Iterable[Tuple[CircuitBlock, ...]] = zip(
+                # This is a generator of length arity, corresponding to each input of sl.
+                # Each item is a list of length (num_vars * num_chs), corresponding to the diff wrt
+                #   each variable of that input.
+                # NOTE: [-1] is omitted and will be added at the end.
+                *(layers_to_blocks[sl_in][:-1] for sl_in in sc.layer_inputs(sl))
+            )
+
+            # The layers are the same for all diffs of a SumLayer. We retrieve (num_vars * num_chs)
+            #   from the length of one input blocks.
+            var_ch = len(layers_to_blocks[sc.layer_inputs(sl)[0]][:-1])
+            diff_blocks = [
+                CircuitBlock.from_layer(type(sl)(**sl.config, **sl_params)) for _ in range(var_ch)
+            ]
+
+            # Connect the layers to their inputs, by zipping a length of (num_vars * num_chs).
+            in_blocks.update(zip(diff_blocks, zip_blocks_in))
+
+        elif isinstance(sl, ProductLayer):
+            # NOTE: Only the outmost level can be a generator, and inner levels must be lists,
+            #       otherwise reference to locals will be broken.
+
+            # This is a generator of length arity, corresponding to each input of sl.
+            # Each item is a list of length (num_vars * num_chs) of that input, corresponding to the
+            #   diff wrt each var and ch of that input.
+            all_scope_var_diff_block = (
+                # Each list is all the diffs of sl wrt each var and each channel in the scope of
+                #   the cur_layer in the input of sl.
+                [
+                    # Each named-tuple is a diff of sl and its inputs, where the diff is wrt the
+                    #   current variable and channel as in the double loop.
+                    _ScopeVarAndBlockAndInputs(
+                        # Label the named-tuple as the var id in the whole scope, for sorting.
+                        scope_var=scope_var,
+                        # The layers are the same for all diffs of a ProductLayer.
+                        diff_block=CircuitBlock.from_layer(type(sl)(**sl.config, **sl_params)),
+                        # The inputs to the diff is the copy of input to sl (retrieved by [-1]),
+                        #   only with cur_layer replaced by its diff.
+                        diff_in_blocks=[
+                            diff_cur_layer if sl_in == cur_layer else layers_to_blocks[sl_in][-1]
+                            for sl_in in sc.layer_inputs(sl)
+                        ],
+                    )
+                    # Loop over the (num_vars * num_chs) diffs of cur_layer, while also providing
+                    #   the corresponding scope_var which the current diff is wrt.
+                    # We need the scope_var to label and sort the diff layers of sl. We do nnt need
+                    #   channel ids because they are always saved densely in order.
+                    for scope_var, diff_cur_layer in zip(
+                        _repeat(cur_layer.scope, times=sc.num_channels),
+                        layers_to_blocks[cur_layer][:-1],
+                    )
+                ]
+                # Loop over each input of sl for the diffs wrt vars and chs in its scope.
+                for cur_layer in sc.layer_inputs(sl)
+            )
+
+            # NOTE: This relys on the fact that Scope object is iterated in id order.
+            # Merge sort the named-tuples by the var id in the scope, so that the diffs are
+            #   correctly ordered according to the scope of sl.
+            sorted_scope_var_diff_block = list(
+                heapq.merge(
+                    # Unpack the generator into several lists, where each list is the named-tuples
+                    #   wrt the scope of each input to sl.
+                    *all_scope_var_diff_block,
+                    key=lambda scope_var_diff_block: scope_var_diff_block.scope_var,
+                )
+            )
+
+            # Take out the diffs of sl and save them in diff_blocks in correct order.
+            diff_blocks = [
+                scope_var_diff_block.diff_block
+                for scope_var_diff_block in sorted_scope_var_diff_block
+            ]
+
+            # Connect the diffs with its corresponding inputs as saved in the named-tuples.
+            in_blocks.update(
+                (scope_var_diff_block.diff_block, scope_var_diff_block.diff_in_blocks)
+                for scope_var_diff_block in sorted_scope_var_diff_block
+            )
+
+        else:
+            # NOTE: In the above if/elif, we made all conditions explicit to make it more readable
+            #       and also easier for static analysis inside the blocks. Yet the completeness
+            #       cannot be inferred and is only guaranteed by larger picture. Also, should
+            #       anything really go wrong, we will hit this guard statement instead of going into
+            #       a wrong branch.
+            assert False, "This should not happen."
+
+        # Save a copy of sl in the diff circuit and connect inputs. This can be accessed through
+        #   diff_blocks[-1], as in the [-1] above for ProductLayer.
+        diff_blocks.append(CircuitBlock.from_layer(type(sl)(**sl.config, **sl_params)))
+        in_blocks[diff_blocks[-1]] = [layers_to_blocks[sl_in][-1] for sl_in in sc.layer_inputs(sl)]
+
+        # Save all the blocks including a copy of sl at [-1] as the diff layers of sl.
+        layers_to_blocks[sl] = diff_blocks
+
+    # Construct the integral symbolic circuit and set the integration operation metadata
+    return Circuit.from_operation(
+        sc.scope,
+        sc.num_channels,
+        sum(layers_to_blocks.values(), []),
+        in_blocks,  # TODO: in_blocks uses Sequence, and Sequence should work.
+        sum((layers_to_blocks[sl] for sl in sc.outputs), []),
+        operation=CircuitOperation(
+            operator=CircuitOperator.DIFFERENTIATION,
+            operands=(sc,),
+            metadata=dict(order=order),
+        ),
+    )
 
 
 def conjugate(

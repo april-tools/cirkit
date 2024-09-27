@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import LSESumSemiring, Semiring
+from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSemiring
 
 
 class TorchInputLayer(TorchLayer, ABC):
@@ -270,7 +270,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
 class TorchGaussianLayer(TorchExpFamilyLayer):
     """The Normal distribution layer.
 
-    This is fully factorized down to univariate Categorical distributions.
+    This is fully factorized down to univariate Gaussian distributions.
     """
 
     def __init__(
@@ -402,4 +402,103 @@ class TorchLogPartitionLayer(TorchInputLayer):
         return self.semiring.map_from(value, LSESumSemiring)
 
     def integrate(self) -> Tensor:
-        raise ValueError("Cannot integrate a layer computing a log-partition function")
+        raise TypeError("Cannot integrate a layer computing a log-partition function")
+
+
+# TODO: could be in backends/torch/utils, can be reused by PolyGaussian
+def polyval(coeff: Tensor, x: Tensor) -> Tensor:
+    """Evaluate polynomial given coefficients and point, with the shape for PolynomialLayer.
+
+    Args:
+        coeff (Tensor): The coefficients of the polynomial, shape (F, Ko, deg+1).
+        x (Tensor): The point of the variable, shape (F, H, B, Ki), where H=Ki=1.
+
+    Returns:
+        Tensor: The value of the polymonial, shape (F, B, Ko).
+    """
+    x = x.squeeze(dim=1)  # shape (F, H=1, B, Ki=1) -> (F, B, 1).
+    y = x.new_zeros(*x.shape[:-1], coeff.shape[-2])  # shape (F, B, Ko).
+
+    # TODO: iterating over dim=2 is inefficient
+    for a_n in reversed(coeff.unbind(dim=2)):  # Reverse iterator of the degree axis, shape (F, Ko).
+        # a_n shape (F, Ko) -> (F, 1, Ko).
+        y = torch.addcmul(a_n.unsqueeze(dim=1), x, y)  # y = a_n + x * y, by Horner's method.
+    return y  # shape (F, B, Ko).
+
+
+class TorchPolynomialLayer(TorchInputLayer):
+    """The Polynomial layer.
+
+    This is fully factorized down to univariate polynomials w.r.t. channels.
+    """
+
+    def __init__(
+        self,
+        scope_idx: Tensor,
+        num_output_units: int,
+        *,
+        num_channels: int = 1,
+        degree: int,
+        coeff: TorchParameter,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        """Init class.
+
+        Args:
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units (int): The number of output units.
+            num_channels (int): The number of channels. Defaults to 1.
+            degree (int): The degree of polynomial.
+            coeff (AbstractTorchParameter): The reparameterization for layer parameters.
+            num_folds (int): The number of channels. Defaults to 1.
+        """
+        num_variables = scope_idx.shape[-1]
+        if num_variables != 1:
+            raise ValueError("The Polynomial layer encodes a univariate distribution")
+        if num_channels != 1:
+            raise ValueError("The Polynomial layer encodes a univariate distribution")
+        super().__init__(
+            scope_idx,
+            num_output_units,
+            num_channels=num_channels,
+            semiring=semiring,
+        )
+        self.degree = degree
+        if not self._valid_parameters_shape(coeff):
+            raise ValueError("The number of folds and shape of 'coeff' must match the layer's")
+        self.coeff = coeff
+
+    def _valid_parameters_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == (self.num_output_units, self.degree + 1)
+
+    @property
+    def fold_settings(self) -> Tuple[Any, ...]:
+        return *super().fold_settings, self.degree + 1
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {**super().config, "degree": self.degree}
+
+    @property
+    def params(self) -> Dict[str, TorchParameter]:
+        return {"coeff": self.coeff}
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
+
+        Args:
+            x (Tensor): The input to this layer, shape (F, H=C, B, Ki=D).
+
+        Returns:
+            Tensor: The output of this layer, shape (F, B, Ko).
+        """
+        coeff = self.coeff()  # shape (F, Ko, dp1)
+        return self.semiring.map_from(polyval(coeff, x), SumProductSemiring)
+
+    def integrate(self) -> Tensor:
+        raise TypeError("Cannot integrate a PolynomialLayer")
