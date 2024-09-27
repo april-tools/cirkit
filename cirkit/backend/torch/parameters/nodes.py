@@ -195,13 +195,13 @@ class TorchPointerParameter(TorchParameterInput):
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
-    def __init__(self, *in_shape: Tuple[int, ...], num_folds: int = 1):
+    def __init__(self, *in_shapes: Tuple[int, ...], num_folds: int = 1):
         super().__init__(num_folds=num_folds)
-        self._in_shape = in_shape
+        self._in_shapes = in_shapes
 
     @property
-    def in_shape(self) -> Tuple[Tuple[int, ...], ...]:
-        return self._in_shape
+    def in_shapes(self) -> Tuple[Tuple[int, ...], ...]:
+        return self._in_shapes
 
     @property
     def config(self) -> Dict[str, Any]:
@@ -218,7 +218,7 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
     def extra_repr(self) -> str:
         return (
-            f"input-shapes: {[(self.num_folds, *in_shape) for in_shape in self._in_shape]}"
+            f"input-shapes: {[(self.num_folds, *in_shape) for in_shape in self._in_shapes]}"
             + "\n"
             + f"output-shape: {(self.num_folds, *self.shape)}"
         )
@@ -233,8 +233,13 @@ class TorchUnaryParameterOp(TorchParameterOp, ABC):
         super().__init__(in_shape, num_folds=num_folds)
 
     @property
+    def in_shape(self) -> Tuple[int, ...]:
+        (in_shape,) = self.in_shapes
+        return in_shape
+
+    @property
     def config(self) -> Dict[str, Any]:
-        return {"in_shape": self.in_shape[0]}
+        return {"in_shape": self.in_shape}
 
     def __call__(self, x: Tensor) -> Tensor:
         """Get the reparameterized parameters.
@@ -257,8 +262,18 @@ class TorchBinaryParameterOp(TorchParameterOp, ABC):
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
 
     @property
+    def in_shape1(self) -> Tuple[int, ...]:
+        in_shape, _ = self.in_shapes
+        return in_shape
+
+    @property
+    def in_shape2(self) -> Tuple[int, ...]:
+        _, in_shape = self.in_shapes
+        return in_shape
+
+    @property
     def config(self) -> Dict[str, Any]:
-        return {"in_shape1": self.in_shape[0], "in_shape2": self.in_shape[1]}
+        return {"in_shape1": self.in_shape1, "in_shape2": self.in_shape2}
 
     def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
         """Get the reparameterized parameters.
@@ -277,7 +292,7 @@ class TorchBinaryParameterOp(TorchParameterOp, ABC):
 class TorchEntrywiseParameterOp(TorchUnaryParameterOp, ABC):
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.in_shape[0]
+        return self.in_shape
 
 
 class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
@@ -299,7 +314,7 @@ class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return *self.in_shape[0][: self.dim], *self.in_shape[0][self.dim + 1 :]
+        return *self.in_shape[: self.dim], *self.in_shape[self.dim + 1 :]
 
     @property
     def config(self) -> Dict[str, Any]:
@@ -363,9 +378,9 @@ class TorchIndexParameter(TorchUnaryParameterOp):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            *self.in_shape[0][: self.dim],
+            *self.in_shape[: self.dim],
             len(self._indices),
-            *self.in_shape[0][self.dim + 1 :],
+            *self.in_shape[self.dim + 1 :],
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -381,7 +396,7 @@ class TorchSumParameter(TorchBinaryParameterOp):
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.in_shape[0]
+        return self.in_shape1
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         return x1 + x2
@@ -398,7 +413,7 @@ class TorchHadamardParameter(TorchBinaryParameterOp):
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.in_shape[0]
+        return self.in_shape1
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         return x1 * x2
@@ -416,7 +431,7 @@ class TorchKroneckerParameter(TorchBinaryParameterOp):
 
     @cached_property
     def shape(self) -> Tuple[int, ...]:
-        return tuple(d1 * d2 for d1, d2 in zip(self.in_shape[0], self.in_shape[1]))
+        return tuple(d1 * d2 for d1, d2 in zip(self.in_shape1, self.in_shape2))
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         return self._batched_kron(x1, x2)
@@ -442,9 +457,9 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            *self.in_shape[0][: self.dim],
-            self.in_shape[0][self.dim] * self.in_shape[1][self.dim],
-            *self.in_shape[0][self.dim + 1 :],
+            *self.in_shape1[: self.dim],
+            self.in_shape1[self.dim] * self.in_shape2[self.dim],
+            *self.in_shape1[self.dim + 1 :],
         )
 
     @property
@@ -483,9 +498,9 @@ class TorchOuterSumParameter(TorchBinaryParameterOp):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            *self.in_shape[0][: self.dim],
-            self.in_shape[0][self.dim] * self.in_shape[1][self.dim],
-            *self.in_shape[0][self.dim + 1 :],
+            *self.in_shape1[: self.dim],
+            self.in_shape1[self.dim] * self.in_shape2[self.dim],
+            *self.in_shape1[self.dim + 1 :],
         )
 
     @property
@@ -636,7 +651,7 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.in_shape[0][0], self.in_shape[1][1]
+        return self.in_shape1[0], self.in_shape2[1]
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1: (F, d1, d2)
@@ -658,13 +673,13 @@ class TorchGaussianProductMean(TorchParameterOp):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shape[0][0] * self.in_shape[1][0],
-            self.in_shape[0][1],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shape[0], "in_gaussian2_shape": self.in_shape[1]}
+        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
 
     def forward(self, mean1: Tensor, mean2: Tensor, stddev1: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, K1, C)
@@ -692,13 +707,13 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shape[0][0] * self.in_shape[1][0],
-            self.in_shape[0][1],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shape[0], "in_gaussian2_shape": self.in_shape[1]}
+        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
 
     def forward(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, K1, C)
@@ -724,13 +739,13 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shape[0][0] * self.in_shape[1][0],
-            self.in_shape[0][1],
+            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shape[0], "in_gaussian2_shape": self.in_shape[1]}
+        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
 
     def forward(
         self,
@@ -754,8 +769,8 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (
-            self.in_shape[0][0] * self.in_shape[1][0],  # dim K
-            self.in_shape[0][1] + self.in_shape[1][1] - 1,  # dim dp1
+            self.in_shapes[0][0] * self.in_shapes[1][0],  # dim K
+            self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim dp1
         )
 
     def forward(self, coeff1: Tensor, coeff2: Tensor) -> Tensor:
@@ -793,8 +808,8 @@ class TorchPolynomialDifferential(TorchUnaryParameterOp):
     def shape(self) -> Tuple[int, ...]:
         # if dp1>order, i.e., deg>=order, then diff, else const 0.
         return (
-            self.in_shape[0][0],
-            self.in_shape[0][1] - self.order if self.in_shape[0][1] > self.order else 1,
+            self.in_shapes[0][0],
+            self.in_shapes[0][1] - self.order if self.in_shapes[0][1] > self.order else 1,
         )
 
     @classmethod
