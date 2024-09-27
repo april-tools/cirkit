@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import IntEnum, auto
 from typing import Optional, Tuple, cast
 
@@ -57,8 +57,22 @@ class Layer(ABC):
         self.num_output_units = num_output_units
         self.arity = arity
 
+    def __copy__(self) -> "Layer":
+        return self.copy()
 
-class InputLayer(Layer):
+    @abstractmethod
+    def copy(self) -> "Layer":
+        """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic parameters
+        are copied by reference, thus effectively creating a symbolic parameter reference between
+        the new layer and the layer being copied.
+
+        Returns:
+            A shallow copy of the layer.
+        """
+        ...
+
+
+class InputLayer(Layer, ABC):
     """The symbolic input layer class."""
 
     def __init__(self, scope: Scope, num_output_units: int, num_channels: int = 1):
@@ -98,7 +112,7 @@ class InputLayer(Layer):
         return self.arity
 
 
-class ConstantLayer(InputLayer):
+class ConstantLayer(InputLayer, ABC):
     """The symbolic layer computing a constant vector, i.e., it does not depend on any variable."""
 
     def __init__(self, num_output_units: int):
@@ -148,6 +162,9 @@ class EvidenceLayer(ConstantLayer):
         self.layer = layer
         self.observation = observation
 
+    def copy(self) -> "EvidenceLayer":
+        return EvidenceLayer(self.layer, observation=self.observation)
+
 
 class CategoricalLayer(InputLayer):
     """A symbolic Categorical layer, which is parameterized either by
@@ -158,9 +175,9 @@ class CategoricalLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int,
-        num_categories: int,
+        num_channels: int = 1,
         *,
+        num_categories: int,
         logits: Optional[Parameter] = None,
         probs: Optional[Parameter] = None,
         logits_factory: Optional[ParameterFactory] = None,
@@ -221,6 +238,16 @@ class CategoricalLayer(InputLayer):
     @property
     def _probs_logits_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_channels, self.num_categories
+
+    def copy(self) -> "CategoricalLayer":
+        return CategoricalLayer(
+            self.scope,
+            self.num_output_units,
+            self.num_channels,
+            num_categories=self.num_categories,
+            logits=self.logits,
+            probs=self.probs,
+        )
 
 
 class GaussianLayer(InputLayer):
@@ -303,6 +330,58 @@ class GaussianLayer(InputLayer):
     def _log_partition_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_channels
 
+    def copy(self) -> "GaussianLayer":
+        return GaussianLayer(
+            self.scope,
+            self.num_output_units,
+            self.num_channels,
+            mean=self.mean,
+            stddev=self.stddev,
+            log_partition=self.log_partition,
+        )
+
+
+class PolynomialLayer(InputLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int,
+        *,
+        degree: int,
+        coeff: Optional[Parameter] = None,
+        coeff_factory: Optional[ParameterFactory] = None,
+    ):
+        if len(scope) != 1:
+            raise ValueError("The Polynomial layer encodes a univariate distribution")
+        if num_channels != 1:
+            raise ValueError("The Polynomial layer encodes a univariate distribution")
+        super().__init__(scope, num_output_units, num_channels)
+        self.degree = degree
+        if coeff is None:
+            if coeff_factory is None:
+                coeff = Parameter.from_leaf(
+                    TensorParameter(*self._coeff_shape, initializer=NormalInitializer())
+                )
+            else:
+                coeff = coeff_factory(self._coeff_shape)
+        if coeff.shape != self._coeff_shape:
+            raise ValueError(f"Expected parameter shape {self._coeff_shape}, found {coeff.shape}")
+        self.coeff = coeff
+
+    @property
+    def _coeff_shape(self) -> Tuple[int, ...]:
+        return self.num_output_units, self.degree + 1
+
+    def copy(self) -> "PolynomialLayer":
+        return PolynomialLayer(
+            self.scope,
+            self.num_output_units,
+            self.num_channels,
+            degree=self.degree,
+            coeff=self.coeff,
+        )
+
 
 class LogPartitionLayer(ConstantLayer):
     """A symbolic layer computing a log-partition function."""
@@ -324,6 +403,9 @@ class LogPartitionLayer(ConstantLayer):
     @property
     def _value_shape(self) -> Tuple[int, ...]:
         return (self.num_output_units,)
+
+    def copy(self) -> "LogPartitionLayer":
+        return LogPartitionLayer(self.num_output_units, value=self.value)
 
 
 class ProductLayer(Layer, ABC):
@@ -362,6 +444,9 @@ class HadamardLayer(ProductLayer):
         """
         super().__init__(num_input_units, num_input_units, arity=arity)
 
+    def copy(self) -> "HadamardLayer":
+        return HadamardLayer(self.num_input_units, arity=self.arity)
+
 
 class KroneckerLayer(ProductLayer):
     """The symbolic outer product (or Kronecker) layer. This layer computes the outer
@@ -386,6 +471,9 @@ class KroneckerLayer(ProductLayer):
             cast(int, num_input_units**arity),
             arity=arity,
         )
+
+    def copy(self) -> "KroneckerLayer":
+        return KroneckerLayer(self.num_input_units, arity=self.arity)
 
 
 class SumLayer(Layer, ABC):
@@ -431,6 +519,9 @@ class DenseLayer(SumLayer):
     def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_input_units
 
+    def copy(self) -> "DenseLayer":
+        return DenseLayer(self.num_input_units, self.num_output_units, weight=self.weight)
+
 
 class MixingLayer(SumLayer):
     """The symbolic mixing sum layer. A mixing layer takes N layers as inputs, where each one
@@ -469,5 +560,12 @@ class MixingLayer(SumLayer):
         self.weight = weight
 
     @property
+    def num_units(self) -> int:
+        return self.num_input_units
+
+    @property
     def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_input_units, self.arity
+
+    def copy(self) -> "MixingLayer":
+        return MixingLayer(self.num_units, self.arity, weight=self.weight)

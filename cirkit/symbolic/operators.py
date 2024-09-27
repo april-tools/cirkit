@@ -12,6 +12,7 @@ from cirkit.symbolic.layers import (
     LayerOperator,
     LogPartitionLayer,
     MixingLayer,
+    PolynomialLayer,
 )
 from cirkit.symbolic.parameters import (
     ConjugateParameter,
@@ -23,6 +24,8 @@ from cirkit.symbolic.parameters import (
     LogParameter,
     OuterSumParameter,
     Parameter,
+    PolynomialDifferential,
+    PolynomialProduct,
     ReduceLSEParameter,
     ReduceSumParameter,
     SumParameter,
@@ -173,6 +176,49 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
     return CircuitBlock.from_layer(sl)
 
 
+def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Polynomial layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
+    if sl1.num_channels != sl2.num_channels:
+        raise ValueError(
+            f"Expected Polynomial layers to have the number of channels,"
+            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
+        )
+
+    shape1, shape2 = sl1.coeff.shape, sl2.coeff.shape
+    coeff = Parameter.from_binary(
+        PolynomialProduct(shape1, shape2),
+        sl1.coeff,
+        sl2.coeff,
+    )
+
+    sl = PolynomialLayer(
+        sl1.scope,
+        sl1.num_output_units * sl2.num_output_units,
+        num_channels=sl1.num_channels,
+        degree=sl1.degree + sl2.degree,
+        coeff=coeff,
+    )
+    return CircuitBlock.from_layer(sl)
+
+
+def differentiate_polynomial_layer(
+    sl: PolynomialLayer, *, var_idx: int, ch_idx: int, order: int = 1
+) -> CircuitBlock:
+    # PolynomialLayer is constructed univariate, but we still take the 2 idx for unified interface
+    assert (var_idx, ch_idx) == (0, 0), "This should not happen"
+    if order <= 0:
+        raise ValueError("The order of differentiation must be positive.")
+    coeff = Parameter.from_unary(PolynomialDifferential(sl.coeff.shape, order=order), sl.coeff)
+    sl = PolynomialLayer(
+        sl.scope, sl.num_output_units, sl.num_channels, degree=coeff.shape[-1] - 1, coeff=coeff
+    )
+    return CircuitBlock.from_layer(sl)
+
+
 def conjugate_categorical_layer(sl: CategoricalLayer) -> CircuitBlock:
     logits = sl.logits if sl.logits is not None else None
     probs = sl.probs if sl.probs is not None else None
@@ -191,6 +237,14 @@ def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
     mean = sl.mean if sl.mean is not None else None
     stddev = sl.stddev if sl.stddev is not None else None
     sl = GaussianLayer(sl.scope, sl.num_output_units, sl.num_channels, mean=mean, stddev=stddev)
+    return CircuitBlock.from_layer(sl)
+
+
+def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
+    coeff = Parameter.from_unary(ConjugateParameter(sl.coeff.shape), sl.coeff)
+    sl = PolynomialLayer(
+        sl.scope, sl.num_output_units, sl.num_channels, degree=sl.degree, coeff=coeff
+    )
     return CircuitBlock.from_layer(sl)
 
 
@@ -245,11 +299,12 @@ class LayerOperatorFunc(Protocol):
 
 DEFAULT_OPERATOR_RULES: Dict[LayerOperator, List[LayerOperatorFunc]] = {
     LayerOperator.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
-    LayerOperator.DIFFERENTIATION: [],
+    LayerOperator.DIFFERENTIATION: [differentiate_polynomial_layer],
     LayerOperator.MULTIPLICATION: [
         multiply_evidence_layers,
         multiply_categorical_layers,
         multiply_gaussian_layers,
+        multiply_polynomial_layers,
         multiply_hadamard_layers,
         multiply_dense_layers,
         multiply_mixing_layers,
@@ -257,6 +312,7 @@ DEFAULT_OPERATOR_RULES: Dict[LayerOperator, List[LayerOperatorFunc]] = {
     LayerOperator.CONJUGATION: [
         conjugate_categorical_layer,
         conjugate_gaussian_layer,
+        conjugate_polynomial_layer,
         conjugate_dense_layer,
         conjugate_mixing_layer,
     ],

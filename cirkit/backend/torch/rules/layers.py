@@ -15,6 +15,7 @@ from cirkit.backend.torch.layers.input import (
     TorchGaussianLayer,
     TorchInputLayer,
     TorchLogPartitionLayer,
+    TorchPolynomialLayer,
 )
 from cirkit.symbolic.layers import (
     CategoricalLayer,
@@ -25,6 +26,7 @@ from cirkit.symbolic.layers import (
     KroneckerLayer,
     LogPartitionLayer,
     MixingLayer,
+    PolynomialLayer,
 )
 
 if TYPE_CHECKING:
@@ -65,6 +67,20 @@ def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> Torc
         mean=mean,
         stddev=stddev,
         log_partition=log_partition,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_polynomial_layer(
+    compiler: "TorchCompiler", sl: PolynomialLayer
+) -> TorchPolynomialLayer:
+    coeff = compiler.compile_parameter(sl.coeff)
+    return TorchPolynomialLayer(
+        torch.tensor(tuple(sl.scope)),
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        degree=sl.degree,
+        coeff=coeff,
         semiring=compiler.semiring,
     )
 
@@ -121,6 +137,7 @@ def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> Torc
 DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     CategoricalLayer: compile_categorical_layer,
     GaussianLayer: compile_gaussian_layer,
+    PolynomialLayer: compile_polynomial_layer,
     HadamardLayer: compile_hadamard_layer,
     KroneckerLayer: compile_kronecker_layer,
     DenseLayer: compile_dense_layer,

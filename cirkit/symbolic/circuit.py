@@ -519,7 +519,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         cls,
         num_channels: int,
         blocks: List[CircuitBlock],
-        in_blocks: Dict[CircuitBlock, List[CircuitBlock]],
+        in_blocks: Dict[CircuitBlock, Sequence[CircuitBlock]],
         output_blocks: List[CircuitBlock],
         *,
         operation: CircuitOperation,
