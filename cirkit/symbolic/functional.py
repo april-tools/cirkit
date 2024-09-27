@@ -306,19 +306,19 @@ def differentiate(
     if order <= 0:
         raise ValueError("The order of differentiation must be positive.")
 
-    # Use the registry in the current context, if not specified otherwise
+    # Use the registry in the current context, if not specified otherwise.
     if registry is None:
         registry = OPERATOR_REGISTRY.get()
 
-    # Mapping the symbolic circuit layers with blocks of circuit layers
+    # Mapping the symbolic circuit layers with blocks of circuit layers.
     layers_to_blocks: dict[Layer, list[CircuitBlock]] = {}
 
-    # For each new circuit block, keep track of its inputs
+    # For each new circuit block, keep track of its inputs.
     in_blocks: dict[CircuitBlock, Sequence[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
         # "diff_blocks: List[CircuitBlock]" is the diff of sl wrt each variable and channel in order
-        #                                   and then at the end we append a copy of sl
+        #                                   and then at the end we append a copy of sl.
         sl_params = {name: p.ref() for name, p in sl.params.items()}
 
         if isinstance(sl, InputLayer):
@@ -348,6 +348,7 @@ def differentiate(
             # The layers are the same for all diffs of a SumLayer. We retrieve (num_vars * num_chs)
             #   from the length of one input blocks.
             var_ch = len(layers_to_blocks[sc.layer_inputs(sl)[0]][:-1])
+            # TODO: make a shortcut for the copy idiom?
             diff_blocks = [
                 CircuitBlock.from_layer(type(sl)(**sl.config, **sl_params)) for _ in range(var_ch)
             ]
@@ -433,13 +434,15 @@ def differentiate(
         # Save all the blocks including a copy of sl at [-1] as the diff layers of sl.
         layers_to_blocks[sl] = diff_blocks
 
-    # Construct the integral symbolic circuit and set the integration operation metadata
+    # Construct the differential symbolic circuit and set the differentiation operation metadata.
     return Circuit.from_operation(
         sc.scope,
         sc.num_channels,
-        sum(layers_to_blocks.values(), []),
+        list(itertools.chain.from_iterable(layers_to_blocks.values())),
         in_blocks,  # TODO: in_blocks uses Sequence, and Sequence should work.
-        sum((layers_to_blocks[sl] for sl in sc.outputs), []),
+        itertools.chain.from_iterable(
+            layers_to_blocks[sl] for sl in sc.outputs
+        ),  # TODO: Iterable should work
         operation=CircuitOperation(
             operator=CircuitOperator.DIFFERENTIATION,
             operands=(sc,),

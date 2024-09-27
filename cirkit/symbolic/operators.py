@@ -177,9 +177,8 @@ def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> Ci
             f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
         )
 
-    shape1, shape2 = sl1.coeff.shape, sl2.coeff.shape
     coeff = Parameter.from_binary(
-        PolynomialProduct(shape1, shape2),
+        PolynomialProduct(sl1.coeff.shape, sl2.coeff.shape),
         sl1.coeff.ref(),
         sl2.coeff.ref(),
     )

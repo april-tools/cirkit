@@ -572,6 +572,12 @@ class PolynomialDifferential(UnaryParameterOp):
     def shape(self) -> tuple[int, ...]:
         # if dp1>order, i.e., deg>=order, then diff, else const 0.
         return (
-            self.in_shapes[0][0],
-            self.in_shapes[0][1] - self.order if self.in_shapes[0][1] > self.order else 1,
+            self.in_shapes[0][0],  # dim Ko
+            self.in_shapes[0][1] - self.order
+            if self.in_shapes[0][1] > self.order
+            else 1,  # dim dp1
         )
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {**super().config, "order": self.order}
