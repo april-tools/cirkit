@@ -7,7 +7,7 @@ import torch.nn as nn
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.layers import *
 from cirkit.backend.torch.layers import TorchTuckerLayer
-from cirkit.backend.torch.parameters.nodes import TorchTensorParameter, TorchParameterOp
+from cirkit.backend.torch.parameters.nodes import TorchParameterOp, TorchTensorParameter
 
 
 def zw_quadrature(
@@ -91,7 +91,7 @@ class PICInputNet(nn.Module):
         learn_ff: Optional[bool] = False,
         z_quad: Optional[torch.Tensor] = None,
         tensor_parameter: Optional[TorchTensorParameter] = None,
-        reparam: Optional[TorchParameterOp] = None
+        reparam: Optional[TorchParameterOp] = None,
     ):
         super().__init__()
         assert sharing in ["none", "f", "c"]
@@ -166,7 +166,9 @@ class PICInputNet(nn.Module):
         self._device = device
 
     def __repr__(self):
-        return '\n'.join([line for line in super().__repr__().split('\n') if 'tensor_parameter' not in line])
+        return "\n".join(
+            [line for line in super().__repr__().split("\n") if "tensor_parameter" not in line]
+        )
 
 
 class PICInnerNet(nn.Module):
@@ -279,7 +281,9 @@ class PICInnerNet(nn.Module):
         self._device = device
 
     def __repr__(self):
-        return '\n'.join([line for line in super().__repr__().split('\n') if 'tensor_parameter' not in line])
+        return "\n".join(
+            [line for line in super().__repr__().split("\n") if "tensor_parameter" not in line]
+        )
 
 
 @torch.no_grad()
@@ -293,7 +297,7 @@ def pc2qpc(
     ff_dim: Optional[int] = None,
     ff_sigma: Optional[float] = 1.0,
     learn_ff: Optional[bool] = False,
-    freeze_mixing_layers: Optional[bool] = True
+    freeze_mixing_layers: Optional[bool] = True,
 ):
     def param_to_buffer(model: torch.nn.Module):
         """Turns all parameters of a module into buffers."""
@@ -310,7 +314,9 @@ def pc2qpc(
 
     for node in qpc.nodes:
         if isinstance(node, TorchCategoricalLayer):
-            z_quad = zw_quadrature(integration_method=integration_method, nip=node.num_output_units)[0]
+            z_quad = zw_quadrature(
+                integration_method=integration_method, nip=node.num_output_units
+            )[0]
             if node.logits is None:
                 tensor_parameter = node.probs.nodes[0]
                 reparam = node.probs.nodes[1] if len(node.probs.nodes) == 2 else None
@@ -329,14 +335,17 @@ def pc2qpc(
                 learn_ff=learn_ff,
                 z_quad=z_quad,
                 tensor_parameter=tensor_parameter,
-                reparam=reparam)
+                reparam=reparam,
+            )
             if node.logits is None:
                 node.probs = input_net
             else:
                 node.logits = input_net
         elif isinstance(node, TorchGaussianLayer):
             assert len(node.mean.nodes) <= 2 and len(node.stddev) <= 2
-            z_quad = zw_quadrature(integration_method=integration_method, nip=node.num_output_units)[0]
+            z_quad = zw_quadrature(
+                integration_method=integration_method, nip=node.num_output_units
+            )[0]
             node.mean = PICInputNet(
                 num_variables=node.num_variables * node.num_folds,
                 num_param=1,
@@ -349,7 +358,8 @@ def pc2qpc(
                 learn_ff=learn_ff,
                 z_quad=z_quad,
                 tensor_parameter=node.mean.nodes[0],
-                reparam=None if len(node.mean.nodes) == 1 else node.mean.nodes[0])
+                reparam=None if len(node.mean.nodes) == 1 else node.mean.nodes[0],
+            )
             node.stddev = PICInputNet(
                 num_variables=node.num_variables * node.num_folds,
                 num_param=1,
@@ -362,32 +372,46 @@ def pc2qpc(
                 learn_ff=learn_ff,
                 z_quad=z_quad,
                 tensor_parameter=node.stddev.nodes[0],
-                reparam=None if len(node.stddev.nodes) == 1 else node.stddev.nodes[0])
+                reparam=None if len(node.stddev.nodes) == 1 else node.stddev.nodes[0],
+            )
         elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPTLayer)):
-            assert len(node.weight.nodes) == 1, \
-                "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
+            assert (
+                len(node.weight.nodes) == 1
+            ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
             weight_shape = list(node.weight.nodes[0]._ptensor.shape)
-            squeezed_weight_shape = [weight_shape[0]] + [dim_size for dim_size in weight_shape[1:] if dim_size != 1]
-            assert (sum([dim_size % min(squeezed_weight_shape[1:]) for dim_size in squeezed_weight_shape[1:]]) == 0), \
-                f"Cannot model a dense layer with shape {weight_shape}!"
+            squeezed_weight_shape = [weight_shape[0]] + [
+                dim_size for dim_size in weight_shape[1:] if dim_size != 1
+            ]
+            assert (
+                sum(
+                    [
+                        dim_size % min(squeezed_weight_shape[1:])
+                        for dim_size in squeezed_weight_shape[1:]
+                    ]
+                )
+                == 0
+            ), f"Cannot model a dense layer with shape {weight_shape}!"
             is_tucker = isinstance(node, TorchTuckerLayer)
             nip = int(max(squeezed_weight_shape[1:]) ** (0.5 if is_tucker else 1))
-            num_dim = sum([int(np.emath.logn(nip, dim_size)) for dim_size in squeezed_weight_shape[1:]])
+            num_dim = sum(
+                [int(np.emath.logn(nip, dim_size)) for dim_size in squeezed_weight_shape[1:]]
+            )
             z_quad, w_quad = zw_quadrature(integration_method=integration_method, nip=nip)
             node.weight = PICInnerNet(
-                        num_dim=num_dim,
-                        num_funcs=node.num_folds,
-                        perm_dim=tuple(range(1, num_dim + 1)),
-                        norm_dim=tuple(range(1, num_dim + 1))[-(2 if is_tucker else 1):],
-                        net_dim=net_dim,
-                        bias=bias,
-                        sharing=inner_sharing,
-                        ff_dim=ff_dim,
-                        ff_sigma=ff_sigma,
-                        learn_ff=learn_ff,
-                        z_quad=z_quad,
-                        w_quad=w_quad,
-                        tensor_parameter=node.weight.nodes[0])
+                num_dim=num_dim,
+                num_funcs=node.num_folds,
+                perm_dim=tuple(range(1, num_dim + 1)),
+                norm_dim=tuple(range(1, num_dim + 1))[-(2 if is_tucker else 1) :],
+                net_dim=net_dim,
+                bias=bias,
+                sharing=inner_sharing,
+                ff_dim=ff_dim,
+                ff_sigma=ff_sigma,
+                learn_ff=learn_ff,
+                z_quad=z_quad,
+                w_quad=w_quad,
+                tensor_parameter=node.weight.nodes[0],
+            )
         elif isinstance(node, TorchMixingLayer) and freeze_mixing_layers:
             node.weight.nodes[0]._ptensor.fill_(1 / node.arity)
         elif isinstance(node, (TorchHadamardLayer, TorchKroneckerLayer)):

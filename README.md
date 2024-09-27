@@ -2,7 +2,7 @@
 [![Python 3.8](https://img.shields.io/badge/python-3.8+-orange.svg)](https://www.python.org/downloads/release/python-380/)
 [![codecov](https://codecov.io/gh/april-tools/cirkit/branch/main/graph/badge.svg?token=MLHONY840L)](https://codecov.io/gh/april-tools/cirkit)
 
-# cirkit
+![cirkit logo](./logo.png)
 
 LL: abstract
 
