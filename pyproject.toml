@@ -177,9 +177,7 @@ default-docstring-type = "google"
 # type checking
 [tool.mypy]
 python_version = "3.8"
-mypy_path = "3rd-party-stubs"  # TODO: do we still need this?
 follow_imports = "silent"
-follow_imports_for_stubs = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous
 warn_unused_configs = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#disallow-dynamic-typing

@@ -4,12 +4,17 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 
+DEFAULT_RTOL = 1e-8
+DEFAULT_ATOL = 1e-12
+
 
 def isclose(
     a: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
     b: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
-    rtol: float = 1e-8,
-    atol: float = 1e-12,
+    /,
+    *,
+    rtol: float = DEFAULT_RTOL,
+    atol: float = DEFAULT_ATOL,
 ) -> NDArray[np.bool_]:
     """Proxy torch.isclose/np.isclose with a different global default rtol and atol.
 
@@ -38,8 +43,10 @@ def isclose(
 def allclose(
     a: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
     b: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
-    rtol: float = 1e-8,
-    atol: float = 1e-12,
+    /,
+    *,
+    rtol: float = DEFAULT_RTOL,
+    atol: float = DEFAULT_ATOL,
 ) -> bool:
     """Proxy torch.allclose/np.allclose with a different global default rtol and atol.
 
