@@ -19,7 +19,7 @@ from cirkit.symbolic.layers import (
     Layer,
     LayerOperator,
     ProductLayer,
-    SumLayer,
+    SumLayer, KroneckerLayer,
 )
 from cirkit.symbolic.parameters import ConstantParameter, Parameter
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
@@ -315,10 +315,50 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: Optional[OperatorRegistry]
     # Using a stack in place of recursion for better memory efficiency and debugging
     while to_multiply:
         pair = to_multiply[-1]
+
+        # Check if the layers have been already multiplied
         if pair in layers_to_block:
             to_multiply.pop()
             continue
+
+        # Get the layers to multiply
         l1, l2 = pair
+
+        # Check whether we are multiplying layers over disjoint scope
+        # If that is the case, then we just need to introduce a Kronecker product layer
+        if len(sc1.layer_scope(l1) & sc2.layer_scope(l2)) == 0:
+            if l1.num_output_units != l2.num_output_units:
+                raise NotImplementedError(
+                    f"Layers over disjoint scopes can be multiplied if they have the same size, "
+                    f"but found layer sizes {l1.num_output_units} and {l2.num_output_units}"
+                )
+            # Get the sub-circuits rooted in the layers being multiplied
+            sub1_circuit = sc1.subgraph(l1)
+            sub2_circuit = sc2.subgraph(l2)
+            # Copy the layers and the connections, by making references to the parameters
+            sub1_blocks = {l: CircuitBlock.from_layer(l.copyref()) for l in sub1_circuit.layers}
+            sub2_blocks = {l: CircuitBlock.from_layer(l.copyref()) for l in sub2_circuit.layers}
+            blocks.extend(sub1_blocks.values())
+            blocks.extend(sub2_blocks.values())
+            in_blocks.update(
+                (b, [sub1_blocks[li] for li in sc1.layer_inputs(l)])
+                for l, b in sub1_blocks.items()
+            )
+            in_blocks.update(
+                (b, [sub2_blocks[li] for li in sc2.layer_inputs(l)])
+                for l, b in sub2_blocks.items()
+            )
+            # Introduce a fresh kronecker product layer, which will multiply
+            # the two layers over disjoint scope
+            kl = CircuitBlock.from_layer(KroneckerLayer(l1.num_output_units, arity=2))
+            blocks.append(kl)
+            in_blocks[kl] = [sub1_blocks[l1], sub2_blocks[l2]]
+            layers_to_block[pair] = kl
+            # Go up in the recursion
+            to_multiply.pop()
+            continue
+
+        # We need to multiply layers over overlapping scopes
         l1_inputs = sc1.layer_inputs(l1)
         l2_inputs = sc2.layer_inputs(l2)
         if isinstance(l1, InputLayer):
@@ -354,7 +394,8 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: Optional[OperatorRegistry]
         # Make the connections
         in_blocks[prod_block] = [layers_to_block[p] for p in next_to_multiply]
         layers_to_block[pair] = prod_block
-        to_multiply.pop()  # Go up in the recursion
+        # Go up in the recursion
+        to_multiply.pop()
 
     # Construct the sequence of output blocks
     output_blocks = [
