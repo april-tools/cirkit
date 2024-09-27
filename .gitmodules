@@ -1,3 +1,0 @@
-[submodule "3rd-party-stubs"]
-	path = 3rd-party-stubs
-	url = https://github.com/april-tools/python-type-stubs.git
