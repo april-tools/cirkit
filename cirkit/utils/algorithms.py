@@ -113,7 +113,7 @@ def topologically_process_nodes(
     process_fn: Callable[[NodeType], NodeType],
     *,
     incomings_fn: Callable[[NodeType], Sequence[NodeType]],
-) -> Tuple[List[NodeType], Dict[NodeType, List[NodeType]], List[NodeType]]:
+) -> Tuple[Sequence[NodeType], Dict[NodeType, Sequence[NodeType]], Sequence[NodeType]]:
     nodes_map = {}
     in_nodes = {}
     for n in ordering:

@@ -63,7 +63,7 @@ def concatenate(scs: Sequence[Circuit], *, registry: Optional[OperatorRegistry] 
     # Simply pass the symbolic layers references
     for sc in scs:
         for sl in sc.topological_ordering():
-            block = CircuitBlock.from_layer(sl)
+            block = CircuitBlock.from_layer(sl.copyref())
             blocks.append(block)
             block_ins = [layers_to_block[sli] for sli in sc.layer_inputs(sl)]
             in_blocks[block] = block_ins
@@ -152,7 +152,7 @@ def evidence(
             obs_parameter = ConstantParameter(*obs_shape, value=obs_ndarray)
 
             # Build the evidence layer, with a reference to the input layer
-            evi_sl = EvidenceLayer(sl, observation=Parameter.from_leaf(obs_parameter))
+            evi_sl = EvidenceLayer(sl.copyref(), observation=Parameter.from_input(obs_parameter))
             evi_block = CircuitBlock.from_layer(evi_sl)
             blocks.append(evi_block)
             layers_to_block[sl] = evi_block
@@ -160,7 +160,7 @@ def evidence(
         # Sum/product layers and input layers whose scope does not
         # include variables to observe over are simply copied.
         # Note that to keep track of shared parameters, we use parameter references
-        evi_block = CircuitBlock.from_layer(sl)
+        evi_block = CircuitBlock.from_layer(sl.copyref())
         blocks.append(evi_block)
         layers_to_block[sl] = evi_block
         in_blocks[evi_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
@@ -245,7 +245,7 @@ def integrate(
             continue
         # Sum/product layers and input layers whose scope does not
         # include variables to integrate over are simply passed through
-        int_block = CircuitBlock.from_layer(sl)
+        int_block = CircuitBlock.from_layer(sl.copyref())
         blocks.append(int_block)
         layers_to_block[sl] = int_block
         in_blocks[int_block] = [layers_to_block[isl] for isl in sc.layer_inputs(sl)]
@@ -453,7 +453,7 @@ def differentiate(
             # The layers are the same for all diffs of a SumLayer. We retrieve (num_vars * num_chs)
             #   from the length of one input blocks.
             var_ch = len(layers_to_blocks[sc.layer_inputs(sl)[0]][:-1])
-            diff_blocks = [CircuitBlock.from_layer(sl.copy()) for _ in range(var_ch)]
+            diff_blocks = [CircuitBlock.from_layer(sl.copyref()) for _ in range(var_ch)]
 
             # Connect the layers to their inputs, by zipping a length of (num_vars * num_chs).
             in_blocks.update(zip(diff_blocks, zip_blocks_in))
@@ -475,7 +475,7 @@ def differentiate(
                         # Label the named-tuple as the var id in the whole scope, for sorting.
                         scope_var=scope_var,
                         # The layers are the same for all diffs of a ProductLayer.
-                        diff_block=CircuitBlock.from_layer(sl.copy()),
+                        diff_block=CircuitBlock.from_layer(sl.copyref()),
                         # The inputs to the diff is the copy of input to sl (retrieved by [-1]),
                         #   only with cur_layer replaced by its diff.
                         diff_in_blocks=[
@@ -530,7 +530,7 @@ def differentiate(
 
         # Save sl in the diff circuit and connect inputs. This can be accessed through
         #   diff_blocks[-1], as in the [-1] above for ProductLayer.
-        diff_blocks.append(CircuitBlock.from_layer(sl))
+        diff_blocks.append(CircuitBlock.from_layer(sl.copyref()))
         in_blocks[diff_blocks[-1]] = [layers_to_blocks[sl_in][-1] for sl_in in sc.layer_inputs(sl)]
 
         # Save all the blocks including a copy of sl at [-1] as the diff layers of sl.

@@ -45,12 +45,12 @@ def build_bivariate_monotonic_structured_cpt_pc(
                 )
                 probs_factory = None
             else:
-                logits_factory = lambda shape: Parameter.from_leaf(
+                logits_factory = lambda shape: Parameter.from_input(
                     TensorParameter(*shape, initializer=NormalInitializer())
                 )
                 probs_factory = None
         else:
-            probs_factory = lambda shape: Parameter.from_leaf(
+            probs_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=DirichletInitializer())
             )
             logits_factory = None
@@ -69,7 +69,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
         if parameterize:
             stddev_factory = None
         else:
-            stddev_factory = lambda shape: Parameter.from_leaf(
+            stddev_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=UniformInitializer())
             )
         input_layers = {
@@ -96,7 +96,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
                 ExpParameter(shape), TensorParameter(*shape, initializer=NormalInitializer())
             )
     else:
-        dense_weight_factory = lambda shape: Parameter.from_leaf(
+        dense_weight_factory = lambda shape: Parameter.from_input(
             TensorParameter(*shape, initializer=DirichletInitializer())
         )
     dense_layers = {
@@ -151,12 +151,12 @@ def build_multivariate_monotonic_structured_cpt_pc(
                 )
                 probs_factory = None
             else:
-                logits_factory = lambda shape: Parameter.from_leaf(
+                logits_factory = lambda shape: Parameter.from_input(
                     TensorParameter(*shape, initializer=NormalInitializer())
                 )
                 probs_factory = None
         else:
-            probs_factory = lambda shape: Parameter.from_leaf(
+            probs_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=DirichletInitializer())
             )
             logits_factory = None
@@ -175,7 +175,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
         if parameterize:
             stddev_factory = None
         else:
-            stddev_factory = lambda shape: Parameter.from_leaf(
+            stddev_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=UniformInitializer())
             )
         input_layers = {
@@ -191,7 +191,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
         if parameterize:
             coeff_factory = None
         else:
-            coeff_factory = lambda shape: Parameter.from_leaf(
+            coeff_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=UniformInitializer())
             )
         input_layers = {
@@ -219,7 +219,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
                 ExpParameter(shape), TensorParameter(*shape, initializer=NormalInitializer())
             )
     else:
-        dense_weight_factory = lambda shape: Parameter.from_leaf(
+        dense_weight_factory = lambda shape: Parameter.from_input(
             TensorParameter(*shape, initializer=DirichletInitializer())
         )
     dense_layers = {

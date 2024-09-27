@@ -18,6 +18,7 @@ from cirkit.symbolic.parameters import (
     ConjugateParameter,
     KroneckerParameter,
     PolynomialDifferential,
+    ReferenceParameter,
     TensorParameter,
 )
 from cirkit.utils.scope import Scope
@@ -192,7 +193,7 @@ def test_differentiate_circuit(num_units: int) -> None:
     assert len(diff_inputs) == len(sc_inputs) * 2  # diff and self
     assert all(
         isinstance(dl.coeff.output, PolynomialDifferential)
-        and isinstance(sl.coeff.output, TensorParameter)
+        and isinstance(sl.coeff.output, ReferenceParameter)
         for dl, sl in _batched(diff_inputs, 2)
     )
     assert len(diff_inner) == sum(len(sc.layer_scope(l)) for l in sc_inner) + len(sc_inner)

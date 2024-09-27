@@ -40,11 +40,11 @@ def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> Circui
             f" is expected to be a subset of the integration scope '{scope}'"
         )
     if sl.logits is None:
-        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+        log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
         reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=2)
         reduce_channels = ReduceSumParameter(reduce_lse.shape, axis=1)
-        log_partition = Parameter.from_sequence(sl.logits, reduce_lse, reduce_channels)
+        log_partition = Parameter.from_sequence(sl.logits.ref(), reduce_lse, reduce_channels)
     sl = LogPartitionLayer(sl.num_output_units, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
@@ -56,10 +56,10 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock
             f" is expected to be a subset of the integration scope '{scope}'"
         )
     if sl.log_partition is None:
-        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+        log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
         reduce_channels = ReduceSumParameter(sl.log_partition.shape, axis=1)
-        log_partition = Parameter.from_unary(reduce_channels, sl.log_partition)
+        log_partition = Parameter.from_unary(reduce_channels, sl.log_partition.ref())
     sl = LogPartitionLayer(sl.num_output_units, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
@@ -91,18 +91,24 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
         )
 
     if sl1.logits is None:
-        sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs)
+        sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs.ref())
+        print(sl1.probs.shape, sl1.probs.ref().shape, sl1.num_output_units)
     else:
-        sl1_logits = sl1.logits
+        sl1_logits = sl1.logits.ref()
+        print(sl1.logits.shape, sl1_logits.shape, sl1.num_output_units)
     if sl2.logits is None:
-        sl2_logits = Parameter.from_unary(LogParameter(sl2.probs.shape), sl2.probs)
+        sl2_logits = Parameter.from_unary(LogParameter(sl2.probs.shape), sl2.probs.ref())
+        print(sl2.probs.shape, sl2.probs.ref().shape, sl2.num_output_units)
     else:
-        sl2_logits = sl2.logits
+        sl2_logits = sl2.logits.ref()
+        print(sl2.logits.shape, sl2_logits.shape, sl2.num_output_units)
     sl_logits = Parameter.from_binary(
         OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=0),
         sl1_logits,
         sl2_logits,
     )
+    print(sl_logits.shape)
+    print()
     sl = CategoricalLayer(
         sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
@@ -128,33 +134,33 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
     gaussian1_shape, gaussian2_shape = sl1.mean.shape, sl2.mean.shape
     mean = Parameter.from_nary(
         GaussianProductMean(gaussian1_shape, gaussian2_shape),
-        sl1.mean,
-        sl2.mean,
-        sl1.stddev,
-        sl2.stddev,
+        sl1.mean.ref(),
+        sl2.mean.ref(),
+        sl1.stddev.ref(),
+        sl2.stddev.ref(),
     )
     stddev = Parameter.from_binary(
         GaussianProductStddev(gaussian1_shape, gaussian2_shape),
-        sl1.stddev,
-        sl2.stddev,
+        sl1.stddev.ref(),
+        sl2.stddev.ref(),
     )
     log_partition = Parameter.from_nary(
         GaussianProductLogPartition(gaussian1_shape, gaussian2_shape),
-        sl1.mean,
-        sl2.mean,
-        sl1.stddev,
-        sl2.stddev,
+        sl1.mean.ref(),
+        sl2.mean.ref(),
+        sl1.stddev.ref(),
+        sl2.stddev.ref(),
     )
 
     if sl1.log_partition is not None or sl2.log_partition is not None:
         if sl1.log_partition is None:
             log_partition1 = ConstantParameter(sl1.num_output_units, sl1.num_channels, value=0.0)
         else:
-            log_partition1 = sl1.log_partition
+            log_partition1 = sl1.log_partition.ref()
         if sl2.log_partition is None:
             log_partition2 = ConstantParameter(sl2.num_output_units, sl2.num_channels, value=0.0)
         else:
-            log_partition2 = sl2.log_partition
+            log_partition2 = sl2.log_partition.ref()
         log_partition = Parameter.from_binary(
             SumParameter(log_partition.shape, log_partition.shape),
             log_partition,
@@ -191,8 +197,8 @@ def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> Ci
     shape1, shape2 = sl1.coeff.shape, sl2.coeff.shape
     coeff = Parameter.from_binary(
         PolynomialProduct(shape1, shape2),
-        sl1.coeff,
-        sl2.coeff,
+        sl1.coeff.ref(),
+        sl2.coeff.ref(),
     )
 
     sl = PolynomialLayer(
@@ -212,7 +218,9 @@ def differentiate_polynomial_layer(
     assert (var_idx, ch_idx) == (0, 0), "This should not happen"
     if order <= 0:
         raise ValueError("The order of differentiation must be positive.")
-    coeff = Parameter.from_unary(PolynomialDifferential(sl.coeff.shape, order=order), sl.coeff)
+    coeff = Parameter.from_unary(
+        PolynomialDifferential(sl.coeff.shape, order=order), sl.coeff.ref()
+    )
     sl = PolynomialLayer(
         sl.scope, sl.num_output_units, sl.num_channels, degree=coeff.shape[-1] - 1, coeff=coeff
     )
@@ -220,8 +228,8 @@ def differentiate_polynomial_layer(
 
 
 def conjugate_categorical_layer(sl: CategoricalLayer) -> CircuitBlock:
-    logits = sl.logits if sl.logits is not None else None
-    probs = sl.probs if sl.probs is not None else None
+    logits = sl.logits.ref() if sl.logits is not None else None
+    probs = sl.probs.ref() if sl.probs is not None else None
     sl = CategoricalLayer(
         sl.scope,
         sl.num_output_units,
@@ -234,14 +242,14 @@ def conjugate_categorical_layer(sl: CategoricalLayer) -> CircuitBlock:
 
 
 def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
-    mean = sl.mean if sl.mean is not None else None
-    stddev = sl.stddev if sl.stddev is not None else None
+    mean = sl.mean.ref() if sl.mean is not None else None
+    stddev = sl.stddev.ref() if sl.stddev is not None else None
     sl = GaussianLayer(sl.scope, sl.num_output_units, sl.num_channels, mean=mean, stddev=stddev)
     return CircuitBlock.from_layer(sl)
 
 
 def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
-    coeff = Parameter.from_unary(ConjugateParameter(sl.coeff.shape), sl.coeff)
+    coeff = Parameter.from_unary(ConjugateParameter(sl.coeff.shape), sl.coeff.ref())
     sl = PolynomialLayer(
         sl.scope, sl.num_output_units, sl.num_channels, degree=sl.degree, coeff=coeff
     )
@@ -258,7 +266,7 @@ def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitB
 
 def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
     weight = Parameter.from_binary(
-        KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight, sl2.weight
+        KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = DenseLayer(
         sl1.num_input_units * sl2.num_input_units,
@@ -270,7 +278,7 @@ def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
 
 def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
     weight = Parameter.from_binary(
-        KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight, sl2.weight
+        KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = MixingLayer(
         sl1.num_input_units * sl2.num_input_units,
@@ -281,13 +289,13 @@ def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
 
 
 def conjugate_dense_layer(sl: DenseLayer) -> CircuitBlock:
-    weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight)
+    weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
     sl = DenseLayer(sl.num_input_units, sl.num_output_units, weight=weight)
     return CircuitBlock.from_layer(sl)
 
 
 def conjugate_mixing_layer(sl: MixingLayer) -> CircuitBlock:
-    weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight)
+    weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
     sl = MixingLayer(sl.num_input_units, sl.arity, weight=weight)
     return CircuitBlock.from_layer(sl)
 

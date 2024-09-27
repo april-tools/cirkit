@@ -205,7 +205,7 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
     @property
     def config(self) -> Dict[str, Any]:
-        return {"in_shape": self._in_shape}
+        return {"in_shapes": self.in_shapes}
 
     def __call__(self, *xs: Tensor) -> Tensor:
         """Get the reparameterized parameters.

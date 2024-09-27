@@ -14,7 +14,7 @@ def categorical_layer_factory(
         num_units,
         num_channels,
         num_categories=num_categories,
-        probs=Parameter.from_leaf(
+        probs=Parameter.from_input(
             TensorParameter(
                 num_units, num_channels, num_categories, initializer=DirichletInitializer()
             )

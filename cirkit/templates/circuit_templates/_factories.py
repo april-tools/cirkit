@@ -162,7 +162,7 @@ def _gaussian_layer_factory(
 
 
 def _id_parameter_factory(shape: Tuple[int, ...], **kwargs) -> Parameter:
-    return Parameter.from_leaf(TensorParameter(*shape, **kwargs))
+    return Parameter.from_input(TensorParameter(*shape, **kwargs))
 
 
 def _softmax_parameter_factory(shape: Tuple[int, ...], *, axis: int = -1, **kwargs) -> Parameter:

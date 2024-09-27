@@ -643,7 +643,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         def default_mixing_layer_factory(num_units: int, arity: int) -> MixingLayer:
             if sum_weight_factory is None:
                 initializer = ConstantTensorInitializer(1.0 / arity)
-                weight = Parameter.from_leaf(
+                weight = Parameter.from_input(
                     TensorParameter(
                         num_units,
                         arity,

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum, auto
-from typing import Optional, Tuple, cast
+from typing import Any, Dict, Optional, Tuple, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
@@ -28,7 +28,14 @@ class LayerOperator(IntEnum):
 
 class Layer(ABC):
     """The symbolic layer class. A symbolic layer consists of useful metadata of input, product
-    and sum layers."""
+    and sum layers. A layer that specializes this class must specify two property methods:
+        1. config(self) -> Dict[str, Any]: A dictionary mapping the non-parameter arguments to
+            the ```__init__``` method to the corresponding values, e.g., the arity.
+        2. params(self) -> Dict[str, Parameter]: A dictionary mapping the parameter arguments
+            the ```__init__``` method to the corresponding symbolic parameter, e.g., the mean and
+            standard deviations symbolic parameters in a
+            [GaussianLayer][cirkit.symbolic.layers.GaussianLayer].
+    """
 
     def __init__(
         self,
@@ -57,19 +64,39 @@ class Layer(ABC):
         self.num_output_units = num_output_units
         self.arity = arity
 
-    def __copy__(self) -> "Layer":
-        return self.copy()
-
+    @property
     @abstractmethod
-    def copy(self) -> "Layer":
+    def config(self) -> Dict[str, Any]:
+        """Retrieves the configuration of the layer, i.e., a dictionary mapping hyperparameters
+        of the layer to their values. The hyperparameter names must match the argument names in
+        the ```__init__``` method.
+
+        Returns:
+            Dict[str, Any]: A dictionary from hyperparameter names to their value.
+        """
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        """Retrieve the symbolic parameters of the layer, i.e., a dictionary mapping the names of
+        the symbolic parameters to the actual symbolic parameter instance. The parameter names must
+        match the argument names in the```__init__``` method.
+
+        Returns:
+            Dict[str, Parameter]: A dictionary from parameter names to the corresponding symbolic
+                parameter instance.
+        """
+        return {}
+
+    def copyref(self) -> "Layer":
         """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic parameters
-        are copied by reference, thus effectively creating a symbolic parameter reference between
+        are copied by reference, thus effectively creating a symbolic parameter sharing between
         the new layer and the layer being copied.
 
         Returns:
-            A shallow copy of the layer.
+            A shallow copy of the layer, with reference to the parameters.
         """
-        ...
+        ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
+        return type(self)(**self.config, **ref_params)
 
 
 class InputLayer(Layer, ABC):
@@ -162,8 +189,13 @@ class EvidenceLayer(ConstantLayer):
         self.layer = layer
         self.observation = observation
 
-    def copy(self) -> "EvidenceLayer":
-        return EvidenceLayer(self.layer, observation=self.observation)
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {"layer": self.layer}
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        return {"observation": self.observation}
 
 
 class CategoricalLayer(InputLayer):
@@ -239,15 +271,20 @@ class CategoricalLayer(InputLayer):
     def _probs_logits_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_channels, self.num_categories
 
-    def copy(self) -> "CategoricalLayer":
-        return CategoricalLayer(
-            self.scope,
-            self.num_output_units,
-            self.num_channels,
-            num_categories=self.num_categories,
-            logits=self.logits,
-            probs=self.probs,
-        )
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_categories": self.num_categories,
+        }
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        if self.logits is None:
+            return {"probs": self.probs}
+        return {"logits": self.logits}
 
 
 class GaussianLayer(InputLayer):
@@ -293,7 +330,7 @@ class GaussianLayer(InputLayer):
         super().__init__(scope, num_output_units, num_channels)
         if mean is None:
             if mean_factory is None:
-                mean = Parameter.from_leaf(
+                mean = Parameter.from_input(
                     TensorParameter(*self._mean_stddev_shape, initializer=NormalInitializer())
                 )
             else:
@@ -330,15 +367,20 @@ class GaussianLayer(InputLayer):
     def _log_partition_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_channels
 
-    def copy(self) -> "GaussianLayer":
-        return GaussianLayer(
-            self.scope,
-            self.num_output_units,
-            self.num_channels,
-            mean=self.mean,
-            stddev=self.stddev,
-            log_partition=self.log_partition,
-        )
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+        }
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        params = {"mean": self.mean, "stddev": self.stddev}
+        if self.log_partition is not None:
+            params.update(log_partition=self.log_partition)
+        return params
 
 
 class PolynomialLayer(InputLayer):
@@ -360,7 +402,7 @@ class PolynomialLayer(InputLayer):
         self.degree = degree
         if coeff is None:
             if coeff_factory is None:
-                coeff = Parameter.from_leaf(
+                coeff = Parameter.from_input(
                     TensorParameter(*self._coeff_shape, initializer=NormalInitializer())
                 )
             else:
@@ -373,14 +415,18 @@ class PolynomialLayer(InputLayer):
     def _coeff_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.degree + 1
 
-    def copy(self) -> "PolynomialLayer":
-        return PolynomialLayer(
-            self.scope,
-            self.num_output_units,
-            self.num_channels,
-            degree=self.degree,
-            coeff=self.coeff,
-        )
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "degree": self.degree,
+        }
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        return {"coeff": self.coeff}
 
 
 class LogPartitionLayer(ConstantLayer):
@@ -404,8 +450,13 @@ class LogPartitionLayer(ConstantLayer):
     def _value_shape(self) -> Tuple[int, ...]:
         return (self.num_output_units,)
 
-    def copy(self) -> "LogPartitionLayer":
-        return LogPartitionLayer(self.num_output_units, value=self.value)
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {"num_output_units": self.num_output_units}
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        return {"value": self.value}
 
 
 class ProductLayer(Layer, ABC):
@@ -444,8 +495,9 @@ class HadamardLayer(ProductLayer):
         """
         super().__init__(num_input_units, num_input_units, arity=arity)
 
-    def copy(self) -> "HadamardLayer":
-        return HadamardLayer(self.num_input_units, arity=self.arity)
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
 class KroneckerLayer(ProductLayer):
@@ -472,8 +524,9 @@ class KroneckerLayer(ProductLayer):
             arity=arity,
         )
 
-    def copy(self) -> "KroneckerLayer":
-        return KroneckerLayer(self.num_input_units, arity=self.arity)
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
 class SumLayer(Layer, ABC):
@@ -506,7 +559,7 @@ class DenseLayer(SumLayer):
         super().__init__(num_input_units, num_output_units, arity=1)
         if weight is None:
             if weight_factory is None:
-                weight = Parameter.from_leaf(
+                weight = Parameter.from_input(
                     TensorParameter(*self._weight_shape, initializer=NormalInitializer())
                 )
             else:
@@ -519,8 +572,13 @@ class DenseLayer(SumLayer):
     def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_output_units, self.num_input_units
 
-    def copy(self) -> "DenseLayer":
-        return DenseLayer(self.num_input_units, self.num_output_units, weight=self.weight)
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        return {"weight": self.weight}
 
 
 class MixingLayer(SumLayer):
@@ -550,7 +608,7 @@ class MixingLayer(SumLayer):
         super().__init__(num_units, num_units, arity)
         if weight is None:
             if weight_factory is None:
-                weight = Parameter.from_leaf(
+                weight = Parameter.from_input(
                     TensorParameter(*self._weight_shape, initializer=NormalInitializer())
                 )
             else:
@@ -567,5 +625,10 @@ class MixingLayer(SumLayer):
     def _weight_shape(self) -> Tuple[int, ...]:
         return self.num_input_units, self.arity
 
-    def copy(self) -> "MixingLayer":
-        return MixingLayer(self.num_units, self.arity, weight=self.weight)
+    @property
+    def config(self) -> Dict[str, Any]:
+        return {"num_units": self.num_units, "arity": self.arity}
+
+    @property
+    def params(self) -> Dict[str, Parameter]:
+        return {"weight": self.weight}
