@@ -1,7 +1,7 @@
+from collections.abc import Iterable
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 from types import TracebackType
-from typing import Iterable, Optional, Type
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.compiler import (
@@ -33,7 +33,7 @@ class PipelineContext(AbstractContextManager):
         self._compiler = retrieve_compiler(backend, **backend_kwargs)
 
         # The token used to restore the pipeline context
-        self._token: Optional[Token[PipelineContext]] = None
+        self._token: Token[PipelineContext] | None = None
 
     @classmethod
     def from_default_backend(cls) -> "PipelineContext":
@@ -49,10 +49,10 @@ class PipelineContext(AbstractContextManager):
 
     def __exit__(
         self,
-        __exc_type: Optional[Type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> bool | None:
         ret = self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
         _PIPELINE_CONTEXT.reset(self._token)
         self._token = None
@@ -93,9 +93,7 @@ class PipelineContext(AbstractContextManager):
         cat_sc = SF.concatenate(*sc, registry=self._op_registry)
         return self.compile(cat_sc)
 
-    def integrate(
-        self, cc: CompiledCircuit, scope: Optional[Iterable[int]] = None
-    ) -> CompiledCircuit:
+    def integrate(self, cc: CompiledCircuit, scope: Iterable[int] | None = None) -> CompiledCircuit:
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(cc)
@@ -129,13 +127,13 @@ class PipelineContext(AbstractContextManager):
         return self.compile(conj_sc)
 
 
-def compile(sc: Circuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
+def compile(sc: Circuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.compile(sc)
 
 
-def concatenate(*cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
+def concatenate(*cc: CompiledCircuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.concatenate(cc)
@@ -143,8 +141,8 @@ def concatenate(*cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> 
 
 def integrate(
     cc: CompiledCircuit,
-    scope: Optional[Iterable[int]] = None,
-    ctx: Optional[PipelineContext] = None,
+    scope: Iterable[int] | None = None,
+    ctx: PipelineContext | None = None,
 ) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
@@ -152,7 +150,7 @@ def integrate(
 
 
 def multiply(
-    cc1: CompiledCircuit, cc2: CompiledCircuit, ctx: Optional[PipelineContext] = None
+    cc1: CompiledCircuit, cc2: CompiledCircuit, ctx: PipelineContext | None = None
 ) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
@@ -160,14 +158,14 @@ def multiply(
 
 
 def differentiate(
-    cc: CompiledCircuit, ctx: Optional[PipelineContext] = None, *, order: int = 1
+    cc: CompiledCircuit, ctx: PipelineContext | None = None, *, order: int = 1
 ) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.differentiate(cc, order=order)
 
 
-def conjugate(cc: CompiledCircuit, ctx: Optional[PipelineContext] = None) -> CompiledCircuit:
+def conjugate(cc: CompiledCircuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.conjugate(cc)

@@ -1,4 +1,4 @@
-from typing import Dict, Iterator, List, Optional, Tuple
+from collections.abc import Iterator
 
 import torch
 from torch import Tensor
@@ -20,10 +20,10 @@ from cirkit.utils.algorithms import subgraph
 
 class ParameterAddressBook(AddressBook):
     def lookup(
-        self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
-    ) -> Iterator[Tuple[Optional[TorchParameterNode], Tuple[Tensor, ...]]]:
+        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+    ) -> Iterator[tuple[TorchParameterNode | None, tuple[Tensor, ...]]]:
         # A useful function combining the modules outputs, and then possibly applying an index
-        def select_index(mids: List[int], idx: Optional[Tensor]) -> Tensor:
+        def select_index(mids: list[int], idx: Tensor | None) -> Tensor:
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
             else:
@@ -49,10 +49,10 @@ class ParameterAddressBook(AddressBook):
     @classmethod
     def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
         # The address book entries being built
-        entries: List[AddressBookEntry] = []
+        entries: list[AddressBookEntry] = []
 
         # A useful dictionary mapping module ids to their number of folds
-        num_folds: Dict[int, int] = {}
+        num_folds: dict[int, int] = {}
 
         # Build the bookkeeping data structure by following the topological ordering
         for mid, m in enumerate(fold_idx_info.ordering):
@@ -84,7 +84,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         return self._address_book.num_outputs
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.outputs[0].shape
 
     def subgraph(self, *roots: TorchParameterNode) -> "TorchParameter":

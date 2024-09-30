@@ -1,4 +1,4 @@
-from typing import Callable, List, Optional, Union
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -21,7 +21,7 @@ def copy_from_ndarray_(tensor: torch.Tensor, *, array: np.ndarray) -> Tensor:
     return tensor.copy_(t)
 
 
-def dirichlet_(tensor: torch.Tensor, alpha: Union[float, List[float]], *, dim: int = -1) -> Tensor:
+def dirichlet_(tensor: torch.Tensor, alpha: float | list[float], *, dim: int = -1) -> Tensor:
     shape = tensor.shape
     if len(shape) == 0:
         raise ValueError(
@@ -42,7 +42,7 @@ def dirichlet_(tensor: torch.Tensor, alpha: Union[float, List[float]], *, dim: i
     return tensor
 
 
-def stacked_initializer_(t: Tensor, *, initializers: List[Optional[InitializerFunc]]) -> Tensor:
+def stacked_initializer_(t: Tensor, *, initializers: list[InitializerFunc | None]) -> Tensor:
     for i, initializer_ in enumerate(initializers):
         if initializer_ is not None:
             initializer_(t[i])

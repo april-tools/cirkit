@@ -1,4 +1,4 @@
-from typing import Dict, List, Protocol, Tuple, Type
+from typing import Protocol
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
@@ -305,7 +305,7 @@ class LayerOperatorFunc(Protocol):
         ...
 
 
-DEFAULT_OPERATOR_RULES: Dict[LayerOperator, List[LayerOperatorFunc]] = {
+DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
     LayerOperator.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
     LayerOperator.DIFFERENTIATION: [differentiate_polynomial_layer],
     LayerOperator.MULTIPLICATION: [
@@ -325,5 +325,5 @@ DEFAULT_OPERATOR_RULES: Dict[LayerOperator, List[LayerOperatorFunc]] = {
         conjugate_mixing_layer,
     ],
 }
-LayerOperatorSign = Tuple[Type[Layer], ...]
-LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
+LayerOperatorSign = tuple[type[Layer], ...]
+LayerOperatorSpecs = dict[LayerOperatorSign, LayerOperatorFunc]

@@ -1,5 +1,6 @@
 import itertools
-from typing import Iterable, Tuple, TypeVar
+from collections.abc import Iterable
+from typing import TypeVar
 
 import pytest
 
@@ -168,7 +169,7 @@ _T_co = TypeVar("_T_co", covariant=True)  # TODO: for _batched. move together
 
 # TODO: this can be made public and moved to utils, might be used elsewhere.
 # itertools.batched introduced in 3.12
-def _batched(iterable: Iterable[_T_co], n: int) -> Iterable[Tuple[_T_co, ...]]:
+def _batched(iterable: Iterable[_T_co], n: int) -> Iterable[tuple[_T_co, ...]]:
     if n < 1:
         raise ValueError("n must be at least one")
     iterator = iter(iterable)

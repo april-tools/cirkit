@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict, cast
+from typing import TYPE_CHECKING, cast
 
 import torch
 
@@ -134,7 +134,7 @@ def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> Torc
     )
 
 
-DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
+DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     CategoricalLayer: compile_categorical_layer,
     GaussianLayer: compile_gaussian_layer,
     PolynomialLayer: compile_polynomial_layer,

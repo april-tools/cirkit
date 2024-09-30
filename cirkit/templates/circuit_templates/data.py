@@ -1,5 +1,4 @@
 import functools
-from typing import Tuple
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.templates.circuit_templates._factories import (
@@ -12,7 +11,7 @@ from cirkit.templates.circuit_templates._factories import (
 
 
 def image_data(
-    image_shape: Tuple[int, int, int],
+    image_shape: tuple[int, int, int],
     *,
     region_graph: str = "quad-graph",
     input_layer: str,

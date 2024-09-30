@@ -1,5 +1,3 @@
-from typing import Union
-
 import numpy as np
 import torch
 from numpy.typing import NDArray
@@ -9,8 +7,8 @@ DEFAULT_ATOL = 1e-12
 
 
 def isclose(
-    a: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
-    b: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
+    a: float | NDArray[np.float16 | np.float32 | np.float64] | torch.Tensor,
+    b: float | NDArray[np.float16 | np.float32 | np.float64] | torch.Tensor,
     /,
     *,
     rtol: float = DEFAULT_RTOL,
@@ -41,8 +39,8 @@ def isclose(
 
 
 def allclose(
-    a: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
-    b: Union[float, NDArray[Union[np.float16, np.float32, np.float64]], torch.Tensor],
+    a: float | NDArray[np.float16 | np.float32 | np.float64] | torch.Tensor,
+    b: float | NDArray[np.float16 | np.float32 | np.float64] | torch.Tensor,
     /,
     *,
     rtol: float = DEFAULT_RTOL,

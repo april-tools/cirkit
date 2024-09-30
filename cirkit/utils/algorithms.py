@@ -1,24 +1,14 @@
 from collections import deque
-from typing import (
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-)
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from typing import Generic, TypeVar
 
 NodeType = TypeVar("NodeType")
 
 
 def graph_nodes_outgoings(
     nodes: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
-) -> Dict[NodeType, Sequence[NodeType]]:
-    outgoings: Dict[NodeType, List[NodeType]] = {}
+) -> dict[NodeType, Sequence[NodeType]]:
+    outgoings: dict[NodeType, list[NodeType]] = {}
     for n in nodes:
         incomings = incomings_fn(n)
         for ch in incomings:
@@ -46,9 +36,9 @@ def bfs(
 
 def subgraph(
     roots: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
-) -> Tuple[Sequence[NodeType], Dict[NodeType, Sequence[NodeType]]]:
+) -> tuple[Sequence[NodeType], dict[NodeType, Sequence[NodeType]]]:
     nodes = list(bfs(roots, incomings_fn))
-    incomings: Dict[NodeType, Sequence[NodeType]] = {}
+    incomings: dict[NodeType, Sequence[NodeType]] = {}
     for n in nodes:
         incomings[n] = incomings_fn(n)
     return nodes, incomings
@@ -57,14 +47,14 @@ def subgraph(
 def topological_ordering(
     nodes: Iterable[NodeType],
     incomings_fn: Callable[[NodeType], Sequence[NodeType]],
-    outcomings_fn: Optional[Callable[[NodeType], Sequence[NodeType]]] = None,
+    outcomings_fn: Callable[[NodeType], Sequence[NodeType]] | None = None,
 ) -> Iterator[NodeType]:
     if outcomings_fn is None:
         if isinstance(nodes, Iterator):
             nodes = list(nodes)
         outgoings = graph_nodes_outgoings(nodes, incomings_fn)
         outcomings_fn = lambda n: outgoings.get(n, [])
-    num_incomings: Dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
+    num_incomings: dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
     inputs = map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items()))
     to_visit = deque(inputs)
     while to_visit:
@@ -81,14 +71,14 @@ def topological_ordering(
 def layerwise_topological_ordering(
     nodes: Iterable[NodeType],
     incomings_fn: Callable[[NodeType], Sequence[NodeType]],
-    outcomings_fn: Optional[Callable[[NodeType], Sequence[NodeType]]] = None,
-) -> Iterator[List[NodeType]]:
+    outcomings_fn: Callable[[NodeType], Sequence[NodeType]] | None = None,
+) -> Iterator[list[NodeType]]:
     if outcomings_fn is None:
         if isinstance(nodes, Iterator):
             nodes = list(nodes)
         outgoings = graph_nodes_outgoings(nodes, incomings_fn)
         outcomings_fn = lambda n: outgoings.get(n, [])
-    num_incomings: Dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
+    num_incomings: dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
     inputs = list(map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items())))
     yield inputs
     prev_ordering = inputs
@@ -113,7 +103,7 @@ def topologically_process_nodes(
     process_fn: Callable[[NodeType], NodeType],
     *,
     incomings_fn: Callable[[NodeType], Sequence[NodeType]],
-) -> Tuple[Sequence[NodeType], Dict[NodeType, Sequence[NodeType]], Sequence[NodeType]]:
+) -> tuple[Sequence[NodeType], dict[NodeType, Sequence[NodeType]], Sequence[NodeType]]:
     nodes_map = {}
     in_nodes = {}
     for n in ordering:
@@ -129,7 +119,7 @@ class Graph(Generic[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: Dict[NodeType, Sequence[NodeType]],
+        in_nodes: dict[NodeType, Sequence[NodeType]],
     ):
         self._nodes = nodes
         self._in_nodes = in_nodes
@@ -146,11 +136,11 @@ class Graph(Generic[NodeType]):
         return self._nodes
 
     @property
-    def nodes_inputs(self) -> Dict[NodeType, Sequence[NodeType]]:
+    def nodes_inputs(self) -> dict[NodeType, Sequence[NodeType]]:
         return self._in_nodes
 
     @property
-    def nodes_outputs(self) -> Dict[NodeType, Sequence[NodeType]]:
+    def nodes_outputs(self) -> dict[NodeType, Sequence[NodeType]]:
         return self._out_nodes
 
     @property
@@ -162,7 +152,7 @@ class DiAcyclicGraph(Graph[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: Dict[NodeType, Sequence[NodeType]],
+        in_nodes: dict[NodeType, Sequence[NodeType]],
         outputs: Sequence[NodeType],
     ):
         super().__init__(nodes, in_nodes)
@@ -175,7 +165,7 @@ class DiAcyclicGraph(Graph[NodeType]):
     def topological_ordering(self) -> Iterator[NodeType]:
         return topological_ordering(self._nodes, self.node_inputs, self.node_outputs)
 
-    def layerwise_topological_ordering(self) -> Iterator[List[NodeType]]:
+    def layerwise_topological_ordering(self) -> Iterator[list[NodeType]]:
         return layerwise_topological_ordering(self._nodes, self.node_inputs, self.node_outputs)
 
     def subgraph(self, *roots: NodeType) -> "DiAcyclicGraph[NodeType]":
@@ -187,7 +177,7 @@ class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: Dict[NodeType, Sequence[NodeType]],
+        in_nodes: dict[NodeType, Sequence[NodeType]],
         outputs: Sequence[NodeType],
     ):
         if len(outputs) != 1:
@@ -206,8 +196,8 @@ BimapRightType = TypeVar("BimapRightType")
 
 class BiMap(Generic[BimapLeftType, BimapRightType]):
     def __init__(self):
-        self._lhs_map: Dict[BimapLeftType, BimapRightType] = {}
-        self._rhs_map: Dict[BimapRightType, BimapLeftType] = {}
+        self._lhs_map: dict[BimapLeftType, BimapRightType] = {}
+        self._rhs_map: dict[BimapRightType, BimapLeftType] = {}
 
     def has_left(self, lhs: BimapLeftType) -> bool:
         return lhs in self._lhs_map

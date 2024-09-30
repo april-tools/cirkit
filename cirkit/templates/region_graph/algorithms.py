@@ -1,7 +1,8 @@
 import itertools
 import math
 from collections import defaultdict, deque
-from typing import Deque, Dict, List, Optional, Sequence, Tuple, Union, cast
+from collections.abc import Sequence
+from typing import Deque, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,11 +15,11 @@ from cirkit.templates.region_graph.graph import (
 )
 from cirkit.utils.scope import Scope
 
-HyperCube = Tuple[Tuple[int, ...], Tuple[int, ...]]  # Just to shorten the annotation.
+HyperCube = tuple[tuple[int, ...], tuple[int, ...]]  # Just to shorten the annotation.
 """A hypercube represented by "top-left" and "bottom-right" coordinates (cut points)."""
 
 
-class HypercubeToScope(Dict[HyperCube, Scope]):
+class HypercubeToScope(dict[HyperCube, Scope]):
     """Helper class to map sub-hypercubes to scopes with caching for variables arranged in a \
     hypercube.
 
@@ -94,8 +95,8 @@ def FullyFactorized(num_variables: int, *, num_repetitions: int = 1) -> RegionGr
         raise ValueError("The number of repetitions must be positive")
 
     root = RegionNode(range(num_variables))
-    nodes: List[RegionGraphNode] = [root]
-    in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]] = {root: []}
+    nodes: list[RegionGraphNode] = [root]
+    in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = {root: []}
     if num_variables == 1:
         return RegionGraph(nodes, in_nodes, [root])
 
@@ -115,7 +116,7 @@ def LinearTree(
     num_variables: int,
     *,
     num_repetitions: int = 1,
-    ordering: List[int] = None,
+    ordering: list[int] = None,
     randomize: bool = False,
     seed: int = 42,
 ) -> RegionGraph:
@@ -147,8 +148,8 @@ def LinearTree(
         )
 
     root = RegionNode(range(num_variables))
-    nodes: List[RegionGraphNode] = [root]
-    in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]] = defaultdict(list)
+    nodes: list[RegionGraphNode] = [root]
+    in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
     if num_variables == 1:
         return RegionGraph(nodes, in_nodes, [root])
 
@@ -178,7 +179,7 @@ def LinearTree(
 
 # pylint: disable-next=invalid-name
 def RandomBinaryTree(
-    num_variables: int, *, depth: Optional[int] = None, num_repetitions: int = 1, seed: int = 42
+    num_variables: int, *, depth: int | None = None, num_repetitions: int = 1, seed: int = 42
 ) -> RegionGraph:
     """Construct a RG with random binary trees.
 
@@ -213,13 +214,13 @@ def RandomBinaryTree(
     random_state = np.random.RandomState(seed)
     root = RegionNode(range(num_variables))
     nodes = [root]
-    in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]] = defaultdict(list)
+    in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
 
     def random_scope_partitioning(
         scope: Scope,
-        num_parts: Optional[int] = None,
-        proportions: Optional[Sequence[float]] = None,
-    ) -> List[Scope]:
+        num_parts: int | None = None,
+        proportions: Sequence[float] | None = None,
+    ) -> list[Scope]:
         # Shuffle the region node scope
         scope = list(scope)
         random_state.shuffle(scope)
@@ -236,7 +237,7 @@ def RandomBinaryTree(
         # ANNOTATE: ndarray.tolist gives Any.
         # CAST: Numpy has typing issues.
         # IGNORE: Numpy has typing issues.
-        split_point: List[int] = (
+        split_point: list[int] = (
             cast(NDArray[np.float64], split / split[-1] * len(scope))  # type: ignore[misc]
             .round()
             .astype(np.int64)
@@ -244,9 +245,8 @@ def RandomBinaryTree(
         )
 
         # ANNOTATE: Specify content for empty container.
-        scopes: List[Scope] = []
-        for l, r in zip(split_point[:-1], split_point[1:]):
-            # FUTURE: for l, r in itertools.pairwise(split_point) in 3.10
+        scopes: list[Scope] = []
+        for l, r in itertools.pairwise(split_point):
             if l < r:  # A region must have as least one var, otherwise we skip it.
                 scopes.append(Scope(scope[l:r]))
 
@@ -278,7 +278,7 @@ def RandomBinaryTree(
 
 
 # pylint: disable-next=invalid-name
-def QuadTree(shape: Tuple[int, int], *, num_patch_splits: int = 2) -> RegionGraph:
+def QuadTree(shape: tuple[int, int], *, num_patch_splits: int = 2) -> RegionGraph:
     """Constructs a Quad Tree region graph.
 
     Args:
@@ -296,7 +296,7 @@ def QuadTree(shape: Tuple[int, int], *, num_patch_splits: int = 2) -> RegionGrap
 
 
 # pylint: disable-next=invalid-name
-def QuadGraph(shape: Tuple[int, int]) -> RegionGraph:
+def QuadGraph(shape: tuple[int, int]) -> RegionGraph:
     """Constructs a Quad Graph region graph.
 
     Args:
@@ -314,7 +314,7 @@ def QuadGraph(shape: Tuple[int, int]) -> RegionGraph:
 # DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name
 def _QuadBuilder(
-    shape: Tuple[int, int], *, is_tree: bool = False, num_patch_splits: int = 2
+    shape: tuple[int, int], *, is_tree: bool = False, num_patch_splits: int = 2
 ) -> RegionGraph:
     """Construct a RG with a quad tree.
 
@@ -350,10 +350,10 @@ def _QuadBuilder(
     grid = [[PADDING] * (width + 1) for _ in range(height + 1)]
 
     # The list of region and partition nodes
-    nodes: List[RegionGraphNode] = []
+    nodes: list[RegionGraphNode] = []
 
     # A map to each region/partition node to its children
-    in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]] = defaultdict(list)
+    in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
 
     # Add univariate input region nodes
     for i, j in itertools.product(range(height), range(width)):
@@ -361,7 +361,7 @@ def _QuadBuilder(
         grid[i][j] = rgn
         nodes.append(rgn)
 
-    def merge_regions_(rgn_in: List[RegionNode]) -> RegionNode:
+    def merge_regions_(rgn_in: list[RegionNode]) -> RegionNode:
         """Merge 2 or 4 regions to a larger region."""
         assert len(rgn_in) in {2, 4}
         scope = Scope.union(*tuple(rgn.scope for rgn in rgn_in))
@@ -373,7 +373,7 @@ def _QuadBuilder(
         in_nodes[ptn] = rgn_in
         return rgn
 
-    def merge_4_regions_tree_(rgn_in: List[RegionNode], *, num_patch_splits: int) -> RegionNode:
+    def merge_4_regions_tree_(rgn_in: list[RegionNode], *, num_patch_splits: int) -> RegionNode:
         # Merge 4 regions to a larger region, with structured-decomposablility
         assert len(rgn_in) == 4
         assert num_patch_splits in {2, 4}
@@ -390,7 +390,7 @@ def _QuadBuilder(
         # Merge both horizontally and vertically
         return merge_regions_(rgn_in)
 
-    def merge_4_regions_dag_(rgn_in: List[RegionNode]) -> RegionNode:
+    def merge_4_regions_dag_(rgn_in: list[RegionNode]) -> RegionNode:
         # Merge 4 regions to a larger region, with non-structured-decomposable mix
         assert len(rgn_in) == 4
 
@@ -447,8 +447,8 @@ def _QuadBuilder(
 
 
 def _parse_poon_domingos_delta(
-    delta: Union[float, List[float], List[List[float]]], shape: Sequence[int], axes: Sequence[int]
-) -> List[List[List[int]]]:
+    delta: float | list[float] | list[list[float]], shape: Sequence[int], axes: Sequence[int]
+) -> list[list[list[int]]]:
     """Parse the delta argument into cut points for PoonDomingos.
 
     Args:
@@ -475,9 +475,9 @@ def _parse_poon_domingos_delta(
     ), "Each delta must be >=1."
 
     # ANNOTATE: Specify content for empty container.
-    cut_points: List[List[List[int]]] = []
+    cut_points: list[list[list[int]]] = []
     for delta_i in delta:
-        cut_pts_i: List[List[int]] = []
+        cut_pts_i: list[list[int]] = []
         for ax, delta_i_ax in zip(axes, delta_i):
             num_cuts = int((shape[ax] - 1) // delta_i_ax)
             cut_pts_i.append([int((j + 1) * delta_i_ax) for j in range(num_cuts)])
@@ -491,9 +491,9 @@ def _parse_poon_domingos_delta(
 def PoonDomingos(
     shape: Sequence[int],
     *,
-    delta: Union[float, List[float], List[List[float]]],
-    axes: Optional[Sequence[int]] = None,
-    max_depth: Optional[int] = None,
+    delta: float | list[float] | list[list[float]],
+    axes: Sequence[int] | None = None,
+    max_depth: int | None = None,
 ) -> RegionGraph:
     """Constructs a region graph with the Poon-Domingos structure.
 
@@ -523,20 +523,20 @@ def PoonDomingos(
         max_depth = sum(shape) + 1  # Larger than every possible cuts
 
     # The list of region and partition nodes
-    nodes: List[RegionGraphNode] = []
+    nodes: list[RegionGraphNode] = []
 
     # The in-degree connections of region/partition nodes
-    in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]] = defaultdict(list)
+    in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
 
     # A map from scopes to the corresponding region nodes
-    scope_region: Dict[Scope, RegionNode] = {}
+    scope_region: dict[Scope, RegionNode] = {}
 
     # An object mapping hypercube selections to region scopes
     hypercube_to_scope = HypercubeToScope(shape)
 
     # ANNOTATE: Specify content for empty container.
     queue: Deque[HyperCube] = deque()
-    depth_dict: Dict[HyperCube, int] = {}  # Also serve as a "visited" set.
+    depth_dict: dict[HyperCube, int] = {}  # Also serve as a "visited" set.
 
     cur_hypercube = ((0,) * len(shape), tuple(shape))
     root_scope = hypercube_to_scope[cur_hypercube]
@@ -552,9 +552,9 @@ def PoonDomingos(
     def cut_hypercube_(
         hypercube: HyperCube,
         axis: int,
-        cut_points: Union[int, Sequence[int]],
+        cut_points: int | Sequence[int],
         hypercube_to_scope: HypercubeToScope,
-    ) -> List[HyperCube]:
+    ) -> list[HyperCube]:
         """Cut a hypercube along given axis at given cut points, and add corresponding regions to
          the region graph.
 
@@ -583,10 +583,9 @@ def PoonDomingos(
 
         # ANNOTATE: Specify content for empty container.
         cut_points = [point1[axis]] + sorted(cut_points) + [point2[axis]]
-        hypercubes: List[HyperCube] = []
-        region_nodes: List[RegionNode] = []
-        for cut_l, cut_r in zip(cut_points[:-1], cut_points[1:]):
-            # FUTURE: for cut_l, cut_r in itertools.pairwise(cut_points) in 3.10
+        hypercubes: list[HyperCube] = []
+        region_nodes: list[RegionNode] = []
+        for cut_l, cut_r in itertools.pairwise(cut_points):
             point_l, point_r = list(point1), list(point2)  # Must convert to list to modify.
             point_l[axis], point_r[axis] = cut_l, cut_r
             hypercube = tuple(point_l), tuple(point_r)

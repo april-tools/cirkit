@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, Dict, Optional
+from typing import Any
 
 from torch import Tensor
 
@@ -18,7 +18,7 @@ class TorchLayer(AbstractTorchModule, ABC):
         num_output_units: int,
         arity: int = 1,
         *,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
         num_folds: int = 1,
     ) -> None:
         """Init class.
@@ -43,15 +43,15 @@ class TorchLayer(AbstractTorchModule, ABC):
 
     @property
     @abstractmethod
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         ...
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return {}
 
     @property
-    def sub_modules(self) -> Dict[str, "TorchLayer"]:
+    def sub_modules(self) -> dict[str, "TorchLayer"]:
         """Retrieve a dictionary mapping string identifiers to torch sub-module layers.,
         that must be passed to the ```__init__``` method of the top-level layer
 

@@ -1,5 +1,5 @@
 import functools
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -45,7 +45,7 @@ def compiler_dirichlet_initializer(
     return functools.partial(dirichlet_, alpha=init.alpha, dim=axis)
 
 
-DEFAULT_INITIALIZER_COMPILATION_RULES: Dict[InitializerCompilationSign, InitializerCompilationFunc] = {  # type: ignore[misc]
+DEFAULT_INITIALIZER_COMPILATION_RULES: dict[InitializerCompilationSign, InitializerCompilationFunc] = {  # type: ignore[misc]
     ConstantTensorInitializer: compile_constant_tensor_initializer,
     UniformInitializer: compile_uniform_initializer,
     NormalInitializer: compile_normal_initializer,

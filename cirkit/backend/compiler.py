@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Protocol, Type, TypeVar, cast
+from typing import Any, Protocol, TypeVar, cast
 
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.symbolic.circuit import Circuit
@@ -33,9 +33,9 @@ class CompiledCircuitsMap:
         self._bimap.add(sc, cc)
 
 
-LayerCompilationSign = Type[Layer]
-ParameterCompilationSign = Type[ParameterNode]
-InitializerCompilationSign = Type[Initializer]
+LayerCompilationSign = type[Layer]
+ParameterCompilationSign = type[ParameterNode]
+InitializerCompilationSign = type[Initializer]
 
 
 class LayerCompilationFunc(Protocol):

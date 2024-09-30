@@ -1,7 +1,6 @@
 import csv
 import os
 from collections import Counter
-from typing import Dict, List, Optional, Union
 
 import h5py
 import numpy as np
@@ -43,22 +42,22 @@ def load_binary_dataset(
     name: str,
     path: str = "datasets",
     sep: str = ",",
-    dtype: Union[str, np.dtype] = np.int64,
-    splits: Optional[List[str]] = None,
-) -> Dict[str, np.ndarray]:
-    def csv_2_numpy(filename: str, path: str, sep: str, dtype: Union[str, np.dtype]) -> np.ndarray:
-        reader = csv.reader(open(os.path.join(path, filename), "r"), delimiter=sep)
+    dtype: str | np.dtype = np.int64,
+    splits: list[str] | None = None,
+) -> dict[str, np.ndarray]:
+    def csv_2_numpy(filename: str, path: str, sep: str, dtype: str | np.dtype) -> np.ndarray:
+        reader = csv.reader(open(os.path.join(path, filename)), delimiter=sep)
         return np.array(list(reader), dtype=dtype)
 
     if splits is None:
         splits = ["train", "valid", "test"]
-    filenames = map(lambda s: os.path.join(name, "{0}.{1}.{2}".format(name, s, "data")), splits)
+    filenames = map(lambda s: os.path.join(name, "{}.{}.{}".format(name, s, "data")), splits)
     return dict(zip(splits, map(lambda fname: csv_2_numpy(fname, path, sep, dtype), filenames)))
 
 
 def load_uci_dataset(
-    name: str, path: str = "datasets", dtype: Union[str, np.dtype] = np.float32
-) -> Dict[str, np.ndarray]:
+    name: str, path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     if name == "power":
         return load_uci_power(path=path, dtype=dtype)
     if name == "gas":
@@ -81,7 +80,7 @@ def load_artificial_dataset(
     discretize: bool = False,
     discretize_bins: int = 32,
     **kwargs,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, np.ndarray]:
     num_valid_samples = int(num_samples * valid_test_perc * 0.5)
     num_test_samples = int(num_samples * valid_test_perc)
     total_num_samples = num_samples + num_valid_samples + num_test_samples
@@ -130,8 +129,8 @@ def load_artificial_dataset(
 
 
 def load_uci_power(
-    path: str = "datasets", dtype: Union[str, np.dtype] = np.float32
-) -> Dict[str, np.ndarray]:
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     data = np.load(os.path.join(path, "power", "data.npy"))
     rng = np.random.RandomState(42)
     rng.shuffle(data)
@@ -164,8 +163,8 @@ def load_uci_power(
 
 
 def load_uci_gas(
-    path: str = "datasets", dtype: Union[str, np.dtype] = np.float32
-) -> Dict[str, np.ndarray]:
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     def compute_correlations(data: pd.DataFrame):
         return (data.corr() > 0.98).to_numpy().sum(axis=1)
 
@@ -197,8 +196,8 @@ def load_uci_gas(
 
 
 def load_uci_hepmass(
-    path: str = "datasets", dtype: Union[str, np.dtype] = np.float32
-) -> Dict[str, np.ndarray]:
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     # Load the data
     data_train = pd.read_csv(os.path.join(path, "hepmass", "1000_train.csv"), index_col=False)
     data_test = pd.read_csv(os.path.join(path, "hepmass", "1000_test.csv"), index_col=False)
@@ -240,8 +239,8 @@ def load_uci_hepmass(
 
 
 def load_uci_miniboone(
-    path: str = "datasets", dtype: Union[str, np.dtype] = np.float32
-) -> Dict[str, np.ndarray]:
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     # Load and split the data
     data = np.load(os.path.join(path, "miniboone", "data.npy"))
     data = data.astype(dtype=dtype, copy=False)
@@ -263,8 +262,8 @@ def load_uci_miniboone(
 
 
 def load_uci_bsds300(
-    path: str = "datasets", dtype: Union[str, np.dtype] = np.float32
-) -> Dict[str, np.ndarray]:
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     f = h5py.File(os.path.join(path, "BSDS300", "BSDS300.hdf5"), "r")
     data_train = f["train"][:].astype(dtype, copy=False)
     data_valid = f["validation"][:].astype(dtype, copy=False)
@@ -333,7 +332,7 @@ def spiral_sample(
     eps: float = 1.0,
     r_scale: float = 1.5,
     length: float = np.pi,
-    starts: Optional[list] = None,
+    starts: list | None = None,
     seed: int = 42,
 ) -> np.ndarray:
     if starts is None:
@@ -375,7 +374,7 @@ def rotate2d_samples(data: np.ndarray, radia: float = np.pi * 0.25) -> np.ndarra
 
 
 def sample_rings(
-    num_samples: int, dim: int, sigma: float = 0.1, radia: Optional[list] = None, seed: int = 42
+    num_samples: int, dim: int, sigma: float = 0.1, radia: list | None = None, seed: int = 42
 ):
     assert dim >= 2
     if radia is None:

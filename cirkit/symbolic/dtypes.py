@@ -1,6 +1,5 @@
 from enum import IntEnum, auto
 from numbers import Number
-from typing import Union
 
 import numpy as np
 
@@ -16,7 +15,7 @@ class DataType(IntEnum):
     """The complex numbers data type."""
 
 
-def dtype_value(x: Union[Number, np.ndarray]) -> DataType:
+def dtype_value(x: Number | np.ndarray) -> DataType:
     """Given a number or Numpy array, return its symbolic data type.
 
     Args:

@@ -1,7 +1,8 @@
 import heapq
 import itertools
+from collections.abc import Iterable, Sequence
 from numbers import Number
-from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, TypeVar, Union
+from typing import NamedTuple, TypeVar
 
 import numpy as np
 
@@ -16,17 +17,18 @@ from cirkit.symbolic.circuit import (
 from cirkit.symbolic.layers import (
     EvidenceLayer,
     InputLayer,
+    KroneckerLayer,
     Layer,
     LayerOperator,
     ProductLayer,
-    SumLayer, KroneckerLayer,
+    SumLayer,
 )
 from cirkit.symbolic.parameters import ConstantParameter, Parameter
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def concatenate(scs: Sequence[Circuit], *, registry: Optional[OperatorRegistry] = None) -> Circuit:
+def concatenate(scs: Sequence[Circuit], *, registry: OperatorRegistry | None = None) -> Circuit:
     """Concatenates a sequence of symbolic circuits. Concatenating circuits means constructing
     another circuit such that its output layers consists of the output layers of each circuit
     (in the given order). This operator does not require the satisfaction of any structural
@@ -44,7 +46,7 @@ def concatenate(scs: Sequence[Circuit], *, registry: Optional[OperatorRegistry] 
             variable.
     """
     # Retrieve the number of channels
-    num_channels_s = set(sc.num_channels for sc in scs)
+    num_channels_s = {sc.num_channels for sc in scs}
     if len(num_channels_s) != 1:
         raise ValueError(
             f"Only circuits with the same number of channels can be concatenated, "
@@ -53,12 +55,12 @@ def concatenate(scs: Sequence[Circuit], *, registry: Optional[OperatorRegistry] 
     num_channels = scs[0].num_channels
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_block: Dict[Layer, CircuitBlock] = {}
+    layers_to_block: dict[Layer, CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    output_blocks: List[CircuitBlock] = []
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
+    output_blocks: list[CircuitBlock] = []
 
     # Simply pass the symbolic layers references
     for sc in scs:
@@ -82,9 +84,9 @@ def concatenate(scs: Sequence[Circuit], *, registry: Optional[OperatorRegistry] 
 
 def evidence(
     sc: Circuit,
-    obs: Dict[int, Union[Number, Tuple[Number, ...]]],
+    obs: dict[int, Number | tuple[Number, ...]],
     *,
-    registry: Optional[OperatorRegistry] = None,
+    registry: OperatorRegistry | None = None,
 ) -> Circuit:
     """Observe the value of some variables in a symbolic circuit, and represent the given
     evidence as another symbolic circuit.
@@ -124,11 +126,11 @@ def evidence(
         raise ValueError("The variables to observe must be a subset of the scope of the circuit")
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_block: Dict[Layer, CircuitBlock] = {}
+    layers_to_block: dict[Layer, CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
         # Check if we have to construct the evidence of an input layer
@@ -184,9 +186,9 @@ def evidence(
 
 def integrate(
     sc: Circuit,
-    scope: Optional[Scope] = None,
+    scope: Scope | None = None,
     *,
-    registry: Optional[OperatorRegistry] = None,
+    registry: OperatorRegistry | None = None,
 ) -> Circuit:
     """Integrate the function computed by a circuit, and represent it as another circuit.
     This operator requires the given circuit to be both smooth and decomposable.
@@ -229,11 +231,11 @@ def integrate(
         registry = OPERATOR_REGISTRY.get()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_block: Dict[Layer, CircuitBlock] = {}
+    layers_to_block: dict[Layer, CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
         # Input layers get integrated over
@@ -267,7 +269,7 @@ def integrate(
     )
 
 
-def multiply(sc1: Circuit, sc2: Circuit, *, registry: Optional[OperatorRegistry] = None) -> Circuit:
+def multiply(sc1: Circuit, sc2: Circuit, *, registry: OperatorRegistry | None = None) -> Circuit:
     """Multiply two symbolic circuit and represent it as another circuit.
     This operator requires the input circuits to be smooth, decomposable and compatible.
     The resulting circuit will be smooth and decomposable. Moreover, if the input circuits
@@ -301,11 +303,11 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: Optional[OperatorRegistry]
         registry = OPERATOR_REGISTRY.get()
 
     # Map from pairs of layers to their product circuit block
-    layers_to_block: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
+    layers_to_block: dict[tuple[Layer, Layer], CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
@@ -341,12 +343,10 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: Optional[OperatorRegistry]
             blocks.extend(sub1_blocks.values())
             blocks.extend(sub2_blocks.values())
             in_blocks.update(
-                (b, [sub1_blocks[li] for li in sc1.layer_inputs(l)])
-                for l, b in sub1_blocks.items()
+                (b, [sub1_blocks[li] for li in sc1.layer_inputs(l)]) for l, b in sub1_blocks.items()
             )
             in_blocks.update(
-                (b, [sub2_blocks[li] for li in sc2.layer_inputs(l)])
-                for l, b in sub2_blocks.items()
+                (b, [sub2_blocks[li] for li in sc2.layer_inputs(l)]) for l, b in sub2_blocks.items()
             )
             # Introduce a fresh kronecker product layer, which will multiply
             # the two layers over disjoint scope
@@ -420,7 +420,7 @@ class _ScopeVarAndBlockAndInputs(NamedTuple):
 
     scope_var: int  # The id of a variable in the scope of THE ProductLayer.
     diff_block: CircuitBlock  # The partial diff of THE ProductLayer w.r.t. the var.
-    diff_in_blocks: List[CircuitBlock]  # The inputs to the layer of diff_block.
+    diff_in_blocks: list[CircuitBlock]  # The inputs to the layer of diff_block.
 
 
 _T = TypeVar("_T")  # TODO: for _repeat. move together
@@ -444,7 +444,7 @@ def _repeat(iterable: Iterable[_T], /, *, times: int) -> Iterable[_T]:
 
 
 def differentiate(
-    sc: Circuit, registry: Optional[OperatorRegistry] = None, *, order: int = 1
+    sc: Circuit, registry: OperatorRegistry | None = None, *, order: int = 1
 ) -> Circuit:
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
@@ -458,10 +458,10 @@ def differentiate(
         registry = OPERATOR_REGISTRY.get()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_blocks: Dict[Layer, List[CircuitBlock]] = {}
+    layers_to_blocks: dict[Layer, list[CircuitBlock]] = {}
 
     # For each new circuit block, keep track of its inputs
-    in_blocks: Dict[CircuitBlock, Sequence[CircuitBlock]] = {}
+    in_blocks: dict[CircuitBlock, Sequence[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
         # "diff_blocks: List[CircuitBlock]" is the diff of sl wrt each variable and channel in order
@@ -483,7 +483,7 @@ def differentiate(
             # Each item is a tuple of length arity, which are inputs to that diff.
             # TODO: typeshed issue?
             # ANNOTATE: zip gives Any when using *iterables.
-            zip_blocks_in: Iterable[Tuple[CircuitBlock, ...]] = zip(
+            zip_blocks_in: Iterable[tuple[CircuitBlock, ...]] = zip(
                 # This is a generator of length arity, corresponding to each input of sl.
                 # Each item is a list of length (num_vars * num_chs), corresponding to the diff wrt
                 #   each variable of that input.
@@ -594,7 +594,7 @@ def differentiate(
 def conjugate(
     sc: Circuit,
     *,
-    registry: Optional[OperatorRegistry] = None,
+    registry: OperatorRegistry | None = None,
 ) -> Circuit:
     """Apply the complex conjugation operator to a symbolic circuit, and represent it as another
     circuit. This operator does not require the satisfaction of structural properties. Moreover,
@@ -615,11 +615,11 @@ def conjugate(
         registry = OPERATOR_REGISTRY.get()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_block: Dict[Layer, CircuitBlock] = {}
+    layers_to_block: dict[Layer, CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
         # The conjugation of a product layer is equivalent to the product of its conjugated inputs
