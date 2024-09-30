@@ -1,6 +1,6 @@
+from collections.abc import Iterator
 from copy import copy as shallowcopy
 from functools import cached_property
-from typing import Dict, Iterator, List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -26,10 +26,10 @@ from cirkit.utils.algorithms import topologically_process_nodes
 
 class ParameterAddressBook(AddressBook):
     def lookup(
-        self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
-    ) -> Iterator[Tuple[Optional[TorchParameterNode], Tuple[Tensor, ...]]]:
+        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+    ) -> Iterator[tuple[TorchParameterNode | None, tuple[Tensor, ...]]]:
         # A useful function combining the modules outputs, and then possibly applying an index
-        def select_index(mids: List[int], idx: Optional[Tensor]) -> Tensor:
+        def select_index(mids: list[int], idx: Tensor | None) -> Tensor:
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
             else:
@@ -55,10 +55,10 @@ class ParameterAddressBook(AddressBook):
     @classmethod
     def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
         # The address book entries being built
-        entries: List[AddressBookEntry] = []
+        entries: list[AddressBookEntry] = []
 
         # A useful dictionary mapping module ids to their number of folds
-        num_folds: Dict[int, int] = {}
+        num_folds: dict[int, int] = {}
 
         # Build the bookkeeping data structure by following the topological ordering
         for mid, m in enumerate(fold_idx_info.ordering):
@@ -90,10 +90,10 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         return sum(n.num_folds for n in self.outputs)
 
     @cached_property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return next(self.outputs).shape
 
-    def extract_subgraphs(self, *roots: TorchParameterNode) -> List["TorchParameter"]:
+    def extract_subgraphs(self, *roots: TorchParameterNode) -> list["TorchParameter"]:
         # The set of torch tensor nodes being observed
         nodes_ptensor = set()
 

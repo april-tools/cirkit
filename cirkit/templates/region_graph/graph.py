@@ -2,9 +2,9 @@ import itertools
 import json
 from abc import ABC
 from collections import defaultdict
+from collections.abc import Iterable, Iterator
 from functools import cached_property
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, TypedDict, Union, cast, final
-from typing_extensions import TypeAlias
+from typing import TypeAlias, TypedDict, Union, cast, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -12,19 +12,19 @@ from numpy.typing import NDArray
 from cirkit.utils.algorithms import DiAcyclicGraph
 from cirkit.utils.scope import Scope
 
-RGNodeMetadata: TypeAlias = Dict[str, Union[int, float, str, bool]]
+RGNodeMetadata: TypeAlias = dict[str, Union[int, float, str, bool]]
 
 
 class RegionDict(TypedDict):
     """The structure of a region node in the json file."""
 
-    scope: List[int]  # The scope of this region node, specified by id of variable.
+    scope: list[int]  # The scope of this region node, specified by id of variable.
 
 
 class PartitionDict(TypedDict):
     """The structure of a partition node in the json file."""
 
-    inputs: List[int]  # The inputs of this partition node, specified by id of region node.
+    inputs: list[int]  # The inputs of this partition node, specified by id of region node.
     output: int  # The output of this partition node, specified by id of region node.
 
 
@@ -32,19 +32,19 @@ class RegionGraphJson(TypedDict):
     """The structure of the region graph json file."""
 
     # The regions of RG represented by a mapping from id in str to either a dict or only the scope.
-    regions: Dict[str, Union[RegionDict, List[int]]]
+    regions: dict[str, RegionDict | list[int]]
 
     # The list of region node roots str ids in the RG
-    roots: List[str]
+    roots: list[str]
 
     # The graph of RG represented by a list of partitions.
-    graph: List[PartitionDict]
+    graph: list[PartitionDict]
 
 
 class RegionGraphNode(ABC):
     """The abstract base class for nodes in region graphs."""
 
-    def __init__(self, scope: Union[Iterable[int], Scope]) -> None:
+    def __init__(self, scope: Iterable[int] | Scope) -> None:
         """Init class.
 
         Args:
@@ -82,9 +82,9 @@ class PartitionNode(RegionGraphNode):
 class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     def __init__(
         self,
-        nodes: List[RegionGraphNode],
-        in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]],
-        outputs: List[RegionGraphNode],
+        nodes: list[RegionGraphNode],
+        in_nodes: dict[RegionGraphNode, list[RegionGraphNode]],
+        outputs: list[RegionGraphNode],
     ) -> None:
         super().__init__(nodes, in_nodes, outputs)
         self._check_structure()
@@ -126,16 +126,16 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                     f" but found {len(rgn_outs)} parent nodes"
                 )
 
-    def region_inputs(self, rgn: RegionNode) -> List[PartitionNode]:
+    def region_inputs(self, rgn: RegionNode) -> list[PartitionNode]:
         return [cast(PartitionNode, node) for node in self.node_inputs(rgn)]
 
-    def partition_inputs(self, ptn: PartitionNode) -> List[RegionNode]:
+    def partition_inputs(self, ptn: PartitionNode) -> list[RegionNode]:
         return [cast(RegionNode, node) for node in self.node_inputs(ptn)]
 
-    def region_outputs(self, rgn: RegionNode) -> List[PartitionNode]:
+    def region_outputs(self, rgn: RegionNode) -> list[PartitionNode]:
         return [cast(PartitionNode, node) for node in self.node_outputs(rgn)]
 
-    def partition_outputs(self, ptn: PartitionNode) -> List[RegionNode]:
+    def partition_outputs(self, ptn: PartitionNode) -> list[RegionNode]:
         return [cast(RegionNode, node) for node in self.node_outputs(ptn)]
 
     @property
@@ -179,7 +179,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     @cached_property
     def is_structured_decomposable(self) -> bool:
         is_structured_decomposable = True
-        decompositions: Dict[Scope, Tuple[Scope, ...]] = {}
+        decompositions: dict[Scope, tuple[Scope, ...]] = {}
         for partition in self.partition_nodes:
             # The scopes are sorted by _sort_nodes(), so the tuple has a deterministic order.
             decomp = tuple(region.scope for region in self.node_inputs(partition))
@@ -196,9 +196,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             for region in self.node_inputs(partition)
         )
 
-    def is_compatible(
-        self, other: "RegionGraph", /, *, scope: Optional[Iterable[int]] = None
-    ) -> bool:
+    def is_compatible(self, other: "RegionGraph", /, *, scope: Iterable[int] | None = None) -> bool:
         """Test compatibility with another region graph over the given scope.
 
         Args:
@@ -265,7 +263,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         # ANNOTATE: Specify content for empty container.
         rg_json: RegionGraphJson = {}
-        region_idx: Dict[RegionNode, int] = {
+        region_idx: dict[RegionNode, int] = {
             node: idx for idx, node in enumerate(self.region_nodes)
         }
 
@@ -304,14 +302,14 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
         #       recover the ordering from file structure. However, the sort_key will be used when
         #       available.
 
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(filename, encoding="utf-8") as f:
             # ANNOTATE: json.load gives Any.
             rg_json: RegionGraphJson = json.load(f)
 
-        nodes: List[RegionGraphNode] = []
-        in_nodes: Dict[RegionGraphNode, List[RegionGraphNode]] = defaultdict(list)
+        nodes: list[RegionGraphNode] = []
+        in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
         outputs = []
-        region_idx: Dict[int, RegionNode] = {}
+        region_idx: dict[int, RegionNode] = {}
 
         # Load the region nodes
         for idx, rgn_scope in rg_json["regions"].items():

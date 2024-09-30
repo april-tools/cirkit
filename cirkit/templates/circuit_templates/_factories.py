@@ -1,5 +1,4 @@
 import functools
-from typing import Optional, Tuple
 
 import numpy as np
 
@@ -24,7 +23,7 @@ from cirkit.utils.scope import Scope
 
 def build_image_region_graph(
     name: str,
-    image_shape: Tuple[int, int],
+    image_shape: tuple[int, int],
 ) -> RegionGraph:
     """
     Build a region graph that is tailored for image data.
@@ -113,7 +112,7 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
 
 
 def mixing_layer_factory(
-    scope: Scope, num_units: int, arity: int, *, weight_factory: Optional[ParameterFactory] = None
+    scope: Scope, num_units: int, arity: int, *, weight_factory: ParameterFactory | None = None
 ) -> MixingLayer:
     """
     Build a mixing layer, given hyperparameters and an optional weight factory.
@@ -136,8 +135,8 @@ def _categorical_layer_factory(
     num_channels: int,
     *,
     num_categories: int,
-    probs_factory: Optional[ParameterFactory] = None,
-    logits_factory: Optional[ParameterFactory] = None,
+    probs_factory: ParameterFactory | None = None,
+    logits_factory: ParameterFactory | None = None,
 ) -> CategoricalLayer:
     return CategoricalLayer(
         scope,
@@ -154,25 +153,25 @@ def _gaussian_layer_factory(
     num_units: int,
     num_channels: int,
     *,
-    mean_factory: Optional[ParameterFactory] = None,
-    stddev_factory: Optional[ParameterFactory] = None,
+    mean_factory: ParameterFactory | None = None,
+    stddev_factory: ParameterFactory | None = None,
 ) -> GaussianLayer:
     return GaussianLayer(
         scope, num_units, num_channels, mean_factory=mean_factory, stddev_factory=stddev_factory
     )
 
 
-def _id_parameter_factory(shape: Tuple[int, ...], **kwargs) -> Parameter:
+def _id_parameter_factory(shape: tuple[int, ...], **kwargs) -> Parameter:
     return Parameter.from_leaf(TensorParameter(*shape, **kwargs))
 
 
-def _softmax_parameter_factory(shape: Tuple[int, ...], *, axis: int = -1, **kwargs) -> Parameter:
+def _softmax_parameter_factory(shape: tuple[int, ...], *, axis: int = -1, **kwargs) -> Parameter:
     return Parameter.from_unary(
         SoftmaxParameter(shape, axis=axis), TensorParameter(*shape, **kwargs)
     )
 
 
-def _positive_clamp_parameter_factory(shape: Tuple[int, ...], **kwargs) -> Parameter:
+def _positive_clamp_parameter_factory(shape: tuple[int, ...], **kwargs) -> Parameter:
     return Parameter.from_unary(
         ClampParameter(shape, vmin=1e-18), TensorParameter(*shape, **kwargs)
     )

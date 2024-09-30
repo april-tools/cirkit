@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple, TypeVar, Union, cast
+from typing import Any, Protocol, TypeVar, cast
 
 import torch
 from torch import Tensor, nn
@@ -22,7 +23,7 @@ class AbstractTorchModule(nn.Module, ABC):
 
     @property
     @abstractmethod
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         """Retrieve a tuple of attributes on which modules must agree on in order to be folded.
 
         Returns:
@@ -37,20 +38,20 @@ TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)
 
 @dataclass(frozen=True)
 class FoldIndexInfo:
-    ordering: List[TorchModule]
-    in_fold_idx: Dict[int, List[List[Tuple[int, int]]]]
-    out_fold_idx: List[Tuple[int, int]]
+    ordering: list[TorchModule]
+    in_fold_idx: dict[int, list[list[tuple[int, int]]]]
+    out_fold_idx: list[tuple[int, int]]
 
 
 @dataclass(frozen=True)
 class AddressBookEntry:
-    module: Optional[TorchModule]
-    in_module_ids: List[List[int]]
-    in_fold_idx: List[Optional[Tensor]]
+    module: TorchModule | None
+    in_module_ids: list[list[int]]
+    in_fold_idx: list[Tensor | None]
 
 
 class AddressBook(ABC):
-    def __init__(self, entries: List[AddressBookEntry]) -> None:
+    def __init__(self, entries: list[AddressBookEntry]) -> None:
         super().__init__()
         self._entries = entries
 
@@ -60,7 +61,7 @@ class AddressBook(ABC):
     def __iter__(self) -> Iterator[AddressBookEntry]:
         return iter(self._entries)
 
-    def set_device(self, device: Union[str, torch.device, int]) -> "AddressBook":
+    def set_device(self, device: str | torch.device | int) -> "AddressBook":
         def set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
             return AddressBookEntry(
                 entry.module,
@@ -73,8 +74,8 @@ class AddressBook(ABC):
 
     @abstractmethod
     def lookup(
-        self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
-    ) -> Iterator[Tuple[Optional[TorchModule], Tuple[Tensor, ...]]]:
+        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+    ) -> Iterator[tuple[TorchModule | None, tuple[Tensor, ...]]]:
         ...
 
 
@@ -98,11 +99,11 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
     def __init__(
         self,
-        modules: List[TorchModule],
-        in_modules: Dict[TorchModule, List[TorchModule]],
-        outputs: List[TorchModule],
+        modules: list[TorchModule],
+        in_modules: dict[TorchModule, list[TorchModule]],
+        outputs: list[TorchModule],
         *,
-        fold_idx_info: Optional[FoldIndexInfo] = None,
+        fold_idx_info: FoldIndexInfo | None = None,
     ):
         """Initialize a Torch computational graph.
 
@@ -114,7 +115,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 not folded. This will be consumed (i.e., set to None) when the address book data
                 structure is built.
         """
-        modules: List = nn.ModuleList(modules)  # type: ignore
+        modules: list = nn.ModuleList(modules)  # type: ignore
         super().__init__()
         super(nn.Module, self).__init__(modules, in_modules, outputs)
         self._device = None
@@ -122,12 +123,12 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             fold_idx_info = self._build_unfold_index_info()
         self._address_book = self._build_address_book(fold_idx_info)
 
-    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+    def _set_device(self, device: str | torch.device | int) -> None:
         self._address_book.set_device(device)
         self._device = device
 
     @property
-    def device(self) -> Optional[Union[str, torch.device, int]]:
+    def device(self) -> str | torch.device | int | None:
         """Retrieve the device the module is allocated to.
 
         Returns:
@@ -146,8 +147,8 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
     def to(
         self,
-        device: Optional[Union[str, torch.device, int]] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: str | torch.device | int | None = None,
+        dtype: torch.dtype | None = None,
         non_blocking: bool = False,
     ) -> "TorchDiAcyclicGraph":
         """Specialization of the torch module's to() method. This is used to set the device
@@ -166,7 +167,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         return cast(TorchDiAcyclicGraph, super().to(device, dtype, non_blocking))
 
     def evaluate(
-        self, x: Optional[Tensor] = None, module_fn: Optional[ModuleEvalFunctional] = None
+        self, x: Tensor | None = None, module_fn: ModuleEvalFunctional | None = None
     ) -> Tensor:
         """Evaluate the Torch graph by following the topological ordering,
             and by using the address book information to retrieve the inputs to each module.
@@ -187,7 +188,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         # Evaluate the computational graph by following the topological ordering,
         # and by using the book address information to retrieve the inputs to each
         # (possibly folded) torch module.
-        module_outputs: List[Tensor] = []
+        module_outputs: list[Tensor] = []
         for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
             if module is None:
                 (output,) = inputs

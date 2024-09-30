@@ -1,17 +1,7 @@
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Iterator
 from enum import IntEnum, auto
-from typing import (
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Protocol,
-    Tuple,
-    Type,
-)
+from typing import Generic, Protocol
 
 from cirkit.backend.torch.graph.modules import TorchModule
 
@@ -26,15 +16,15 @@ class GraphOptPatternDefn(Generic[TorchModule]):
         return False
 
     @classmethod
-    def entries(cls) -> List[Type[TorchModule]]:
+    def entries(cls) -> list[type[TorchModule]]:
         ...
 
 
-GraphOptPattern = Type[GraphOptPatternDefn[TorchModule]]
+GraphOptPattern = type[GraphOptPatternDefn[TorchModule]]
 
 
 class GraphOptMatch(Generic[TorchModule]):
-    def __init__(self, pattern: GraphOptPattern[TorchModule], entries: List[TorchModule]):
+    def __init__(self, pattern: GraphOptPattern[TorchModule], entries: list[TorchModule]):
         self._pattern = pattern
         self._entries = entries
 
@@ -43,7 +33,7 @@ class GraphOptMatch(Generic[TorchModule]):
         return self._pattern
 
     @property
-    def entries(self) -> List[TorchModule]:
+    def entries(self) -> list[TorchModule]:
         return self._entries
 
     @property
@@ -57,9 +47,9 @@ class PatternMatcherFunc(Protocol):
         module: TorchModule,
         pattern: GraphOptPattern[TorchModule],
         *,
-        incomings_fn: Callable[[TorchModule], List[TorchModule]],
-        outcomings_fn: Callable[[TorchModule], List[TorchModule]],
-    ) -> Optional[GraphOptMatch[TorchModule]]:
+        incomings_fn: Callable[[TorchModule], list[TorchModule]],
+        outcomings_fn: Callable[[TorchModule], list[TorchModule]],
+    ) -> GraphOptMatch[TorchModule] | None:
         ...
 
 
@@ -67,7 +57,7 @@ class MatchOptimizerFunc(Protocol):
     def __call__(
         self,
         match: GraphOptMatch[TorchModule],
-    ) -> Tuple[TorchModule, ...]:
+    ) -> tuple[TorchModule, ...]:
         ...
 
 
@@ -76,12 +66,12 @@ def optimize_graph(
     outputs: Iterable[TorchModule],
     patterns: Iterable[GraphOptPattern],
     *,
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], list[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], list[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
     match_optimizer_fn: MatchOptimizerFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-) -> Optional[Tuple[List[TorchModule], Dict[TorchModule, List[TorchModule]], List[TorchModule],]]:
+) -> tuple[list[TorchModule], dict[TorchModule, list[TorchModule]], list[TorchModule],] | None:
     # TODO: generalize this as to cover patterns with multiply entry or exit points? (much more difficult)
 
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
@@ -105,19 +95,19 @@ def optimize_graph(
         return None
 
     # Run the matched optimization rules and collect the optimized modules
-    match_opt_modules: Dict[GraphOptMatch, Tuple[TorchModule, ...]] = {}
+    match_opt_modules: dict[GraphOptMatch, tuple[TorchModule, ...]] = {}
     for match in matches:
         match_opt_modules[match] = match_optimizer_fn(match)
 
     # The list of optimized layer and the inputs of each optimized module
-    modules: List[TorchModule] = []
-    in_modules: Dict[TorchModule, List[TorchModule]] = {}
+    modules: list[TorchModule] = []
+    in_modules: dict[TorchModule, list[TorchModule]] = {}
 
     # A map from matches to their entry point unoptimized modules
-    match_entry_points: Dict[GraphOptMatch, TorchModule] = {}
+    match_entry_points: dict[GraphOptMatch, TorchModule] = {}
 
     # A map from matches to their exit point unoptimized modules
-    match_exit_points: Dict[GraphOptMatch, TorchModule] = {}
+    match_exit_points: dict[GraphOptMatch, TorchModule] = {}
 
     # Build the optimize graph by following the topological ordering
     for module in ordering:
@@ -171,16 +161,16 @@ def match_optimization_patterns(
     outputs: Iterable[TorchModule],
     patterns: Iterable[GraphOptPattern[TorchModule]],
     *,
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], list[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], list[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-) -> Tuple[List[GraphOptMatch[TorchModule]], Dict[TorchModule, GraphOptMatch[TorchModule]]]:
+) -> tuple[list[GraphOptMatch[TorchModule]], dict[TorchModule, GraphOptMatch[TorchModule]]]:
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
     outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
 
     # A map from modules to the list of found matches they belong to
-    module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]] = defaultdict(list)
+    module_matches: dict[TorchModule, list[GraphOptMatch[TorchModule]]] = defaultdict(list)
 
     # For each given pattern, match it on the graph
     for pattern in patterns:
@@ -210,14 +200,14 @@ def match_optimization_patterns(
 
 def _prioritize_optimization_strategy(
     ordering: Iterable[TorchModule],
-    module_matches: Dict[TorchModule, List[GraphOptMatch[TorchModule]]],
+    module_matches: dict[TorchModule, list[GraphOptMatch[TorchModule]]],
     *,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
     in_place: bool = True,
-) -> Dict[TorchModule, GraphOptMatch[TorchModule]]:
+) -> dict[TorchModule, GraphOptMatch[TorchModule]]:
     if not in_place:
         module_matches = module_matches.copy()
-    prioritized_module_matches: Dict[TorchModule, GraphOptMatch[TorchModule]] = {}
+    prioritized_module_matches: dict[TorchModule, GraphOptMatch[TorchModule]] = {}
 
     # Follow the topological ordering of the computational graph and prune
     # pattern matches, according to the given prioritization strategy
@@ -241,10 +231,10 @@ def _prioritize_optimization_strategy(
 
 
 def _sort_matches_priority(
-    matches: List[GraphOptMatch[TorchModule]],
+    matches: list[GraphOptMatch[TorchModule]],
     *,
     strategy: OptMatchStrategy,
-) -> List[GraphOptMatch[TorchModule]]:
+) -> list[GraphOptMatch[TorchModule]]:
     if strategy == OptMatchStrategy.LARGEST_MATCH:
         return sorted(matches, key=lambda m: m.size, reverse=True)
     assert False
@@ -254,8 +244,8 @@ def _match_pattern_graph(
     modules: Iterable[TorchModule],
     pattern: GraphOptPattern[TorchModule],
     *,
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], list[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], list[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
 ) -> Iterator[GraphOptMatch[TorchModule]]:
     # Tries to match a pattern by rooting it in all the modules of the computational graph

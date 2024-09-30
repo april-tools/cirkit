@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from collections import ChainMap
+from collections.abc import Callable
 from copy import copy as shallowcopy
 from functools import cached_property
 from itertools import chain
 from numbers import Number
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union, final
+from typing import Any, Protocol, Union, final
 
 from cirkit.symbolic.dtypes import DataType, dtype_value
 from cirkit.symbolic.initializers import ConstantInitializer, Initializer
@@ -26,7 +27,7 @@ class ParameterNode(ABC):
 
     @property
     @abstractmethod
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """Retrieves the shape of the output of the parameter node.
 
         Returns:
@@ -34,7 +35,7 @@ class ParameterNode(ABC):
         """
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         """Retrieves the configuration of the parameter node, i.e., a dictionary mapping
         hyperparameters of the parameter node to their values. The hyperparameter names must
         match the argument names in the ```__init__``` method.
@@ -89,11 +90,11 @@ class TensorParameter(ParameterInput):
         return cls(*self._shape, **self.config)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self._shape
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"initializer": self.initializer, "learnable": self.learnable, "dtype": self.dtype}
 
 
@@ -112,7 +113,7 @@ class ConstantParameter(TensorParameter):
         return cls(*self._shape, value=self.value)
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"value": self.value}
 
 
@@ -127,7 +128,7 @@ class ReferenceParameter(ParameterInput):
         return cls(self._parameter)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self._parameter.shape
 
     def deref(self) -> TensorParameter:
@@ -135,7 +136,7 @@ class ReferenceParameter(ParameterInput):
 
 
 class ParameterOp(ParameterNode, ABC):
-    def __init__(self, *in_shape: Tuple[int, ...], **kwargs):
+    def __init__(self, *in_shape: tuple[int, ...], **kwargs):
         self.in_shapes = in_shape
 
     def __copy__(self) -> "ParameterOp":
@@ -144,50 +145,50 @@ class ParameterOp(ParameterNode, ABC):
 
 
 class UnaryParameterOp(ParameterOp, ABC):
-    def __init__(self, in_shape: Tuple[int, ...]):
+    def __init__(self, in_shape: tuple[int, ...]):
         super().__init__(in_shape)
 
 
 class BinaryParameterOp(ParameterOp, ABC):
-    def __init__(self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...]):
+    def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]):
         super().__init__(in_shape1, in_shape2)
 
 
 class EntrywiseParameterOp(UnaryParameterOp, ABC):
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.in_shapes[0]
 
 
 class ReduceParameterOp(UnaryParameterOp, ABC):
-    def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
+    def __init__(self, in_shape: tuple[int, ...], *, axis: int = -1):
         assert 0 <= axis < len(in_shape)
         super().__init__(in_shape)
         self.axis = axis if axis >= 0 else axis + len(in_shape)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return *self.in_shapes[0][: self.axis], *self.in_shapes[0][self.axis + 1 :]
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"axis": self.axis}
 
 
 class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
-    def __init__(self, in_shape: Tuple[int, ...], *, axis: int = -1):
+    def __init__(self, in_shape: tuple[int, ...], *, axis: int = -1):
         super().__init__(in_shape)
         axis = axis if axis >= 0 else axis + len(in_shape)
         assert 0 <= axis < len(in_shape)
         self.axis = axis
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"axis": self.axis}
 
 
 class IndexParameter(UnaryParameterOp):
-    def __init__(self, in_shape: Tuple[int, ...], *, indices: List[int], axis: int = -1):
+    def __init__(self, in_shape: tuple[int, ...], *, indices: list[int], axis: int = -1):
         super().__init__(in_shape)
         axis = axis if axis >= 0 else axis + len(in_shape)
         assert 0 <= axis < len(in_shape)
@@ -196,7 +197,7 @@ class IndexParameter(UnaryParameterOp):
         self.axis = axis
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             *self.in_shapes[0][: self.axis],
             len(self.indices),
@@ -204,37 +205,37 @@ class IndexParameter(UnaryParameterOp):
         )
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"indices": self.indices, "axis": self.axis}
 
 
 class SumParameter(BinaryParameterOp):
-    def __init__(self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...]) -> None:
+    def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]) -> None:
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.in_shapes[0]
 
 
 class HadamardParameter(BinaryParameterOp):
-    def __init__(self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...]):
+    def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]):
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.in_shapes[0]
 
 
 class KroneckerParameter(BinaryParameterOp):
-    def __init__(self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...]):
+    def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]):
         assert len(in_shape1) == len(in_shape2)
         super().__init__(in_shape1, in_shape2)
 
     @cached_property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return tuple(
             self.in_shapes[0][i] * self.in_shapes[1][i] for i in range(len(self.in_shapes[0]))
         )
@@ -242,7 +243,7 @@ class KroneckerParameter(BinaryParameterOp):
 
 class OuterParameterOp(BinaryParameterOp):
     def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, axis: int = -1
+        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, axis: int = -1
     ) -> None:
         assert len(in_shape1) == len(in_shape2)
         axis = axis if axis >= 0 else axis + len(in_shape1)
@@ -253,12 +254,12 @@ class OuterParameterOp(BinaryParameterOp):
         self.axis = axis
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         cross_dim = self.in_shapes[0][self.axis] * self.in_shapes[1][self.axis]
         return *self.in_shapes[0][: self.axis], cross_dim, *self.in_shapes[0][self.axis + 1 :]
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"axis": self.axis}
 
 
@@ -291,13 +292,13 @@ class SigmoidParameter(EntrywiseParameterOp):
 
 
 class ScaledSigmoidParameter(EntrywiseParameterOp):
-    def __init__(self, in_shape: Tuple[int, ...], vmin: float, vmax: float):
+    def __init__(self, in_shape: tuple[int, ...], vmin: float, vmax: float):
         super().__init__(in_shape)
         self.vmin = vmin
         self.vmax = vmax
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"vmin": self.vmin, "vmax": self.vmax}
 
 
@@ -306,10 +307,10 @@ class ClampParameter(EntrywiseParameterOp):
 
     def __init__(
         self,
-        in_shape: Tuple[int, ...],
+        in_shape: tuple[int, ...],
         *,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> None:
         assert vmin is not None or vmax is not None
         super().__init__(in_shape)
@@ -317,7 +318,7 @@ class ClampParameter(EntrywiseParameterOp):
         self.vmax = vmax
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = {}
         if self.vmin is not None:
             config.update(vmin=self.vmin)
@@ -355,7 +356,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
     consisting of symbolic nodes, which represent how to compute a tensor parameter."""
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """Retrieves the shape of the output tensor.
 
         Returns:
@@ -493,7 +494,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
 class ParameterFactory(Protocol):
     """A factory that constucts symbolic parameter given a shape."""
 
-    def __call__(self, shape: Tuple[int, ...]) -> Parameter:
+    def __call__(self, shape: tuple[int, ...]) -> Parameter:
         """Constructs a symbolic parameter given the parameter shape.
 
         Args:
@@ -506,13 +507,13 @@ class ParameterFactory(Protocol):
 
 class GaussianProductMean(ParameterOp):
     def __init__(
-        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+        self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]
     ) -> None:
         assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],
             self.in_shapes[0][1],
@@ -521,13 +522,13 @@ class GaussianProductMean(ParameterOp):
 
 class GaussianProductStddev(BinaryParameterOp):
     def __init__(
-        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+        self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]
     ) -> None:
         assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],
             self.in_shapes[0][1],
@@ -536,13 +537,13 @@ class GaussianProductStddev(BinaryParameterOp):
 
 class GaussianProductLogPartition(ParameterOp):
     def __init__(
-        self, in_gaussian1_shape: Tuple[int, ...], in_gaussian2_shape: Tuple[int, ...]
+        self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]
     ) -> None:
         assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],
             self.in_shapes[0][1],
@@ -553,7 +554,7 @@ class PolynomialProduct(BinaryParameterOp):
     # Use default __init__
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],  # dim Ko
             self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim deg+1
@@ -561,14 +562,14 @@ class PolynomialProduct(BinaryParameterOp):
 
 
 class PolynomialDifferential(UnaryParameterOp):
-    def __init__(self, in_shape: Tuple[int, ...], *, order: int = 1):
+    def __init__(self, in_shape: tuple[int, ...], *, order: int = 1):
         if order <= 0:
             raise ValueError("The order of differentiation must be positive.")
         super().__init__(in_shape)
         self.order = order
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         # if dp1>order, i.e., deg>=order, then diff, else const 0.
         return (
             self.in_shapes[0][0],

@@ -1,18 +1,7 @@
 import functools
 from abc import ABC, abstractmethod
-from typing import (
-    Callable,
-    ClassVar,
-    Dict,
-    Iterable,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-)
+from collections.abc import Callable, Iterable, Sequence
+from typing import ClassVar, TypeVar, cast
 from typing_extensions import TypeVarTuple, Unpack, final
 
 import torch
@@ -21,7 +10,7 @@ from torch import Tensor
 from cirkit.backend.torch.utils import csafelog
 
 Ts = TypeVarTuple("Ts")
-SemiringT = TypeVar("SemiringT", bound=Type["SemiringImpl"])
+SemiringT = TypeVar("SemiringT", bound=type["SemiringImpl"])
 
 
 class SemiringImpl(ABC):
@@ -34,11 +23,11 @@ class SemiringImpl(ABC):
     """
 
     # A registry from semiring string identifiers to semiring class implementations
-    _registry: ClassVar[Dict[str, Type["SemiringImpl"]]] = {}
+    _registry: ClassVar[dict[str, type["SemiringImpl"]]] = {}
 
     # A registry of morphisms between semiring class implementations
     _registry_morphisms: ClassVar[
-        Dict[Tuple[Type["SemiringImpl"], Type["SemiringImpl"]], Callable[[Tensor], Tensor]]
+        dict[tuple[type["SemiringImpl"], type["SemiringImpl"]], Callable[[Tensor], Tensor]]
     ] = {}
 
     @final
@@ -140,7 +129,7 @@ class SemiringImpl(ABC):
         """
         if cls == semiring:
             return x
-        func: Optional[Callable[[Tensor], Tensor]] = SemiringImpl._registry_morphisms.get(
+        func: Callable[[Tensor], Tensor] | None = SemiringImpl._registry_morphisms.get(
             (semiring, cls), None
         )
         if func is None:
@@ -166,8 +155,8 @@ class SemiringImpl(ABC):
         cls,
         equation: str,
         *,
-        inputs: Tuple[Tensor, ...],
-        operands: Tuple[Tensor, ...],
+        inputs: tuple[Tensor, ...],
+        operands: tuple[Tensor, ...],
         dim: int,
         keepdim: bool,
     ) -> Tensor:
@@ -195,7 +184,7 @@ class SemiringImpl(ABC):
 
     @classmethod
     @abstractmethod
-    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         """
 
         Args:
@@ -222,7 +211,7 @@ class SemiringImpl(ABC):
     @classmethod
     @abstractmethod
     def prod(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: int | Sequence[int] | None = None, keepdim: bool = False
     ) -> Tensor:
         """Do the product within a tensor on given dim(s).
 
@@ -285,7 +274,7 @@ class SemiringImpl(ABC):
         """
 
 
-Semiring = Type[SemiringImpl]
+Semiring = type[SemiringImpl]
 
 
 @SemiringImpl.register("sum-product")
@@ -311,7 +300,7 @@ class SumProductSemiring(SemiringImpl):
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
-    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -319,7 +308,7 @@ class SumProductSemiring(SemiringImpl):
         raise functools.reduce(torch.add, xs)
 
     @classmethod
-    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         # prod only accepts one dim and cannot be None.
         dim = dim if dim is not None else range(x.ndim)
         return torch.prod(x, dim=dim, keepdim=keepdim)
@@ -354,7 +343,7 @@ class LSESumSemiring(SemiringImpl):
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
-    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -362,7 +351,7 @@ class LSESumSemiring(SemiringImpl):
         return functools.reduce(torch.logaddexp, xs)
 
     @classmethod
-    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.sum(dim=dim, keepdim=keepdim)
 
@@ -387,7 +376,7 @@ class LSESumSemiring(SemiringImpl):
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
         # CAST: Expected Ts but got tuple (actually list) of Tensor.
-        func_exp_xs = func(*cast(Tuple[Unpack[Ts]], exp_xs))
+        func_exp_xs = func(*cast(tuple[Unpack[Ts]], exp_xs))
 
         # TODO: verify the behavior of reduce under torch.compile
         reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
@@ -411,7 +400,7 @@ class ComplexLSESumSemiring(SemiringImpl):
         return x.to(default_float_dtype.to_complex())
 
     @classmethod
-    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -419,7 +408,7 @@ class ComplexLSESumSemiring(SemiringImpl):
         return functools.reduce(torch.logaddexp, xs)
 
     @classmethod
-    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -443,7 +432,7 @@ class ComplexLSESumSemiring(SemiringImpl):
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
         # CAST: Expected Ts but got tuple (actually list) of Tensor.
-        func_exp_xs = func(*cast(Tuple[Unpack[Ts]], exp_xs))
+        func_exp_xs = func(*cast(tuple[Unpack[Ts]], exp_xs))
 
         # TODO: verify the behavior of reduce under torch.compile
         reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from functools import cached_property
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, final
+from typing import Any, final
 
 import numpy as np
 import torch
@@ -22,11 +23,11 @@ class TorchParameterNode(AbstractTorchModule, ABC):
 
     @property
     @abstractmethod
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         ...
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {}
 
     @torch.no_grad()
@@ -65,15 +66,15 @@ class TorchTensorParameter(TorchParameterInput):
         *shape: int,
         num_folds: int = 1,
         requires_grad: bool = True,
-        initializer_: Optional[Callable[[Tensor], Tensor]] = None,
-        dtype: Optional[torch.dtype] = None,
+        initializer_: Callable[[Tensor], Tensor] | None = None,
+        dtype: torch.dtype | None = None,
     ) -> None:
         """Init class."""
         if dtype is None:
             dtype = torch.get_default_dtype()
         super().__init__(num_folds=num_folds)
         self._shape = shape
-        self._ptensor: Optional[nn.Parameter] = None
+        self._ptensor: nn.Parameter | None = None
         self._requires_grad = requires_grad
         self._initializer_ = nn.init.normal_ if initializer_ is None else initializer_
         self._dtype = dtype
@@ -83,7 +84,7 @@ class TorchTensorParameter(TorchParameterInput):
         return cls(**self.config)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self._shape
 
     @property
@@ -111,11 +112,11 @@ class TorchTensorParameter(TorchParameterInput):
         return self._initializer_
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return self.shape, self.requires_grad, self._dtype
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         """Configuration flags for the parameter."""
         return dict(
             shape=self._shape,
@@ -154,7 +155,7 @@ class TorchTensorParameter(TorchParameterInput):
 @final
 class TorchPointerParameter(TorchParameterInput):
     def __init__(
-        self, parameter: TorchTensorParameter, *, fold_idx: Optional[Union[int, List[int]]] = None
+        self, parameter: TorchTensorParameter, *, fold_idx: int | list[int] | None = None
     ) -> None:
         if fold_idx is None:
             num_folds = parameter.num_folds
@@ -184,23 +185,23 @@ class TorchPointerParameter(TorchParameterInput):
         return cls(self._parameter, **self.config)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """The shape of the output parameter."""
         return self._parameter.shape
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return self.shape, id(self._parameter)
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return dict(fold_idx=self.fold_idx)
 
     def deref(self) -> TorchTensorParameter:
         return self._parameter
 
     @property
-    def fold_idx(self) -> Optional[List[int]]:
+    def fold_idx(self) -> list[int] | None:
         if self._fold_idx is None:
             return None
         return self._fold_idx.cpu().tolist()
@@ -213,7 +214,7 @@ class TorchPointerParameter(TorchParameterInput):
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
-    def __init__(self, *in_shape: Tuple[int, ...], num_folds: int = 1):
+    def __init__(self, *in_shape: tuple[int, ...], num_folds: int = 1):
         super().__init__(num_folds=num_folds)
         self.in_shapes = in_shape
 
@@ -222,7 +223,7 @@ class TorchParameterOp(TorchParameterNode, ABC):
         return cls(*self.in_shapes, **self.config)
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return self.in_shapes
 
     def __call__(self, *xs: Tensor) -> Tensor:
@@ -247,7 +248,7 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
 
 class TorchUnaryParameterOp(TorchParameterOp, ABC):
-    def __init__(self, in_shape: Tuple[int, ...], *, num_folds: int = 1) -> None:
+    def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1) -> None:
         super().__init__(in_shape, num_folds=num_folds)
 
     def __call__(self, x: Tensor) -> Tensor:
@@ -266,7 +267,7 @@ class TorchUnaryParameterOp(TorchParameterOp, ABC):
 
 class TorchBinaryParameterOp(TorchParameterOp, ABC):
     def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
     ) -> None:
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
 
@@ -286,7 +287,7 @@ class TorchBinaryParameterOp(TorchParameterOp, ABC):
 
 class TorchEntrywiseParameterOp(TorchUnaryParameterOp, ABC):
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.in_shapes[0]
 
 
@@ -297,7 +298,7 @@ class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
     #       nothing more. It's up to the implementations to define further details.
     def __init__(
         self,
-        in_shape: Tuple[int, ...],
+        in_shape: tuple[int, ...],
         *,
         dim: int = -1,
         num_folds: int = 1,
@@ -308,15 +309,15 @@ class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
         self.dim = dim
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return *self.in_shapes[0][: self.dim], *self.in_shapes[0][self.dim + 1 :]
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return dict(dim=self.dim)
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self.dim
 
 
@@ -327,7 +328,7 @@ class TorchEntrywiseReduceParameterOp(TorchEntrywiseParameterOp, ABC):
     #       nothing more. It's up to the implementations to define further details.
     def __init__(
         self,
-        in_shape: Tuple[int, ...],
+        in_shape: tuple[int, ...],
         *,
         num_folds: int = 1,
         dim: int = -1,
@@ -338,19 +339,19 @@ class TorchEntrywiseReduceParameterOp(TorchEntrywiseParameterOp, ABC):
         self.dim = dim
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = super().config
         config.update(dim=self.dim)
         return config
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self.dim
 
 
 class TorchIndexParameter(TorchUnaryParameterOp):
     def __init__(
-        self, in_shape: Tuple[int, ...], *, num_folds: int = 1, indices: List[int], dim: int = -1
+        self, in_shape: tuple[int, ...], *, num_folds: int = 1, indices: list[int], dim: int = -1
     ) -> None:
         super().__init__(in_shape, num_folds=num_folds)
         dim = dim if dim >= 0 else dim + len(in_shape)
@@ -361,21 +362,21 @@ class TorchIndexParameter(TorchUnaryParameterOp):
         self.register_buffer("_indices", torch.tensor(indices))
 
     @property
-    def indices(self) -> List[int]:
+    def indices(self) -> list[int]:
         return self._indices.cpu().tolist()
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = super().config
         config.update(indices=self.indices, dim=self.dim)
         return config
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, tuple(self.indices), self.dim
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             *self.in_shapes[0][: self.dim],
             len(self._indices),
@@ -388,13 +389,13 @@ class TorchIndexParameter(TorchUnaryParameterOp):
 
 class TorchSumParameter(TorchBinaryParameterOp):
     def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
     ) -> None:
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.in_shapes[0]
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
@@ -405,13 +406,13 @@ class TorchHadamardParameter(TorchBinaryParameterOp):
     """Hadamard product reparameterization."""
 
     def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
     ) -> None:
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.in_shapes[0]
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
@@ -422,14 +423,14 @@ class TorchKroneckerParameter(TorchBinaryParameterOp):
     """Kronecker product reparameterization."""
 
     def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
     ) -> None:
         assert len(in_shape1) == len(in_shape2)
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
         self._batched_kron = torch.vmap(torch.kron)
 
     @cached_property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return tuple(d1 * d2 for d1, d2 in zip(self.in_shapes[0], self.in_shapes[1]))
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
@@ -439,8 +440,8 @@ class TorchKroneckerParameter(TorchBinaryParameterOp):
 class TorchOuterProductParameter(TorchBinaryParameterOp):
     def __init__(
         self,
-        in_shape1: Tuple[int, ...],
-        in_shape2: Tuple[int, ...],
+        in_shape1: tuple[int, ...],
+        in_shape2: tuple[int, ...],
         *,
         num_folds: int = 1,
         dim: int = -1,
@@ -454,7 +455,7 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
         self.dim = dim
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             *self.in_shapes[0][: self.dim],
             self.in_shapes[0][self.dim] * self.in_shapes[1][self.dim],
@@ -462,13 +463,13 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
         )
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = super().config
         config.update(dim=self.dim)
         return config
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self.dim
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
@@ -484,8 +485,8 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
 class TorchOuterSumParameter(TorchBinaryParameterOp):
     def __init__(
         self,
-        in_shape1: Tuple[int, ...],
-        in_shape2: Tuple[int, ...],
+        in_shape1: tuple[int, ...],
+        in_shape2: tuple[int, ...],
         *,
         num_folds: int = 1,
         dim: int = -1,
@@ -499,7 +500,7 @@ class TorchOuterSumParameter(TorchBinaryParameterOp):
         self.dim = dim
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             *self.in_shapes[0][: self.dim],
             self.in_shapes[0][self.dim] * self.in_shapes[1][self.dim],
@@ -507,13 +508,13 @@ class TorchOuterSumParameter(TorchBinaryParameterOp):
         )
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = super().config
         config.update(dim=self.dim)
         return config
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self.dim
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
@@ -554,7 +555,7 @@ class TorchSigmoidParameter(TorchEntrywiseParameterOp):
 
 class TorchScaledSigmoidParameter(TorchEntrywiseParameterOp):
     def __init__(
-        self, in_shape: Tuple[int, ...], *, vmin: float, vmax: float, num_folds: int = 1
+        self, in_shape: tuple[int, ...], *, vmin: float, vmax: float, num_folds: int = 1
     ) -> None:
         super().__init__(in_shape, num_folds=num_folds)
         assert 0 <= vmin < vmax, "Must provide 0 <= vmin < vmax."
@@ -562,13 +563,13 @@ class TorchScaledSigmoidParameter(TorchEntrywiseParameterOp):
         self.vmax = vmax
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = super().config
         config.update(vmin=self.vmin, vmax=self.vmax)
         return config
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self.vmin, self.vmax
 
     def forward(self, x: Tensor) -> Tensor:
@@ -580,11 +581,11 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
 
     def __init__(
         self,
-        in_shape: Tuple[int, ...],
+        in_shape: tuple[int, ...],
         num_folds: int = 1,
         *,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> None:
         assert vmin is not None or vmax is not None
         super().__init__(in_shape, num_folds=num_folds)
@@ -592,7 +593,7 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
         self.vmax = vmax
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = super().config
         if self.vmin is not None:
             config.update(vmin=self.vmin)
@@ -601,7 +602,7 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
         return config
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self.vmin, self.vmax
 
     def forward(self, x: Tensor) -> Tensor:
@@ -611,7 +612,7 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
 class TorchConjugateParameter(TorchEntrywiseParameterOp):
     """Conjugate parameterization."""
 
-    def __init__(self, in_shape: Tuple[int, ...], num_folds: int = 1) -> None:
+    def __init__(self, in_shape: tuple[int, ...], num_folds: int = 1) -> None:
         super().__init__(in_shape, num_folds=num_folds)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -657,14 +658,14 @@ class TorchLogSoftmaxParameter(TorchEntrywiseReduceParameterOp):
 
 class TorchMatMulParameter(TorchBinaryParameterOp):
     def __init__(
-        self, in_shape1: Tuple[int, ...], in_shape2: Tuple[int, ...], *, num_folds: int = 1
+        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
     ) -> None:
         assert len(in_shape1) == len(in_shape2) == 2
         assert in_shape1[1] == in_shape2[0]
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self.in_shapes[0][0], self.in_shapes[1][1]
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
@@ -676,8 +677,8 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
 class TorchGaussianProductMean(TorchParameterOp):
     def __init__(
         self,
-        in_gaussian1_shape: Tuple[int, ...],
-        in_gaussian2_shape: Tuple[int, ...],
+        in_gaussian1_shape: tuple[int, ...],
+        in_gaussian2_shape: tuple[int, ...],
         *,
         num_folds: int = 1,
     ) -> None:
@@ -685,7 +686,7 @@ class TorchGaussianProductMean(TorchParameterOp):
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],
             self.in_shapes[0][1],
@@ -706,8 +707,8 @@ class TorchGaussianProductMean(TorchParameterOp):
 class TorchGaussianProductStddev(TorchBinaryParameterOp):
     def __init__(
         self,
-        in_gaussian1_shape: Tuple[int, ...],
-        in_gaussian2_shape: Tuple[int, ...],
+        in_gaussian1_shape: tuple[int, ...],
+        in_gaussian2_shape: tuple[int, ...],
         *,
         num_folds: int = 1,
     ) -> None:
@@ -715,7 +716,7 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
         super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],
             self.in_shapes[0][1],
@@ -733,8 +734,8 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
 class TorchGaussianProductLogPartition(TorchParameterOp):
     def __init__(
         self,
-        in_gaussian1_shape: Tuple[int, ...],
-        in_gaussian2_shape: Tuple[int, ...],
+        in_gaussian1_shape: tuple[int, ...],
+        in_gaussian2_shape: tuple[int, ...],
         *,
         num_folds: int = 1,
     ) -> None:
@@ -743,7 +744,7 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         self._log_two_pi = np.log(2.0 * np.pi)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],
             self.in_shapes[0][1],
@@ -769,7 +770,7 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
     # Use default __init__
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (
             self.in_shapes[0][0] * self.in_shapes[1][0],  # dim K
             self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim dp1
@@ -800,14 +801,14 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
 
 
 class TorchPolynomialDifferential(TorchUnaryParameterOp):
-    def __init__(self, in_shape: Tuple[int, ...], *, num_folds: int = 1, order: int = 1) -> None:
+    def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1, order: int = 1) -> None:
         if order <= 0:
             raise ValueError("The order of differentiation must be positive.")
         super().__init__(in_shape, num_folds=num_folds)
         self.order = order
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         # if dp1>order, i.e., deg>=order, then diff, else const 0.
         return (
             self.in_shapes[0][0],

@@ -1,6 +1,6 @@
 from abc import ABC
 from numbers import Number
-from typing import Any, Dict, List, Union
+from typing import Any
 
 import numpy as np
 
@@ -10,7 +10,7 @@ class Initializer(ABC):
     [TensorParameter][cirkit.symbolic.parameters.TensorParameter] upon their instantiation."""
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         """Retrieves the hyperparameters of the initializer.
 
         Returns:
@@ -38,7 +38,7 @@ class ConstantInitializer(Initializer):
         self.value = value
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"value": self.value}
 
 
@@ -60,7 +60,7 @@ class ConstantTensorInitializer(Initializer):
         self.value = value
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"value": self.value}
 
 
@@ -84,7 +84,7 @@ class UniformInitializer(Initializer):
         self.b = b
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"a": self.a, "b": self.b}
 
 
@@ -108,7 +108,7 @@ class NormalInitializer(Initializer):
         self.stddev = stddev
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"mean": self.mean, "stddev": self.stddev}
 
 
@@ -116,7 +116,7 @@ class DirichletInitializer(Initializer):
     """A symbolic Dirichlet initializer, which initializes all the entries of a tensor
     along one axis by sampling independently from a Dirichlet distribution."""
 
-    def __init__(self, alpha: Union[float, List[float]] = 1.0, *, axis: int = -1) -> None:
+    def __init__(self, alpha: float | list[float] = 1.0, *, axis: int = -1) -> None:
         """Initializes a Dirichlet initializer, given the concentration parameters
         and the axis along which the sampled values will sum to one.
 
@@ -139,5 +139,5 @@ class DirichletInitializer(Initializer):
         self.axis = axis
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"alpha": self.alpha, "axis": self.axis}

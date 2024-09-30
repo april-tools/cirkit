@@ -1,5 +1,4 @@
 import itertools
-from typing import List, Optional, Tuple, Union
 
 import pytest
 
@@ -72,7 +71,7 @@ def test_rg_algorithm_linear_tree(num_variables: int, num_repetitions: int, rand
     itertools.product([3, 4], [None, 1, 2], [1, 3]),
 )
 def test_rg_algorithm_random_binary_tree(
-    num_variables: int, depth: Optional[int], num_repetitions: int
+    num_variables: int, depth: int | None, num_repetitions: int
 ):
     rg = RandomBinaryTree(num_variables, depth=depth, num_repetitions=num_repetitions)
     if num_repetitions == 1:
@@ -90,7 +89,7 @@ def test_rg_algorithm_random_binary_tree(
 @pytest.mark.parametrize(
     "shape,num_patch_splits", itertools.product([(1, 1), (1, 3), (3, 1), (3, 3), (4, 4)], [2, 4])
 )
-def test_rg_algorithm_quad_tree(shape: Tuple[int, int], num_patch_splits: int):
+def test_rg_algorithm_quad_tree(shape: tuple[int, int], num_patch_splits: int):
     num_variables = shape[0] * shape[1]
     rg = QuadTree(shape, num_patch_splits=num_patch_splits)
     root: RegionNode
@@ -110,7 +109,7 @@ def test_rg_algorithm_quad_tree(shape: Tuple[int, int], num_patch_splits: int):
 
 
 @pytest.mark.parametrize("shape", [(1, 1), (1, 3), (3, 1), (3, 3), (4, 4)])
-def test_rg_algorithm_quad_graph(shape: Tuple[int, int]):
+def test_rg_algorithm_quad_graph(shape: tuple[int, int]):
     num_variables = shape[0] * shape[1]
     rg = QuadGraph(shape)
     root: RegionNode
@@ -127,8 +126,8 @@ def test_rg_algorithm_quad_graph(shape: Tuple[int, int]):
     "shape,delta", itertools.product([(1, 1), (3, 3), (4, 4)], [1, [1, 2], [[1, 3], [2, 4]]])
 )
 def test_rg_algorithm_poon_domingos(
-    shape: Tuple[int, int],
-    delta: Union[int, List[int], List[List[int]]],
+    shape: tuple[int, int],
+    delta: int | list[int] | list[list[int]],
 ) -> None:
     num_variables = shape[0] * shape[1]
     rg = PoonDomingos(shape, delta=delta)

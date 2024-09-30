@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from torch import Tensor
 
@@ -10,7 +10,7 @@ from cirkit.backend.torch.semiring import Semiring
 
 class TorchSumProductLayer(TorchInnerLayer, ABC):
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -33,7 +33,7 @@ class TorchTuckerLayer(TorchSumProductLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -53,7 +53,7 @@ class TorchTuckerLayer(TorchSumProductLayer):
         self.weight = weight
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -93,7 +93,7 @@ class TorchCPTLayer(TorchSumProductLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -115,7 +115,7 @@ class TorchCPTLayer(TorchSumProductLayer):
         self.weight = weight
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -144,7 +144,7 @@ class TorchTensorDotLayer(TorchSumLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -167,7 +167,7 @@ class TorchTensorDotLayer(TorchSumLayer):
         self.weight = weight
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -175,11 +175,11 @@ class TorchTensorDotLayer(TorchSumLayer):
         }
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self._num_batch_units
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
     def forward(self, x: Tensor) -> Tensor:
