@@ -1,5 +1,5 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Python 3.8](https://img.shields.io/badge/python-3.8+-orange.svg)](https://www.python.org/downloads/release/python-380/)
+[![Python 3.10](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/downloads/release/python-3100/)
 [![codecov](https://codecov.io/gh/april-tools/cirkit/branch/main/graph/badge.svg?token=MLHONY840L)](https://codecov.io/gh/april-tools/cirkit)
 
 ![cirkit logo](./logo.png)
@@ -12,7 +12,7 @@ LL: to write
 
 ## How to Install the Library
 
-cirkit currently requires Python 3.8 and PyTorch 2.3 or above versions.
+cirkit currently requires Python 3.10 and PyTorch 2.3 or above versions.
 To start developing, install the virtual environment and activate it first.
 ```shell
 virtualenv venv           # or python -m venv venv
