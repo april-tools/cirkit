@@ -12,6 +12,7 @@ from cirkit.symbolic.layers import (
     EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
+    KroneckerLayer,
     LogPartitionLayer,
     PolynomialLayer,
 )
@@ -20,7 +21,6 @@ from cirkit.symbolic.parameters import (
     KroneckerParameter,
     PolynomialDifferential,
     ReferenceParameter,
-    TensorParameter,
 )
 from cirkit.utils.scope import Scope
 from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
@@ -109,6 +109,57 @@ def test_multiply_circuits(num_units: int, input_layer: str):
             assert isinstance(in_2, PolynomialLayer)
             assert isinstance(in_prod, PolynomialLayer)
             assert in_prod.degree == in_1.degree + in_2.degree
+
+
+@pytest.mark.parametrize(
+    "num_units,input_layer",
+    itertools.product([1, 3], ["bernoulli", "gaussian"]),
+)
+def test_multiply_evidence_circuit(num_units: int, input_layer: str):
+    sc1 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer
+    )
+    sc2 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer
+    )
+    obs0 = {0: 1 if input_layer == "bernoulli" else 1.23}
+    evi_sc1 = SF.evidence(sc1, obs=obs0)
+    evi_sc2 = SF.evidence(sc2, obs=obs0)
+    assert evi_sc1.scope == evi_sc2.scope == Scope([1, 2, 3, 4])
+    assert evi_sc1.is_smooth and evi_sc1.is_decomposable and evi_sc1.is_structured_decomposable
+    assert evi_sc2.is_smooth and evi_sc2.is_decomposable and evi_sc2.is_structured_decomposable
+    assert len(evi_sc1.layers) == len(evi_sc2.layers) == len(sc1.layers)
+
+    sc3 = SF.multiply(evi_sc1, evi_sc2)
+    assert sc3.scope == Scope([1, 2, 3, 4])
+    assert sc3.is_smooth and sc3.is_decomposable and sc3.is_structured_decomposable
+    assert len(sc3.layers) == len(evi_sc1.layers) + 2
+    kls = [sl for sl in sc3.layers if isinstance(sl, KroneckerLayer)]
+    assert len(kls) == 1
+    (kl,) = kls
+    kl_inputs = sc3.layer_inputs(kl)
+    assert len(kl_inputs) == 2 and all(isinstance(sl, EvidenceLayer) for sl in kl_inputs)
+
+    obs2 = {2: 0 if input_layer == "bernoulli" else 2.72}
+    evi_sc3 = SF.evidence(sc3, obs=obs2)
+    sc4 = SF.multiply(evi_sc3, evi_sc3)
+    assert sc4.scope == Scope([1, 3, 4])
+    assert sc4.is_smooth and sc4.is_decomposable and sc4.is_structured_decomposable
+    kls = [sl for sl in sc4.layers if isinstance(sl, KroneckerLayer)]
+    assert len(kls) == 3
+    kls = sorted(kls, key=sc4.layer_scope)
+    assert all(sc4.layer_scope(kl) == Scope([]) for kl in kls)
+    assert any(all(isinstance(kli, DenseLayer) for kli in sc4.layer_inputs(kl)) for kl in kls)
+
+    obs_rest = {
+        1: 1 if input_layer == "bernoulli" else -2.72,
+        3: 1 if input_layer == "bernoulli" else 3.14,
+        4: 1 if input_layer == "bernoulli" else 0.0,
+    }
+    sc5 = SF.evidence(sc4, obs=obs_rest)
+    assert sc5.scope == Scope([])
+    assert sc5.is_smooth and sc5.is_decomposable and sc5.is_structured_decomposable
+    assert sc5.is_omni_compatible
 
 
 @pytest.mark.parametrize(
