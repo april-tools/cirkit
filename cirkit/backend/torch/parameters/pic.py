@@ -1,5 +1,3 @@
-from typing import Optional, Tuple, Union
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,11 +11,11 @@ from cirkit.backend.torch.parameters.nodes import TorchParameterOp, TorchTensorP
 def zw_quadrature(
     integration_method: str,
     nip: int,
-    a: Optional[float] = -1,
-    b: Optional[float] = 1,
-    return_log_weight: Optional[bool] = False,
-    dtype: Optional[torch.dtype] = torch.float32,
-    device: Optional[torch.device] = "cpu",
+    a: float | None = -1,
+    b: float | None = 1,
+    return_log_weight: bool | None = False,
+    dtype: torch.dtype | None = torch.float32,
+    device: torch.device | None = "cpu",
 ):
     if integration_method == "leggauss":
         z_quad, w_quad = np.polynomial.legendre.leggauss(nip)
@@ -54,10 +52,10 @@ class FourierLayer(nn.Module):
         self,
         in_features: int,
         out_features: int,
-        sigma: Optional[float] = 1.0,
-        learnable: Optional[bool] = False,
+        sigma: float | None = 1.0,
+        learnable: bool | None = False,
     ):
-        super(FourierLayer, self).__init__()
+        super().__init__()
         assert out_features % 2 == 0, "Number of output features must be even."
         self.in_features = in_features
         self.out_features = out_features
@@ -74,7 +72,7 @@ class FourierLayer(nn.Module):
         return torch.cat([z_proj.cos(), z_proj.sin()], dim=-1).transpose(-2, -1)
 
     def extra_repr(self) -> str:
-        return "{}, {}, sigma={}".format(self.in_features, self.out_features, self.sigma)
+        return f"{self.in_features}, {self.out_features}, sigma={self.sigma}"
 
 
 class PICInputNet(nn.Module):
@@ -82,16 +80,16 @@ class PICInputNet(nn.Module):
         self,
         num_variables: int,
         num_param: int,
-        num_channels: Optional[bool] = 1,
-        net_dim: Optional[int] = 64,
-        bias: Optional[bool] = False,
-        sharing: Optional[str] = "none",
-        ff_dim: Optional[int] = None,
-        ff_sigma: Optional[float] = 1.0,
-        learn_ff: Optional[bool] = False,
-        z_quad: Optional[torch.Tensor] = None,
-        tensor_parameter: Optional[TorchTensorParameter] = None,
-        reparam: Optional[TorchParameterOp] = None,
+        num_channels: bool | None = 1,
+        net_dim: int | None = 64,
+        bias: bool | None = False,
+        sharing: str | None = "none",
+        ff_dim: int | None = None,
+        ff_sigma: float | None = 1.0,
+        learn_ff: bool | None = False,
+        z_quad: torch.Tensor | None = None,
+        tensor_parameter: TorchTensorParameter | None = None,
+        reparam: TorchParameterOp | None = None,
     ):
         super().__init__()
         assert sharing in ["none", "f", "c"]
@@ -140,7 +138,7 @@ class PICInputNet(nn.Module):
             with torch.no_grad():
                 _ = self()  # initialize tensor_parameter as result of self.forward()
 
-    def forward(self, z_quad: Optional[torch.Tensor] = None, n_chunks: Optional[int] = 1):
+    def forward(self, z_quad: torch.Tensor | None = None, n_chunks: int | None = 1):
         z_quad = self.z_quad if z_quad is None else z_quad
         assert z_quad.ndim == 1
         self.net[1].groups = 1
@@ -162,7 +160,7 @@ class PICInputNet(nn.Module):
             param = self.reparam(param)
         return param
 
-    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+    def _set_device(self, device: str | torch.device | int) -> None:
         self._device = device
 
     def __repr__(self):
@@ -176,17 +174,17 @@ class PICInnerNet(nn.Module):
         self,
         num_dim: int,
         num_funcs: int,
-        perm_dim: Optional[Tuple[int]] = None,
-        norm_dim: Optional[Tuple[int]] = None,
-        net_dim: Optional[int] = 64,
-        bias: Optional[bool] = False,
-        sharing: Optional[str] = "none",
-        ff_dim: Optional[int] = None,
-        ff_sigma: Optional[float] = 1.0,
-        learn_ff: Optional[bool] = False,
-        z_quad: Optional[torch.Tensor] = None,
-        w_quad: Optional[torch.Tensor] = None,
-        tensor_parameter: Optional[TorchTensorParameter] = None,
+        perm_dim: tuple[int] | None = None,
+        norm_dim: tuple[int] | None = None,
+        net_dim: int | None = 64,
+        bias: bool | None = False,
+        sharing: str | None = "none",
+        ff_dim: int | None = None,
+        ff_sigma: float | None = 1.0,
+        learn_ff: bool | None = False,
+        z_quad: torch.Tensor | None = None,
+        w_quad: torch.Tensor | None = None,
+        tensor_parameter: TorchTensorParameter | None = None,
     ):
         super().__init__()
         assert sharing in ["none", "f", "c"]
@@ -244,9 +242,9 @@ class PICInnerNet(nn.Module):
 
     def forward(
         self,
-        z_quad: Optional[torch.Tensor] = None,
-        w_quad: Optional[torch.Tensor] = None,
-        n_chunks: Optional[int] = 1,
+        z_quad: torch.Tensor | None = None,
+        w_quad: torch.Tensor | None = None,
+        n_chunks: int | None = 1,
     ):
         z_quad = self.z_quad if z_quad is None else z_quad
         w_quad = self.w_quad if w_quad is None else w_quad
@@ -277,7 +275,7 @@ class PICInnerNet(nn.Module):
             self.tensor_parameter._ptensor = param
         return param
 
-    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+    def _set_device(self, device: str | torch.device | int) -> None:
         self._device = device
 
     def __repr__(self):
@@ -290,14 +288,14 @@ class PICInnerNet(nn.Module):
 def pc2qpc(
     pc: TorchCircuit,
     integration_method: str,
-    net_dim: Optional[int] = 128,
-    bias: Optional[bool] = True,
-    input_sharing: Optional[str] = "f",
-    inner_sharing: Optional[str] = "c",
-    ff_dim: Optional[int] = None,
-    ff_sigma: Optional[float] = 1.0,
-    learn_ff: Optional[bool] = False,
-    freeze_mixing_layers: Optional[bool] = True,
+    net_dim: int | None = 128,
+    bias: bool | None = True,
+    input_sharing: str | None = "f",
+    inner_sharing: str | None = "c",
+    ff_dim: int | None = None,
+    ff_sigma: float | None = 1.0,
+    learn_ff: bool | None = False,
+    freeze_mixing_layers: bool | None = True,
 ):
     def param_to_buffer(model: torch.nn.Module):
         """Turns all parameters of a module into buffers."""

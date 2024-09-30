@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import torch
 from torch import Tensor, distributions
@@ -25,7 +25,7 @@ class TorchInputLayer(TorchLayer, ABC):
         num_output_units: int,
         *,
         num_channels: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -64,11 +64,11 @@ class TorchInputLayer(TorchLayer, ABC):
         return self.arity
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return self.num_variables, self.num_channels, self.num_output_units
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "scope_idx": self.scope_idx,
             "num_output_units": self.num_output_units,
@@ -76,7 +76,7 @@ class TorchInputLayer(TorchLayer, ABC):
         }
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return {}
 
     @abstractmethod
@@ -126,7 +126,7 @@ class TorchExpFamilyLayer(TorchInputLayer):
         num_output_units: int,
         *,
         num_channels: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -185,9 +185,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         *,
         num_channels: int = 1,
         num_categories: int = 2,
-        probs: Optional[TorchParameter] = None,
-        logits: Optional[TorchParameter] = None,
-        semiring: Optional[Semiring] = None,
+        probs: TorchParameter | None = None,
+        logits: TorchParameter | None = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -237,13 +237,13 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         )
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         config = super().config
         config.update(num_categories=self.num_categories)
         return config
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         if self.logits is None:
             return dict(probs=self.probs)
         return dict(logits=self.logits)
@@ -281,8 +281,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         num_channels: int = 1,
         mean: TorchParameter,
         stddev: TorchParameter,
-        log_partition: Optional[TorchParameter] = None,
-        semiring: Optional[Semiring] = None,
+        log_partition: TorchParameter | None = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -323,7 +323,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return p.shape == (self.num_output_units, self.num_channels)
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         params = dict(mean=self.mean, stddev=self.stddev)
         if self.log_partition is not None:
             params.update(log_partition=self.log_partition)
@@ -358,7 +358,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         num_channels: int = 1,
         num_folds: int = 1,
         value: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -382,7 +382,7 @@ class TorchLogPartitionLayer(TorchInputLayer):
         self.value = value
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         params = super().params
         params.update(value=self.value)
         return params
@@ -440,7 +440,7 @@ class TorchPolynomialLayer(TorchInputLayer):
         num_channels: int = 1,
         degree: int,
         coeff: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -477,15 +477,15 @@ class TorchPolynomialLayer(TorchInputLayer):
         return p.shape == (self.num_output_units, self.degree + 1)
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return *super().fold_settings, self.degree + 1
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {**super().config, "degree": self.degree}
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return {"coeff": self.coeff}
 
     def forward(self, x: Tensor) -> Tensor:

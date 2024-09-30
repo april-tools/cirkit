@@ -1,5 +1,4 @@
 import itertools
-from typing import Dict, List, Tuple, Union
 
 import numpy as np
 
@@ -113,7 +112,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
     product_layer = HadamardLayer(Scope([0, 1]), num_input_units=num_units, arity=2)
 
     # Set the connections between layers
-    in_layers: Dict[Layer, List[Layer]] = {
+    in_layers: dict[Layer, list[Layer]] = {
         dense_layers[(0,)]: [input_layers[(0,)]],
         dense_layers[(1,)]: [input_layers[(1,)]],
         product_layer: [dense_layers[(0,)], dense_layers[(1,)]],
@@ -241,7 +240,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
     }
 
     # Set the connections between layers
-    in_layers: Dict[Layer, List[Layer]] = {
+    in_layers: dict[Layer, list[Layer]] = {
         dense_layer: [product_layers[scope]] for scope, dense_layer in dense_layers.items()
     }
     in_layers.update(
@@ -273,9 +272,9 @@ def build_multivariate_monotonic_structured_cpt_pc(
 
 def build_monotonic_structured_categorical_cpt_pc(
     return_ground_truth: bool = False,
-) -> Union[Circuit, Tuple[Circuit, Dict[str, Dict[Tuple[int, ...], float]], float]]:
+) -> Circuit | tuple[Circuit, dict[str, dict[tuple[int, ...], float]], float]:
     # The probabilities of Bernoulli layers
-    bernoulli_probs: Dict[Tuple[int, ...], np.ndarray] = {
+    bernoulli_probs: dict[tuple[int, ...], np.ndarray] = {
         (0,): np.array([[[0.5, 0.5]], [[0.4, 0.6]]]),
         (1,): np.array([[[0.2, 0.8]], [[0.3, 0.7]]]),
         (2,): np.array([[[0.3, 0.7]], [[0.1, 0.9]]]),
@@ -284,7 +283,7 @@ def build_monotonic_structured_categorical_cpt_pc(
     }
 
     # The parameters of dense weights
-    dense_weights: Dict[Tuple[int, ...], np.ndarray] = {
+    dense_weights: dict[tuple[int, ...], np.ndarray] = {
         (0, 2): np.array([[1.0, 1.0], [3.0, 2.0]]),
         (1, 3): np.array([[1.0, 2.0], [2.0, 1.0]]),
         (0, 1, 2, 3): np.array([[4.0, 3.0], [1.0, 1.0]]),
@@ -387,7 +386,7 @@ def build_monotonic_structured_categorical_cpt_pc(
     #   - (0, 1, 2, 3, 4): [69 * 4 + 21 * 2] = 318.0
 
     # The ground truth outputs we expect and the partition function
-    gt_outputs: Dict[str, Dict[Tuple[int, ...] : float]] = {
+    gt_outputs: dict[str, dict[tuple[int, ...] : float]] = {
         "evi": {(0, 0, 0, 0, 0): 0.7626, (1, 0, 1, 1, 0): 3.2266},
         "mar": {(1, 0, 1, 1, None): 16.845},
     }
@@ -397,15 +396,15 @@ def build_monotonic_structured_categorical_cpt_pc(
 
 def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
     return_ground_truth: bool = False,
-) -> Union[Circuit, Tuple[Circuit, Dict[str, Dict[Tuple[int, ...], float]], float]]:
+) -> Circuit | tuple[Circuit, dict[str, dict[tuple[int, ...], float]], float]:
     # The mean and standard deviations of Gaussian layers
-    gaussian_mean_stddev: Dict[Tuple[int, ...], Tuple[np.ndarray, np.ndarray]] = {
+    gaussian_mean_stddev: dict[tuple[int, ...], tuple[np.ndarray, np.ndarray]] = {
         (0,): (np.array([[0.0], [0.5]]), np.array([[1.0], [0.5]])),
         (1,): (np.array([[2.0], [-1.0]]), np.array([[1.5], [2.0]])),
     }
 
     # The parameters of dense weights
-    dense_weights: Dict[Tuple[int, ...], np.ndarray] = {
+    dense_weights: dict[tuple[int, ...], np.ndarray] = {
         (0,): np.array([[1.0, 1.0], [3.0, 2.0]]),
         (1,): np.array([[4.0, 3.0], [1.0, 2.0]]),
         (0, 1): np.array([[1.0, 2.0]]),
@@ -470,7 +469,7 @@ def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
     #   - (0, 1): [1 * 14 + 2 * 15] = [44]
 
     # The ground truth outputs we expect and the partition function
-    gt_outputs: Dict[str, Dict[Tuple[int, ...] : float]] = {
+    gt_outputs: dict[str, dict[tuple[int, ...] : float]] = {
         "evi": {(0.3, 1.2): 3.744904862456293},
         "mar": {(0.3, None): 23.528960785605985},
     }

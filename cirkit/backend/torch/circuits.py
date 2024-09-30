@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Iterator, List, Optional, Tuple, Union
+from collections.abc import Callable, Iterator
 
 import torch
 from torch import Tensor
@@ -19,12 +19,12 @@ from cirkit.utils.scope import Scope
 
 
 class LayerAddressBook(AddressBook):
-    def __init__(self, entries: List[AddressBookEntry]):
+    def __init__(self, entries: list[AddressBookEntry]):
         super().__init__(entries)
 
     def lookup(
-        self, module_outputs: List[Tensor], *, in_graph: Optional[Tensor] = None
-    ) -> Iterator[Tuple[Optional[TorchLayer], Tuple[Tensor, ...]]]:
+        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+    ) -> Iterator[tuple[TorchLayer | None, tuple[Tensor, ...]]]:
         # Loop through the entries and yield inputs
         for entry in self._entries:
             # Catch the case there are some inputs coming from other modules
@@ -51,13 +51,13 @@ class LayerAddressBook(AddressBook):
 
     @classmethod
     def from_index_info(
-        cls, fold_idx_info: FoldIndexInfo, *, incomings_fn: Callable[[TorchLayer], List[TorchLayer]]
+        cls, fold_idx_info: FoldIndexInfo, *, incomings_fn: Callable[[TorchLayer], list[TorchLayer]]
     ) -> "LayerAddressBook":
         # The address book entries being built
-        entries: List[AddressBookEntry] = []
+        entries: list[AddressBookEntry] = []
 
         # A useful dictionary mapping module ids to their number of folds
-        num_folds: Dict[int, int] = {}
+        num_folds: dict[int, int] = {}
 
         # Build the bookkeeping data structure by following the topological ordering
         for mid, m in enumerate(fold_idx_info.ordering):
@@ -91,12 +91,12 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self,
         scope: Scope,
         num_channels: int,
-        layers: List[TorchLayer],
-        in_layers: Dict[TorchLayer, List[TorchLayer]],
-        outputs: List[TorchLayer],
+        layers: list[TorchLayer],
+        in_layers: dict[TorchLayer, list[TorchLayer]],
+        outputs: list[TorchLayer],
         *,
         properties: StructuralProperties,
-        fold_idx_info: Optional[FoldIndexInfo] = None,
+        fold_idx_info: FoldIndexInfo | None = None,
     ) -> None:
         super().__init__(
             layers,
@@ -124,22 +124,22 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def properties(self) -> StructuralProperties:
         return self._properties
 
-    def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
+    def layer_inputs(self, l: TorchLayer) -> list[TorchLayer]:
         return self.node_inputs(l)
 
-    def layer_outputs(self, l: TorchLayer) -> List[TorchLayer]:
+    def layer_outputs(self, l: TorchLayer) -> list[TorchLayer]:
         return self.node_outputs(l)
 
     @property
-    def layers(self) -> List[TorchLayer]:
+    def layers(self) -> list[TorchLayer]:
         return self.nodes
 
     @property
-    def layers_inputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
+    def layers_inputs(self) -> dict[TorchLayer, list[TorchLayer]]:
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
+    def layers_outputs(self) -> dict[TorchLayer, list[TorchLayer]]:
         return self.nodes_outputs
 
     def reset_parameters(self) -> None:
@@ -148,7 +148,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             for p in l.params.values():
                 p.reset_parameters()
 
-    def _set_device(self, device: Union[str, torch.device, int]) -> None:
+    def _set_device(self, device: str | torch.device | int) -> None:
         for l in self.layers:
             for p in l.params.values():
                 p._set_device(device)

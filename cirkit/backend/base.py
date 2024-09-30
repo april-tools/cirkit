@@ -1,6 +1,7 @@
 import os
 from abc import ABC, abstractmethod
-from typing import IO, Any, Callable, Dict, Optional, Protocol, Type, TypeVar, Union
+from collections.abc import Callable
+from typing import IO, Any, Protocol, TypeVar
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import Initializer
@@ -9,9 +10,9 @@ from cirkit.symbolic.parameters import ParameterNode
 from cirkit.utils.algorithms import BiMap
 
 CompiledCircuit = TypeVar("CompiledCircuit")
-LayerCompilationSign = Type[Layer]
-ParameterCompilationSign = Type[ParameterNode]
-InitializerCompilationSign = Type[Initializer]
+LayerCompilationSign = type[Layer]
+ParameterCompilationSign = type[ParameterNode]
+InitializerCompilationSign = type[Initializer]
 
 
 class LayerCompilationFunc(Protocol):
@@ -60,18 +61,17 @@ class CompiledCircuitsMap:
 class CompilerRegistry:
     def __init__(
         self,
-        layer_rules: Optional[Dict[LayerCompilationSign, LayerCompilationFunc]] = None,
-        parameter_rules: Optional[Dict[ParameterCompilationSign, ParameterCompilationFunc]] = None,
-        initializer_rules: Optional[
-            Dict[InitializerCompilationSign, InitializerCompilationFunc]
-        ] = None,
+        layer_rules: dict[LayerCompilationSign, LayerCompilationFunc] | None = None,
+        parameter_rules: dict[ParameterCompilationSign, ParameterCompilationFunc] | None = None,
+        initializer_rules: None
+        | (dict[InitializerCompilationSign, InitializerCompilationFunc]) = None,
     ):
         self._layer_rules = {} if layer_rules is None else layer_rules
         self._parameter_rules = {} if parameter_rules is None else parameter_rules
         self._initializer_rules = {} if initializer_rules is None else initializer_rules
 
     @staticmethod
-    def _validate_rule_sign(func: Callable, sym_cls: Type) -> Optional[Type]:
+    def _validate_rule_sign(func: Callable, sym_cls: type) -> type | None:
         args = func.__annotations__
         if "return" not in args or "compiler" not in args or len(args) != 3:
             return None
@@ -84,19 +84,19 @@ class CompilerRegistry:
         return found_sym_cls
 
     def add_layer_rule(self, func: LayerCompilationFunc):
-        layer_cls: Optional[Type[Layer]] = self._validate_rule_sign(func, Layer)
+        layer_cls: type[Layer] | None = self._validate_rule_sign(func, Layer)
         if layer_cls is None:
             raise ValueError("The function is not a symbolic layer compilation rule")
         self._layer_rules[layer_cls] = func
 
     def add_parameter_rule(self, func: ParameterCompilationFunc):
-        param_cls: Optional[Type[ParameterNode]] = self._validate_rule_sign(func, ParameterNode)
+        param_cls: type[ParameterNode] | None = self._validate_rule_sign(func, ParameterNode)
         if param_cls is None:
             raise ValueError("The function is not a symbolic parameter compilation rule")
         self._parameter_rules[param_cls] = func
 
     def add_initializer_rule(self, func: InitializerCompilationFunc):
-        init_cls: Optional[Type[Initializer]] = self._validate_rule_sign(func, Initializer)
+        init_cls: type[Initializer] | None = self._validate_rule_sign(func, Initializer)
         if init_cls is None:
             raise ValueError("The function is not a symbolic initializer compilation rule")
         self._initializer_rules[init_cls] = func
@@ -186,14 +186,14 @@ class AbstractCompiler(ABC):
     @abstractmethod
     def save(
         self,
-        sym_filepath: Union[IO, os.PathLike, str],
-        compiled_filepath: Union[IO, os.PathLike, str],
+        sym_filepath: IO | os.PathLike | str,
+        compiled_filepath: IO | os.PathLike | str,
     ):
         ...
 
     @staticmethod
     @abstractmethod
     def load(
-        sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]
+        sym_filepath: IO | os.PathLike | str, tens_filepath: IO | os.PathLike | str
     ) -> "AbstractCompiler":
         ...

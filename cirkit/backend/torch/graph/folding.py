@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from collections.abc import Callable, Iterable
 
 import torch
 from torch import Tensor
@@ -17,22 +17,22 @@ def build_unfold_index_info(
     ordering: Iterable[TorchModule],
     *,
     outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
+    incomings_fn: Callable[[TorchModule], list[TorchModule]],
 ) -> FoldIndexInfo:
     # The topological ordering of modules
-    ordering: List[TorchModule] = list(ordering)
+    ordering: list[TorchModule] = list(ordering)
 
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
     # (ii) a 'slice_idx' (a natural number) within the output of the folded module,
     #      which recovers the output of the unfolded module.
-    fold_idx: Dict[AbstractTorchModule, Tuple[int, int]] = {}
+    fold_idx: dict[AbstractTorchModule, tuple[int, int]] = {}
 
     # A useful data structure mapping each module id to
     # a tensor of indices IDX of size (F, H, 2), where F is the number of modules in the fold,
     # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair (fold_id, slice_idx),
     # pointing to the folded module of id 'fold_id' and to the slice 'slice_idx' within that fold.
-    in_fold_idx: Dict[int, List[List[Tuple[int, int]]]] = {}
+    in_fold_idx: dict[int, list[list[tuple[int, int]]]] = {}
 
     # Build the fold index information data structure, by following the topological ordering
     cur_module_id = 0
@@ -42,7 +42,7 @@ def build_unfold_index_info(
                 f"Expected modules with fold dimension equal to one, found {m.num_folds}"
             )
         # Retrieve the input modules
-        in_modules: List[AbstractTorchModule] = incomings_fn(m)
+        in_modules: list[AbstractTorchModule] = incomings_fn(m)
         # Check if we are folding non-input modules
         in_modules_idx = [fold_idx[mi] for mi in in_modules] if in_modules else []
 
@@ -58,32 +58,32 @@ def build_unfold_index_info(
 
 
 def build_folded_graph(
-    ordering: Iterable[List[TorchModule]],
+    ordering: Iterable[list[TorchModule]],
     *,
     outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], List[TorchModule]],
-    fold_group_fn: Callable[[List[TorchModule]], TorchModule],
-) -> Tuple[
-    List[TorchModule],
-    Dict[TorchModule, List[TorchModule]],
-    List[TorchModule],
+    incomings_fn: Callable[[TorchModule], list[TorchModule]],
+    fold_group_fn: Callable[[list[TorchModule]], TorchModule],
+) -> tuple[
+    list[TorchModule],
+    dict[TorchModule, list[TorchModule]],
+    list[TorchModule],
     FoldIndexInfo,
 ]:
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
     # (ii) a 'slice_idx' (a natural number) within the output of the folded module,
     #      which recovers the output of the unfolded module.
-    fold_idx: Dict[AbstractTorchModule, Tuple[int, int]] = {}
+    fold_idx: dict[AbstractTorchModule, tuple[int, int]] = {}
 
     # A useful data structure mapping each folded module id to
     # a tensor of indices IDX of size (F, H, 2), where F is the number of modules in the fold,
     # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair (fold_id, slice_idx),
     # pointing to the folded module of id 'fold_id' and to the slice 'slice_idx' within that fold.
-    in_fold_idx: Dict[int, List[List[Tuple[int, int]]]] = {}
+    in_fold_idx: dict[int, list[list[tuple[int, int]]]] = {}
 
     # The list of folded modules and the inputs of each folded module
-    modules: List[AbstractTorchModule] = []
-    in_modules: Dict[AbstractTorchModule, List[AbstractTorchModule]] = {}
+    modules: list[AbstractTorchModule] = []
+    in_modules: dict[AbstractTorchModule, list[AbstractTorchModule]] = {}
 
     # Fold modules in each frontier, by firstly finding the module groups to fold
     # in each frontier, and then by stacking each group of modules into a folded module
@@ -97,16 +97,16 @@ def build_folded_graph(
             folded_module = fold_group_fn(group)
 
             # For each module in the group, retrieve the unfolded input modules
-            in_group_modules: List[List[AbstractTorchModule]] = [incomings_fn(m) for m in group]
+            in_group_modules: list[list[AbstractTorchModule]] = [incomings_fn(m) for m in group]
 
             # Set the input modules
             folded_in_modules = list(
-                set(modules[fold_idx[mi][0]] for msi in in_group_modules for mi in msi)
+                {modules[fold_idx[mi][0]] for msi in in_group_modules for mi in msi}
             )
             in_modules[folded_module] = folded_in_modules
 
             # Check if we are folding input modules
-            in_modules_idx: List[List[Tuple[int, int]]]
+            in_modules_idx: list[list[tuple[int, int]]]
             if in_group_modules[0]:
                 in_modules_idx = [[fold_idx[mi] for mi in msi] for msi in in_group_modules]
             else:
@@ -131,12 +131,12 @@ def build_folded_graph(
 
 
 def group_foldable_modules(
-    modules: List[TorchModule],
-) -> List[List[TorchModule]]:
+    modules: list[TorchModule],
+) -> list[list[TorchModule]]:
     # A dictionary mapping a module fold settings,
     # which uniquely identifies a group of modules that can be folded,
     # into a group of modules.
-    groups: Dict[tuple, List[TorchModule]] = defaultdict(list)
+    groups: dict[tuple, list[TorchModule]] = defaultdict(list)
 
     # For each module, either create a new group or insert it into an existing one
     for m in modules:
@@ -147,10 +147,10 @@ def group_foldable_modules(
 
 
 def build_address_book_stacked_entry(
-    module: Optional[TorchModule],
-    in_fold_idx: List[List[Tuple[int, int]]],
+    module: TorchModule | None,
+    in_fold_idx: list[list[tuple[int, int]]],
     *,
-    num_folds: Dict[int, int],
+    num_folds: dict[int, int],
     output: bool = False,
 ) -> AddressBookEntry:
     # Retrieve the unique fold indices that reference the module inputs
@@ -187,10 +187,10 @@ def build_address_book_stacked_entry(
 
 
 def build_address_book_entry(
-    module: Optional[TorchModule],
-    in_fold_idx: List[List[Tuple[int, int]]],
+    module: TorchModule | None,
+    in_fold_idx: list[list[tuple[int, int]]],
     *,
-    num_folds: Dict[int, int],
+    num_folds: dict[int, int],
 ) -> AddressBookEntry:
     # Transpose the index information, since we will build the
     # address book information for each operand independently
@@ -205,9 +205,9 @@ def build_address_book_entry(
         dict(zip(mids, itertools.accumulate([0] + [num_folds[mid] for mid in mids])))
         for mids in in_module_ids
     ]
-    cum_fold_idx_t: List[Optional[Tensor]] = []
+    cum_fold_idx_t: list[Tensor | None] = []
     for i, hi in enumerate(in_fold_idx):
-        cum_fold_i_idx: List[int] = [cum_module_ids[i][idx[0]] + idx[1] for idx in hi]
+        cum_fold_i_idx: list[int] = [cum_module_ids[i][idx[0]] + idx[1] for idx in hi]
         # The following checks whether using the fold index would yield the same tensor
         # If so, then avoid indexing at all
         module_id = hi[0][0]

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -125,7 +125,7 @@ def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMix
     )
 
 
-DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
+DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     LogPartitionLayer: compile_log_partition_layer,
     CategoricalLayer: compile_categorical_layer,
     GaussianLayer: compile_gaussian_layer,

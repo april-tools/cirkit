@@ -1,6 +1,5 @@
 import itertools
 from collections import Counter
-from typing import Dict, Tuple
 
 import numpy as np
 import pytest
@@ -32,7 +31,7 @@ def check_discrete_ground_truth(
     tc: TorchCircuit,
     int_tc: TorchConstantCircuit,
     semiring: Semiring,
-    gt_outputs: Dict[Tuple[int, ...], float],
+    gt_outputs: dict[tuple[int, ...], float],
     gt_partition_func: float,
 ):
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables))).unsqueeze(
@@ -61,7 +60,7 @@ def check_continuous_ground_truth(
     tc: TorchCircuit,
     int_tc: TorchConstantCircuit,
     semiring: Semiring,
-    gt_outputs: Dict[Tuple[int, ...], float],
+    gt_outputs: dict[tuple[int, ...], float],
     gt_partition_func: float,
 ):
     for x, y in gt_outputs.items():
@@ -189,7 +188,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     )
 
     # check all input layers
-    input_scopes = set([(i,) for i in range(9)])
+    input_scopes = {(i,) for i in range(9)}
     scopes = set()
     for n1, n2 in zip(nodes_sc[:9], nodes_c[:9]):
         assert isinstance(n1, CategoricalLayer)

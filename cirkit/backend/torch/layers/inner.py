@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from torch import Tensor
 
@@ -20,7 +20,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -35,7 +35,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         )
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return self.num_input_units, self.num_output_units, self.arity
 
 
@@ -57,7 +57,7 @@ class TorchHadamardLayer(TorchProductLayer):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -99,7 +99,7 @@ class TorchKroneckerLayer(TorchProductLayer):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -144,7 +144,7 @@ class TorchDenseLayer(TorchSumLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -162,7 +162,7 @@ class TorchDenseLayer(TorchSumLayer):
         self.weight = weight
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -170,7 +170,7 @@ class TorchDenseLayer(TorchSumLayer):
         }
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -203,7 +203,7 @@ class TorchMixingLayer(TorchSumLayer):
         arity: int = 2,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -225,7 +225,7 @@ class TorchMixingLayer(TorchSumLayer):
         self.weight = weight
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
     def forward(self, x: Tensor) -> Tensor:

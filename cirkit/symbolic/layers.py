@@ -1,6 +1,6 @@
 from abc import ABC
 from enum import IntEnum, auto
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
@@ -59,7 +59,7 @@ class Layer(ABC):
         self.arity = arity
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         """Retrieves the configuration of the layer, i.e., a dictionary mapping hyperparameters
         of the layer to their values. The hyperparameter names must match the argument names in
         the ```__init__``` method.
@@ -75,7 +75,7 @@ class Layer(ABC):
         }
 
     @property
-    def params(self) -> Dict[str, Parameter]:
+    def params(self) -> dict[str, Parameter]:
         """Retrieve the symbolic parameters of the layer, i.e., a dictionary mapping the names of
         the symbolic parameters to the actual symbolic parameter instance. The parameter names must
         match the argument names in the```__init__``` method.
@@ -119,7 +119,7 @@ class InputLayer(Layer):
         return self.arity
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
@@ -139,10 +139,10 @@ class CategoricalLayer(InputLayer):
         num_channels: int,
         num_categories: int,
         *,
-        logits: Optional[Parameter] = None,
-        probs: Optional[Parameter] = None,
-        logits_factory: Optional[ParameterFactory] = None,
-        probs_factory: Optional[ParameterFactory] = None,
+        logits: Parameter | None = None,
+        probs: Parameter | None = None,
+        logits_factory: ParameterFactory | None = None,
+        probs_factory: ParameterFactory | None = None,
     ):
         """Initializes a Categorical layer.
 
@@ -197,7 +197,7 @@ class CategoricalLayer(InputLayer):
         self.logits = logits
 
     @property
-    def _probs_logits_shape(self) -> Tuple[int, ...]:
+    def _probs_logits_shape(self) -> tuple[int, ...]:
         return self.num_output_units, self.num_channels, self.num_categories
 
     @property
@@ -207,7 +207,7 @@ class CategoricalLayer(InputLayer):
         return config
 
     @property
-    def params(self) -> Dict[str, Parameter]:
+    def params(self) -> dict[str, Parameter]:
         if self.logits is None:
             return {"probs": self.probs}
         return {"logits": self.logits}
@@ -224,11 +224,11 @@ class GaussianLayer(InputLayer):
         num_output_units: int,
         num_channels: int,
         *,
-        mean: Optional[Parameter] = None,
-        stddev: Optional[Parameter] = None,
-        log_partition: Optional[Parameter] = None,
-        mean_factory: Optional[ParameterFactory] = None,
-        stddev_factory: Optional[ParameterFactory] = None,
+        mean: Parameter | None = None,
+        stddev: Parameter | None = None,
+        log_partition: Parameter | None = None,
+        mean_factory: ParameterFactory | None = None,
+        stddev_factory: ParameterFactory | None = None,
     ):
         """Initializes a Gaussian layer.
 
@@ -286,15 +286,15 @@ class GaussianLayer(InputLayer):
         self.log_partition = log_partition
 
     @property
-    def _mean_stddev_shape(self) -> Tuple[int, ...]:
+    def _mean_stddev_shape(self) -> tuple[int, ...]:
         return self.num_output_units, self.num_channels
 
     @property
-    def _log_partition_shape(self) -> Tuple[int, ...]:
+    def _log_partition_shape(self) -> tuple[int, ...]:
         return self.num_output_units, self.num_channels
 
     @property
-    def params(self) -> Dict[str, Parameter]:
+    def params(self) -> dict[str, Parameter]:
         params = {"mean": self.mean, "stddev": self.stddev}
         if self.log_partition is not None:
             params.update(log_partition=self.log_partition)
@@ -309,8 +309,8 @@ class PolynomialLayer(InputLayer):
         num_channels: int,
         *,
         degree: int,
-        coeff: Optional[Parameter] = None,
-        coeff_factory: Optional[ParameterFactory] = None,
+        coeff: Parameter | None = None,
+        coeff_factory: ParameterFactory | None = None,
     ):
         if len(scope) != 1:
             raise ValueError("The Polynomial layer encodes a univariate distribution")
@@ -330,7 +330,7 @@ class PolynomialLayer(InputLayer):
         self.coeff = coeff
 
     @property
-    def _coeff_shape(self) -> Tuple[int, ...]:
+    def _coeff_shape(self) -> tuple[int, ...]:
         return self.num_output_units, self.degree + 1
 
     @property
@@ -338,7 +338,7 @@ class PolynomialLayer(InputLayer):
         return {**super().config, "degree": self.degree}
 
     @property
-    def params(self) -> Dict[str, Parameter]:
+    def params(self) -> dict[str, Parameter]:
         return {"coeff": self.coeff}
 
 
@@ -360,11 +360,11 @@ class LogPartitionLayer(InputLayer):
         self.value = value
 
     @property
-    def _value_shape(self) -> Tuple[int, ...]:
+    def _value_shape(self) -> tuple[int, ...]:
         return (self.num_output_units,)
 
     @property
-    def params(self) -> Dict[str, Parameter]:
+    def params(self) -> dict[str, Parameter]:
         params = super().params
         params.update(value=self.value)
         return params
@@ -390,7 +390,7 @@ class ProductLayer(Layer, ABC):
         super().__init__(scope, num_input_units, num_output_units, arity)
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "scope": self.scope,
             "num_input_units": self.num_input_units,
@@ -457,8 +457,8 @@ class DenseLayer(SumLayer):
         scope: Scope,
         num_input_units: int,
         num_output_units: int,
-        weight: Optional[Parameter] = None,
-        weight_factory: Optional[ParameterFactory] = None,
+        weight: Parameter | None = None,
+        weight_factory: ParameterFactory | None = None,
     ):
         """Initializes a dense layer.
 
@@ -486,11 +486,11 @@ class DenseLayer(SumLayer):
         self.weight = weight
 
     @property
-    def _weight_shape(self) -> Tuple[int, ...]:
+    def _weight_shape(self) -> tuple[int, ...]:
         return self.num_output_units, self.num_input_units
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "scope": self.scope,
             "num_input_units": self.num_input_units,
@@ -498,7 +498,7 @@ class DenseLayer(SumLayer):
         }
 
     @property
-    def params(self) -> Dict[str, Parameter]:
+    def params(self) -> dict[str, Parameter]:
         return {"weight": self.weight}
 
 
@@ -512,8 +512,8 @@ class MixingLayer(SumLayer):
         scope: Scope,
         num_units: int,
         arity: int,
-        weight: Optional[Parameter] = None,
-        weight_factory: Optional[ParameterFactory] = None,
+        weight: Parameter | None = None,
+        weight_factory: ParameterFactory | None = None,
     ):
         """Initializes a mixing layer.
 
@@ -541,13 +541,13 @@ class MixingLayer(SumLayer):
         self.weight = weight
 
     @property
-    def _weight_shape(self) -> Tuple[int, ...]:
+    def _weight_shape(self) -> tuple[int, ...]:
         return self.num_input_units, self.arity
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {"scope": self.scope, "num_units": self.num_input_units, "arity": self.arity}
 
     @property
-    def params(self) -> Dict[str, Parameter]:
+    def params(self) -> dict[str, Parameter]:
         return {"weight": self.weight}

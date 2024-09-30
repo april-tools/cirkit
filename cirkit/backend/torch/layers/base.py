@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, Dict, Optional
+from typing import Any
 
 from torch import Tensor
 
@@ -19,7 +19,7 @@ class TorchLayer(AbstractTorchModule, ABC):
         *,
         arity: int = 1,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -42,7 +42,7 @@ class TorchLayer(AbstractTorchModule, ABC):
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -51,7 +51,7 @@ class TorchLayer(AbstractTorchModule, ABC):
         }
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return {}
 
     # Expected to be fixed, so use cached property to avoid recalculation.
