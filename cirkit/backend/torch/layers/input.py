@@ -453,7 +453,6 @@ class TorchPolynomialLayer(TorchInputLayer):
             num_channels (int): The number of channels. Defaults to 1.
             degree (int): The degree of polynomial.
             coeff (AbstractTorchParameter): The reparameterization for layer parameters.
-            num_folds (int): The number of channels. Defaults to 1.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
