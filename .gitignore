@@ -168,3 +168,11 @@ cython_debug/
 
 # Notebooks data
 notebooks/datasets/
+datasets/MNIST/raw/t10k-images-idx3-ubyte
+datasets/MNIST/raw/t10k-images-idx3-ubyte.gz
+datasets/MNIST/raw/t10k-labels-idx1-ubyte
+datasets/MNIST/raw/t10k-labels-idx1-ubyte.gz
+datasets/MNIST/raw/train-images-idx3-ubyte
+datasets/MNIST/raw/train-images-idx3-ubyte.gz
+datasets/MNIST/raw/train-labels-idx1-ubyte
+datasets/MNIST/raw/train-labels-idx1-ubyte.gz

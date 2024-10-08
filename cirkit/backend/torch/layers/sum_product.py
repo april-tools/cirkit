@@ -1,4 +1,3 @@
-from cirkit.backend.torch import Tensor
 import torch
 import einops as E
 
@@ -152,10 +151,12 @@ class TorchCPLayer(TorchSumProductLayer):
         negative = negative.any()
 
         unnormalised = self.weight().sum(-1)
-        unnormalised = unnormalised < 1 - 1e-6 or unnormalised > 1 + 1e-6
+        unnormalised = torch.logical_or(unnormalised < 1 - 1e-6,  unnormalised > 1 + 1e-6)
         unnormalised = unnormalised.any()
 
-        if negative or unnormalised:
+        if negative:
+            raise ValueError("Sampling only works with positive weights!")
+        if unnormalised:
             raise ValueError("Sampling only works with a normalised parametrisation!")
 
         c = x.shape[2]
