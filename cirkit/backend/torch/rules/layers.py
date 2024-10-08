@@ -8,9 +8,10 @@ from cirkit.backend.torch.layers.inner import (
     TorchKroneckerLayer,
     TorchMixingLayer,
 )
-from cirkit.backend.torch.layers.input.ef import TorchGaussianLayer
+from cirkit.backend.torch.layers.input.ef import TorchGaussianLayer, TorchBinomialLayer
 from cirkit.symbolic.layers import (
     CategoricalLayer,
+    BinomialLayer,
     DenseLayer,
     GaussianLayer,
     HadamardLayer,
@@ -50,6 +51,24 @@ def compile_categorical_layer(
         sl.num_output_units,
         num_channels=sl.num_channels,
         num_categories=sl.num_categories,
+        probs=probs,
+        logits=logits,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> TorchBinomialLayer:
+    if sl.logits is None:
+        probs = compiler.compile_parameter(sl.probs)
+        logits = None
+    else:
+        probs = None
+        logits = compiler.compile_parameter(sl.logits)
+    return TorchBinomialLayer(
+        sl.scope,
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        total_count=sl.total_count,
         probs=probs,
         logits=logits,
         semiring=compiler.semiring,

@@ -171,6 +171,104 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         samples = distribution.sample((num_samples,))  # (N, F, D = 1, K, C)
         samples = E.rearrange(samples[..., 0, :, :], "n f k c -> f c k n")  # (F, C, K, N)
         return samples
+    
+
+class TorchBinomialLayer(TorchExpFamilyLayer):
+    """The Binomial distribution layer.
+
+    This is fully factorized down to univariate Binomial distributions.
+    """
+
+    # DISABLE: It's designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        *,
+        num_channels: int = 1,
+        num_folds: int = 1,
+        total_count: int = 1,
+        probs: Optional[TorchParameter] = None,
+        logits: Optional[TorchParameter] = None,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        """Init class.
+
+        Args:
+            scope (Scope): The scope the input layer is defined on.
+            num_output_units (int): The number of output units.
+            num_channels (int): The number of channels.
+            num_folds (int): The number of channels. Defaults to 1.
+            total_count (int): The number of trails. Defaults to 1.
+            logits (TorchParameter): The reparameterization for layer parameters.
+        """
+        if total_count < 0:
+            raise ValueError("The number of trials must be non-negative")
+        super().__init__(
+            scope,
+            num_output_units,
+            num_channels=num_channels,
+            num_folds=num_folds,
+            semiring=semiring,
+        )
+        self.num_folds = num_folds
+        self.total_count = total_count
+        if not ((logits is None) ^ (probs is None)):
+            raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
+        if logits is None:
+            assert probs is not None
+            if not self._valid_parameter_shape(probs):
+                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
+        else:
+            if not self._valid_parameter_shape(logits):
+                raise ValueError(
+                    f"The number of folds and shape of 'logits' must match the layer's"
+                )
+        self.probs = probs
+        self.logits = logits
+
+    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == (
+            len(self.scope),
+            self.num_output_units,
+            self.num_channels,
+        )
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        config = super().config
+        config.update(total_count=self.total_count)
+        return config
+
+    @property
+    def params(self) -> Dict[str, TorchParameter]:
+        if self.logits is None:
+            return dict(probs=self.probs)
+        return dict(logits=self.logits)
+
+    def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
+        if x.is_floating_point():
+            x = x.long()  # The input to Categorical should be discrete
+        if self.logits is not None:
+            dist = distributions.Binomial(self.total_count, logits=self.logits())
+        else:
+            dist = distributions.Binomial(self.total_count, probs=self.probs())
+        x = dist.log_prob(x.transpose(1, 2)).sum(-1)
+        return x
+
+    def sample(self, num_samples: int, x: Optional[Tensor] = None) -> Tensor:
+        if len(self.scope) > 1:
+            raise NotImplementedError("Multivariate Binomial sampling is not implemented yet!")
+
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        distribution = distributions.Binomial(self.total_count, logits=logits)
+
+        samples = distribution.sample((num_samples,))  # (N, F, D = 1, K, C)
+        samples = E.rearrange(samples[..., 0, :, :], "n f k c -> f c k n")  # (F, C, K, N)
+        return samples
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
