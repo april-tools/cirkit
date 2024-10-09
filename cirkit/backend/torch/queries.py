@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from cirkit.backend.torch.circuits import TorchCircuit
-from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer, TorchSumLayer
+from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
 from cirkit.utils.scope import Scope
 
 

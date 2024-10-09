@@ -1,6 +1,8 @@
 from abc import ABC
 from typing import Any
 
+import einops as E
+import torch
 from torch import Tensor
 
 from cirkit.backend.torch.layers import TorchInnerLayer, TorchSumLayer
@@ -132,6 +134,33 @@ class TorchCPTLayer(TorchSumProductLayer):
         return self.semiring.einsum(
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
+
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        # x: (F, H, C, K, num_samples, D)
+        x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
+
+        weight = self.weight()
+        negative = torch.any(weight < 0.0)
+        if negative:
+            raise ValueError("Sampling only works with positive weights")
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        if not normalized:
+            raise ValueError("Sampling only works with a normalized parametrization")
+
+        c = x.shape[2]
+        d = x.shape[-1]
+        num_samples = x.shape[-2]
+
+        # mixing_distribution: (F, O, K)
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
+
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
+        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
+
+        x = torch.gather(x, dim=-3, index=mixing_indices)
+        x = x[:, 0]
+        return x, mixing_samples
 
 
 class TorchTensorDotLayer(TorchSumLayer):
