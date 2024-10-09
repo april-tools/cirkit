@@ -2,7 +2,7 @@ from abc import ABC
 from enum import IntEnum, auto
 from typing import Any, cast
 
-from cirkit.symbolic.initializers import NormalInitializer
+from cirkit.symbolic.initializers import Initializer, NormalInitializer
 from cirkit.symbolic.parameters import (
     Parameter,
     ParameterFactory,
@@ -85,6 +85,37 @@ class Layer(ABC):
                 parameter instance.
         """
         return {}
+
+    # TODO: apply to other layers
+    @staticmethod
+    def _make_param(
+        param: Parameter | None,
+        param_factory: ParameterFactory | None,
+        shape: tuple[int, ...],
+        default_factory: ParameterFactory = lambda shape: Parameter.from_leaf(
+            TensorParameter(*shape, initializer=NormalInitializer())
+        ),
+    ) -> Parameter:
+        """Make a parameter from the optional parameter object or factory or default.
+
+        Args:
+            param (Optional[Parameter]): The optional parameter provided to a layer.
+            param_factory (Optional[ParameterFactory]): The optional parameter factory provided to
+                a layer.
+            shape (Tuple[int, ...]): The shape of the parameter.
+            default_factory (ParameterFactory, optional): The factory to use when falling back to
+                default. Defaults to a new leaf TensorParameter with NormalInitializer.
+
+        Returns:
+            Parameter: The parameter.
+        """
+        if param is not None:
+            return param
+
+        if param_factory is not None:
+            return param_factory(shape)
+
+        return default_factory(shape)
 
 
 class InputLayer(Layer):
@@ -380,13 +411,7 @@ class PolynomialLayer(InputLayer):
             raise ValueError("The Polynomial layer encodes a univariate distribution")
         super().__init__(scope, num_output_units, num_channels)
         self.degree = degree
-        if coeff is None:
-            if coeff_factory is None:
-                coeff = Parameter.from_leaf(
-                    TensorParameter(*self._coeff_shape, initializer=NormalInitializer())
-                )
-            else:
-                coeff = coeff_factory(self._coeff_shape)
+        coeff = self._make_param(coeff, coeff_factory, self._coeff_shape)
         if coeff.shape != self._coeff_shape:
             raise ValueError(f"Expected parameter shape {self._coeff_shape}, found {coeff.shape}")
         self.coeff = coeff
@@ -396,7 +421,8 @@ class PolynomialLayer(InputLayer):
         return self.num_output_units, self.degree + 1
 
     @property
-    def config(self) -> dict:
+    def config(self) -> dict[str, Any]:
+        # FUTURE: use | operator in 3.9
         return {**super().config, "degree": self.degree}
 
     @property

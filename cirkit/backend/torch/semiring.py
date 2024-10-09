@@ -2,7 +2,7 @@ import functools
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from typing import ClassVar, TypeVar, cast
-from typing_extensions import TypeVarTuple, Unpack, final
+from typing_extensions import TypeVarTuple, Unpack, final  # FUTURE: in typing from 3.11
 
 import torch
 from torch import Tensor
