@@ -1,39 +1,38 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, cast
+
+import torch
 
 from cirkit.backend.compiler import LayerCompilationFunc, LayerCompilationSign
-from cirkit.backend.torch.layers import TorchCategoricalLayer, TorchLogPartitionLayer
 from cirkit.backend.torch.layers.inner import (
     TorchDenseLayer,
     TorchHadamardLayer,
     TorchKroneckerLayer,
     TorchMixingLayer,
 )
-from cirkit.backend.torch.layers.input.ef import TorchGaussianLayer
+from cirkit.backend.torch.layers.input import (
+    TorchBinomialLayer,
+    TorchCategoricalLayer,
+    TorchEvidenceLayer,
+    TorchGaussianLayer,
+    TorchInputLayer,
+    TorchLogPartitionLayer,
+    TorchPolynomialLayer,
+)
 from cirkit.symbolic.layers import (
+    BinomialLayer,
     CategoricalLayer,
     DenseLayer,
+    EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
     LogPartitionLayer,
     MixingLayer,
+    PolynomialLayer,
 )
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
-
-
-def compile_log_partition_layer(
-    compiler: "TorchCompiler", sl: LogPartitionLayer
-) -> TorchLogPartitionLayer:
-    value = compiler.compile_parameter(sl.value)
-    return TorchLogPartitionLayer(
-        sl.scope,
-        sl.num_output_units,
-        num_channels=sl.num_channels,
-        value=value,
-        semiring=compiler.semiring,
-    )
 
 
 def compile_categorical_layer(
@@ -46,10 +45,28 @@ def compile_categorical_layer(
         probs = None
         logits = compiler.compile_parameter(sl.logits)
     return TorchCategoricalLayer(
-        sl.scope,
+        torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
         num_channels=sl.num_channels,
         num_categories=sl.num_categories,
+        probs=probs,
+        logits=logits,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> TorchBinomialLayer:
+    if sl.logits is None:
+        probs = compiler.compile_parameter(sl.probs)
+        logits = None
+    else:
+        probs = None
+        logits = compiler.compile_parameter(sl.logits)
+    return TorchBinomialLayer(
+        torch.tensor(tuple(sl.scope)),
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        total_count=sl.total_count,
         probs=probs,
         logits=logits,
         semiring=compiler.semiring,
@@ -64,12 +81,26 @@ def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> Torc
     else:
         log_partition = None
     return TorchGaussianLayer(
-        sl.scope,
+        torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
         num_channels=sl.num_channels,
         mean=mean,
         stddev=stddev,
         log_partition=log_partition,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_polynomial_layer(
+    compiler: "TorchCompiler", sl: PolynomialLayer
+) -> TorchPolynomialLayer:
+    coeff = compiler.compile_parameter(sl.coeff)
+    return TorchPolynomialLayer(
+        torch.tensor(tuple(sl.scope)),
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        degree=sl.degree,
+        coeff=coeff,
         semiring=compiler.semiring,
     )
 
@@ -104,12 +135,34 @@ def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMix
     )
 
 
-DEFAULT_LAYER_COMPILATION_RULES: Dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
-    LogPartitionLayer: compile_log_partition_layer,
+def compile_log_partition_layer(
+    compiler: "TorchCompiler", sl: LogPartitionLayer
+) -> TorchLogPartitionLayer:
+    value = compiler.compile_parameter(sl.value)
+    return TorchLogPartitionLayer(
+        sl.num_output_units,
+        value=value,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> TorchEvidenceLayer:
+    layer = compiler.compile_layer(sl.layer)
+    observation = compiler.compile_parameter(sl.observation)
+    return TorchEvidenceLayer(
+        cast(TorchInputLayer, layer), observation=observation, semiring=compiler.semiring
+    )
+
+
+DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     CategoricalLayer: compile_categorical_layer,
+    BinomialLayer: compile_binomial_layer,
     GaussianLayer: compile_gaussian_layer,
+    PolynomialLayer: compile_polynomial_layer,
     HadamardLayer: compile_hadamard_layer,
     KroneckerLayer: compile_kronecker_layer,
     DenseLayer: compile_dense_layer,
     MixingLayer: compile_mixing_layer,
+    LogPartitionLayer: compile_log_partition_layer,
+    EvidenceLayer: compile_evidence_layer,
 }

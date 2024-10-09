@@ -1,25 +1,16 @@
 import functools
 from abc import ABC, abstractmethod
-from typing import (
-    Callable,
-    ClassVar,
-    Dict,
-    Iterable,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-)
+from collections.abc import Callable, Iterable, Sequence
+from typing import ClassVar, TypeVar, cast
 from typing_extensions import TypeVarTuple, Unpack, final
 
 import torch
 from torch import Tensor
 
+from cirkit.backend.torch.utils import csafelog
+
 Ts = TypeVarTuple("Ts")
-Semiring = TypeVar("Semiring", bound=Type["SemiringImpl"])
+SemiringT = TypeVar("SemiringT", bound=type["SemiringImpl"])
 
 
 class SemiringImpl(ABC):
@@ -32,16 +23,16 @@ class SemiringImpl(ABC):
     """
 
     # A registry from semiring string identifiers to semiring class implementations
-    _registry: ClassVar[Dict[str, Type["SemiringImpl"]]] = {}
+    _registry: ClassVar[dict[str, type["SemiringImpl"]]] = {}
 
     # A registry of morphisms between semiring class implementations
     _registry_morphisms: ClassVar[
-        Dict[Tuple[Type["SemiringImpl"], Type["SemiringImpl"]], Callable[[Tensor], Tensor]]
+        dict[tuple[type["SemiringImpl"], type["SemiringImpl"]], Callable[[Tensor], Tensor]]
     ] = {}
 
     @final
     @staticmethod
-    def register(name: str) -> Callable[[Semiring], Semiring]:
+    def register(name: str) -> Callable[[SemiringT], SemiringT]:
         """Register a concrete semiring implementation by its name.
 
         Args:
@@ -72,7 +63,7 @@ class SemiringImpl(ABC):
     @final
     @classmethod
     def register_map_from(
-        cls, other: Semiring
+        cls, other: SemiringT
     ) -> Callable[[Callable[[Tensor], Tensor]], Callable[[Tensor], Tensor]]:
         """Register a concrete semiring morphism implementation.
 
@@ -109,7 +100,7 @@ class SemiringImpl(ABC):
 
     @final
     @staticmethod
-    def from_name(name: str) -> Semiring:
+    def from_name(name: str) -> SemiringT:
         """Get a semiring by its registered name.
 
         Args:
@@ -126,7 +117,7 @@ class SemiringImpl(ABC):
 
     @final
     @classmethod
-    def map_from(cls, x: Tensor, semiring: Semiring) -> Tensor:
+    def map_from(cls, x: Tensor, semiring: SemiringT) -> Tensor:
         """Map a tensor from the given semiring to `this` semiring.
 
         Args:
@@ -138,7 +129,7 @@ class SemiringImpl(ABC):
         """
         if cls == semiring:
             return x
-        func: Optional[Callable[[Tensor], Tensor]] = SemiringImpl._registry_morphisms.get(
+        func: Callable[[Tensor], Tensor] | None = SemiringImpl._registry_morphisms.get(
             (semiring, cls), None
         )
         if func is None:
@@ -164,8 +155,8 @@ class SemiringImpl(ABC):
         cls,
         equation: str,
         *,
-        inputs: Tuple[Tensor, ...],
-        operands: Tuple[Tensor, ...],
+        inputs: tuple[Tensor, ...],
+        operands: tuple[Tensor, ...],
         dim: int,
         keepdim: bool,
     ) -> Tensor:
@@ -193,9 +184,7 @@ class SemiringImpl(ABC):
 
     @classmethod
     @abstractmethod
-    def sum(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
-    ) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         """
 
         Args:
@@ -222,7 +211,7 @@ class SemiringImpl(ABC):
     @classmethod
     @abstractmethod
     def prod(
-        cls, x: Tensor, /, *, dim: Optional[Union[int, Sequence[int]]] = None, keepdim: bool = False
+        cls, x: Tensor, /, *, dim: int | Sequence[int] | None = None, keepdim: bool = False
     ) -> Tensor:
         """Do the product within a tensor on given dim(s).
 
@@ -285,6 +274,9 @@ class SemiringImpl(ABC):
         """
 
 
+Semiring = type[SemiringImpl]
+
+
 @SemiringImpl.register("sum-product")
 @final  # type: ignore[misc]
 class SumProductSemiring(SemiringImpl):
@@ -302,10 +294,13 @@ class SumProductSemiring(SemiringImpl):
         """
         if x.is_floating_point():
             return x
+        if not x.is_complex():
+            default_float_dtype = torch.get_default_dtype()
+            return x.to(default_float_dtype)
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
-    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -313,7 +308,7 @@ class SumProductSemiring(SemiringImpl):
         raise functools.reduce(torch.add, xs)
 
     @classmethod
-    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         # prod only accepts one dim and cannot be None.
         dim = dim if dim is not None else range(x.ndim)
         return torch.prod(x, dim=dim, keepdim=keepdim)
@@ -342,10 +337,13 @@ class LSESumSemiring(SemiringImpl):
     def cast(cls, x: Tensor) -> Tensor:
         if x.is_floating_point():
             return x
+        if not x.is_complex():
+            default_float_dtype = torch.get_default_dtype()
+            return x.to(default_float_dtype)
         raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
 
     @classmethod
-    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -353,7 +351,7 @@ class LSESumSemiring(SemiringImpl):
         return functools.reduce(torch.logaddexp, xs)
 
     @classmethod
-    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         dim = tuple(dim) if isinstance(dim, Sequence) else dim  # dim must be concrete type for sum.
         return x.sum(dim=dim, keepdim=keepdim)
 
@@ -378,7 +376,7 @@ class LSESumSemiring(SemiringImpl):
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
         # CAST: Expected Ts but got tuple (actually list) of Tensor.
-        func_exp_xs = func(*cast(Tuple[Unpack[Ts]], exp_xs))
+        func_exp_xs = func(*cast(tuple[Unpack[Ts]], exp_xs))
 
         # TODO: verify the behavior of reduce under torch.compile
         reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
@@ -396,16 +394,13 @@ class ComplexLSESumSemiring(SemiringImpl):
     def cast(cls, x: Tensor) -> Tensor:
         if x.is_complex():
             return x
-        if x.dtype == torch.float16:
-            return x.to(torch.complex32)
-        if x.dtype == torch.float32:
-            return x.to(torch.complex64)
-        if x.dtype == torch.float64:
-            return x.to(torch.complex128)
-        raise ValueError(f"Cannot cast a tensor of type '{x.dtype}' to the '{cls.__name__}'")
+        if x.is_floating_point():
+            return x.to(x.dtype.to_complex())
+        default_float_dtype = torch.get_default_dtype()
+        return x.to(default_float_dtype.to_complex())
 
     @classmethod
-    def sum(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -413,7 +408,7 @@ class ComplexLSESumSemiring(SemiringImpl):
         return functools.reduce(torch.logaddexp, xs)
 
     @classmethod
-    def prod(cls, x: Tensor, /, *, dim: Optional[int] = None, keepdim: bool = False) -> Tensor:
+    def prod(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
         return x.sum(dim=dim, keepdim=keepdim)
 
     @classmethod
@@ -437,38 +432,26 @@ class ComplexLSESumSemiring(SemiringImpl):
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
         # CAST: Expected Ts but got tuple (actually list) of Tensor.
-        func_exp_xs = func(*cast(Tuple[Unpack[Ts]], exp_xs))
+        func_exp_xs = func(*cast(tuple[Unpack[Ts]], exp_xs))
 
         # TODO: verify the behavior of reduce under torch.compile
         reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
         if not keepdim:
             reduced_max_xs = reduced_max_xs.squeeze(dim)  # To match shape of func_exp_x.
 
-        # Compute log(x) safely where x is a complex tensor.
+        # Compute log(x) and its gradients safely where x is a complex tensor.
+        #
         # The problem is that if x = 0 + 0j, then the complex gradient of log(x) yields NaNs.
         # Note that for real non-monotonic circuits this problem cannot be avoided by simply
         # clipping the parameters of e.g., dense layers. In fact, even if we clipped the parameters
-        # to be sufficiently far from zero, cancellations would still arise from negations, which
-        # in turn might result in underflows. This has been observed in float32 for squared
-        # non-monotonic PCs with real parameters. To solve this issue, here we clamp the real
-        # part to be at least the tiny value of the default float dtype precision, in absolute.
-        # Note that we do not need to clamp also the imaginary parts, since the complex gradients of
-        # log(v + 0j) are 'well-behaved' for every non-zero real value 'v'.
-        # Furthermore, torch.compile is used to hopefully obtain a faster kernel.
-        # NOTE: to reproduce the bug, place the following assertion in the above code.
-        #       This checks whether the real output of the function in the 'apply_reduce' is not 0.0.
-        # assert not torch.any(torch.isclose(func_exp_xs.real.sign(), torch.tensor(0.0, device=func_exp_xs.device)))
-        ComplexLSESumSemiring._double_zero_clamp_(func_exp_xs.real)
-        return torch.log(func_exp_xs) + reduced_max_xs
-
-    @staticmethod
-    @torch.no_grad()
-    @torch.compile()
-    def _double_zero_clamp_(x: Tensor) -> None:
-        eps = torch.finfo(torch.get_default_dtype()).tiny
-        close_zero_mask = (x > -eps) & (x < eps)
-        clamped_x = eps * (1.0 - 2.0 * torch.signbit(x))
-        torch.where(close_zero_mask, clamped_x, x, out=x)
+        # to be sufficiently far from zero here, cancellations would still arise from negations, which
+        # in turn might result in under-flows. This has been observed in float32 for squared
+        # non-monotonic PCs with real parameters.
+        #
+        # To solve this issue, here we use a 'safe' version of the complex logarithm whose gradients
+        # are replaced with zero if NaN and to the largest/lowest representable values if +inf/-inf.
+        #
+        return csafelog(func_exp_xs) + reduced_max_xs
 
 
 @SumProductSemiring.register_map_from(LSESumSemiring)
@@ -501,7 +484,7 @@ def _(x: Tensor) -> Tensor:
 
 @ComplexLSESumSemiring.register_map_from(SumProductSemiring)
 def _(x: Tensor) -> Tensor:
-    return torch.log(ComplexLSESumSemiring.cast(x))
+    return csafelog(ComplexLSESumSemiring.cast(x))
 
 
 @ComplexLSESumSemiring.register_map_from(LSESumSemiring)

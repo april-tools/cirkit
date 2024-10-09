@@ -1,6 +1,5 @@
-import os
 from abc import ABC, abstractmethod
-from typing import IO, Any, Protocol, Type, TypeVar, Union, cast
+from typing import Any, Protocol, TypeVar, cast
 
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.symbolic.circuit import Circuit
@@ -34,9 +33,9 @@ class CompiledCircuitsMap:
         self._bimap.add(sc, cc)
 
 
-LayerCompilationSign = Type[Layer]
-ParameterCompilationSign = Type[ParameterNode]
-InitializerCompilationSign = Type[Initializer]
+LayerCompilationSign = type[Layer]
+ParameterCompilationSign = type[ParameterNode]
+InitializerCompilationSign = type[Initializer]
 
 
 class LayerCompilationFunc(Protocol):
@@ -169,19 +168,4 @@ class AbstractCompiler(ABC):
 
     @abstractmethod
     def compile_pipeline(self, sc: Circuit) -> CompiledCircuit:
-        ...
-
-    @abstractmethod
-    def save(
-        self,
-        sym_filepath: Union[IO, os.PathLike, str],
-        compiled_filepath: Union[IO, os.PathLike, str],
-    ):
-        ...
-
-    @staticmethod
-    @abstractmethod
-    def load(
-        sym_filepath: Union[IO, os.PathLike, str], tens_filepath: Union[IO, os.PathLike, str]
-    ) -> "AbstractCompiler":
         ...

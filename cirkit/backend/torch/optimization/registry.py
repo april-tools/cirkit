@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import TYPE_CHECKING, Dict, List, Protocol, Tuple, Type
+from typing import TYPE_CHECKING, Protocol
 
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDefn
@@ -11,42 +11,42 @@ if TYPE_CHECKING:
 
 
 ParameterOptPatternDefn = GraphOptPatternDefn[TorchParameterNode]
-ParameterOptPattern = Type[ParameterOptPatternDefn]
+ParameterOptPattern = type[ParameterOptPatternDefn]
 ParameterOptMatch = GraphOptMatch[TorchParameterNode]
 
 
 class ParameterOptApplyFunc(Protocol):
     def __call__(
         self, compiler: "TorchCompiler", match: ParameterOptMatch
-    ) -> Tuple[TorchParameterNode, ...]:
+    ) -> tuple[TorchParameterNode, ...]:
         ...
 
 
 class LayerOptPatternDefn(GraphOptPatternDefn[TorchLayer]):
     @classmethod
-    def entries(cls) -> List[Type[TorchLayer]]:
+    def entries(cls) -> list[type[TorchLayer]]:
         ...
 
     @classmethod
-    def ppatterns(cls) -> List[Dict[str, ParameterOptPattern]]:
+    def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
         return [{} for _ in cls.entries()]
 
 
-LayerOptPattern = Type[LayerOptPatternDefn]
+LayerOptPattern = type[LayerOptPatternDefn]
 
 
 class LayerOptMatch(GraphOptMatch[TorchLayer]):
     def __init__(
         self,
         pattern: LayerOptPattern,
-        entries: List[TorchLayer],
-        pentries: List[Dict[str, List[ParameterOptMatch]]],
+        entries: list[TorchLayer],
+        pentries: list[dict[str, list[ParameterOptMatch]]],
     ):
         super().__init__(pattern, entries)
         self._pentries = pentries
 
     @property
-    def pentries(self) -> List[Dict[str, List[ParameterOptMatch]]]:
+    def pentries(self) -> list[dict[str, list[ParameterOptMatch]]]:
         return self._pentries
 
     @cached_property
@@ -59,7 +59,7 @@ class LayerOptMatch(GraphOptMatch[TorchLayer]):
 
 
 class LayerOptApplyFunc(Protocol):
-    def __call__(self, compiler: "TorchCompiler", match: LayerOptMatch) -> Tuple[TorchLayer, ...]:
+    def __call__(self, compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchLayer, ...]:
         ...
 
 

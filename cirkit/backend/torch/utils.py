@@ -1,7 +1,47 @@
-from typing import Sequence
+import itertools
+from collections.abc import Sequence
+from typing import Any
 
 import torch
-from torch import Tensor
+from torch import Tensor, autograd
+
+
+class SafeLog(autograd.Function):
+    @staticmethod
+    def forward(x: Tensor) -> Tensor:
+        return torch.log(x)
+
+    @staticmethod
+    def setup_context(ctx: Any, inputs: tuple[Tensor, ...], output: Tensor) -> None:
+        (x,) = inputs
+        ctx.save_for_backward(x)
+
+    @staticmethod
+    def backward(ctx: Any, grad_output: Tensor) -> Tensor:
+        (x,) = ctx.saved_tensors
+        return torch.nan_to_num(grad_output / x)
+
+
+safelog = SafeLog.apply
+
+
+class ComplexSafeLog(autograd.Function):
+    @staticmethod
+    def forward(x: Tensor) -> Tensor:
+        return torch.log(x)
+
+    @staticmethod
+    def setup_context(ctx: Any, inputs: tuple[Tensor, ...], output: Tensor) -> None:
+        (x,) = inputs
+        ctx.save_for_backward(x)
+
+    @staticmethod
+    def backward(ctx: Any, grad_output: Tensor) -> Tensor:
+        (x,) = ctx.saved_tensors
+        return torch.nan_to_num(grad_output / x.conj())
+
+
+csafelog = ComplexSafeLog.apply
 
 
 def flatten_dims(x: Tensor, /, *, dims: Sequence[int]) -> Tensor:
@@ -48,9 +88,8 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
     # We require dims to be sorted so that there's no ambiguation in how shape is interpreted,
     # unless the shape itself never causes ambiguation.
     assert all(s == 1 for s in shape) or all(
-        l < r for l, r in zip(dims[:-1], dims[1:])
+        l < r for l, r in itertools.pairwise(dims)
     ), "dims must be sorted for unflatten_dims."
-    # FUTURE: for l, r in itertools.pairwise(dims) in 3.10
 
     if len(shape) == x.ndim - 1 + len(dims):  # The shape is for whole output.
         shape = [shape[d] for d in dims]

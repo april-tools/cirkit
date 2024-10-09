@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from functools import cached_property
-from typing import Any, Dict, Optional
+from typing import Any
 
 from torch import Tensor
 
@@ -16,10 +17,10 @@ class TorchLayer(AbstractTorchModule, ABC):
         self,
         num_input_units: int,
         num_output_units: int,
-        *,
         arity: int = 1,
+        *,
+        semiring: Semiring | None = None,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
     ) -> None:
         """Init class.
 
@@ -29,8 +30,8 @@ class TorchLayer(AbstractTorchModule, ABC):
             arity (int, optional): The arity of the layer. Defaults to 1.
             num_folds (int): The number of channels. Defaults to 1.
         """
-        if num_input_units <= 0:
-            raise ValueError("The number of input units must be positive")
+        if num_input_units < 0:
+            raise ValueError("The number of input units must be non-negative")
         if num_output_units <= 0:
             raise ValueError("The number of output units must be positive")
         if arity <= 0:
@@ -42,16 +43,22 @@ class TorchLayer(AbstractTorchModule, ABC):
         self.semiring = semiring if semiring is not None else SumProductSemiring
 
     @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "arity": self.arity,
-            "num_folds": self.num_folds,
-        }
+    @abstractmethod
+    def config(self) -> Mapping[str, Any]:
+        ...
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
+        return {}
+
+    @property
+    def sub_modules(self) -> Mapping[str, "TorchLayer"]:
+        """Retrieve a dictionary mapping string identifiers to torch sub-module layers.,
+        that must be passed to the ```__init__``` method of the top-level layer
+
+        Returns:
+            A dictionary of torch modules.
+        """
         return {}
 
     # Expected to be fixed, so use cached property to avoid recalculation.
@@ -94,3 +101,19 @@ class TorchLayer(AbstractTorchModule, ABC):
         Returns:
             Tensor: The output of this layer, shape (F, B, Ko).
         """
+
+    def extra_repr(self) -> str:
+        return (
+            "  ".join(
+                [
+                    f"folds: {self.num_folds}",
+                    f"arity: {self.arity}",
+                    f"input-units: {self.num_input_units}",
+                    f"output-units: {self.num_output_units}",
+                ]
+            )
+            + "\n"
+            + f"input-shape: {(self.num_folds, self.arity, -1, self.num_input_units)}"
+            + "\n"
+            + f"output-shape: {(self.num_folds, -1, self.num_output_units)}"
+        )

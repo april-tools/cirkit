@@ -1,10 +1,176 @@
-from typing import Any, Dict, Optional, Tuple
+from abc import ABC
+from collections.abc import Mapping
+from typing import Any
 
+import einops as E
+import torch
 from torch import Tensor
 
-from cirkit.backend.torch.layers import TorchSumLayer
+from cirkit.backend.torch.layers import TorchInnerLayer, TorchSumLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
+
+
+class TorchSumProductLayer(TorchInnerLayer, ABC):
+    ...
+
+
+class TorchTuckerLayer(TorchSumProductLayer):
+    """The Tucker (2) layer, which is a fused dense-kronecker.
+
+    A ternary einsum is used to fuse the sum and product.
+    """
+
+    def __init__(
+        self,
+        num_input_units: int,
+        num_output_units: int,
+        arity: int = 2,
+        *,
+        weight: TorchParameter,
+        semiring: Semiring | None = None,
+        num_folds: int = 1,
+    ) -> None:
+        """Init class.
+
+        Args:
+            num_input_units (int): The number of input units.
+            num_output_units (int): The number of output units.
+            arity (Literal[2], optional): The arity of the layer, must be 2. Defaults to 2.
+            weight (TorchParameter): The reparameterization for layer parameters.
+        """
+        if arity != 2:
+            raise NotImplementedError("Tucker (2) only implemented for binary product units.")
+        assert weight.num_folds == num_folds
+        assert weight.shape == (num_output_units, num_input_units * num_input_units)
+        super().__init__(
+            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
+        )
+        self.weight = weight
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        return {"weight": self.weight}
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
+
+        Args:
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
+
+        Returns:
+            Tensor: The output of this layer, shape (F, B, Ko).
+        """
+        weight = self.weight().view(
+            -1, self.num_output_units, self.num_input_units, self.num_input_units
+        )
+        return self.semiring.einsum(
+            "fbi,fbj,foij->fbo",
+            operands=(weight,),
+            inputs=(x[:, 0], x[:, 1]),
+            dim=-1,
+            keepdim=True,
+        )
+
+
+class TorchCPTLayer(TorchSumProductLayer):
+    """The Candecomp Parafac (collapsed) layer, which is a fused dense-hadamard.
+
+    The fusion actually does not gain anything, and is just a plain connection. We don't because \
+    it cannot save computation but enforced the product into linear space, which might be worse \
+    numerically.
+    """
+
+    def __init__(
+        self,
+        num_input_units: int,
+        num_output_units: int,
+        arity: int = 2,
+        *,
+        weight: TorchParameter,
+        semiring: Semiring | None = None,
+        num_folds: int = 1,
+    ) -> None:
+        """Init class.
+
+        Args:
+            num_input_units (int): The number of input units.
+            num_output_units (int): The number of output units.
+            arity (int, optional): The arity of the layer. Defaults to 2.
+            weight (TorchParameter): The reparameterization for layer parameters.
+        """
+        assert weight.num_folds == num_folds
+        assert weight.shape == (num_output_units, num_input_units)
+        super().__init__(
+            num_input_units,
+            num_output_units,
+            arity=arity,
+            semiring=semiring,
+            num_folds=num_folds,
+        )
+        self.weight = weight
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        return {"weight": self.weight}
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Run forward pass.
+
+        Args:
+            x (Tensor): The input to this layer, shape (F, H, B, Ki).
+
+        Returns:
+            Tensor: The output of this layer, shape (F, B, Ko).
+        """
+        x = self.semiring.prod(x, dim=1, keepdim=False)  # (F, B, Ki)
+        weight = self.weight()
+        return self.semiring.einsum(
+            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+        )
+
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        weight = self.weight()
+        negative = torch.any(weight < 0.0)
+        if negative:
+            raise ValueError("Sampling only works with positive weights")
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        if not normalized:
+            raise ValueError("Sampling only works with a normalized parametrization")
+
+        # x: (F, H, C, K, num_samples, D)
+        x = torch.sum(x, dim=1, keepdim=True)  # (F, H=1, C, K, num_samples, D)
+
+        c = x.shape[2]
+        d = x.shape[-1]
+        num_samples = x.shape[-2]
+
+        # mixing_distribution: (F, O, K)
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
+
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
+        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=1, c=c, d=d)
+
+        x = torch.gather(x, dim=-3, index=mixing_indices)
+        x = x[:, 0]
+        return x, mixing_samples
 
 
 class TorchTensorDotLayer(TorchSumLayer):
@@ -14,11 +180,10 @@ class TorchTensorDotLayer(TorchSumLayer):
         self,
         num_input_units: int,
         num_output_units: int,
-        num_batch_units: int,
         *,
-        num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
+        num_folds: int = 1,
     ) -> None:
         """Init class.
 
@@ -28,34 +193,29 @@ class TorchTensorDotLayer(TorchSumLayer):
             num_folds (int): The number of channels. Defaults to 1.
             weight (TorchParameter): The reparameterization for layer parameters.
         """
-        assert num_input_units % num_batch_units == 0
-        num_contracted_units = num_input_units // num_batch_units
+        num_contract_units = weight.shape[1]
+        num_batch_units = num_input_units // num_contract_units
         assert weight.num_folds == num_folds
-        assert weight.shape[1] == num_contracted_units
+        assert num_input_units % weight.shape[1] == 0
         assert num_output_units == weight.shape[0] * num_batch_units
         super().__init__(
-            num_input_units, num_output_units, arity=1, num_folds=num_folds, semiring=semiring
+            num_input_units,
+            num_output_units,
+            arity=1,
+            semiring=semiring,
+            num_folds=num_folds,
         )
-        self.num_batch_units = num_batch_units
-        self.num_contracted_units = num_contracted_units
+        self._num_contract_units = num_contract_units
+        self._num_batch_units = num_batch_units
         self.weight = weight
 
     @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "num_batch_units": self.num_batch_units,
-            "num_folds": self.num_folds,
-        }
+    def config(self) -> Mapping[str, Any]:
+        return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
-        return *super().fold_settings, self.num_batch_units
-
-    @property
-    def params(self) -> Dict[str, TorchParameter]:
-        return dict(weight=self.weight)
+    def params(self) -> Mapping[str, TorchParameter]:
+        return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -69,7 +229,7 @@ class TorchTensorDotLayer(TorchSumLayer):
         # x: (F, H=1, B, Ki) -> (F, B, Ki)
         x = x.squeeze(dim=1)
         # x: (F, B, Ki) -> (F, B, Kj, Kq) -> (F, B, Kq, Kj)
-        x = x.view(x.shape[0], x.shape[1], self.num_contracted_units, self.num_batch_units)
+        x = x.view(x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units)
         x = x.permute(0, 1, 3, 2)
         # weight: (F, Kk, Kj)
         weight = self.weight()

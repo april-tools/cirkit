@@ -1,4 +1,5 @@
-from typing import Collection, Iterable, Iterator, Protocol, TypeVar, final
+from collections.abc import Collection, Iterable, Iterator
+from typing import Protocol, TypeVar, final
 from typing_extensions import Self  # FUTURE: in typing from 3.11
 
 

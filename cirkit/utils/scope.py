@@ -1,16 +1,5 @@
-from typing import (
-    Callable,
-    ClassVar,
-    Collection,
-    Dict,
-    FrozenSet,
-    Hashable,
-    Iterable,
-    Iterator,
-    Type,
-    TypeVar,
-    cast,
-)
+from collections.abc import Callable, Collection, Hashable, Iterable, Iterator
+from typing import ClassVar, TypeVar, cast
 from typing_extensions import Never, final  # FUTURE: in typing from 3.11
 
 # NOTE: Explaination on the magic in class customization for Scope.
@@ -28,7 +17,7 @@ from typing_extensions import Never, final  # FUTURE: in typing from 3.11
 #               not-implemented interface methods are never actually called.
 
 
-ScopeClsT = TypeVar("ScopeClsT", bound=Type["Scope"])
+ScopeClsT = TypeVar("ScopeClsT", bound=type["Scope"])
 
 
 class Scope(Collection[int], Hashable):
@@ -39,10 +28,10 @@ class Scope(Collection[int], Hashable):
     """
 
     # NOTE: This is not set here by default, and a default value should be provided later.
-    impl: ClassVar[Type["Scope"]]
+    impl: ClassVar[type["Scope"]]
     """The currently selected implementation."""
 
-    _registry: ClassVar[Dict[str, Type["Scope"]]] = {}
+    _registry: ClassVar[dict[str, type["Scope"]]] = {}
 
     @final
     @staticmethod
@@ -388,10 +377,13 @@ class Scope(Collection[int], Hashable):
         """
         return Scope(frozenset().union(*scopes))
 
+    def difference(self, other: "Scope") -> "Scope":
+        return Scope(filter(lambda s: s not in other, self))
+
 
 @Scope.register("frozenset")  # type: ignore[misc]
 @final  # type: ignore[misc]
-class FrozenSetScope(Scope, FrozenSet[int]):  # type: ignore[misc]
+class FrozenSetScope(Scope, frozenset[int]):  # type: ignore[misc]
     """The Scope implemented by frozenset."""
 
     __new__ = frozenset.__new__
