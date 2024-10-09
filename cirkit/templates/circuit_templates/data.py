@@ -30,7 +30,9 @@ def image_data(
             'quad-tree-4' (the Quad-Tree with four splits per region node),
             'quad-graph'  (the Quad-Graph region graph),
             'poon-domingos' (the Poon-Domingos architecture).
-        input_layer: The name of the input layer. It can be one of the following: 'categorical'.
+        input_layer: The name of the input layer. It can be one of the following:
+            'categorical' (encoding a Categorical distribution over pixel channel values),
+            'binomial' (encoding a Binomial distribution over pixel channel values),
         num_input_units: The number of input units per input layer.
         sum_product_layer: The name of the sum-product inner layer. It can be one of the following:
             'cp' (the canonical decomposition layer, consisting of dense layers followed by a
@@ -52,7 +54,7 @@ def image_data(
     """
     if region_graph not in ["quad-tree-2", "quad-tree-4", "quad-graph", "poon-domingos"]:
         raise ValueError(f"Unknown region graph called {region_graph}")
-    if input_layer not in ["categorical"]:
+    if input_layer not in ["categorical", "binomial"]:
         raise ValueError(f"Unknown input layer called {input_layer}")
     if sum_weight_param not in ["id", "softmax", "positive-clamp"]:
         raise ValueError(f"Unknown sum weight parameterization called {sum_weight_param}")
@@ -61,12 +63,12 @@ def image_data(
     rg = build_image_region_graph(region_graph, (image_shape[1], image_shape[2]))
 
     # Get the input layer factory
-    input_factory = name_to_input_layer_factory(input_layer, num_categories=256)
+    input_kwargs = {"num_categories": 256} if input_layer == "categorical" else {"total_count": 256}
+    input_factory = name_to_input_layer_factory(input_layer, **input_kwargs)
 
     # Get the dense and mixing layers parameterization factory
     sum_weight_init = "normal" if sum_weight_param == "softmax" else "uniform"
-    initializer_kwargs = {"axis": -1} if sum_weight_init in {"dirichlet"} else {}
-    initializer = name_to_initializer(sum_weight_init, **initializer_kwargs)
+    initializer = name_to_initializer(sum_weight_init)
     sum_weight_factory = name_to_parameter_factory(sum_weight_param, initializer=initializer)
 
     # Get the mixing layer factory (this might not be needed, but we pass it anyway)
