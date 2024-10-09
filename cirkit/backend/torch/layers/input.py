@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-import einops as E
 import torch
 from torch import Tensor, distributions
 from torch.nn import functional as F
@@ -356,13 +355,16 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
-            x = x.long()  # The input to Categorical should be discrete
+            x = x.long()  # The input to Binomial should be discrete
+        x = x.permute(0, 2, 3, 1)  # (F, C, B, 1) -> (F, B, 1, C)
         if self.logits is not None:
-            dist = distributions.Binomial(self.total_count, logits=self.logits())
+            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K, C)
+            dist = distributions.Binomial(self.total_count, logits=logits)
         else:
-            dist = distributions.Binomial(self.total_count, probs=self.probs())
-        x = dist.log_prob(x.transpose(1, 2)).sum(-1)
-        return x
+            probs = self.probs().unsqueeze(dim=1)  # (F, 1, K, C)
+            dist = distributions.Binomial(self.total_count, probs=probs)
+        x = dist.log_prob(x)  # (F, B, K, C)
+        return torch.sum(x, dim=3)
 
     def log_partition_function(self) -> Tensor:
         if self.logits is None:
@@ -374,9 +376,9 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
 
     def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        distribution = distributions.Binomial(self.total_count, logits=logits)
-        samples = distribution.sample((num_samples,))  # (N, F, K, C)
-        samples = E.rearrange(samples, "n f k c -> f c k n")  # (F, C, K, N)
+        dist = distributions.Binomial(self.total_count, logits=logits)
+        samples = dist.sample((num_samples,))  # (N, F, K, C)
+        samples = samples.permute(1, 3, 2, 0)  # (F, C, K, N)
         return samples
 
 
