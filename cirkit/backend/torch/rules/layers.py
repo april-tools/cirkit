@@ -12,27 +12,41 @@ from cirkit.backend.torch.layers.inner import (
 from cirkit.backend.torch.layers.input import (
     TorchBinomialLayer,
     TorchCategoricalLayer,
+    TorchConstantValueLayer,
+    TorchEmbeddingLayer,
     TorchEvidenceLayer,
     TorchGaussianLayer,
     TorchInputLayer,
-    TorchLogPartitionLayer,
     TorchPolynomialLayer,
 )
 from cirkit.symbolic.layers import (
     BinomialLayer,
     CategoricalLayer,
+    ConstantValueLayer,
     DenseLayer,
+    EmbeddingLayer,
     EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
-    LogPartitionLayer,
     MixingLayer,
     PolynomialLayer,
 )
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
+
+
+def compile_embedding_layer(compiler: "TorchCompiler", sl: EmbeddingLayer) -> TorchEmbeddingLayer:
+    weight = compiler.compile_parameter(sl.weight)
+    return TorchEmbeddingLayer(
+        torch.tensor(tuple(sl.scope)),
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        num_states=sl.num_states,
+        weight=weight,
+        semiring=compiler.semiring,
+    )
 
 
 def compile_categorical_layer(
@@ -135,12 +149,13 @@ def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMix
     )
 
 
-def compile_log_partition_layer(
-    compiler: "TorchCompiler", sl: LogPartitionLayer
-) -> TorchLogPartitionLayer:
+def compile_constant_value_layer(
+    compiler: "TorchCompiler", sl: ConstantValueLayer
+) -> TorchConstantValueLayer:
     value = compiler.compile_parameter(sl.value)
-    return TorchLogPartitionLayer(
+    return TorchConstantValueLayer(
         sl.num_output_units,
+        log_space=sl.log_space,
         value=value,
         semiring=compiler.semiring,
     )
@@ -155,6 +170,7 @@ def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> Torc
 
 
 DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
+    EmbeddingLayer: compile_embedding_layer,
     CategoricalLayer: compile_categorical_layer,
     BinomialLayer: compile_binomial_layer,
     GaussianLayer: compile_gaussian_layer,
@@ -163,6 +179,6 @@ DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc
     KroneckerLayer: compile_kronecker_layer,
     DenseLayer: compile_dense_layer,
     MixingLayer: compile_mixing_layer,
-    LogPartitionLayer: compile_log_partition_layer,
+    ConstantValueLayer: compile_constant_value_layer,
     EvidenceLayer: compile_evidence_layer,
 }

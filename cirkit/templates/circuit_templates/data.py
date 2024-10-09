@@ -63,7 +63,7 @@ def image_data(
     rg = build_image_region_graph(region_graph, (image_shape[1], image_shape[2]))
 
     # Get the input layer factory
-    input_kwargs = {"num_categories": 256} if input_layer == "categorical" else {"total_count": 256}
+    input_kwargs = {"num_categories": 256} if input_layer == "categorical" else {"total_count": 255}
     input_factory = name_to_input_layer_factory(input_layer, **input_kwargs)
 
     # Get the dense and mixing layers parameterization factory
