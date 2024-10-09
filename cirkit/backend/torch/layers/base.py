@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from functools import cached_property
 from typing import Any
 
@@ -43,15 +44,15 @@ class TorchLayer(AbstractTorchModule, ABC):
 
     @property
     @abstractmethod
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         ...
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {}
 
     @property
-    def sub_modules(self) -> dict[str, "TorchLayer"]:
+    def sub_modules(self) -> Mapping[str, "TorchLayer"]:
         """Retrieve a dictionary mapping string identifiers to torch sub-module layers.,
         that must be passed to the ```__init__``` method of the top-level layer
 

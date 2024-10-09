@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar, cast
 
@@ -35,7 +35,7 @@ class AbstractTorchModule(nn.Module, ABC):
         """
 
     @property
-    def sub_modules(self) -> dict[str, "AbstractTorchModule"]:
+    def sub_modules(self) -> Mapping[str, "AbstractTorchModule"]:
         """Retrieve a dictionary mapping string identifiers to torch sub-modules,
         that must be passed to the ```__init__``` method of the top-level torch module.
 

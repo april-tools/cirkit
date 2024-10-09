@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from enum import IntEnum, auto
 from typing import Any, cast
 
@@ -29,9 +30,9 @@ class LayerOperator(IntEnum):
 class Layer(ABC):
     """The symbolic layer class. A symbolic layer consists of useful metadata of input, product
     and sum layers. A layer that specializes this class must specify two property methods:
-        1. config(self) -> Dict[str, Any]: A dictionary mapping the non-parameter arguments to
+        1. config(self) -> Mapping[str, Any]: A dictionary mapping the non-parameter arguments to
             the ```__init__``` method to the corresponding values, e.g., the arity.
-        2. params(self) -> Dict[str, Parameter]: A dictionary mapping the parameter arguments
+        2. params(self) -> Mapping[str, Parameter]: A dictionary mapping the parameter arguments
             the ```__init__``` method to the corresponding symbolic parameter, e.g., the mean and
             standard deviations symbolic parameters in a
             [GaussianLayer][cirkit.symbolic.layers.GaussianLayer].
@@ -66,23 +67,23 @@ class Layer(ABC):
 
     @property
     @abstractmethod
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         """Retrieves the configuration of the layer, i.e., a dictionary mapping hyperparameters
         of the layer to their values. The hyperparameter names must match the argument names in
         the ```__init__``` method.
 
         Returns:
-            Dict[str, Any]: A dictionary from hyperparameter names to their value.
+            Mapping[str, Any]: A dictionary from hyperparameter names to their value.
         """
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         """Retrieve the symbolic parameters of the layer, i.e., a dictionary mapping the names of
         the symbolic parameters to the actual symbolic parameter instance. The parameter names must
         match the argument names in the```__init__``` method.
 
         Returns:
-            Dict[str, Parameter]: A dictionary from parameter names to the corresponding symbolic
+            Mapping[str, Parameter]: A dictionary from parameter names to the corresponding symbolic
                 parameter instance.
         """
         return {}
@@ -190,11 +191,11 @@ class EvidenceLayer(ConstantLayer):
         self.observation = observation
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"layer": self.layer}
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"observation": self.observation}
 
 
@@ -272,7 +273,7 @@ class CategoricalLayer(InputLayer):
         return self.num_output_units, self.num_channels, self.num_categories
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
@@ -281,7 +282,7 @@ class CategoricalLayer(InputLayer):
         }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
             return {"probs": self.probs}
         return {"logits": self.logits}
@@ -315,7 +316,7 @@ class BinomialLayer(InputLayer):
             elif probs_factory is not None:
                 probs = probs_factory(self._probs_logits_shape)
             else:
-                logits = Parameter.from_leaf(
+                logits = Parameter.from_input(
                     TensorParameter(
                         *self._probs_logits_shape,
                         initializer=NormalInitializer(0.0, total_count * 0.01),
@@ -338,12 +339,15 @@ class BinomialLayer(InputLayer):
 
     @property
     def config(self) -> dict:
-        config = super().config
-        config.update(total_count=self.total_count)
-        return config
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "total_count": self.total_count,
+        }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
             return {"probs": self.probs}
         return {"logits": self.logits}
@@ -430,7 +434,7 @@ class GaussianLayer(InputLayer):
         return self.num_output_units, self.num_channels
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
@@ -438,7 +442,7 @@ class GaussianLayer(InputLayer):
         }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         params = {"mean": self.mean, "stddev": self.stddev}
         if self.log_partition is not None:
             params.update(log_partition=self.log_partition)
@@ -478,7 +482,7 @@ class PolynomialLayer(InputLayer):
         return self.num_output_units, self.degree + 1
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
@@ -487,7 +491,7 @@ class PolynomialLayer(InputLayer):
         }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"coeff": self.coeff}
 
 
@@ -513,11 +517,11 @@ class LogPartitionLayer(ConstantLayer):
         return (self.num_output_units,)
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_output_units": self.num_output_units}
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"value": self.value}
 
 
@@ -558,7 +562,7 @@ class HadamardLayer(ProductLayer):
         super().__init__(num_input_units, num_input_units, arity=arity)
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
@@ -587,7 +591,7 @@ class KroneckerLayer(ProductLayer):
         )
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
@@ -635,11 +639,11 @@ class DenseLayer(SumLayer):
         return self.num_output_units, self.num_input_units
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"weight": self.weight}
 
 
@@ -688,9 +692,9 @@ class MixingLayer(SumLayer):
         return self.num_input_units, self.arity
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_units": self.num_units, "arity": self.arity}
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"weight": self.weight}

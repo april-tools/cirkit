@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any, Optional
 
 import torch
@@ -65,11 +66,11 @@ class TorchInputLayer(TorchLayer, ABC):
 
     @property
     @abstractmethod
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         ...
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {}
 
     @property
@@ -117,7 +118,7 @@ class TorchConstantLayer(TorchInputLayer, ABC):
         )
 
 
-class TorchExpFamilyLayer(TorchInputLayer):
+class TorchExpFamilyLayer(TorchInputLayer, ABC):
     """The abstract base class for Exponential Family distribution layers.
 
     Exponential Family dist:
@@ -157,14 +158,6 @@ class TorchExpFamilyLayer(TorchInputLayer):
             num_channels=num_channels,
             semiring=semiring,
         )
-
-    @property
-    def config(self) -> dict[str, Any]:
-        return {
-            "scope_idx": self.scope_idx,
-            "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
-        }
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
@@ -258,7 +251,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         )
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "num_output_units": self.num_output_units,
             "num_channels": self.num_channels,
@@ -266,7 +259,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         }
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
             return {"probs": self.probs}
         return {"logits": self.logits}
@@ -357,7 +350,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         )
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "num_output_units": self.num_output_units,
             "num_channels": self.num_channels,
@@ -365,7 +358,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         }
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
             return {"probs": self.probs}
         return {"logits": self.logits}
@@ -455,11 +448,11 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return p.shape == (self.num_output_units, self.num_channels)
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_output_units": self.num_output_units, "num_channels": self.num_channels}
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         params = {"mean": self.mean, "stddev": self.stddev}
         if self.log_partition is not None:
             params["log_partition"] = self.log_partition
@@ -509,11 +502,11 @@ class TorchLogPartitionLayer(TorchConstantLayer):
         self.value = value
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_output_units": self.num_output_units}
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {"value": self.value}
 
     def forward(self, x: Tensor) -> Tensor:
@@ -565,16 +558,16 @@ class TorchEvidenceLayer(TorchConstantLayer):
         self.observation = observation
 
     @property
-    def sub_modules(self) -> dict[str, TorchInputLayer]:
-        return {"layer": self.layer}
-
-    @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {}
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {"observation": self.observation}
+
+    @property
+    def sub_modules(self) -> Mapping[str, TorchInputLayer]:
+        return {"layer": self.layer}
 
     def forward(self, x: Tensor) -> Tensor:
         obs = self.observation()  # (F, C, D)
@@ -662,7 +655,7 @@ class TorchPolynomialLayer(TorchInputLayer):
         return p.shape == (self.num_output_units, self.degree + 1)
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "num_output_units": self.num_output_units,
             "num_channels": self.num_channels,
@@ -670,7 +663,7 @@ class TorchPolynomialLayer(TorchInputLayer):
         }
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {"coeff": self.coeff}
 
     def forward(self, x: Tensor) -> Tensor:

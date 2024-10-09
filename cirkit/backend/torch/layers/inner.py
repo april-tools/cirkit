@@ -1,4 +1,5 @@
 from abc import ABC
+from collections.abc import Mapping
 from typing import Any
 
 import einops as E
@@ -84,7 +85,7 @@ class TorchHadamardLayer(TorchProductLayer):
         )
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -140,7 +141,7 @@ class TorchKroneckerLayer(TorchProductLayer):
         )
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -198,11 +199,11 @@ class TorchDenseLayer(TorchSumLayer):
         self.weight = weight
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
@@ -282,7 +283,7 @@ class TorchMixingLayer(TorchSumLayer):
         self.weight = weight
 
     @property
-    def config(self) -> dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -290,7 +291,7 @@ class TorchMixingLayer(TorchSumLayer):
         }
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
