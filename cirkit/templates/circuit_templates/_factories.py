@@ -114,13 +114,12 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
 
 
 def mixing_layer_factory(
-    scope: Scope, num_units: int, arity: int, *, weight_factory: ParameterFactory | None = None
+    num_units: int, arity: int, *, weight_factory: ParameterFactory | None = None
 ) -> MixingLayer:
     """
     Build a mixing layer, given hyperparameters and an optional weight factory.
 
     Args:
-        scope: The scope.
         num_units: The number of sum units in the layer.
         arity: The arity, i.e., the number of input layers.
         weight_factory: An optional factory constructing symbolic weights.
@@ -128,7 +127,7 @@ def mixing_layer_factory(
     Returns:
         MixingLayer: A mixing layer.
     """
-    return MixingLayer(scope, num_units, arity, weight_factory=weight_factory)
+    return MixingLayer(num_units, arity, weight_factory=weight_factory)
 
 
 def _categorical_layer_factory(
@@ -183,7 +182,7 @@ def _gaussian_layer_factory(
 
 
 def _id_parameter_factory(shape: tuple[int, ...], **kwargs) -> Parameter:
-    return Parameter.from_leaf(TensorParameter(*shape, **kwargs))
+    return Parameter.from_input(TensorParameter(*shape, **kwargs))
 
 
 def _softmax_parameter_factory(shape: tuple[int, ...], *, axis: int = -1, **kwargs) -> Parameter:

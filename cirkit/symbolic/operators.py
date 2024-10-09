@@ -4,8 +4,10 @@ from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     DenseLayer,
+    EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
+    KroneckerLayer,
     Layer,
     LayerOperator,
     LogPartitionLayer,
@@ -38,12 +40,12 @@ def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> Circui
             f" is expected to be a subset of the integration scope '{scope}'"
         )
     if sl.logits is None:
-        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+        log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
         reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=2)
         reduce_channels = ReduceSumParameter(reduce_lse.shape, axis=1)
         log_partition = Parameter.from_sequence(sl.logits.ref(), reduce_lse, reduce_channels)
-    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+    sl = LogPartitionLayer(sl.num_output_units, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
 
@@ -54,12 +56,21 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock
             f" is expected to be a subset of the integration scope '{scope}'"
         )
     if sl.log_partition is None:
-        log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
+        log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
         reduce_channels = ReduceSumParameter(sl.log_partition.shape, axis=1)
         log_partition = Parameter.from_unary(reduce_channels, sl.log_partition.ref())
-    sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
+    sl = LogPartitionLayer(sl.num_output_units, value=log_partition)
     return CircuitBlock.from_layer(sl)
+
+
+def multiply_evidence_layers(sl1: EvidenceLayer, sl2: EvidenceLayer) -> CircuitBlock:
+    if sl1.num_output_units != sl2.num_output_units:
+        raise NotImplementedError(
+            "The product of evidence layer with " "different number of units is not supported"
+        )
+    kronecker = KroneckerLayer(sl1.num_output_units, arity=2)
+    return CircuitBlock.from_nary_layer(kronecker, sl1, sl2)
 
 
 def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) -> CircuitBlock:
@@ -80,18 +91,24 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
         )
 
     if sl1.logits is None:
-        sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs)
+        sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs.ref())
+        print(sl1.probs.shape, sl1.probs.ref().shape, sl1.num_output_units)
     else:
-        sl1_logits = sl1.logits
+        sl1_logits = sl1.logits.ref()
+        print(sl1.logits.shape, sl1_logits.shape, sl1.num_output_units)
     if sl2.logits is None:
-        sl2_logits = Parameter.from_unary(LogParameter(sl2.probs.shape), sl2.probs)
+        sl2_logits = Parameter.from_unary(LogParameter(sl2.probs.shape), sl2.probs.ref())
+        print(sl2.probs.shape, sl2.probs.ref().shape, sl2.num_output_units)
     else:
-        sl2_logits = sl2.logits
+        sl2_logits = sl2.logits.ref()
+        print(sl2.logits.shape, sl2_logits.shape, sl2.num_output_units)
     sl_logits = Parameter.from_binary(
         OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=0),
-        sl1_logits.ref(),
-        sl2_logits.ref(),
+        sl1_logits,
+        sl2_logits,
     )
+    print(sl_logits.shape)
+    print()
     sl = CategoricalLayer(
         sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
@@ -240,13 +257,7 @@ def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
 
 
 def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitBlock:
-    if sl1.scope != sl2.scope:
-        raise ValueError(
-            f"Expected Hadamard layers to have the same scope,"
-            f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
     sl = HadamardLayer(
-        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         arity=max(sl1.arity, sl2.arity),
     )
@@ -254,16 +265,10 @@ def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitB
 
 
 def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
-    if sl1.scope != sl2.scope:
-        raise ValueError(
-            f"Expected Dense layers to have the same scope,"
-            f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = DenseLayer(
-        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.num_output_units * sl2.num_output_units,
         weight=weight,
@@ -272,16 +277,10 @@ def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
 
 
 def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
-    if sl1.scope != sl2.scope:
-        raise ValueError(
-            f"Expected Mixing layers to have the same scope,"
-            f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = MixingLayer(
-        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.arity * sl2.arity,
         weight=weight,
@@ -291,13 +290,13 @@ def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
 
 def conjugate_dense_layer(sl: DenseLayer) -> CircuitBlock:
     weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
-    sl = DenseLayer(sl.scope, sl.num_input_units, sl.num_output_units, weight=weight)
+    sl = DenseLayer(sl.num_input_units, sl.num_output_units, weight=weight)
     return CircuitBlock.from_layer(sl)
 
 
 def conjugate_mixing_layer(sl: MixingLayer) -> CircuitBlock:
     weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
-    sl = MixingLayer(sl.scope, sl.num_input_units, sl.arity, weight=weight)
+    sl = MixingLayer(sl.num_input_units, sl.arity, weight=weight)
     return CircuitBlock.from_layer(sl)
 
 
@@ -310,6 +309,7 @@ DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
     LayerOperator.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
     LayerOperator.DIFFERENTIATION: [differentiate_polynomial_layer],
     LayerOperator.MULTIPLICATION: [
+        multiply_evidence_layers,
         multiply_categorical_layers,
         multiply_gaussian_layers,
         multiply_polynomial_layers,

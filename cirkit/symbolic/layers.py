@@ -1,4 +1,5 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from enum import IntEnum, auto
 from typing import Any, cast
 
@@ -21,7 +22,7 @@ class LayerOperator(IntEnum):
     DIFFERENTIATION = auto()
     """The differentiation operator defined over layers."""
     MULTIPLICATION = auto()
-    """The multiplication operator defined over layers."""
+    """The multiplication (Kronecker product) operator defined over layers."""
     CONJUGATION = auto()
     """The conjugation opereator defined over sum and input layers."""
 
@@ -29,9 +30,9 @@ class LayerOperator(IntEnum):
 class Layer(ABC):
     """The symbolic layer class. A symbolic layer consists of useful metadata of input, product
     and sum layers. A layer that specializes this class must specify two property methods:
-        1. config(self) -> Dict[str, Any]: A dictionary mapping the non-parameter arguments to
+        1. config(self) -> Mapping[str, Any]: A dictionary mapping the non-parameter arguments to
             the ```__init__``` method to the corresponding values, e.g., the arity.
-        2. params(self) -> Dict[str, Parameter]: A dictionary mapping the parameter arguments
+        2. params(self) -> Mapping[str, Parameter]: A dictionary mapping the parameter arguments
             the ```__init__``` method to the corresponding symbolic parameter, e.g., the mean and
             standard deviations symbolic parameters in a
             [GaussianLayer][cirkit.symbolic.layers.GaussianLayer].
@@ -39,7 +40,6 @@ class Layer(ABC):
 
     def __init__(
         self,
-        scope: Scope,
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
@@ -47,47 +47,60 @@ class Layer(ABC):
         """Initializes a symbolic layer.
 
         Args:
-            scope: The variables scope of the layer.
             num_input_units: The number of units in each input layer.
             num_output_units: The number of output units, i.e., the number of computational units
                 in this layer.
             arity: The arity of the layer, i.e., the number of input layers to this layer.
+
+        Raises:
+            ValueError: If the number of input units, output units or the arity are not positvie.
         """
-        self.scope = scope
+        if num_input_units < 0:
+            raise ValueError("The number of input units should be non-negative")
+        if num_output_units <= 0:
+            raise ValueError("The number of output units should be positive")
+        if arity <= 0:
+            raise ValueError("The arity should be positive")
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
 
     @property
-    def config(self) -> dict[str, Any]:
+    @abstractmethod
+    def config(self) -> Mapping[str, Any]:
         """Retrieves the configuration of the layer, i.e., a dictionary mapping hyperparameters
         of the layer to their values. The hyperparameter names must match the argument names in
         the ```__init__``` method.
 
         Returns:
-            Dict[str, Any]: A dictionary from hyperparameter names to their value.
+            Mapping[str, Any]: A dictionary from hyperparameter names to their value.
         """
-        return {
-            "scope": self.scope,
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-            "arity": self.arity,
-        }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         """Retrieve the symbolic parameters of the layer, i.e., a dictionary mapping the names of
         the symbolic parameters to the actual symbolic parameter instance. The parameter names must
         match the argument names in the```__init__``` method.
 
         Returns:
-            Dict[str, Parameter]: A dictionary from parameter names to the corresponding symbolic
+            Mapping[str, Parameter]: A dictionary from parameter names to the corresponding symbolic
                 parameter instance.
         """
         return {}
 
+    def copyref(self) -> "Layer":
+        """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic parameters
+        are copied by reference, thus effectively creating a symbolic parameter sharing between
+        the new layer and the layer being copied.
 
-class InputLayer(Layer):
+        Returns:
+            A shallow copy of the layer, with reference to the parameters.
+        """
+        ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
+        return type(self)(**self.config, **ref_params)
+
+
+class InputLayer(Layer, ABC):
     """The symbolic input layer class."""
 
     def __init__(self, scope: Scope, num_output_units: int, num_channels: int = 1):
@@ -97,8 +110,16 @@ class InputLayer(Layer):
             scope: The variables scope of the layer.
             num_output_units: The number of input units in the layer.
             num_channels: The number of channels for each variable in the scope. Defaults to 1.
+
+        Raises:
+            ValueError: If the number of outputs or the number of channels are not positive.
         """
-        super().__init__(scope, len(scope), num_output_units, num_channels)
+        if num_output_units <= 0:
+            raise ValueError("The number of output units should be positive")
+        if num_channels <= 0:
+            raise ValueError("The number of channels should be positive")
+        super().__init__(len(scope), num_output_units, num_channels)
+        self.scope = scope
 
     @property
     def num_variables(self) -> int:
@@ -118,13 +139,64 @@ class InputLayer(Layer):
         """
         return self.arity
 
+
+class ConstantLayer(InputLayer, ABC):
+    """The symbolic layer computing a constant vector, i.e., it does not depend on any variable."""
+
+    def __init__(self, num_output_units: int):
+        """Initializes a symbolic constant layer.
+
+        Args:
+            num_output_units: The number of input units in the layer.
+        """
+        super().__init__(Scope([]), num_output_units)
+
+
+class EvidenceLayer(ConstantLayer):
+    """The symbolic layer computing the output of an input layer given by a complete observation.
+    The only parameter of an evidence layer is a complete observation of the variables."""
+
+    def __init__(self, layer: InputLayer, *, observation: Parameter):
+        """Initializes a symbolic evidence layer.
+
+        Args:
+            layer: The symbolic input layer to condition, i.e., to evaluate on the observation.
+            observation: The observation stored as a parameter that outputs a constant (i.e.,
+                non-learnable) tensor of shape (C, D), where D is the number of variable the
+                symbolic input layer is defined on, and C is the number of channels per variable.
+
+        Raises:
+            ValueError: If the observation parameter shape has not two dimensions, or if the
+                number of its channels (resp. variables) does not match the number of channels
+                (resp. variables) of the symbolic input layer.
+        """
+        if len(observation.shape) != 2:
+            raise ValueError(
+                f"Expected observation of shape (num_channels, num_variables), "
+                f"but found {observation.shape}"
+            )
+        num_channels, num_variables = observation.shape
+        if num_channels != layer.num_channels:
+            raise ValueError(
+                f"Expected an observation with number of channels {layer.num_channels}, "
+                f"but found {num_channels}"
+            )
+        if num_variables != layer.num_variables:
+            raise ValueError(
+                f"Expected an observation with number of variables {layer.num_variables}, "
+                f"but found {num_variables}"
+            )
+        super().__init__(layer.num_output_units)
+        self.layer = layer
+        self.observation = observation
+
     @property
-    def config(self) -> dict[str, Any]:
-        return {
-            "scope": self.scope,
-            "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
-        }
+    def config(self) -> Mapping[str, Any]:
+        return {"layer": self.layer}
+
+    @property
+    def params(self) -> Mapping[str, Parameter]:
+        return {"observation": self.observation}
 
 
 class CategoricalLayer(InputLayer):
@@ -136,9 +208,9 @@ class CategoricalLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int,
-        num_categories: int,
+        num_channels: int = 1,
         *,
+        num_categories: int,
         logits: Parameter | None = None,
         probs: Parameter | None = None,
         logits_factory: ParameterFactory | None = None,
@@ -201,13 +273,16 @@ class CategoricalLayer(InputLayer):
         return self.num_output_units, self.num_channels, self.num_categories
 
     @property
-    def config(self) -> dict:
-        config = super().config
-        config.update(num_categories=self.num_categories)
-        return config
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_categories": self.num_categories,
+        }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
             return {"probs": self.probs}
         return {"logits": self.logits}
@@ -241,7 +316,7 @@ class BinomialLayer(InputLayer):
             elif probs_factory is not None:
                 probs = probs_factory(self._probs_logits_shape)
             else:
-                logits = Parameter.from_leaf(
+                logits = Parameter.from_input(
                     TensorParameter(
                         *self._probs_logits_shape,
                         initializer=NormalInitializer(0.0, total_count * 0.01),
@@ -264,12 +339,15 @@ class BinomialLayer(InputLayer):
 
     @property
     def config(self) -> dict:
-        config = super().config
-        config.update(total_count=self.total_count)
-        return config
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "total_count": self.total_count,
+        }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
             return {"probs": self.probs}
         return {"logits": self.logits}
@@ -318,7 +396,7 @@ class GaussianLayer(InputLayer):
         super().__init__(scope, num_output_units, num_channels)
         if mean is None:
             if mean_factory is None:
-                mean = Parameter.from_leaf(
+                mean = Parameter.from_input(
                     TensorParameter(*self._mean_stddev_shape, initializer=NormalInitializer())
                 )
             else:
@@ -356,7 +434,15 @@ class GaussianLayer(InputLayer):
         return self.num_output_units, self.num_channels
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+        }
+
+    @property
+    def params(self) -> Mapping[str, Parameter]:
         params = {"mean": self.mean, "stddev": self.stddev}
         if self.log_partition is not None:
             params.update(log_partition=self.log_partition)
@@ -382,7 +468,7 @@ class PolynomialLayer(InputLayer):
         self.degree = degree
         if coeff is None:
             if coeff_factory is None:
-                coeff = Parameter.from_leaf(
+                coeff = Parameter.from_input(
                     TensorParameter(*self._coeff_shape, initializer=NormalInitializer())
                 )
             else:
@@ -396,27 +482,32 @@ class PolynomialLayer(InputLayer):
         return self.num_output_units, self.degree + 1
 
     @property
-    def config(self) -> dict:
-        return {**super().config, "degree": self.degree}
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "degree": self.degree,
+        }
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"coeff": self.coeff}
 
 
-class LogPartitionLayer(InputLayer):
+class LogPartitionLayer(ConstantLayer):
     """A symbolic layer computing a log-partition function."""
 
-    def __init__(self, scope: Scope, num_output_units: int, num_channels: int, *, value: Parameter):
+    def __init__(self, num_output_units: int, *, value: Parameter):
         """Initializes a Log Partition layer.
 
         Args:
-            scope: The variables scope the layer depends on.
             num_output_units: The number of output log partition functions.
-            num_channels: The number of channels per variable.
             value: The symbolic parameter representing the log partition value.
+                This symbolic paramater should have shape (K,), where K is the number of
+                output units.
         """
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(num_output_units)
         if value.shape != self._value_shape:
             raise ValueError(f"Expected parameter shape {self._value_shape}, found {value.shape}")
         self.value = value
@@ -426,20 +517,21 @@ class LogPartitionLayer(InputLayer):
         return (self.num_output_units,)
 
     @property
-    def params(self) -> dict[str, Parameter]:
-        params = super().params
-        params.update(value=self.value)
-        return params
+    def config(self) -> Mapping[str, Any]:
+        return {"num_output_units": self.num_output_units}
+
+    @property
+    def params(self) -> Mapping[str, Parameter]:
+        return {"value": self.value}
 
 
 class ProductLayer(Layer, ABC):
     """The abstract base class for symbolic product layers."""
 
-    def __init__(self, scope: Scope, num_input_units: int, num_output_units: int, arity: int = 2):
+    def __init__(self, num_input_units: int, num_output_units: int, arity: int = 2):
         """Initializes a product layer.
 
         Args:
-            scope: The variables scope of the layer.
             num_input_units: The number of units in each input layer.
             num_output_units: The number of product units in the product layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
@@ -449,15 +541,7 @@ class ProductLayer(Layer, ABC):
         """
         if arity < 2:
             raise ValueError("The arity should be at least 2")
-        super().__init__(scope, num_input_units, num_output_units, arity)
-
-    @property
-    def config(self) -> dict[str, Any]:
-        return {
-            "scope": self.scope,
-            "num_input_units": self.num_input_units,
-            "arity": self.arity,
-        }
+        super().__init__(num_input_units, num_output_units, arity)
 
 
 class HadamardLayer(ProductLayer):
@@ -465,18 +549,21 @@ class HadamardLayer(ProductLayer):
     product of the vectors given in output by some input layers. Therefore, the number of product
     units in the layer is equal to the number of units in each input layer."""
 
-    def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
+    def __init__(self, num_input_units: int, arity: int = 2):
         """Initializes a Hadamard product layer.
 
         Args:
-            scope: The variables scope of the layer.
             num_input_units: The number of units in each input layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
 
         Raises:
             ValueError: If the arity is less than two.
         """
-        super().__init__(scope, num_input_units, num_input_units, arity=arity)
+        super().__init__(num_input_units, num_input_units, arity=arity)
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
 class KroneckerLayer(ProductLayer):
@@ -485,11 +572,10 @@ class KroneckerLayer(ProductLayer):
     units in the layer is equal to the product of the number of units in each input layer.
     Note that the output of a Kronecker layer is a vector."""
 
-    def __init__(self, scope: Scope, num_input_units: int, arity: int = 2):
+    def __init__(self, num_input_units: int, arity: int = 2):
         """Initializes a Kronecker product layer.
 
         Args:
-            scope: The variables scope of the layer.
             num_input_units: The number of units in each input layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
 
@@ -499,11 +585,14 @@ class KroneckerLayer(ProductLayer):
         if arity < 2:
             raise ValueError("The arity should be at least 2")
         super().__init__(
-            scope,
             num_input_units,
             cast(int, num_input_units**arity),
             arity=arity,
         )
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
 class SumLayer(Layer, ABC):
@@ -516,7 +605,6 @@ class DenseLayer(SumLayer):
 
     def __init__(
         self,
-        scope: Scope,
         num_input_units: int,
         num_output_units: int,
         weight: Parameter | None = None,
@@ -525,7 +613,6 @@ class DenseLayer(SumLayer):
         """Initializes a dense layer.
 
         Args:
-            scope: The variables scope of the layer.
             num_input_units: The number of units of the input layer.
             num_output_units: The number of sum units in the dense layer.
             weight: The symbolic weight matrix parameter, having shape (S, K), where S is the
@@ -535,10 +622,10 @@ class DenseLayer(SumLayer):
                 parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
                 as initializer will be instantiated.
         """
-        super().__init__(scope, num_input_units, num_output_units, arity=1)
+        super().__init__(num_input_units, num_output_units, arity=1)
         if weight is None:
             if weight_factory is None:
-                weight = Parameter.from_leaf(
+                weight = Parameter.from_input(
                     TensorParameter(*self._weight_shape, initializer=NormalInitializer())
                 )
             else:
@@ -552,15 +639,11 @@ class DenseLayer(SumLayer):
         return self.num_output_units, self.num_input_units
 
     @property
-    def config(self) -> dict[str, Any]:
-        return {
-            "scope": self.scope,
-            "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
-        }
+    def config(self) -> Mapping[str, Any]:
+        return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"weight": self.weight}
 
 
@@ -571,7 +654,6 @@ class MixingLayer(SumLayer):
 
     def __init__(
         self,
-        scope: Scope,
         num_units: int,
         arity: int,
         weight: Parameter | None = None,
@@ -580,7 +662,6 @@ class MixingLayer(SumLayer):
         """Initializes a mixing layer.
 
         Args:
-            scope: The variables scope of the layer.
             num_units: The number of units in each of the input layers.
             arity: The arity of the layer, i.e., the number of input layers to the mixing layer.
             weight: The symbolic weight matrix parameter, having shape (K, R), where K is the
@@ -590,10 +671,10 @@ class MixingLayer(SumLayer):
                 parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
                 as initializer will be instantiated.
         """
-        super().__init__(scope, num_units, num_units, arity)
+        super().__init__(num_units, num_units, arity)
         if weight is None:
             if weight_factory is None:
-                weight = Parameter.from_leaf(
+                weight = Parameter.from_input(
                     TensorParameter(*self._weight_shape, initializer=NormalInitializer())
                 )
             else:
@@ -603,13 +684,17 @@ class MixingLayer(SumLayer):
         self.weight = weight
 
     @property
+    def num_units(self) -> int:
+        return self.num_input_units
+
+    @property
     def _weight_shape(self) -> tuple[int, ...]:
         return self.num_input_units, self.arity
 
     @property
-    def config(self) -> dict[str, Any]:
-        return {"scope": self.scope, "num_units": self.num_input_units, "arity": self.arity}
+    def config(self) -> Mapping[str, Any]:
+        return {"num_units": self.num_units, "arity": self.arity}
 
     @property
-    def params(self) -> dict[str, Parameter]:
+    def params(self) -> Mapping[str, Parameter]:
         return {"weight": self.weight}

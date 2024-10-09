@@ -44,12 +44,12 @@ def build_bivariate_monotonic_structured_cpt_pc(
                 )
                 probs_factory = None
             else:
-                logits_factory = lambda shape: Parameter.from_leaf(
+                logits_factory = lambda shape: Parameter.from_input(
                     TensorParameter(*shape, initializer=NormalInitializer())
                 )
                 probs_factory = None
         else:
-            probs_factory = lambda shape: Parameter.from_leaf(
+            probs_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=DirichletInitializer())
             )
             logits_factory = None
@@ -68,7 +68,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
         if parameterize:
             stddev_factory = None
         else:
-            stddev_factory = lambda shape: Parameter.from_leaf(
+            stddev_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=UniformInitializer())
             )
         input_layers = {
@@ -95,12 +95,11 @@ def build_bivariate_monotonic_structured_cpt_pc(
                 ExpParameter(shape), TensorParameter(*shape, initializer=NormalInitializer())
             )
     else:
-        dense_weight_factory = lambda shape: Parameter.from_leaf(
+        dense_weight_factory = lambda shape: Parameter.from_input(
             TensorParameter(*shape, initializer=DirichletInitializer())
         )
     dense_layers = {
         scope: DenseLayer(
-            Scope(scope),
             num_input_units=num_units,
             num_output_units=1 if len(scope) == 2 else num_units,
             weight_factory=dense_weight_factory,
@@ -109,7 +108,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
     }
 
     # Build hadamard product layer
-    product_layer = HadamardLayer(Scope([0, 1]), num_input_units=num_units, arity=2)
+    product_layer = HadamardLayer(num_input_units=num_units, arity=2)
 
     # Set the connections between layers
     in_layers: dict[Layer, list[Layer]] = {
@@ -121,7 +120,6 @@ def build_bivariate_monotonic_structured_cpt_pc(
 
     # Build the symbolic circuit
     circuit = Circuit(
-        scope=Scope([0, 1]),
         num_channels=1,
         layers=list(itertools.chain(input_layers.values(), [product_layer], dense_layers.values())),
         in_layers=in_layers,
@@ -152,12 +150,12 @@ def build_multivariate_monotonic_structured_cpt_pc(
                 )
                 probs_factory = None
             else:
-                logits_factory = lambda shape: Parameter.from_leaf(
+                logits_factory = lambda shape: Parameter.from_input(
                     TensorParameter(*shape, initializer=NormalInitializer())
                 )
                 probs_factory = None
         else:
-            probs_factory = lambda shape: Parameter.from_leaf(
+            probs_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=DirichletInitializer())
             )
             logits_factory = None
@@ -176,7 +174,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
         if parameterize:
             stddev_factory = None
         else:
-            stddev_factory = lambda shape: Parameter.from_leaf(
+            stddev_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=UniformInitializer())
             )
         input_layers = {
@@ -192,7 +190,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
         if parameterize:
             coeff_factory = None
         else:
-            coeff_factory = lambda shape: Parameter.from_leaf(
+            coeff_factory = lambda shape: Parameter.from_input(
                 TensorParameter(*shape, initializer=UniformInitializer())
             )
         input_layers = {
@@ -220,12 +218,11 @@ def build_multivariate_monotonic_structured_cpt_pc(
                 ExpParameter(shape), TensorParameter(*shape, initializer=NormalInitializer())
             )
     else:
-        dense_weight_factory = lambda shape: Parameter.from_leaf(
+        dense_weight_factory = lambda shape: Parameter.from_input(
             TensorParameter(*shape, initializer=DirichletInitializer())
         )
     dense_layers = {
         scope: DenseLayer(
-            Scope(scope),
             num_input_units=num_units,
             num_output_units=1 if len(scope) == 5 else num_units,
             weight_factory=dense_weight_factory,
@@ -235,8 +232,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
 
     # Build hadamard product layers
     product_layers = {
-        scope: HadamardLayer(Scope(scope), num_input_units=num_units, arity=2)
-        for scope in dense_layers
+        scope: HadamardLayer(num_input_units=num_units, arity=2) for scope in dense_layers
     }
 
     # Set the connections between layers
@@ -254,7 +250,6 @@ def build_multivariate_monotonic_structured_cpt_pc(
 
     # Build the symbolic circuit
     circuit = Circuit(
-        scope=Scope([0, 1, 2, 3, 4]),
         num_channels=1,
         layers=list(
             itertools.chain(input_layers.values(), product_layers.values(), dense_layers.values())
@@ -303,7 +298,7 @@ def build_monotonic_structured_categorical_cpt_pc(
     for sl in circuit.sum_layers:
         assert isinstance(sl, DenseLayer)
         next(sl.weight.inputs).initializer = ConstantTensorInitializer(
-            dense_weights[tuple(sl.scope)]
+            dense_weights[tuple(circuit.layer_scope(sl))]
         )
 
     if not return_ground_truth:
@@ -426,7 +421,7 @@ def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
     for sl in circuit.sum_layers:
         assert isinstance(sl, DenseLayer)
         next(sl.weight.inputs).initializer = ConstantTensorInitializer(
-            dense_weights[tuple(sl.scope)]
+            dense_weights[tuple(circuit.layer_scope(sl))]
         )
 
     if not return_ground_truth:

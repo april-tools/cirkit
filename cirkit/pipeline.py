@@ -100,14 +100,14 @@ class PipelineContext(AbstractContextManager):
         int_sc = SF.integrate(sc, scope=scope, registry=self._op_registry)
         return self.compile(int_sc)
 
-    def multiply(self, lhs_cc: CompiledCircuit, rhs_cc: CompiledCircuit) -> CompiledCircuit:
-        if not self._compiler.has_symbolic(lhs_cc):
-            raise ValueError("The given LHS compiled circuit is not known in this pipeline")
-        if not self._compiler.has_symbolic(rhs_cc):
-            raise ValueError("The given RHS compiled circuit is not known in this pipeline")
-        lhs_sc = self._compiler.get_symbolic_circuit(lhs_cc)
-        rhs_sc = self._compiler.get_symbolic_circuit(rhs_cc)
-        prod_sc = SF.multiply(lhs_sc, rhs_sc, registry=self._op_registry)
+    def multiply(self, cc1: CompiledCircuit, cc2: CompiledCircuit) -> CompiledCircuit:
+        if not self._compiler.has_symbolic(cc1):
+            raise ValueError("The first compiled circuit is not known in this pipeline")
+        if not self._compiler.has_symbolic(cc2):
+            raise ValueError("The second compiled circuit is not known in this pipeline")
+        sc1 = self._compiler.get_symbolic_circuit(cc1)
+        sc2 = self._compiler.get_symbolic_circuit(cc2)
+        prod_sc = SF.multiply(sc1, sc2, registry=self._op_registry)
         return self.compile(prod_sc)
 
     def differentiate(self, cc: CompiledCircuit, *, order: int = 1) -> CompiledCircuit:
@@ -150,11 +150,11 @@ def integrate(
 
 
 def multiply(
-    lhs_cc: CompiledCircuit, rhs_cc: CompiledCircuit, ctx: PipelineContext | None = None
+    cc1: CompiledCircuit, cc2: CompiledCircuit, ctx: PipelineContext | None = None
 ) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
-    return ctx.multiply(lhs_cc, rhs_cc)
+    return ctx.multiply(cc1, cc2)
 
 
 def differentiate(
