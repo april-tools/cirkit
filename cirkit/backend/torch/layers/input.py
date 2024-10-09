@@ -308,6 +308,9 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             probs: The reparameterization for layer probs parameters.
             logits: The reparameterization for layer logits parameters.
         """
+        num_variables = scope_idx.shape[-1]
+        if num_variables != 1:
+            raise ValueError("The Binomial layer encodes a univariate distribution")
         if total_count < 0:
             raise ValueError("The number of trials must be non-negative")
         super().__init__(

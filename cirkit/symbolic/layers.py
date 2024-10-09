@@ -257,7 +257,7 @@ class BinomialLayer(InputLayer):
 
     @property
     def _probs_logits_shape(self) -> tuple[int, ...]:
-        return self.num_variables, self.num_output_units, self.num_channels
+        return self.num_output_units, self.num_channels
 
     @property
     def config(self) -> dict:
