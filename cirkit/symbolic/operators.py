@@ -1,18 +1,16 @@
-from typing import Dict, Iterable, List, Optional, Protocol, Tuple, Type
+from typing import Protocol
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
-    AbstractLayerOperator,
     CategoricalLayer,
     DenseLayer,
     GaussianLayer,
     HadamardLayer,
-    IndexLayer,
-    KroneckerLayer,
     Layer,
-    LayerOperation,
+    LayerOperator,
     LogPartitionLayer,
     MixingLayer,
+    PolynomialLayer,
 )
 from cirkit.symbolic.parameters import (
     ConjugateParameter,
@@ -24,6 +22,8 @@ from cirkit.symbolic.parameters import (
     LogParameter,
     OuterSumParameter,
     Parameter,
+    PolynomialDifferential,
+    PolynomialProduct,
     ReduceLSEParameter,
     ReduceSumParameter,
     SumParameter,
@@ -31,45 +31,54 @@ from cirkit.symbolic.parameters import (
 from cirkit.utils.scope import Scope
 
 
-def integrate_categorical_layer(
-    sl: CategoricalLayer, scope: Optional[Iterable[int]] = None
-) -> CircuitBlock:
-    scope = Scope(scope) if scope is not None else sl.scope
-    if sl.scope != scope:
-        raise NotImplementedError()
+def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> CircuitBlock:
+    if len(sl.scope & scope) == 0:
+        raise ValueError(
+            f"The scope of the Categorical layer '{sl.scope}'"
+            f" is expected to be a subset of the integration scope '{scope}'"
+        )
     if sl.logits is None:
         log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
     else:
-        reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=3)
-        reduce_sum1 = ReduceSumParameter(reduce_lse.shape, axis=2)
-        reduce_sum2 = ReduceSumParameter(reduce_sum1.shape, axis=0)
-        log_partition = Parameter.from_sequence(
-            sl.logits.ref(), reduce_lse, reduce_sum1, reduce_sum2
-        )
+        reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=2)
+        reduce_channels = ReduceSumParameter(reduce_lse.shape, axis=1)
+        log_partition = Parameter.from_sequence(sl.logits.ref(), reduce_lse, reduce_channels)
     sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
 
-def integrate_gaussian_layer(
-    sl: GaussianLayer, scope: Optional[Iterable[int]] = None
-) -> CircuitBlock:
-    scope = Scope(scope) if scope is not None else sl.scope
-    if sl.scope != scope:
-        raise NotImplementedError()
+def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock:
+    if len(sl.scope & scope) == 0:
+        raise ValueError(
+            f"The scope of the Gaussian layer '{sl.scope}'"
+            f" is expected to be a subset of the integration scope '{scope}'"
+        )
     if sl.log_partition is None:
         log_partition = Parameter.from_leaf(ConstantParameter(sl.num_output_units, value=0.0))
     else:
-        reduce_sum1 = ReduceSumParameter(sl.log_partition.shape, axis=2)
-        reduce_sum2 = ReduceSumParameter(reduce_sum1.shape, axis=0)
-        log_partition = Parameter.from_sequence(sl.log_partition.ref(), reduce_sum1, reduce_sum2)
+        reduce_channels = ReduceSumParameter(sl.log_partition.shape, axis=1)
+        log_partition = Parameter.from_unary(reduce_channels, sl.log_partition.ref())
     sl = LogPartitionLayer(sl.scope, sl.num_output_units, sl.num_channels, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
 
 def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) -> CircuitBlock:
-    assert sl1.num_variables == sl2.num_variables
-    assert sl1.num_channels == sl2.num_channels
-    assert sl1.num_categories == sl2.num_categories
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Categorical layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
+    if sl1.num_channels != sl2.num_channels:
+        raise ValueError(
+            f"Expected Categorical layers to have the number of channels,"
+            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
+        )
+    if sl1.num_categories != sl2.num_categories:
+        raise ValueError(
+            f"Expected Categorical layers to have the number of categories,"
+            f"but found '{sl1.num_categories}' and '{sl2.num_categories}'"
+        )
+
     if sl1.logits is None:
         sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs)
     else:
@@ -79,12 +88,12 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
     else:
         sl2_logits = sl2.logits
     sl_logits = Parameter.from_binary(
-        OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=1),
+        OuterSumParameter(sl1_logits.shape, sl2_logits.shape, axis=0),
         sl1_logits.ref(),
         sl2_logits.ref(),
     )
     sl = CategoricalLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
         num_channels=sl1.num_channels,
         num_categories=sl1.num_categories,
@@ -94,8 +103,16 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
 
 
 def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitBlock:
-    assert sl1.num_variables == sl2.num_variables
-    assert sl1.num_channels == sl2.num_channels
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Gaussian layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
+    if sl1.num_channels != sl2.num_channels:
+        raise ValueError(
+            f"Expected Gaussian layers to have the number of channels,"
+            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
+        )
 
     gaussian1_shape, gaussian2_shape = sl1.mean.shape, sl2.mean.shape
     mean = Parameter.from_nary(
@@ -120,34 +137,75 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
 
     if sl1.log_partition is not None or sl2.log_partition is not None:
         if sl1.log_partition is None:
-            log_partition1 = ConstantParameter(
-                sl1.num_variables, sl1.num_output_units, sl1.num_channels, value=0.0
-            )
+            log_partition1 = ConstantParameter(sl1.num_output_units, sl1.num_channels, value=0.0)
         else:
             log_partition1 = sl1.log_partition.ref()
         if sl2.log_partition is None:
-            log_partition2 = ConstantParameter(
-                sl2.num_variables, sl2.num_output_units, sl2.num_channels, value=0.0
-            )
+            log_partition2 = ConstantParameter(sl2.num_output_units, sl2.num_channels, value=0.0)
         else:
             log_partition2 = sl2.log_partition.ref()
         log_partition = Parameter.from_binary(
             SumParameter(log_partition.shape, log_partition.shape),
             log_partition,
             Parameter.from_binary(
-                OuterSumParameter(log_partition1.shape, log_partition2.shape, axis=1),
+                OuterSumParameter(log_partition1.shape, log_partition2.shape, axis=0),
                 log_partition1,
                 log_partition2,
             ),
         )
 
     sl = GaussianLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
         num_channels=sl1.num_channels,
         mean=mean,
         stddev=stddev,
         log_partition=log_partition,
+    )
+    return CircuitBlock.from_layer(sl)
+
+
+def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Polynomial layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
+    if sl1.num_channels != sl2.num_channels:
+        raise ValueError(
+            f"Expected Polynomial layers to have the number of channels,"
+            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
+        )
+
+    shape1, shape2 = sl1.coeff.shape, sl2.coeff.shape
+    coeff = Parameter.from_binary(
+        PolynomialProduct(shape1, shape2),
+        sl1.coeff.ref(),
+        sl2.coeff.ref(),
+    )
+
+    sl = PolynomialLayer(
+        sl1.scope,
+        sl1.num_output_units * sl2.num_output_units,
+        num_channels=sl1.num_channels,
+        degree=sl1.degree + sl2.degree,
+        coeff=coeff,
+    )
+    return CircuitBlock.from_layer(sl)
+
+
+def differentiate_polynomial_layer(
+    sl: PolynomialLayer, *, var_idx: int, ch_idx: int, order: int = 1
+) -> CircuitBlock:
+    # PolynomialLayer is constructed univariate, but we still take the 2 idx for unified interface
+    assert (var_idx, ch_idx) == (0, 0), "This should not happen"
+    if order <= 0:
+        raise ValueError("The order of differentiation must be positive.")
+    coeff = Parameter.from_unary(
+        PolynomialDifferential(sl.coeff.shape, order=order), sl.coeff.ref()
+    )
+    sl = PolynomialLayer(
+        sl.scope, sl.num_output_units, sl.num_channels, degree=coeff.shape[-1] - 1, coeff=coeff
     )
     return CircuitBlock.from_layer(sl)
 
@@ -173,33 +231,39 @@ def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
     return CircuitBlock.from_layer(sl)
 
 
+def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
+    coeff = Parameter.from_unary(ConjugateParameter(sl.coeff.shape), sl.coeff.ref())
+    sl = PolynomialLayer(
+        sl.scope, sl.num_output_units, sl.num_channels, degree=sl.degree, coeff=coeff
+    )
+    return CircuitBlock.from_layer(sl)
+
+
 def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Hadamard layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
     sl = HadamardLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         arity=max(sl1.arity, sl2.arity),
     )
     return CircuitBlock.from_layer(sl)
 
 
-def multiply_kronecker_layers(sl1: KroneckerLayer, sl2: KroneckerLayer) -> CircuitBlock:
-    sl = KroneckerLayer(
-        sl1.scope | sl2.scope,
-        sl1.num_input_units * sl2.num_input_units,
-        arity=max(sl1.arity, sl2.arity),
-    )
-    # The product of kronecker layers is a kronecker layer followed by a permutation
-    idx: List[int] = []  # TODO
-    sil = IndexLayer(sl1.scope | sl2.scope, sl.num_output_units, sl.num_output_units, indices=idx)
-    return CircuitBlock.from_layer_composition(sl, sil)
-
-
 def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Dense layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = DenseLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.num_output_units * sl2.num_output_units,
         weight=weight,
@@ -208,11 +272,16 @@ def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
 
 
 def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
+    if sl1.scope != sl2.scope:
+        raise ValueError(
+            f"Expected Mixing layers to have the same scope,"
+            f" but found '{sl1.scope}' and '{sl2.scope}'"
+        )
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
     sl = MixingLayer(
-        sl1.scope | sl2.scope,
+        sl1.scope,
         sl1.num_input_units * sl2.num_input_units,
         sl1.arity * sl2.arity,
         weight=weight,
@@ -237,23 +306,24 @@ class LayerOperatorFunc(Protocol):
         ...
 
 
-DEFAULT_OPERATOR_RULES: Dict[AbstractLayerOperator, List[LayerOperatorFunc]] = {
-    LayerOperation.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
-    LayerOperation.DIFFERENTIATION: [],
-    LayerOperation.MULTIPLICATION: [
+DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
+    LayerOperator.INTEGRATION: [integrate_categorical_layer, integrate_gaussian_layer],
+    LayerOperator.DIFFERENTIATION: [differentiate_polynomial_layer],
+    LayerOperator.MULTIPLICATION: [
         multiply_categorical_layers,
         multiply_gaussian_layers,
+        multiply_polynomial_layers,
         multiply_hadamard_layers,
-        multiply_kronecker_layers,
         multiply_dense_layers,
         multiply_mixing_layers,
     ],
-    LayerOperation.CONJUGATION: [
+    LayerOperator.CONJUGATION: [
         conjugate_categorical_layer,
         conjugate_gaussian_layer,
+        conjugate_polynomial_layer,
         conjugate_dense_layer,
         conjugate_mixing_layer,
     ],
 }
-LayerOperatorSign = Tuple[Type[Layer], ...]
-LayerOperatorSpecs = Dict[LayerOperatorSign, LayerOperatorFunc]
+LayerOperatorSign = tuple[type[Layer], ...]
+LayerOperatorSpecs = dict[LayerOperatorSign, LayerOperatorFunc]

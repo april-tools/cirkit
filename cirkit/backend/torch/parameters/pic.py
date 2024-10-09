@@ -1,22 +1,21 @@
-from typing import Optional, Tuple
-
 import numpy as np
 import torch
 import torch.nn as nn
 
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.layers import *
-from cirkit.backend.torch.parameters.nodes import TorchTensorParameter
+from cirkit.backend.torch.layers import TorchTuckerLayer
+from cirkit.backend.torch.parameters.nodes import TorchParameterOp, TorchTensorParameter
 
 
 def zw_quadrature(
     integration_method: str,
     nip: int,
-    a: Optional[float] = -1,
-    b: Optional[float] = 1,
-    return_log_weight: Optional[bool] = False,
-    dtype: Optional[torch.dtype] = torch.float32,
-    device: Optional[torch.device] = "cpu",
+    a: float | None = -1,
+    b: float | None = 1,
+    return_log_weight: bool | None = False,
+    dtype: torch.dtype | None = torch.float32,
+    device: torch.device | None = "cpu",
 ):
     if integration_method == "leggauss":
         z_quad, w_quad = np.polynomial.legendre.leggauss(nip)
@@ -53,10 +52,10 @@ class FourierLayer(nn.Module):
         self,
         in_features: int,
         out_features: int,
-        sigma: Optional[float] = 1.0,
-        learnable: Optional[bool] = False,
+        sigma: float | None = 1.0,
+        learnable: bool | None = False,
     ):
-        super(FourierLayer, self).__init__()
+        super().__init__()
         assert out_features % 2 == 0, "Number of output features must be even."
         self.in_features = in_features
         self.out_features = out_features
@@ -73,37 +72,39 @@ class FourierLayer(nn.Module):
         return torch.cat([z_proj.cos(), z_proj.sin()], dim=-1).transpose(-2, -1)
 
     def extra_repr(self) -> str:
-        return "{}, {}, sigma={}".format(self.in_features, self.out_features, self.sigma)
+        return f"{self.in_features}, {self.out_features}, sigma={self.sigma}"
 
 
 class PICInputNet(nn.Module):
     def __init__(
         self,
-        num_vars: int,
+        num_variables: int,
         num_param: int,
-        num_channels: Optional[bool] = 1,
-        net_dim: Optional[int] = 64,
-        bias: Optional[bool] = False,
-        sharing: Optional[str] = "none",
-        ff_dim: Optional[int] = None,
-        ff_sigma: Optional[float] = 1.0,
-        learn_ff: Optional[bool] = False,
-        z_quad: Optional[torch.Tensor] = None,
-        tensor_parameter: Optional[TorchTensorParameter] = None,
+        num_channels: bool | None = 1,
+        net_dim: int | None = 64,
+        bias: bool | None = False,
+        sharing: str | None = "none",
+        ff_dim: int | None = None,
+        ff_sigma: float | None = 1.0,
+        learn_ff: bool | None = False,
+        z_quad: torch.Tensor | None = None,
+        tensor_parameter: TorchTensorParameter | None = None,
+        reparam: TorchParameterOp | None = None,
     ):
         super().__init__()
         assert sharing in ["none", "f", "c"]
-        self.num_vars = num_vars
+        self.num_variables = num_variables
         self.num_param = num_param
         self.num_channels = num_channels
         self.sharing = sharing
         self.tensor_parameter = tensor_parameter
+        self.reparam = reparam
         if z_quad is not None:
             self.register_buffer("z_quad", z_quad)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
-        inner_conv_groups = num_channels * (1 if sharing in ["f", "c"] else num_vars)
-        last_conv_groups = num_channels * (1 if sharing == "f" else num_vars)
+        inner_conv_groups = num_channels * (1 if sharing in ["f", "c"] else num_variables)
+        last_conv_groups = num_channels * (1 if sharing == "f" else num_variables)
         self.net = nn.Sequential(
             FourierLayer(1, ff_dim, sigma=ff_sigma, learnable=learn_ff),
             nn.Conv1d(
@@ -126,36 +127,46 @@ class PICInputNet(nn.Module):
         # initialize all heads to be equal when using composite sharing
         if sharing == "c":
             self.net[-1].weight.data = (
-                self.net[-1].weight.data[: num_param * num_channels].repeat(num_vars, 1, 1)
+                self.net[-1].weight.data[: num_param * num_channels].repeat(num_variables, 1, 1)
             )
             if self.net[-1].bias is not None:
                 self.net[-1].bias.data = (
-                    self.net[-1].bias.data[: num_param * num_channels].repeat(num_vars)
+                    self.net[-1].bias.data[: num_param * num_channels].repeat(num_variables)
                 )
 
         if tensor_parameter is not None and z_quad is not None:
             with torch.no_grad():
                 _ = self()  # initialize tensor_parameter as result of self.forward()
 
-    def forward(self, z_quad: Optional[torch.Tensor] = None, n_chunks: Optional[int] = 1):
+    def forward(self, z_quad: torch.Tensor | None = None, n_chunks: int | None = 1):
         z_quad = self.z_quad if z_quad is None else z_quad
         assert z_quad.ndim == 1
         self.net[1].groups = 1
         self.net[-1].groups = self.num_channels * (
-            1 if self.sharing in ["f", "c"] else self.num_vars
+            1 if self.sharing in ["f", "c"] else self.num_variables
         )
         param = torch.cat(
             [self.net(chunk.unsqueeze(1)) for chunk in z_quad.chunk(n_chunks, dim=0)], dim=1
         )
         if self.sharing == "f":
-            param = param.unsqueeze(0).expand(self.num_vars, -1, -1)
+            param = param.unsqueeze(0).expand(self.num_variables, -1, -1)
         param = param.view(
-            self.num_vars, self.num_param * self.num_channels, len(z_quad)
+            self.num_variables, self.num_param * self.num_channels, len(z_quad)
         ).transpose(1, 2)
         if self.tensor_parameter is not None:
             param = param.view_as(self.tensor_parameter._ptensor)
             self.tensor_parameter._ptensor = param
+        if self.reparam is not None:
+            param = self.reparam(param)
         return param
+
+    def _set_device(self, device: str | torch.device | int) -> None:
+        self._device = device
+
+    def __repr__(self):
+        return "\n".join(
+            [line for line in super().__repr__().split("\n") if "tensor_parameter" not in line]
+        )
 
 
 class PICInnerNet(nn.Module):
@@ -163,17 +174,17 @@ class PICInnerNet(nn.Module):
         self,
         num_dim: int,
         num_funcs: int,
-        perm_dim: Optional[Tuple[int]] = None,
-        norm_dim: Optional[Tuple[int]] = None,
-        net_dim: Optional[int] = 64,
-        bias: Optional[bool] = False,
-        sharing: Optional[str] = "none",
-        ff_dim: Optional[int] = None,
-        ff_sigma: Optional[float] = 1.0,
-        learn_ff: Optional[bool] = False,
-        z_quad: Optional[torch.Tensor] = None,
-        w_quad: Optional[torch.Tensor] = None,
-        tensor_parameter: Optional[TorchTensorParameter] = None,
+        perm_dim: tuple[int] | None = None,
+        norm_dim: tuple[int] | None = None,
+        net_dim: int | None = 64,
+        bias: bool | None = False,
+        sharing: str | None = "none",
+        ff_dim: int | None = None,
+        ff_sigma: float | None = 1.0,
+        learn_ff: bool | None = False,
+        z_quad: torch.Tensor | None = None,
+        w_quad: torch.Tensor | None = None,
+        tensor_parameter: TorchTensorParameter | None = None,
     ):
         super().__init__()
         assert sharing in ["none", "f", "c"]
@@ -231,9 +242,9 @@ class PICInnerNet(nn.Module):
 
     def forward(
         self,
-        z_quad: Optional[torch.Tensor] = None,
-        w_quad: Optional[torch.Tensor] = None,
-        n_chunks: Optional[int] = 1,
+        z_quad: torch.Tensor | None = None,
+        w_quad: torch.Tensor | None = None,
+        n_chunks: int | None = 1,
     ):
         z_quad = self.z_quad if z_quad is None else z_quad
         w_quad = self.w_quad if w_quad is None else w_quad
@@ -264,18 +275,27 @@ class PICInnerNet(nn.Module):
             self.tensor_parameter._ptensor = param
         return param
 
+    def _set_device(self, device: str | torch.device | int) -> None:
+        self._device = device
+
+    def __repr__(self):
+        return "\n".join(
+            [line for line in super().__repr__().split("\n") if "tensor_parameter" not in line]
+        )
+
 
 @torch.no_grad()
 def pc2qpc(
     pc: TorchCircuit,
     integration_method: str,
-    net_dim: Optional[int] = 128,
-    bias: Optional[bool] = True,
-    input_sharing: Optional[str] = "f",
-    inner_sharing: Optional[str] = "c",
-    ff_dim: Optional[int] = None,
-    ff_sigma: Optional[float] = 1.0,
-    learn_ff: Optional[bool] = False,
+    net_dim: int | None = 128,
+    bias: bool | None = True,
+    input_sharing: str | None = "f",
+    inner_sharing: str | None = "c",
+    ff_dim: int | None = None,
+    ff_sigma: float | None = 1.0,
+    learn_ff: bool | None = False,
+    freeze_mixing_layers: bool | None = True,
 ):
     def param_to_buffer(model: torch.nn.Module):
         """Turns all parameters of a module into buffers."""
@@ -290,14 +310,21 @@ def pc2qpc(
     qpc = pc  # copy.deepcopy(pc)
     param_to_buffer(qpc)
 
-    for node in qpc._nodes:
+    for node in qpc.nodes:
         if isinstance(node, TorchCategoricalLayer):
-            probs_shape = list(node.probs._nodes[0]._ptensor.shape)
-            z_quad = zw_quadrature(integration_method=integration_method, nip=probs_shape[2])[0]
-            node.probs._nodes[0] = PICInputNet(
-                num_vars=probs_shape[0],
-                num_param=probs_shape[-1],
-                num_channels=probs_shape[-2],
+            z_quad = zw_quadrature(
+                integration_method=integration_method, nip=node.num_output_units
+            )[0]
+            if node.logits is None:
+                tensor_parameter = node.probs.nodes[0]
+                reparam = node.probs.nodes[1] if len(node.probs.nodes) == 2 else None
+            else:
+                tensor_parameter = node.logits.nodes[0]
+                reparam = node.logits.nodes[1] if len(node.logits.nodes) == 2 else None
+            input_net = PICInputNet(
+                num_variables=node.num_variables * node.num_folds,
+                num_param=node.num_categories,
+                num_channels=node.num_channels,
                 net_dim=net_dim,
                 bias=bias,
                 sharing=input_sharing,
@@ -305,19 +332,22 @@ def pc2qpc(
                 ff_sigma=ff_sigma,
                 learn_ff=learn_ff,
                 z_quad=z_quad,
-                tensor_parameter=node.probs._nodes[0],
+                tensor_parameter=tensor_parameter,
+                reparam=reparam,
             )
+            if node.logits is None:
+                node.probs = input_net
+            else:
+                node.logits = input_net
         elif isinstance(node, TorchGaussianLayer):
-            gauss_shape = list(
-                node.mean._nodes[0]._ptensor.shape
-            )  # or node.stddev._nodes[0]._ptensor.shape
-            if len(gauss_shape) == 4:
-                assert gauss_shape[1] == 1, f"Invalid Gaussian layer shape {gauss_shape}"
-            z_quad = zw_quadrature(integration_method=integration_method, nip=gauss_shape[-2])[0]
-            node.mean._nodes[0] = PICInputNet(
-                num_vars=gauss_shape[0],
+            assert len(node.mean.nodes) <= 2 and len(node.stddev) <= 2
+            z_quad = zw_quadrature(
+                integration_method=integration_method, nip=node.num_output_units
+            )[0]
+            node.mean = PICInputNet(
+                num_variables=node.num_variables * node.num_folds,
                 num_param=1,
-                num_channels=gauss_shape[-1],
+                num_channels=node.num_channels,
                 net_dim=net_dim,
                 bias=bias,
                 sharing=input_sharing,
@@ -325,12 +355,13 @@ def pc2qpc(
                 ff_sigma=ff_sigma,
                 learn_ff=learn_ff,
                 z_quad=z_quad,
-                tensor_parameter=node.mean._nodes[0],
+                tensor_parameter=node.mean.nodes[0],
+                reparam=None if len(node.mean.nodes) == 1 else node.mean.nodes[0],
             )
-            node.stddev._nodes[0] = PICInputNet(
-                num_vars=gauss_shape[0],
+            node.stddev = PICInputNet(
+                num_variables=node.num_variables * node.num_folds,
                 num_param=1,
-                num_channels=gauss_shape[-1],
+                num_channels=node.num_channels,
                 net_dim=net_dim,
                 bias=bias,
                 sharing=input_sharing,
@@ -338,13 +369,14 @@ def pc2qpc(
                 ff_sigma=ff_sigma,
                 learn_ff=learn_ff,
                 z_quad=z_quad,
-                tensor_parameter=node.stddev._nodes[0],
+                tensor_parameter=node.stddev.nodes[0],
+                reparam=None if len(node.stddev.nodes) == 1 else node.stddev.nodes[0],
             )
-        elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPLayer)):
+        elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPTLayer)):
             assert (
-                len(node.weight._nodes) == 1
+                len(node.weight.nodes) == 1
             ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
-            weight_shape = list(node.weight._nodes[0]._ptensor.shape)
+            weight_shape = list(node.weight.nodes[0]._ptensor.shape)
             squeezed_weight_shape = [weight_shape[0]] + [
                 dim_size for dim_size in weight_shape[1:] if dim_size != 1
             ]
@@ -363,31 +395,23 @@ def pc2qpc(
                 [int(np.emath.logn(nip, dim_size)) for dim_size in squeezed_weight_shape[1:]]
             )
             z_quad, w_quad = zw_quadrature(integration_method=integration_method, nip=nip)
-            node.weight._nodes = nn.ModuleList(
-                [
-                    PICInnerNet(
-                        num_dim=num_dim,
-                        num_funcs=weight_shape[0],
-                        perm_dim=tuple(range(1, num_dim + 1)),
-                        norm_dim=tuple(range(1, num_dim + 1))[-(2 if is_tucker else 1) :],
-                        net_dim=net_dim,
-                        bias=bias,
-                        sharing=inner_sharing,
-                        ff_dim=ff_dim,
-                        ff_sigma=ff_sigma,
-                        learn_ff=learn_ff,
-                        z_quad=z_quad,
-                        w_quad=w_quad,
-                        tensor_parameter=node.weight._nodes[0],
-                    )
-                ]
+            node.weight = PICInnerNet(
+                num_dim=num_dim,
+                num_funcs=node.num_folds,
+                perm_dim=tuple(range(1, num_dim + 1)),
+                norm_dim=tuple(range(1, num_dim + 1))[-(2 if is_tucker else 1) :],
+                net_dim=net_dim,
+                bias=bias,
+                sharing=inner_sharing,
+                ff_dim=ff_dim,
+                ff_sigma=ff_sigma,
+                learn_ff=learn_ff,
+                z_quad=z_quad,
+                w_quad=w_quad,
+                tensor_parameter=node.weight.nodes[0],
             )
-        elif isinstance(node, TorchMixingLayer):
-            assert (
-                len(node.weight._nodes) == 1
-            ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
-            node.weight._nodes = node.weight._nodes[:1]  # ignore possible reparameterizations
-            node.weight._nodes[0]._ptensor.fill_(1 / node.weight._nodes[0]._ptensor.size(-1))
+        elif isinstance(node, TorchMixingLayer) and freeze_mixing_layers:
+            node.weight.nodes[0]._ptensor.fill_(1 / node.arity)
         elif isinstance(node, (TorchHadamardLayer, TorchKroneckerLayer)):
             pass
         else:

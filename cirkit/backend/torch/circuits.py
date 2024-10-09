@@ -1,94 +1,91 @@
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple
+from collections.abc import Callable, Iterator
 
 import torch
-import einops as E
 from torch import Tensor
 
-from cirkit.backend.torch.graph.address_book import AddressBook, AddressBookEntry, FoldIndexInfo
 from cirkit.backend.torch.graph.folding import (
     build_address_book_stacked_entry,
-    build_fold_index_info,
+    build_unfold_index_info,
 )
-from cirkit.backend.torch.graph.modules import TorchDiAcyclicGraph
-from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.graph.modules import (
+    AddressBook,
+    AddressBookEntry,
+    FoldIndexInfo,
+    TorchDiAcyclicGraph,
+)
+from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.symbolic.circuit import StructuralProperties
 from cirkit.utils.scope import Scope
 
 
 class LayerAddressBook(AddressBook):
-    def __init__(
-        self, entries: List[AddressBookEntry], *, in_graph_fn: Callable[[Tensor, Tensor], Tensor]
-    ):
+    def __init__(self, entries: list[AddressBookEntry]):
         super().__init__(entries)
-        self._in_graph_fn = in_graph_fn
 
     def lookup(
-        self,
-        module_outputs: List[Tensor],
-        *,
-        in_graph: Optional[Tensor] = None,
-    ) -> Iterator[Tuple[Tensor, ...]]:
+        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+    ) -> Iterator[tuple[TorchLayer | None, tuple[Tensor, ...]]]:
         # Loop through the entries and yield inputs
         for entry in self._entries:
-            (in_fold_idx,) = entry.in_fold_idx
-
             # Catch the case there are some inputs coming from other modules
             if entry.in_module_ids:
+                (in_fold_idx,) = entry.in_fold_idx
                 (in_module_ids,) = entry.in_module_ids
                 if len(in_module_ids) == 1:
                     x = module_outputs[in_module_ids[0]]
                 else:
                     x = torch.cat([module_outputs[mid] for mid in in_module_ids], dim=0)
                 x = x[in_fold_idx]
-                yield (x,)
+                yield entry.module, (x,)
                 continue
 
-            # Catch the case there are no inputs coming from other modules if not sampling
+            # Catch the case there are no inputs coming from other modules
+            # That is, we are gathering the inputs of input layers
+            assert isinstance(entry.module, TorchInputLayer)
             if in_graph is None:
-                yield ()
+                yield entry.module, ()
             else:
-                assert in_fold_idx is not None
-                x = self._in_graph_fn(in_graph, in_fold_idx)
-                yield (x,)
+                # in_graph: An input batch (assignments to variables) of shape (B, C, D)
+                # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
+                # x: (B, C, D) -> (B, C, F, D') -> (F, C, B, D')
+                x = in_graph[..., entry.module.scope_idx].permute(2, 1, 0, 3)
+                yield entry.module, (x,)
 
     @classmethod
     def from_index_info(
-        cls,
-        ordering: Iterable[TorchLayer],
-        fold_idx_info: FoldIndexInfo,
-        *,
-        incomings_fn: Callable[[TorchLayer], List[TorchLayer]],
-        in_graph_fn: Callable[[Tensor, Tensor], Tensor],
+        cls, fold_idx_info: FoldIndexInfo, *, incomings_fn: Callable[[TorchLayer], list[TorchLayer]]
     ) -> "LayerAddressBook":
         # The address book entries being built
-        entries: List[AddressBookEntry] = []
+        entries: list[AddressBookEntry] = []
 
         # A useful dictionary mapping module ids to their number of folds
-        num_folds: Dict[int, int] = {}
+        num_folds: dict[int, int] = {}
 
         # Build the bookkeeping data structure by following the topological ordering
-        for mid, m in enumerate(ordering):
+        for mid, m in enumerate(fold_idx_info.ordering):
             # Retrieve the index information of the input modules
             in_modules_fold_idx = fold_idx_info.in_fold_idx[mid]
 
             # Catch the case of a folded module having the output of another module as input
             if incomings_fn(m):
-                entry = build_address_book_stacked_entry(in_modules_fold_idx, num_folds=num_folds)
-            # Catch the case of a folded module having the input of the network as input
+                entry = build_address_book_stacked_entry(
+                    m, in_modules_fold_idx, num_folds=num_folds
+                )
             else:
-                input_idx = [[idx[1] for idx in fi] for fi in in_modules_fold_idx]
-                input_idx_t = torch.tensor(input_idx)
-                entry = AddressBookEntry([], [input_idx_t])
+                # Catch the case of a folded module having the input of the network as input
+                # That is, this is the case of an input layer
+                entry = AddressBookEntry(m, [], [])
 
             num_folds[mid] = m.num_folds
             entries.append(entry)
 
         # Append the last bookkeeping entry with the information to compute the output tensor
         entry = build_address_book_stacked_entry(
-            [fold_idx_info.out_fold_idx], num_folds=num_folds, output=True
+            None, [fold_idx_info.out_fold_idx], num_folds=num_folds, output=True
         )
         entries.append(entry)
 
-        return LayerAddressBook(entries, in_graph_fn=in_graph_fn)
+        return LayerAddressBook(entries)
 
 
 class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
@@ -96,85 +93,81 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self,
         scope: Scope,
         num_channels: int,
-        layers: List[TorchLayer],
-        in_layers: Dict[TorchLayer, List[TorchLayer]],
-        outputs: List[TorchLayer],
+        layers: list[TorchLayer],
+        in_layers: dict[TorchLayer, list[TorchLayer]],
+        outputs: list[TorchLayer],
         *,
-        topologically_ordered: bool = False,
-        fold_idx_info: Optional[FoldIndexInfo] = None,
+        properties: StructuralProperties,
+        fold_idx_info: FoldIndexInfo | None = None,
     ) -> None:
         super().__init__(
             layers,
             in_layers,
             outputs,
-            topologically_ordered=topologically_ordered,
             fold_idx_info=fold_idx_info,
         )
-        self.scope = scope
-        self.num_channels = num_channels
+        self._scope = scope
+        self._num_channels = num_channels
+        self._properties = properties
+
+    @property
+    def scope(self) -> Scope:
+        return self._scope
+
+    @property
+    def num_variables(self) -> int:
+        return len(self.scope)
+
+    @property
+    def num_channels(self) -> int:
+        return self._num_channels
+
+    @property
+    def properties(self) -> StructuralProperties:
+        return self._properties
+
+    def layer_inputs(self, l: TorchLayer) -> list[TorchLayer]:
+        return self.node_inputs(l)
+
+    def layer_outputs(self, l: TorchLayer) -> list[TorchLayer]:
+        return self.node_outputs(l)
+
+    @property
+    def layers(self) -> list[TorchLayer]:
+        return self.nodes
+
+    @property
+    def layers_inputs(self) -> dict[TorchLayer, list[TorchLayer]]:
+        return self.nodes_inputs
+
+    @property
+    def layers_outputs(self) -> dict[TorchLayer, list[TorchLayer]]:
+        return self.nodes_outputs
 
     def reset_parameters(self) -> None:
         # For each layer, initialize its parameters, if any
         for l in self.layers:
-            for _, p in l.params.items():
-                if not p.has_address_book:
-                    p.initialize_address_book()
+            for p in l.params.values():
                 p.reset_parameters()
 
-    def layer_inputs(self, l: TorchLayer) -> List[TorchLayer]:
-        return self.node_inputs(l)
+    def _set_device(self, device: str | torch.device | int) -> None:
+        for l in self.layers:
+            for p in l.params.values():
+                p._set_device(device)
+        super()._set_device(device)
 
-    def layer_outputs(self, l: TorchLayer) -> List[TorchLayer]:
-        return self.node_outputs(l)
-
-    @property
-    def layers(self) -> List[TorchLayer]:
-        return self.nodes
-
-    @property
-    def layers_inputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
-        return self.nodes_inputs
-
-    @property
-    def layers_outputs(self) -> Dict[TorchLayer, List[TorchLayer]]:
-        return self.nodes_outputs
-
-    def _build_address_book(self) -> AddressBook:
-        fold_idx_info = self._fold_idx_info
-        if fold_idx_info is None:
-            fold_idx_info = build_fold_index_info(
-                self.topological_ordering(),
-                outputs=self.outputs,
-                incomings_fn=self.node_inputs,
-                in_address_fn=lambda l: l.scope,
-            )
-        address_book = LayerAddressBook.from_index_info(
-            self.topological_ordering(),
-            fold_idx_info,
-            incomings_fn=self.layer_inputs,
-            in_graph_fn=self._index_input,
+    def _build_unfold_index_info(self) -> FoldIndexInfo:
+        return build_unfold_index_info(
+            self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
         )
-        self._fold_idx_info = None
-        return address_book
 
-    def _index_input(self, x: Tensor, idx: Tensor) -> Tensor:
-        # Index and process the input tensor, before feeding it to the input layers
-        # idx: (F, D)
-        # x: (B, C, D)
-        return x[..., idx].permute(2, 1, 0, 3)  # (F, C, B, D)
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> LayerAddressBook:
+        return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
 
-    def _eval_layers(self, x: Tensor) -> Tensor:
-        # Evaluate layers
-        y = self._eval_forward(x)  # (O, B, K)
+    def _evaluate_layers(self, x: Tensor) -> Tensor:
+        # Evaluate layers on the given input
+        y = self.evaluate(x)  # (O, B, K)
         return y.transpose(0, 1)  # (B, O, K)
-
-    def _sample_layers(self, num_samples: int) -> Tuple[Tensor, Tensor]:
-        # Sample layers
-        y = self._sample(num_samples)
-        samples = y[0][0, 0, :, :]  # (C, N, D)
-        samples = E.rearrange(samples, "c n d -> n c d")  # (N, C, D
-        mixture_samples = y[1]
-        return samples, mixture_samples  # (N, C, D)
 
 
 class TorchCircuit(AbstractTorchCircuit):
@@ -196,8 +189,8 @@ class TorchCircuit(AbstractTorchCircuit):
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     def forward(self, x: Tensor) -> Tensor:
-        return self._eval_layers(x)
-    
+        return self._evaluate_layers(x)
+
 
 class TorchConstantCircuit(AbstractTorchCircuit):
     """The tensorized circuit with concrete computational graph in PyTorch.
@@ -215,6 +208,7 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
-        x = torch.empty(size=(1, self.num_channels, len(self.scope)), device=self.device)
-        x = self._eval_layers(x)  # (B, O, K)
+        # Evaluate the layers using some dummy input
+        x = torch.empty(size=(1, self.num_channels, self.num_variables), device=self.device)
+        x = self._evaluate_layers(x)  # (B, O, K)
         return x.squeeze(dim=0)  # (O, K)

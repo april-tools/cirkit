@@ -1,7 +1,7 @@
-import einops as E
 from abc import ABC
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
+import einops as E
 import torch
 from torch import Tensor
 
@@ -22,7 +22,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -37,7 +37,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         )
 
     @property
-    def fold_settings(self) -> Tuple[Any, ...]:
+    def fold_settings(self) -> tuple[Any, ...]:
         return self.num_input_units, self.num_output_units, self.arity
 
 
@@ -59,7 +59,7 @@ class TorchHadamardLayer(TorchProductLayer):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -69,9 +69,12 @@ class TorchHadamardLayer(TorchProductLayer):
             num_folds (int): The number of channels. Defaults to 1.
             arity (int, optional): The arity of the layer. Defaults to 2.
         """
-        assert (
-            num_output_units == num_input_units
-        ), "The number of input and output units must be the same for Hadamard product."
+        if arity < 2:
+            raise ValueError("The arity should be at least 2")
+        if num_output_units != num_input_units:
+            raise ValueError(
+                "The number of input and output units must be the same for Hadamard product"
+            )
         super().__init__(
             num_input_units, num_output_units, arity=arity, num_folds=num_folds, semiring=semiring
         )
@@ -101,7 +104,7 @@ class TorchKroneckerLayer(TorchProductLayer):
         *,
         arity: int = 2,
         num_folds: int = 1,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -149,7 +152,7 @@ class TorchDenseLayer(TorchSumLayer):
         *,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -167,7 +170,7 @@ class TorchDenseLayer(TorchSumLayer):
         self.weight = weight
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         return {
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
@@ -175,7 +178,7 @@ class TorchDenseLayer(TorchSumLayer):
         }
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -193,34 +196,28 @@ class TorchDenseLayer(TorchSumLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, Ko).
 
-    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
-        if self.arity != 1:
-            raise NotImplementedError("Sampling of Dense layer only implemented for arity 1.")
+    def sample(self, num_samples: int, x: Tensor) -> tuple[Tensor, Tensor]:
+        weight = self.weight()
 
-        negative = self.weight() < 0
-        negative = negative.any()
-
-        unnormalised = self.weight().sum(-1)
-        unnormalised = torch.logical_or(unnormalised < 1 - 1e-6,  unnormalised > 1 + 1e-6)
-        unnormalised = unnormalised.any()
-
+        negative = torch.any(weight < 0.0)
         if negative:
-            raise ValueError("Sampling only works with positive weights!")
-        if unnormalised:
-            raise ValueError("Sampling only works with a normalised parametrisation!")
-        
+            raise ValueError("Sampling only works with positive weights")
+
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        if not normalized:
+            raise ValueError("Sampling only works with a normalized parametrization")
+
         c = x.shape[2]
         d = x.shape[-1]
 
-        mixing_distribution = torch.distributions.Categorical(
-            probs=self.weight()
-        )  # shape (F, O, K)
+        # mixing_distribution: (F, O, K)
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
 
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
         mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
 
-        x = torch.gather(x, -3, mixing_indices)
+        x = torch.gather(x, dim=-3, index=mixing_indices)
         x = x[:, 0]
         return x, mixing_samples
 
@@ -239,7 +236,7 @@ class TorchMixingLayer(TorchSumLayer):
         arity: int = 2,
         num_folds: int = 1,
         weight: TorchParameter,
-        semiring: Optional[Semiring] = None,
+        semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
@@ -261,7 +258,7 @@ class TorchMixingLayer(TorchSumLayer):
         self.weight = weight
 
     @property
-    def params(self) -> Dict[str, TorchParameter]:
+    def params(self) -> dict[str, TorchParameter]:
         return dict(weight=self.weight)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -279,26 +276,24 @@ class TorchMixingLayer(TorchSumLayer):
             "fhbk,fkh->fbk", inputs=(x,), operands=(weight,), dim=1, keepdim=False
         )
 
-    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
-        negative = self.weight() < 0
-        negative = negative.any()
+    def sample(self, num_samples: int, x: Tensor) -> tuple[Tensor, Tensor]:
+        weight = self.weight()
 
-        unnormalised = self.weight().sum(-1)
-        unnormalised = torch.logical_or(unnormalised < 1 - 1e-6,  unnormalised > 1 + 1e-6)
-        unnormalised = unnormalised.any()
-
+        negative = torch.any(weight < 0.0)
         if negative:
-            raise ValueError("Sampling only works with positive weights!")
-        if unnormalised:
-            raise ValueError("Sampling only works with a normalised parametrisation!")
+            raise ValueError("Sampling only works with positive weights")
+
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        if not normalized:
+            raise ValueError("Sampling only works with a normalized parametrization")
 
         c = x.shape[2]
         k = x.shape[-3]
         d = x.shape[-1]
 
-        mixing_distribution = torch.distributions.Categorical(
-            probs=self.weight()
-        )  # shape (F, K, H)
+        # mixing_distribution: (F, O, K)
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
+
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
         mixing_indices = E.repeat(mixing_samples, "f k n -> f 1 c k n d", c=c, k=k, d=d)

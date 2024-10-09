@@ -1,7 +1,7 @@
-import functools
+import heapq
 import itertools
-import operator
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from collections.abc import Iterable, Sequence
+from typing import NamedTuple, TypeVar
 
 from cirkit.symbolic.circuit import (
     Circuit,
@@ -9,32 +9,46 @@ from cirkit.symbolic.circuit import (
     CircuitOperation,
     CircuitOperator,
     StructuralPropertyError,
+    are_compatible,
 )
-from cirkit.symbolic.layers import InputLayer, Layer, LayerOperation, ProductLayer, SumLayer
+from cirkit.symbolic.layers import InputLayer, Layer, LayerOperator, ProductLayer, SumLayer
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -> Circuit:
+def concatenate(scs: Sequence[Circuit], registry: OperatorRegistry | None = None) -> Circuit:
+    """Concatenates a sequence of symbolic circuits. Concatenating circuits means constructing
+    another circuit such that its output layers consists of the output layers of each circuit
+    (in the given order). This operator does not require the satisfaction of any structural
+    property by the given circuits.
+
+    Args:
+        scs: A sequence of symbolic circuits.
+        registry: A registry of symbolic layer operators. It is not used for this operator.
+
+    Returns:
+        A circuit obtained by concatenating circuits.
+
+    Raises:
+        ValueError: If the given circuits to concatenate have different number of channels per
+            variable.
+    """
     # Retrieve the number of channels
-    assert len(set(sc.num_channels for sc in scs)) == 1
+    num_channels_s = {sc.num_channels for sc in scs}
+    if len(num_channels_s) != 1:
+        raise ValueError(
+            f"Only circuits with the same number of channels can be concatenated, "
+            f"but found a set of number of channels {num_channels_s}"
+        )
     num_channels = scs[0].num_channels
 
-    # Retrieve the union of the scopes of the circuits
-    scope = functools.reduce(operator.or_, map(lambda sc: sc.scope, scs))
-    # TODO: refactor scope class, I (LL) do not understand why do we would have different implementations
-    #       of the Scope data structure. What is the difference between Scope and FrozenSetScope?
-    #       Why do not we have just a frozen set or a bitmap?
-    # assert scope == scs[0].scope
-    assert tuple(scope) == tuple(scs[0].scope)
-
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_block: Dict[Layer, CircuitBlock] = {}
+    layers_to_block: dict[Layer, CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
-    output_blocks: List[CircuitBlock] = []
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
+    output_blocks: list[CircuitBlock] = []
 
     # Copy the symbolic layers, pick references to parameters and build the blocks
     for sc in scs:
@@ -47,6 +61,9 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
             layers_to_block[sl] = block
         output_blocks.extend(layers_to_block[sl] for sl in sc.outputs)
 
+    # Retrieve the union of the scopes of the circuits
+    scope = Scope.union(*tuple(sc.scope for sc in scs))
+
     # Construct the symbolic circuit obtained by merging multiple circuits
     return Circuit.from_operation(
         scope,
@@ -54,16 +71,34 @@ def merge(scs: Sequence[Circuit], registry: Optional[OperatorRegistry] = None) -
         blocks,
         in_blocks,
         output_blocks,
-        operation=CircuitOperation(operator=CircuitOperator.MERGE, operands=tuple(scs)),
-        topologically_ordered=True,
+        operation=CircuitOperation(operator=CircuitOperator.CONCATENATE, operands=tuple(scs)),
     )
 
 
 def integrate(
     sc: Circuit,
-    scope: Optional[Iterable[int]] = None,
-    registry: Optional[OperatorRegistry] = None,
+    scope: Scope | None = None,
+    registry: OperatorRegistry | None = None,
 ) -> Circuit:
+    """Integrate the function computed by a circuit, and represent it as another circuit.
+    This operator requires the given circuit to be both smooth and decomposable.
+
+    Args:
+        sc: A symbolic circuit.
+        scope: The varaibles scope to integrate over. If it is None, then all variables on
+            which the given circuit is defined on will be integrated over.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        The symbolic circuit reprenting the integration operation of the given circuit.
+
+    Raises:
+        StructuralPropertyError: If the given circuit is not smooth and decomposable.
+        ValueError: If the scope to integrate over is not a subset of the scope of the circuit.
+    """
     # Check for structural properties
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
@@ -71,8 +106,9 @@ def integrate(
         )
 
     # Check the variable
-    scope = Scope(scope) if scope is not None else sc.scope
-    if (scope | sc.scope) != sc.scope:
+    if scope is None:
+        scope = sc.scope
+    elif not scope <= sc.scope:
         raise ValueError(
             "The variables scope to integrate must be a subset of the scope of the circuit"
         )
@@ -82,29 +118,22 @@ def integrate(
         registry = OPERATOR_REGISTRY.get()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_block: Dict[Layer, CircuitBlock] = {}
+    layers_to_block: dict[Layer, CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
         # Input layers get integrated over
         if isinstance(sl, InputLayer) and sl.scope & scope:
-            if not (sl.scope <= scope):
-                raise NotImplementedError(
-                    "Multivariate integration of proper subsets of variables is not implemented"
-                )
-            # Retrieve the integration rule from the registry and apply it
-            func = registry.retrieve_rule(LayerOperation.INTEGRATION, type(sl))
-            int_block = func(sl)
+            func = registry.retrieve_rule(LayerOperator.INTEGRATION, type(sl))
+            int_block = func(sl, scope=scope)
             blocks.append(int_block)
             layers_to_block[sl] = int_block
             continue
-        assert isinstance(
-            sl, (SumLayer, ProductLayer)
-        ), "Symbolic inner layers must be either sum or product layers"
-        # Sum/product layers are simply copied
+        # Sum/product layers and input layers whose scope does not
+        # include variables to integrate over are simply copied.
         # Note that this willTo keep track of shared parameters, we use parameter references
         parameters = {name: p.ref() for name, p in sl.params.items()}
         int_block = CircuitBlock.from_layer(type(sl)(**sl.config, **parameters))
@@ -125,16 +154,37 @@ def integrate(
         operation=CircuitOperation(
             operator=CircuitOperator.INTEGRATION,
             operands=(sc,),
-            metadata=dict(scope=scope),
+            metadata={"scope": scope},
         ),
-        topologically_ordered=True,
     )
 
 
-def multiply(
-    lhs_sc: Circuit, rhs_sc: Circuit, registry: Optional[OperatorRegistry] = None
-) -> Circuit:
-    if not lhs_sc.is_compatible(rhs_sc):
+def multiply(sc1: Circuit, sc2: Circuit, registry: OperatorRegistry | None = None) -> Circuit:
+    """Multiply two symbolic circuit and represent it as another circuit.
+    This operator requires the input circuits to be smooth, decomposable and compatible.
+    The resulting circuit will be smooth and decomposable. Moreover, if the input circuits
+    are structured decomposable, then the resulting circuit will also be structured.
+
+    Args:
+        sc1: The first symbolic circuit.
+        sc2: The second symbolic circuit.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        The symbolic circuit representing the multiplication of the given circuits.
+
+    Raises:
+        NotImplementedError: If the given circuits have different scope.
+        StructuralPropertyError: If the given circuits are not smooth and decomposable,
+            or if they are not compatible with each other.
+    """
+    if sc1.scope != sc2.scope:
+        raise NotImplementedError("Only the product of circuits over the same scope is implemented")
+    scope = sc1.scope
+    if not are_compatible(sc1, sc2):
         raise StructuralPropertyError(
             "Only compatible circuits can be multiplied into decomposable circuits."
         )
@@ -144,16 +194,16 @@ def multiply(
         registry = OPERATOR_REGISTRY.get()
 
     # Map from pairs of layers to their product circuit block
-    layers_to_block: Dict[Tuple[Layer, Layer], CircuitBlock] = {}
+    layers_to_block: dict[tuple[Layer, Layer], CircuitBlock] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
 
     # Get the first layers to multiply, from the outputs
     to_multiply = []
-    for lhs_out, rhs_out in itertools.product(lhs_sc.outputs, rhs_sc.outputs):
-        to_multiply.append((lhs_out, rhs_out))
+    for l1, l2 in itertools.product(sc1.outputs, sc2.outputs):
+        to_multiply.append((l1, l2))
 
     # Using a stack in place of recursion for better memory efficiency and debugging
     while to_multiply:
@@ -161,36 +211,38 @@ def multiply(
         if pair in layers_to_block:
             to_multiply.pop()
             continue
-        lhs_layer, rhs_layer = pair
-        lhs_inputs = lhs_sc.layer_inputs(lhs_layer)
-        rhs_inputs = rhs_sc.layer_inputs(rhs_layer)
-        if isinstance(lhs_layer, InputLayer):
+        l1, l2 = pair
+        l1_inputs = sc1.layer_inputs(l1)
+        l2_inputs = sc2.layer_inputs(l2)
+        if isinstance(l1, InputLayer):
             # TODO: generalize product between input and inner layers
             next_to_multiply = []
-        elif isinstance(lhs_layer, SumLayer):
+        elif isinstance(l1, SumLayer):
             # TODO: generalize product between input and inner layers
-            next_to_multiply = list(itertools.product(lhs_inputs, rhs_inputs))
-        elif isinstance(lhs_layer, ProductLayer):
+            next_to_multiply = list(itertools.product(l1_inputs, l2_inputs))
+        elif isinstance(l1, ProductLayer):
             # TODO: generalize product such that it can multiply layers of different arity
-            #       this is related to the much more relaxed definition of compatibility between circuits
-            assert len(lhs_inputs) == len(rhs_inputs)
+            #       this is related to the much more relaxed definition of compatibility between
+            #       circuits
+            assert len(l1_inputs) == len(l2_inputs)
             # Sort layers based on the scope, such that we can multiply layers with matching scopes
-            lhs_inputs = sorted(lhs_inputs, key=lambda sl: sl.scope)
-            rhs_inputs = sorted(rhs_inputs, key=lambda sl: sl.scope)
-            next_to_multiply = list(zip(lhs_inputs, rhs_inputs))
+            l1_inputs = sorted(l1_inputs, key=lambda sl: sl.scope)
+            l2_inputs = sorted(l2_inputs, key=lambda sl: sl.scope)
+            next_to_multiply = list(zip(l1_inputs, l2_inputs))
         else:
             assert False
 
-        # Check if at least one pair of layers needs to be multiplied before going up in the recursion
-        not_yet_multiplied = list(filter(lambda p: p not in layers_to_block, next_to_multiply))
+        # Check if at least one pair of layers needs to be multiplied before going up in the
+        # recursion
+        not_yet_multiplied = [p for p in next_to_multiply if p not in layers_to_block]
         if len(not_yet_multiplied) > 0:
             to_multiply.extend(not_yet_multiplied)
             continue
 
         # In case all the input have been multiplied, then construct the product layer
-        prod_signature = type(lhs_layer), type(rhs_layer)
-        func = registry.retrieve_rule(LayerOperation.MULTIPLICATION, *prod_signature)
-        prod_block = func(lhs_layer, rhs_layer)
+        prod_signature = type(l1), type(l2)
+        func = registry.retrieve_rule(LayerOperator.MULTIPLICATION, *prod_signature)
+        prod_block = func(l1, l2)
         blocks.append(prod_block)
         # Make the connections
         in_blocks[prod_block] = [layers_to_block[p] for p in next_to_multiply]
@@ -199,50 +251,231 @@ def multiply(
 
     # Construct the sequence of output blocks
     output_blocks = [
-        layers_to_block[(lhs_out, rhs_out)]
-        for lhs_out, rhs_out in itertools.product(lhs_sc.outputs, rhs_sc.outputs)
+        layers_to_block[(l1, l2)] for l1, l2 in itertools.product(sc1.outputs, sc2.outputs)
     ]
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
-        lhs_sc.scope | rhs_sc.scope,
-        lhs_sc.num_channels,
+        scope,
+        sc1.num_channels,
         blocks,
         in_blocks,
         output_blocks,
-        operation=CircuitOperation(
-            operator=CircuitOperator.MULTIPLICATION, operands=(lhs_sc, rhs_sc)
-        ),
-        topologically_ordered=True,
+        operation=CircuitOperation(operator=CircuitOperator.MULTIPLICATION, operands=(sc1, sc2)),
     )
 
 
-def differentiate(sc: Circuit, registry: Optional[OperatorRegistry] = None) -> Circuit:
+class _ScopeVarAndBlockAndInputs(NamedTuple):
+    """The tuple of a scope variable and a circiut block for diff.
+
+    Used for differential of ProductLayer.
+    """
+
+    scope_var: int  # The id of a variable in the scope of THE ProductLayer.
+    diff_block: CircuitBlock  # The partial diff of THE ProductLayer w.r.t. the var.
+    diff_in_blocks: list[CircuitBlock]  # The inputs to the layer of diff_block.
+
+
+_T = TypeVar("_T")  # TODO: for _repeat. move together
+
+
+# TODO: this can be made public and moved to utils, might be used elsewhere.
+def _repeat(iterable: Iterable[_T], /, *, times: int) -> Iterable[_T]:
+    """Repeat each element of the given iterable by given times.
+
+    The elements are generated lazily. The iterable passed in will be iterated once.
+    This function differs from itertools in that it repeats an interable instead of only one elem.
+
+    Args:
+        iterable (Iterable[_T]): The iterable to generate the original elements.
+        times (int): The times to repeat each element.
+
+    Returns:
+        Iterable[_T]: The iterable with repeated elements.
+    """
+    return itertools.chain.from_iterable(itertools.repeat(elem, times=times) for elem in iterable)
+
+
+def differentiate(
+    sc: Circuit, registry: OperatorRegistry | None = None, *, order: int = 1
+) -> Circuit:
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
             "Only smooth and decomposable circuits can be efficiently differentiated."
         )
+    if order <= 0:
+        raise ValueError("The order of differentiation must be positive.")
 
-    # Use the registry in the current context, if not specified otherwise
-    if registry is None:
-        registry = OPERATOR_REGISTRY.get()
-    raise NotImplementedError()
-
-
-def conjugate(
-    sc: Circuit,
-    registry: Optional[OperatorRegistry] = None,
-) -> Circuit:
     # Use the registry in the current context, if not specified otherwise
     if registry is None:
         registry = OPERATOR_REGISTRY.get()
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
-    layers_to_block: Dict[Layer, CircuitBlock] = {}
+    layers_to_blocks: dict[Layer, list[CircuitBlock]] = {}
 
     # For each new circuit block, keep track of its inputs
-    blocks: List[CircuitBlock] = []
-    in_blocks: Dict[CircuitBlock, List[CircuitBlock]] = {}
+    in_blocks: dict[CircuitBlock, Sequence[CircuitBlock]] = {}
+
+    for sl in sc.topological_ordering():
+        # "diff_blocks: List[CircuitBlock]" is the diff of sl wrt each variable and channel in order
+        #                                   and then at the end we append a copy of sl
+        sl_params = {name: p.ref() for name, p in sl.params.items()}
+
+        if isinstance(sl, InputLayer):
+            # TODO: no type hint for func, also cannot quick jump in static analysis
+            func = registry.retrieve_rule(LayerOperator.DIFFERENTIATION, type(sl))
+            diff_blocks = [
+                func(sl, var_idx=var_idx, ch_idx=ch_idx, order=order)
+                for var_idx, ch_idx in itertools.product(
+                    range(len(sl.scope)), range(sc.num_channels)
+                )
+            ]
+
+        elif isinstance(sl, SumLayer):
+            # Zip to transpose the generator into an iterable of length (num_vars * num_chs),
+            #   corresponding to each var to take diff.
+            # Each item is a tuple of length arity, which are inputs to that diff.
+            # TODO: typeshed issue?
+            # ANNOTATE: zip gives Any when using *iterables.
+            zip_blocks_in: Iterable[tuple[CircuitBlock, ...]] = zip(
+                # This is a generator of length arity, corresponding to each input of sl.
+                # Each item is a list of length (num_vars * num_chs), corresponding to the diff wrt
+                #   each variable of that input.
+                # NOTE: [-1] is omitted and will be added at the end.
+                *(layers_to_blocks[sl_in][:-1] for sl_in in sc.layer_inputs(sl))
+            )
+
+            # The layers are the same for all diffs of a SumLayer. We retrieve (num_vars * num_chs)
+            #   from the length of one input blocks.
+            var_ch = len(layers_to_blocks[sc.layer_inputs(sl)[0]][:-1])
+            diff_blocks = [
+                CircuitBlock.from_layer(type(sl)(**sl.config, **sl_params)) for _ in range(var_ch)
+            ]
+
+            # Connect the layers to their inputs, by zipping a length of (num_vars * num_chs).
+            in_blocks.update(zip(diff_blocks, zip_blocks_in))
+
+        elif isinstance(sl, ProductLayer):
+            # NOTE: Only the outmost level can be a generator, and inner levels must be lists,
+            #       otherwise reference to locals will be broken.
+
+            # This is a generator of length arity, corresponding to each input of sl.
+            # Each item is a list of length (num_vars * num_chs) of that input, corresponding to the
+            #   diff wrt each var and ch of that input.
+            all_scope_var_diff_block = (
+                # Each list is all the diffs of sl wrt each var and each channel in the scope of
+                #   the cur_layer in the input of sl.
+                [
+                    # Each named-tuple is a diff of sl and its inputs, where the diff is wrt the
+                    #   current variable and channel as in the double loop.
+                    _ScopeVarAndBlockAndInputs(
+                        # Label the named-tuple as the var id in the whole scope, for sorting.
+                        scope_var=scope_var,
+                        # The layers are the same for all diffs of a ProductLayer.
+                        diff_block=CircuitBlock.from_layer(type(sl)(**sl.config, **sl_params)),
+                        # The inputs to the diff is the copy of input to sl (retrieved by [-1]),
+                        #   only with cur_layer replaced by its diff.
+                        diff_in_blocks=[
+                            diff_cur_layer if sl_in == cur_layer else layers_to_blocks[sl_in][-1]
+                            for sl_in in sc.layer_inputs(sl)
+                        ],
+                    )
+                    # Loop over the (num_vars * num_chs) diffs of cur_layer, while also providing
+                    #   the corresponding scope_var which the current diff is wrt.
+                    # We need the scope_var to label and sort the diff layers of sl. We do nnt need
+                    #   channel ids because they are always saved densely in order.
+                    for scope_var, diff_cur_layer in zip(
+                        _repeat(cur_layer.scope, times=sc.num_channels),
+                        layers_to_blocks[cur_layer][:-1],
+                    )
+                ]
+                # Loop over each input of sl for the diffs wrt vars and chs in its scope.
+                for cur_layer in sc.layer_inputs(sl)
+            )
+
+            # NOTE: This relys on the fact that Scope object is iterated in id order.
+            # Merge sort the named-tuples by the var id in the scope, so that the diffs are
+            #   correctly ordered according to the scope of sl.
+            sorted_scope_var_diff_block = list(
+                heapq.merge(
+                    # Unpack the generator into several lists, where each list is the named-tuples
+                    #   wrt the scope of each input to sl.
+                    *all_scope_var_diff_block,
+                    key=lambda scope_var_diff_block: scope_var_diff_block.scope_var,
+                )
+            )
+
+            # Take out the diffs of sl and save them in diff_blocks in correct order.
+            diff_blocks = [
+                scope_var_diff_block.diff_block
+                for scope_var_diff_block in sorted_scope_var_diff_block
+            ]
+
+            # Connect the diffs with its corresponding inputs as saved in the named-tuples.
+            in_blocks.update(
+                (scope_var_diff_block.diff_block, scope_var_diff_block.diff_in_blocks)
+                for scope_var_diff_block in sorted_scope_var_diff_block
+            )
+
+        else:
+            # NOTE: In the above if/elif, we made all conditions explicit to make it more readable
+            #       and also easier for static analysis inside the blocks. Yet the completeness
+            #       cannot be inferred and is only guaranteed by larger picture. Also, should
+            #       anything really go wrong, we will hit this guard statement instead of going into
+            #       a wrong branch.
+            assert False, "This should not happen."
+
+        # Save a copy of sl in the diff circuit and connect inputs. This can be accessed through
+        #   diff_blocks[-1], as in the [-1] above for ProductLayer.
+        diff_blocks.append(CircuitBlock.from_layer(type(sl)(**sl.config, **sl_params)))
+        in_blocks[diff_blocks[-1]] = [layers_to_blocks[sl_in][-1] for sl_in in sc.layer_inputs(sl)]
+
+        # Save all the blocks including a copy of sl at [-1] as the diff layers of sl.
+        layers_to_blocks[sl] = diff_blocks
+
+    # Construct the integral symbolic circuit and set the integration operation metadata
+    return Circuit.from_operation(
+        sc.scope,
+        sc.num_channels,
+        sum(layers_to_blocks.values(), []),
+        in_blocks,  # TODO: in_blocks uses Sequence, and Sequence should work.
+        sum((layers_to_blocks[sl] for sl in sc.outputs), []),
+        operation=CircuitOperation(
+            operator=CircuitOperator.DIFFERENTIATION,
+            operands=(sc,),
+            metadata=dict(order=order),
+        ),
+    )
+
+
+def conjugate(
+    sc: Circuit,
+    registry: OperatorRegistry | None = None,
+) -> Circuit:
+    """Apply the complex conjugation operator to a symbolic circuit, and represent it as another
+    circuit. This operator does not require the satisfaction of structural properties. Moreover,
+    the resulting circuit will inherit the structural property of the given circuit.
+
+    Args:
+        sc: A symbolic circuit.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        The symbolic circuit representing the complex conjugation operation of the given circuit.
+    """
+    # Use the registry in the current context, if not specified otherwise
+    if registry is None:
+        registry = OPERATOR_REGISTRY.get()
+
+    # Mapping the symbolic circuit layers with blocks of circuit layers
+    layers_to_block: dict[Layer, CircuitBlock] = {}
+
+    # For each new circuit block, keep track of its inputs
+    blocks: list[CircuitBlock] = []
+    in_blocks: dict[CircuitBlock, list[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
         # The conjugation of a product layer is equivalent to the product of its conjugated inputs
@@ -257,7 +490,7 @@ def conjugate(
         # We are not taking the conjugation of a non-product layer
         # Retrieve the conjugation rule from the registry and apply it
         assert isinstance(sl, (InputLayer, SumLayer))
-        func = registry.retrieve_rule(LayerOperation.CONJUGATION, type(sl))
+        func = registry.retrieve_rule(LayerOperator.CONJUGATION, type(sl))
         conj_block = func(sl)
         blocks.append(conj_block)
         layers_to_block[sl] = conj_block
@@ -274,5 +507,4 @@ def conjugate(
         in_blocks,
         output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.CONJUGATION, operands=(sc,)),
-        topologically_ordered=True,
     )

@@ -1,9 +1,8 @@
-import torch
-import einops as E
-
 from abc import ABC
 from typing import Any, Dict, Optional, Tuple
 
+import einops as E
+import torch
 from torch import Tensor
 
 from cirkit.backend.torch.layers.inner import TorchInnerLayer
@@ -20,11 +19,6 @@ class TorchSumProductLayer(TorchInnerLayer, ABC):
             "arity": self.arity,
             "num_folds": self.num_folds,
         }
-
-    def sample_forward(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
-        product_samples = self.prod_layer.sample_forward(num_samples, x)
-        samples, mixing_samples = self.sum_layer.sample_forward(num_samples, product_samples)
-        return samples, mixing_samples
 
 
 class TorchTuckerLayer(TorchSumProductLayer):
@@ -83,7 +77,7 @@ class TorchTuckerLayer(TorchSumProductLayer):
             dim=-1,
             keepdim=True,
         )
-    
+
     def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
         raise NotImplementedError("Sampling not implemented for Tucker layers.")
 
@@ -147,29 +141,26 @@ class TorchCPLayer(TorchSumProductLayer):
     def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
         x = self.semiring.prod(x, dim=1, keepdim=False)
 
-        negative = self.weight() < 0
-        negative = negative.any()
+        weight = self.weight()
 
-        unnormalised = self.weight().sum(-1)
-        unnormalised = torch.logical_or(unnormalised < 1 - 1e-6,  unnormalised > 1 + 1e-6)
-        unnormalised = unnormalised.any()
-
+        negative = torch.any(weight < 0.0)
         if negative:
-            raise ValueError("Sampling only works with positive weights!")
-        if unnormalised:
-            raise ValueError("Sampling only works with a normalised parametrisation!")
+            raise ValueError("Sampling only works with positive weights")
+
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        if not normalized:
+            raise ValueError("Sampling only works with a normalized parametrization")
 
         c = x.shape[2]
         d = x.shape[-1]
 
-        mixing_distribution = torch.distributions.Categorical(
-            probs=self.weight()
-        )  # shape (F, O, K)
+        # mixing_distribution: (F, O, K)
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
 
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
         mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
 
-        x = torch.gather(x, -3, mixing_indices)
+        x = torch.gather(x, dim=-3, index=mixing_indices)
         x = x[:, 0]
         return x, mixing_samples

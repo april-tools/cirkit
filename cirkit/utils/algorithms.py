@@ -1,25 +1,15 @@
 from collections import deque
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from functools import cached_property
-from typing import (
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-)
+from typing import Generic, TypeVar
 
 NodeType = TypeVar("NodeType")
 
 
 def graph_nodes_outgoings(
     nodes: Iterable[NodeType], incomings_fn: Callable[[NodeType], Sequence[NodeType]]
-) -> Dict[NodeType, List[NodeType]]:
-    outgoings: Dict[NodeType, List[NodeType]] = {}
+) -> dict[NodeType, list[NodeType]]:
+    outgoings: dict[NodeType, list[NodeType]] = {}
     for n in nodes:
         incomings = incomings_fn(n)
         for ch in incomings:
@@ -48,14 +38,14 @@ def bfs(
 def topological_ordering(
     nodes: Iterable[NodeType],
     incomings_fn: Callable[[NodeType], Sequence[NodeType]],
-    outcomings_fn: Optional[Callable[[NodeType], Sequence[NodeType]]] = None,
+    outcomings_fn: Callable[[NodeType], Sequence[NodeType]] | None = None,
 ) -> Iterator[NodeType]:
     if outcomings_fn is None:
         if isinstance(nodes, Iterator):
             nodes = list(nodes)
         outgoings = graph_nodes_outgoings(nodes, incomings_fn)
         outcomings_fn = lambda n: outgoings.get(n, [])
-    num_incomings: Dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
+    num_incomings: dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
     inputs = map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items()))
     to_visit = deque(inputs)
     while to_visit:
@@ -72,14 +62,14 @@ def topological_ordering(
 def layerwise_topological_ordering(
     nodes: Iterable[NodeType],
     incomings_fn: Callable[[NodeType], Sequence[NodeType]],
-    outcomings_fn: Optional[Callable[[NodeType], Sequence[NodeType]]] = None,
-) -> Iterator[List[NodeType]]:
+    outcomings_fn: Callable[[NodeType], Sequence[NodeType]] | None = None,
+) -> Iterator[list[NodeType]]:
     if outcomings_fn is None:
         if isinstance(nodes, Iterator):
             nodes = list(nodes)
         outgoings = graph_nodes_outgoings(nodes, incomings_fn)
         outcomings_fn = lambda n: outgoings.get(n, [])
-    num_incomings: Dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
+    num_incomings: dict[NodeType, int] = {n: len(incomings_fn(n)) for n in nodes}
     inputs = list(map(lambda x: x[0], filter(lambda x: x[1] == 0, num_incomings.items())))
     yield inputs
     prev_ordering = inputs
@@ -104,7 +94,7 @@ def topologically_process_nodes(
     process_fn: Callable[[NodeType], NodeType],
     *,
     incomings_fn: Callable[[NodeType], Sequence[NodeType]],
-) -> Tuple[List[NodeType], Dict[NodeType, List[NodeType]], List[NodeType]]:
+) -> tuple[list[NodeType], dict[NodeType, list[NodeType]], list[NodeType]]:
     nodes_map = {}
     in_nodes = {}
     for n in ordering:
@@ -119,31 +109,31 @@ def topologically_process_nodes(
 class Graph(Generic[NodeType]):
     def __init__(
         self,
-        nodes: List[NodeType],
-        in_nodes: Dict[NodeType, List[NodeType]],
-        outputs: List[NodeType],
+        nodes: list[NodeType],
+        in_nodes: dict[NodeType, list[NodeType]],
+        outputs: list[NodeType],
     ):
         self._nodes = nodes
         self._in_nodes = in_nodes
         self._outputs = outputs
         self._out_nodes = graph_nodes_outgoings(nodes, self.node_inputs)
 
-    def node_inputs(self, n: NodeType) -> List[NodeType]:
+    def node_inputs(self, n: NodeType) -> list[NodeType]:
         return self._in_nodes.get(n, [])
 
-    def node_outputs(self, n: NodeType) -> List[NodeType]:
+    def node_outputs(self, n: NodeType) -> list[NodeType]:
         return self._out_nodes.get(n, [])
 
     @property
-    def nodes(self) -> List[NodeType]:
+    def nodes(self) -> list[NodeType]:
         return self._nodes
 
     @property
-    def nodes_inputs(self) -> Dict[NodeType, List[NodeType]]:
+    def nodes_inputs(self) -> dict[NodeType, list[NodeType]]:
         return self._in_nodes
 
     @property
-    def nodes_outputs(self) -> Dict[NodeType, List[NodeType]]:
+    def nodes_outputs(self) -> dict[NodeType, list[NodeType]]:
         return self._out_nodes
 
     @property
@@ -158,29 +148,18 @@ class Graph(Generic[NodeType]):
 class DiAcyclicGraph(Graph[NodeType]):
     def __init__(
         self,
-        nodes: List[NodeType],
-        in_nodes: Dict[NodeType, List[NodeType]],
-        outputs: List[NodeType],
-        *,
-        topologically_ordered: bool = False,
+        nodes: list[NodeType],
+        in_nodes: dict[NodeType, list[NodeType]],
+        outputs: list[NodeType],
     ):
         super().__init__(nodes, in_nodes, outputs)
-        self._topologically_ordered = topologically_ordered
 
-    @property
-    def is_topologically_ordered(self) -> bool:
-        return self._topologically_ordered
-
-    def topological_ordering(
-        self, roots: Optional[Iterable[NodeType]] = None
-    ) -> Iterator[NodeType]:
-        if self.is_topologically_ordered and roots is None:
-            return iter(self.nodes)
+    def topological_ordering(self, roots: Iterable[NodeType] | None = None) -> Iterator[NodeType]:
         nodes = self._nodes if roots is None else bfs(roots, self.node_inputs)
         outcomings_fn = self.node_outputs if roots is None else None
         return topological_ordering(nodes, self.node_inputs, outcomings_fn)
 
-    def layerwise_topological_ordering(self) -> Iterator[List[NodeType]]:
+    def layerwise_topological_ordering(self) -> Iterator[list[NodeType]]:
         return layerwise_topological_ordering(self._nodes, self.node_inputs, self.node_outputs)
 
 
@@ -194,24 +173,14 @@ class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
         return output
 
 
-class BiRootedDiAcyclicGraph(RootedDiAcyclicGraph[NodeType]):
-    @cached_property
-    def input(self) -> NodeType:
-        inputs = list(self.inputs)
-        if len(inputs) != 1:
-            raise ValueError("The graph should have exactly one input node.")
-        (input,) = inputs
-        return input
-
-
 BimapLeftType = TypeVar("BimapLeftType")
 BimapRightType = TypeVar("BimapRightType")
 
 
 class BiMap(Generic[BimapLeftType, BimapRightType]):
     def __init__(self):
-        self._lhs_map: Dict[BimapLeftType, BimapRightType] = {}
-        self._rhs_map: Dict[BimapRightType, BimapLeftType] = {}
+        self._lhs_map: dict[BimapLeftType, BimapRightType] = {}
+        self._rhs_map: dict[BimapRightType, BimapLeftType] = {}
 
     def has_left(self, lhs: BimapLeftType) -> bool:
         return lhs in self._lhs_map

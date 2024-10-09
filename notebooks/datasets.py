@@ -3,82 +3,70 @@ import os
 from collections import Counter
 
 import h5py
-import pandas as pd
 import numpy as np
-from typing import Optional, List, Union, Dict
-
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 BINARY_DATASETS = [
-    'accidents',
-    'ad',
-    'baudio',
-    'bbc',
-    'binarized_mnist',
-    'bnetflix',
-    'book',
-    'c20ng',
-    'cr52',
-    'cwebkb',
-    'dna',
-    'jester',
-    'kdd',
-    'kosarek',
-    'msnbc',
-    'msweb',
-    'mushrooms',
-    'nltcs',
-    'ocr_letters',
-    'plants',
-    'pumsb_star',
-    'tmovie',
-    'tretail'
+    "accidents",
+    "ad",
+    "baudio",
+    "bbc",
+    "binarized_mnist",
+    "bnetflix",
+    "book",
+    "c20ng",
+    "cr52",
+    "cwebkb",
+    "dna",
+    "jester",
+    "kdd",
+    "kosarek",
+    "msnbc",
+    "msweb",
+    "mushrooms",
+    "nltcs",
+    "ocr_letters",
+    "plants",
+    "pumsb_star",
+    "tmovie",
+    "tretail",
 ]
 
-UCI_DATASETS = [
-    'power',
-    'gas',
-    'hepmass',
-    'miniboone',
-    'bsds300'
-]
+UCI_DATASETS = ["power", "gas", "hepmass", "miniboone", "bsds300"]
 
-ARTIFICIAL_DATASETS = [
-    'ring',
-    'rings',
-    'funnel',
-    'banana',
-    'cosine',
-    'spiral'
-]
+ARTIFICIAL_DATASETS = ["ring", "rings", "funnel", "banana", "cosine", "spiral"]
 
 
 def load_binary_dataset(
     name: str,
-    path: str = 'datasets',
-    sep: str = ',',
-    dtype: Union[str, np.dtype] = np.int64,
-    splits: Optional[List[str]] = None
-) -> Dict[str, np.ndarray]:
-    def csv_2_numpy(filename: str, path: str, sep: str, dtype: Union[str, np.dtype]) -> np.ndarray:
-        reader = csv.reader(open(os.path.join(path, filename), 'r'), delimiter=sep)
+    path: str = "datasets",
+    sep: str = ",",
+    dtype: str | np.dtype = np.int64,
+    splits: list[str] | None = None,
+) -> dict[str, np.ndarray]:
+    def csv_2_numpy(filename: str, path: str, sep: str, dtype: str | np.dtype) -> np.ndarray:
+        reader = csv.reader(open(os.path.join(path, filename)), delimiter=sep)
         return np.array(list(reader), dtype=dtype)
+
     if splits is None:
-        splits = ['train', 'valid', 'test']
-    filenames = map(lambda s: os.path.join(name, "{0}.{1}.{2}".format(name, s, 'data')), splits)
+        splits = ["train", "valid", "test"]
+    filenames = map(lambda s: os.path.join(name, "{}.{}.{}".format(name, s, "data")), splits)
     return dict(zip(splits, map(lambda fname: csv_2_numpy(fname, path, sep, dtype), filenames)))
 
 
-def load_uci_dataset(name: str, path: str = 'datasets', dtype: Union[str, np.dtype] = np.float32) -> Dict[str, np.ndarray]:
-    if name == 'power':
+def load_uci_dataset(
+    name: str, path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
+    if name == "power":
         return load_uci_power(path=path, dtype=dtype)
-    if name == 'gas':
+    if name == "gas":
         return load_uci_gas(path=path, dtype=dtype)
-    if name == 'hepmass':
+    if name == "hepmass":
         return load_uci_hepmass(path=path, dtype=dtype)
-    if name == 'miniboone':
+    if name == "miniboone":
         return load_uci_miniboone(path=path, dtype=dtype)
-    if name == 'bsds300':
+    if name == "bsds300":
         return load_uci_bsds300(path=path, dtype=dtype)
     raise ValueError(f"Unknown UCI dataset called '{name}'")
 
@@ -91,24 +79,24 @@ def load_artificial_dataset(
     dtype: np.dtype = np.float32,
     discretize: bool = False,
     discretize_bins: int = 32,
-    **kwargs
-) -> Dict[str, np.ndarray]:
+    **kwargs,
+) -> dict[str, np.ndarray]:
     num_valid_samples = int(num_samples * valid_test_perc * 0.5)
     num_test_samples = int(num_samples * valid_test_perc)
     total_num_samples = num_samples + num_valid_samples + num_test_samples
-    if name == 'ring':
+    if name == "ring":
         data = sample_single_ring(total_num_samples, seed=seed, **kwargs)
-    elif name == 'rings':
+    elif name == "rings":
         data = sample_nested_rings(total_num_samples, seed=seed, **kwargs)
-    elif name == 'funnel':
+    elif name == "funnel":
         data = sample_funnel(total_num_samples, seed=seed, **kwargs)
         data = rotate2d_samples(data)
-    elif name == 'banana':
+    elif name == "banana":
         data = sample_banana(total_num_samples, seed=seed, **kwargs)
-    elif name == 'cosine':
+    elif name == "cosine":
         data = sample_cosine(total_num_samples, seed=seed, **kwargs)
         data = rotate2d_samples(data)
-    elif name == 'spiral':
+    elif name == "spiral":
         data = spiral_sample(total_num_samples, seed=seed, **kwargs)
     else:
         raise ValueError(f"Unknown artificial dataset called '{name}'")
@@ -119,22 +107,31 @@ def load_artificial_dataset(
 
     # Discretize data, if specified
     if discretize:
-        xlim, ylim = (np.min(data[:, 0]), np.max(data[:, 0])), (np.min(data[:, 1]), np.max(data[:, 1]))
-        _, xedges, yedges = np.histogram2d(data[:, 0], data[:, 1], bins=discretize_bins, range=[xlim, ylim])
-        quantized_xdata = np.searchsorted(xedges[:-1], data[:, 0], side='right') - 1
-        quantized_ydata = np.searchsorted(yedges[:-1], data[:, 1], side='right') - 1
+        xlim, ylim = (np.min(data[:, 0]), np.max(data[:, 0])), (
+            np.min(data[:, 1]),
+            np.max(data[:, 1]),
+        )
+        _, xedges, yedges = np.histogram2d(
+            data[:, 0], data[:, 1], bins=discretize_bins, range=[xlim, ylim]
+        )
+        quantized_xdata = np.searchsorted(xedges[:-1], data[:, 0], side="right") - 1
+        quantized_ydata = np.searchsorted(yedges[:-1], data[:, 1], side="right") - 1
         data = np.stack([quantized_xdata, quantized_ydata], axis=1)
 
     # Split the data
     data_train, data_valid_test = train_test_split(
-        data, test_size=num_valid_samples + num_test_samples, shuffle=True, random_state=seed)
+        data, test_size=num_valid_samples + num_test_samples, shuffle=True, random_state=seed
+    )
     data_valid, data_test = train_test_split(
-        data_valid_test, test_size=num_test_samples, shuffle=False)
+        data_valid_test, test_size=num_test_samples, shuffle=False
+    )
     return dict(train=data_train, valid=data_valid, test=data_test)
 
 
-def load_uci_power(path: str = 'datasets', dtype: Union[str, np.dtype] = np.float32) -> Dict[str, np.ndarray]:
-    data = np.load(os.path.join(path, 'power', 'data.npy'))
+def load_uci_power(
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
+    data = np.load(os.path.join(path, "power", "data.npy"))
     rng = np.random.RandomState(42)
     rng.shuffle(data)
 
@@ -165,12 +162,14 @@ def load_uci_power(path: str = 'datasets', dtype: Union[str, np.dtype] = np.floa
     return dict(train=data_train, valid=data_valid, test=data_test)
 
 
-def load_uci_gas(path: str = 'datasets', dtype: Union[str, np.dtype] = np.float32) -> Dict[str, np.ndarray]:
+def load_uci_gas(
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     def compute_correlations(data: pd.DataFrame):
         return (data.corr() > 0.98).to_numpy().sum(axis=1)
 
     # Load and clean data
-    data = pd.read_pickle(os.path.join(path, 'gas', 'ethylene_CO.pickle'))
+    data = pd.read_pickle(os.path.join(path, "gas", "ethylene_CO.pickle"))
     data.drop("Meth", axis=1, inplace=True)
     data.drop("Eth", axis=1, inplace=True)
     data.drop("Time", axis=1, inplace=True)
@@ -186,7 +185,7 @@ def load_uci_gas(path: str = 'datasets', dtype: Union[str, np.dtype] = np.float3
     data = data.to_numpy().astype(dtype, copy=False)
 
     # Split data
-    num_test_samples = int(0.1*data.shape[0])
+    num_test_samples = int(0.1 * data.shape[0])
     data_test = data[-num_test_samples:]
     data_train = data[0:-num_test_samples]
     num_valid_samples = int(0.1 * len(data_train))
@@ -196,10 +195,12 @@ def load_uci_gas(path: str = 'datasets', dtype: Union[str, np.dtype] = np.float3
     return dict(train=data_train, valid=data_valid, test=data_test)
 
 
-def load_uci_hepmass(path: str = 'datasets', dtype: Union[str, np.dtype] = np.float32) -> Dict[str, np.ndarray]:
+def load_uci_hepmass(
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     # Load the data
-    data_train = pd.read_csv(os.path.join(path, 'hepmass', '1000_train.csv'), index_col=False)
-    data_test = pd.read_csv(os.path.join(path, 'hepmass', '1000_test.csv'), index_col=False)
+    data_train = pd.read_csv(os.path.join(path, "hepmass", "1000_train.csv"), index_col=False)
+    data_test = pd.read_csv(os.path.join(path, "hepmass", "1000_test.csv"), index_col=False)
 
     # Gets rid of any background noise examples i.e. class label 0
     data_train = data_train[data_train[data_train.columns[0]] == 1]
@@ -224,7 +225,9 @@ def load_uci_hepmass(path: str = 'datasets', dtype: Union[str, np.dtype] = np.fl
         if max_count > 5:
             features_to_remove.append(i)
         i += 1
-    data_train = data_train[:, [i for i in range(data_train.shape[1]) if i not in features_to_remove]]
+    data_train = data_train[
+        :, [i for i in range(data_train.shape[1]) if i not in features_to_remove]
+    ]
     data_test = data_test[:, [i for i in range(data_test.shape[1]) if i not in features_to_remove]]
 
     # Split the training data
@@ -235,9 +238,11 @@ def load_uci_hepmass(path: str = 'datasets', dtype: Union[str, np.dtype] = np.fl
     return dict(train=data_train, valid=data_valid, test=data_test)
 
 
-def load_uci_miniboone(path: str = 'datasets', dtype: Union[str, np.dtype] = np.float32) -> Dict[str, np.ndarray]:
+def load_uci_miniboone(
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
     # Load and split the data
-    data = np.load(os.path.join(path, 'miniboone', 'data.npy'))
+    data = np.load(os.path.join(path, "miniboone", "data.npy"))
     data = data.astype(dtype=dtype, copy=False)
     num_test_samples = int(0.1 * len(data))
     data_test = data[-num_test_samples:]
@@ -256,25 +261,32 @@ def load_uci_miniboone(path: str = 'datasets', dtype: Union[str, np.dtype] = np.
     return dict(train=data_train, valid=data_valid, test=data_test)
 
 
-def load_uci_bsds300(path: str = 'datasets', dtype: Union[str, np.dtype] = np.float32) -> Dict[str, np.ndarray]:
-    f = h5py.File(os.path.join(path, 'BSDS300', 'BSDS300.hdf5'), 'r')
-    data_train = f['train'][:].astype(dtype, copy=False)
-    data_valid = f['validation'][:].astype(dtype, copy=False)
-    data_test = f['test'][:].astype(dtype, copy=False)
+def load_uci_bsds300(
+    path: str = "datasets", dtype: str | np.dtype = np.float32
+) -> dict[str, np.ndarray]:
+    f = h5py.File(os.path.join(path, "BSDS300", "BSDS300.hdf5"), "r")
+    data_train = f["train"][:].astype(dtype, copy=False)
+    data_valid = f["validation"][:].astype(dtype, copy=False)
+    data_test = f["test"][:].astype(dtype, copy=False)
     return dict(train=data_train, valid=data_valid, test=data_test)
 
 
-def sample_single_ring(num_samples: int, dim: int = 2, sigma: float = 0.26, seed: int = 42) -> np.ndarray:
+def sample_single_ring(
+    num_samples: int, dim: int = 2, sigma: float = 0.26, seed: int = 42
+) -> np.ndarray:
     return sample_rings(num_samples, dim, sigma, radia=[1], seed=seed)
 
 
-def sample_nested_rings(num_samples: int, dim: int = 2, sigma: float = 0.2, seed: int = 42) -> np.ndarray:
+def sample_nested_rings(
+    num_samples: int, dim: int = 2, sigma: float = 0.2, seed: int = 42
+) -> np.ndarray:
     return sample_rings(num_samples, dim, sigma, radia=[1, 3, 5], seed=seed)
 
 
 def sample_funnel(num_samples: int, dim: int = 2, sigma: float = 2.0, seed: int = 42) -> np.ndarray:
     def thresh(x: np.ndarray, low_lim: float = 0.0, high_lim: float = 5.0):
         return np.clip(np.exp(-x), low_lim, high_lim)
+
     random_state = np.random.RandomState(seed)
     data = random_state.randn(num_samples, dim)
     data[:, 0] *= sigma
@@ -283,19 +295,27 @@ def sample_funnel(num_samples: int, dim: int = 2, sigma: float = 2.0, seed: int 
     return data
 
 
-def sample_banana(num_samples: int, dim: int = 2, sigma: float = 2.0, cf: float = 0.2, seed: int = 42) -> np.ndarray:
+def sample_banana(
+    num_samples: int, dim: int = 2, sigma: float = 2.0, cf: float = 0.2, seed: int = 42
+) -> np.ndarray:
     random_state = np.random.RandomState(seed)
     data = random_state.randn(num_samples, dim)
     data[:, 0] = sigma * data[:, 0]
-    data[:, 1] = data[:, 1] + cf * (data[:, 0] ** 2 - sigma ** 2)
+    data[:, 1] = data[:, 1] + cf * (data[:, 0] ** 2 - sigma**2)
     if dim > 2:
         data[:, 2:] = random_state.randn(num_samples, dim - 2)
     return data
 
 
 def sample_cosine(
-        num_samples: int, dim: int = 2, sigma: float = 1.0,
-        xlim: float = 4.0, omega: float = 2.0, alpha: float = 3.0, seed: int = 42) -> np.ndarray:
+    num_samples: int,
+    dim: int = 2,
+    sigma: float = 1.0,
+    xlim: float = 4.0,
+    omega: float = 2.0,
+    alpha: float = 3.0,
+    seed: int = 42,
+) -> np.ndarray:
     random_state = np.random.RandomState(seed)
     x0 = random_state.uniform(-xlim, xlim, num_samples)
     x1 = alpha * np.cos(omega * x0)
@@ -306,8 +326,15 @@ def sample_cosine(
 
 
 def spiral_sample(
-        num_samples: int, dim: int = 2, sigma: float = 0.5, eps: float = 1.0, r_scale: float = 1.5,
-        length: float = np.pi, starts: Optional[list] = None, seed: int = 42) -> np.ndarray:
+    num_samples: int,
+    dim: int = 2,
+    sigma: float = 0.5,
+    eps: float = 1.0,
+    r_scale: float = 1.5,
+    length: float = np.pi,
+    starts: list | None = None,
+    seed: int = 42,
+) -> np.ndarray:
     if starts is None:
         starts = [0.0, 2.0 / 3, 4.0 / 3]
     starts = length * np.asarray(starts)
@@ -334,7 +361,7 @@ def spiral_sample(
         return m + np.random.randn(n, dim) * v
 
     for si, s in enumerate(starts):
-        data[si * batch_size:(si + 1) * batch_size] = sample_branch(batch_size, s)
+        data[si * batch_size : (si + 1) * batch_size] = sample_branch(batch_size, s)
     return data[:num_samples]
 
 
@@ -346,7 +373,9 @@ def rotate2d_samples(data: np.ndarray, radia: float = np.pi * 0.25) -> np.ndarra
     return rot_data
 
 
-def sample_rings(num_samples: int, dim: int, sigma: float = 0.1, radia: Optional[list] = None, seed: int = 42):
+def sample_rings(
+    num_samples: int, dim: int, sigma: float = 0.1, radia: list | None = None, seed: int = 42
+):
     assert dim >= 2
     if radia is None:
         radia = [1, 3, 5]

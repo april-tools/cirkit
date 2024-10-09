@@ -1,19 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Generic, List, Optional, Type, TypeVar
+from typing import Generic, TypeVar
 
 RegistrySign = TypeVar("RegistrySign")
 RegistryFunc = TypeVar("RegistryFunc")
 
 
 class InvalidRuleSign(Exception):
-    def __init__(self, annotations: Dict[str, Type]):
+    def __init__(self, annotations: dict[str, type]):
         super().__init__(
             f"Cannot extract rule signature from function with annotations '{annotations}"
         )
 
 
 class InvalidRuleFunction(Exception):
-    def __init__(self, annotations: Dict[str, Type]):
+    def __init__(self, annotations: dict[str, type]):
         super().__init__(f"Invalid Compilation rule function with annotations '{annotations}'")
 
 
@@ -23,7 +23,7 @@ class CompilationRuleNotFound(Exception):
 
 
 class CompilerRegistry(Generic[RegistrySign, RegistryFunc], ABC):
-    def __init__(self, rules: Optional[Dict[RegistrySign, RegistryFunc]] = None):
+    def __init__(self, rules: dict[RegistrySign, RegistryFunc] | None = None):
         self._rules = {} if rules is None else rules
 
     @classmethod
@@ -36,10 +36,10 @@ class CompilerRegistry(Generic[RegistrySign, RegistryFunc], ABC):
         raise InvalidRuleSign(func.__annotations__)
 
     @property
-    def signatures(self) -> List[RegistrySign]:
+    def signatures(self) -> list[RegistrySign]:
         return list(self._rules)
 
-    def add_rule(self, func: RegistryFunc, *, signature: Optional[RegistrySign] = None) -> None:
+    def add_rule(self, func: RegistryFunc, *, signature: RegistrySign | None = None) -> None:
         if not self._validate_rule_function(func):
             raise InvalidRuleFunction(func.__annotations__)
         if signature is None:

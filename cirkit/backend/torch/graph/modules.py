@@ -1,91 +1,229 @@
-import abc
-import torch
-import itertools
-import einops as E
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union, cast
+from collections.abc import Iterator
+from dataclasses import dataclass
+from typing import Any, Protocol, TypeVar, cast
 
+import torch
 from torch import Tensor, nn
 
-from cirkit.backend.torch.graph.address_book import AddressBook, FoldIndexInfo
 from cirkit.utils.algorithms import DiAcyclicGraph
-from cirkit.utils.scope import Scope
 
 
 class AbstractTorchModule(nn.Module, ABC):
+    """An abstract class representing a torch.nn.Module that can be folded."""
+
     def __init__(self, *, num_folds: int = 1):
+        """Initialize the abstract torch module object.
+
+        Args:
+            num_folds: The number of folds computed by the module.
+        """
         super().__init__()
         self.num_folds = num_folds
 
     @property
     @abstractmethod
-    def fold_settings(self) -> Tuple[Any, ...]:
-        ...
+    def fold_settings(self) -> tuple[Any, ...]:
+        """Retrieve a tuple of attributes on which modules must agree on in order to be folded.
+
+        Returns:
+            A tuple of attributes.
+        """
 
 
 TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)
+"""TypeVar: A torch module type that subclasses
+    [AbstractTorchModule][cirkit.backend.torch.graph.modules.AbstractTorchModule]."""
+
+
+@dataclass(frozen=True)
+class FoldIndexInfo:
+    ordering: list[TorchModule]
+    in_fold_idx: dict[int, list[list[tuple[int, int]]]]
+    out_fold_idx: list[tuple[int, int]]
+
+
+@dataclass(frozen=True)
+class AddressBookEntry:
+    module: TorchModule | None
+    in_module_ids: list[list[int]]
+    in_fold_idx: list[Tensor | None]
+
+
+class AddressBook(ABC):
+    def __init__(self, entries: list[AddressBookEntry]) -> None:
+        super().__init__()
+        self._entries = entries
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __iter__(self) -> Iterator[AddressBookEntry]:
+        return iter(self._entries)
+
+    def set_device(self, device: str | torch.device | int) -> "AddressBook":
+        def set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
+            return AddressBookEntry(
+                entry.module,
+                entry.in_module_ids,
+                [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
+            )
+
+        self._entries = [set_book_entry_device(entry) for entry in self._entries]
+        return self
+
+    @abstractmethod
+    def lookup(
+        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+    ) -> Iterator[tuple[TorchModule | None, tuple[Tensor, ...]]]:
+        ...
+
+
+class ModuleEvalFunctional(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a function that evaluates a module on some inputs."""
+
+    def __call__(self, module: TorchModule, *inputs: Tensor) -> Tensor:
+        """Evaluate a module on some inputs.
+
+        Args:
+            module: The module to evaluate.
+            inputs: The tensor inputs to the module
+
+        Returns:
+            Tensor: The output of the module as specified by this functional.
+        """
 
 
 class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
+    """A torch directed acyclic graph module, i.e., a computational graph made of torch modules."""
+
     def __init__(
         self,
-        modules: List[TorchModule],
-        in_modules: Dict[TorchModule, List[TorchModule]],
-        outputs: List[TorchModule],
+        modules: list[TorchModule],
+        in_modules: dict[TorchModule, list[TorchModule]],
+        outputs: list[TorchModule],
         *,
-        topologically_ordered: bool = False,
-        fold_idx_info: Optional[FoldIndexInfo] = None,
+        fold_idx_info: FoldIndexInfo | None = None,
     ):
-        modules: List = nn.ModuleList(modules)  # type: ignore
+        """Initialize a Torch computational graph.
+
+        Args:
+            modules: The module nodes.
+            in_modules: A dictionary mapping modules to their input modules, if any.
+            outputs: A list of modules that are the output modules in the computational graph.
+            fold_idx_info: The folding index information. It can be None if the Torch graph is
+                not folded. This will be consumed (i.e., set to None) when the address book data
+                structure is built.
+        """
+        modules: list = nn.ModuleList(modules)  # type: ignore
         super().__init__()
-        super(nn.Module, self).__init__(
-            modules, in_modules, outputs, topologically_ordered=topologically_ordered
-        )
-        self._address_book: Optional[AddressBook] = None
-        self._fold_idx_info = fold_idx_info
+        super(nn.Module, self).__init__(modules, in_modules, outputs)
         self._device = None
+        if fold_idx_info is None:
+            fold_idx_info = self._build_unfold_index_info()
+        self._address_book = self._build_address_book(fold_idx_info)
+
+    def _set_device(self, device: str | torch.device | int) -> None:
+        self._address_book.set_device(device)
+        self._device = device
 
     @property
-    def has_address_book(self) -> bool:
-        return self._address_book is not None
+    def device(self) -> str | torch.device | int | None:
+        """Retrieve the device the module is allocated to.
 
-    @property
-    def device(self) -> Optional[Union[str, torch.device, int]]:
+        Returns:
+            A device, which can be a string, and integer or a torch.device object.
+        """
         return self._device
 
-    def initialize_address_book(self) -> None:
-        if self.has_address_book:
-            raise RuntimeError("The address book has already been initialized")
+    @property
+    def address_book(self) -> AddressBook:
+        """Retrieve the address book object of the computational graph.
 
-        # Build the book address entries
-        self._address_book = self._build_address_book()
+        Returns:
+            The address book.
+        """
+        return self._address_book
 
     def to(
         self,
-        device: Optional[Union[str, torch.device, int]] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: str | torch.device | int | None = None,
+        dtype: torch.dtype | None = None,
         non_blocking: bool = False,
     ) -> "TorchDiAcyclicGraph":
+        """Specialization of the torch module's to() method. This is used to set the device
+            attribute.
+
+        Args:
+            device: The device.
+            dtype: The dtype.
+            non_blocking: Whether the method should be non-blocking.
+
+        Returns:
+            Itself.
+        """
         if device is not None:
-            self._address_book.set_device(device)
-            self._device = device
+            self._set_device(device)
         return cast(TorchDiAcyclicGraph, super().to(device, dtype, non_blocking))
 
-    @abc.abstractmethod
-    def _build_address_book(self) -> AddressBook:
-        ...
+    def evaluate(
+        self, x: Tensor | None = None, module_fn: ModuleEvalFunctional | None = None
+    ) -> Tensor:
+        """Evaluate the Torch graph by following the topological ordering,
+            and by using the address book information to retrieve the inputs to each module.
 
-    def _eval_forward(self, x: Optional[Tensor] = None) -> Tensor:
+        Args:
+            x: The input of the Torch computational graph. It can be None.
+            module_fn: A functional over modules that overrides the forward method defined by a
+                module. It can be None. If it is None, then the ```__call__``` method defined by
+                the module itself is used.
+
+        Returns:
+            The output tensor of the Torch graph.
+            If the Torch graph has multiple outputs, then they will be stacked.
+
+        Raises:
+            RuntimeError: If the address book is somehow not well-formed.
+        """
         # Evaluate the computational graph by following the topological ordering,
         # and by using the book address information to retrieve the inputs to each
         # (possibly folded) torch module.
-        if not self.has_address_book:
-            raise RuntimeError("The address book has not been initialized")
-        module_outputs: List[Tensor] = []
-        inputs_iterator = self._address_book.lookup(module_outputs, in_graph=x)
-        for module, inputs in itertools.zip_longest(self.topological_ordering(), inputs_iterator):
+        module_outputs: list[Tensor] = []
+        for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
             if module is None:
                 (output,) = inputs
                 return output
-            y = module(*inputs)
+            if module_fn is None:
+                y = module(*inputs)
+            else:
+                y = module_fn(module, *inputs)
             module_outputs.append(y)
+        raise RuntimeError("The address book is malformed")
+
+    @abstractmethod
+    def _build_unfold_index_info(self) -> FoldIndexInfo:
+        ...
+
+    @abstractmethod
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
+        ...
+
+    def __repr__(self) -> str:
+        def indent(s: str) -> str:
+            s = s.split("\n")
+            r = s[0]
+            if len(s) == 1:
+                return r
+            return r + "\n" + "\n".join(f"  {t}" for t in s[1:])
+
+        lines = [self.__class__.__name__ + "("]
+        extra_lines = self.extra_repr()
+        if extra_lines:
+            lines.append(f"  {indent(extra_lines)}")
+        for i, entry in enumerate(self._address_book):
+            if entry.module is None:
+                continue
+            repr_module = indent(repr(entry.module))
+            lines.append(f"  ({i}): {repr_module}")
+        lines.append(")")
+        return "\n".join(lines)

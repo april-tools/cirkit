@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -11,12 +11,15 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchGaussianProductMean,
     TorchGaussianProductStddev,
     TorchHadamardParameter,
+    TorchIndexParameter,
     TorchKroneckerParameter,
     TorchLogParameter,
     TorchLogSoftmaxParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
     TorchPointerParameter,
+    TorchPolynomialDifferential,
+    TorchPolynomialProduct,
     TorchReduceLSEParameter,
     TorchReduceProductParameter,
     TorchReduceSumParameter,
@@ -37,11 +40,14 @@ from cirkit.symbolic.parameters import (
     GaussianProductMean,
     GaussianProductStddev,
     HadamardParameter,
+    IndexParameter,
     KroneckerParameter,
     LogParameter,
     LogSoftmaxParameter,
     OuterProductParameter,
     OuterSumParameter,
+    PolynomialDifferential,
+    PolynomialProduct,
     ReduceLSEParameter,
     ReduceProductParameter,
     ReduceSumParameter,
@@ -65,10 +71,7 @@ def _retrieve_dtype(dtype: DataType) -> torch.dtype:
     if dtype == DataType.REAL:
         return default_float_dtype
     if dtype == DataType.COMPLEX:
-        if default_float_dtype == torch.float32:
-            return torch.complex64
-        if default_float_dtype == torch.float64:
-            return torch.complex128
+        return default_float_dtype.to_complex()
     raise ValueError(
         f"Cannot determine the torch.dtype to use, current default: {default_float_dtype}, given dtype: {dtype}"
     )
@@ -100,6 +103,11 @@ def compile_reference_parameter(
     # and wrap it in a pointer parameter node.
     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+
+def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
+    (in_shape,) = p.in_shapes
+    return TorchIndexParameter(in_shape, indices=p.indices, dim=p.axis)
 
 
 def compile_sum_parameter(compiler: "TorchCompiler", p: SumParameter) -> TorchSumParameter:
@@ -230,10 +238,23 @@ def compile_gaussian_product_log_partition(
     return TorchGaussianProductLogPartition(*p.in_shapes)
 
 
-DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
+def compile_polynomial_product(
+    compiler: "TorchCompiler", p: PolynomialProduct
+) -> TorchPolynomialProduct:
+    return TorchPolynomialProduct(*p.in_shapes)
+
+
+def compile_polynomial_differential(
+    compiler: "TorchCompiler", p: PolynomialDifferential
+) -> TorchPolynomialDifferential:
+    return TorchPolynomialDifferential(*p.in_shapes, order=p.order)
+
+
+DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
+    IndexParameter: compile_index_parameter,
     SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,
     KroneckerParameter: compile_kronecker_parameter,
@@ -254,4 +275,6 @@ DEFAULT_PARAMETER_COMPILATION_RULES: Dict[ParameterCompilationSign, ParameterCom
     GaussianProductMean: compile_gaussian_product_mean,
     GaussianProductStddev: compile_gaussian_product_stddev,
     GaussianProductLogPartition: compile_gaussian_product_log_partition,
+    PolynomialProduct: compile_polynomial_product,
+    PolynomialDifferential: compile_polynomial_differential,
 }
