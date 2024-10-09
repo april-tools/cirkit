@@ -78,9 +78,6 @@ class TorchTuckerLayer(TorchSumProductLayer):
             keepdim=True,
         )
 
-    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
-        raise NotImplementedError("Sampling not implemented for Tucker layers.")
-
 
 class TorchCPLayer(TorchSumProductLayer):
     """The Candecomp Parafac (collapsed) layer, which is a fused dense-hadamard.
@@ -138,21 +135,21 @@ class TorchCPLayer(TorchSumProductLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
-    def sample(self, num_samples: int, x: Tensor) -> Tuple[Tensor, Tensor]:
-        x = self.semiring.prod(x, dim=1, keepdim=False)
+    def sample(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+        # x: (F, H, C, K, num_samples, D)
+        x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
 
         weight = self.weight()
-
         negative = torch.any(weight < 0.0)
         if negative:
             raise ValueError("Sampling only works with positive weights")
-
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
         c = x.shape[2]
         d = x.shape[-1]
+        num_samples = x.shape[-2]
 
         # mixing_distribution: (F, O, K)
         mixing_distribution = torch.distributions.Categorical(probs=weight)

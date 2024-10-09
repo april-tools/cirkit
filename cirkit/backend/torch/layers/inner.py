@@ -96,8 +96,8 @@ class TorchHadamardLayer(TorchProductLayer):
     def sample(self, x: Tensor) -> tuple[Tensor, None]:
         # Concatenate samples over disjoint variables through a sum
         # x: (F, H, C, K, num_samples, D)
-        samples = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
-        return samples, None
+        x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
+        return x, None
 
 
 class TorchKroneckerLayer(TorchProductLayer):
