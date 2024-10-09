@@ -14,7 +14,7 @@ def categorical_layer_factory(
         num_units,
         num_channels,
         num_categories=num_categories,
-        probs=Parameter.from_leaf(
+        probs=Parameter.from_input(
             TensorParameter(
                 num_units, num_channels, num_categories, initializer=DirichletInitializer()
             )
@@ -36,12 +36,16 @@ def test_build_circuit_qg_3x3_cp():
     assert not sc.is_structured_decomposable
     assert not sc.is_omni_compatible
     assert len(list(sc.inputs)) == 9
-    assert all(isinstance(sl, CategoricalLayer) and len(sl.scope) == 1 for sl in sc.inputs)
+    assert all(
+        isinstance(sl, CategoricalLayer) and len(sc.layer_scope(sl)) == 1 for sl in sc.inputs
+    )
     assert len(list(sc.product_layers)) == 14
     assert len(list(sl for sl in sc.sum_layers if isinstance(sl, DenseLayer))) == 28
     assert len(list(sl for sl in sc.sum_layers if isinstance(sl, MixingLayer))) == 2
-    assert len(list(sl for sl in sc.product_layers if sl.scope == Scope([0, 1, 3, 4]))) == 2
-    assert len(list(sl for sl in sc.product_layers if sl.scope == Scope(range(9)))) == 2
+    assert (
+        len(list(sl for sl in sc.product_layers if sc.layer_scope(sl) == Scope([0, 1, 3, 4]))) == 2
+    )
+    assert len(list(sl for sl in sc.product_layers if sc.layer_scope(sl) == Scope(range(9)))) == 2
 
 
 def test_build_circuit_qt4_3x3_cp():
@@ -57,9 +61,15 @@ def test_build_circuit_qt4_3x3_cp():
     assert sc.is_decomposable
     assert sc.is_structured_decomposable
     assert len(list(sc.inputs)) == 9
-    assert all(isinstance(sl, CategoricalLayer) and len(sl.scope) == 1 for sl in sc.inputs)
+    assert all(
+        isinstance(sl, CategoricalLayer) and len(sc.layer_scope(sl)) == 1 for sl in sc.inputs
+    )
     assert len(list(sc.product_layers)) == 4
     assert len(list(sl for sl in sc.sum_layers if isinstance(sl, DenseLayer))) == 12
     assert len(list(sl for sl in sc.sum_layers if isinstance(sl, MixingLayer))) == 0
-    assert all(len(sc.layer_inputs(sl)) == 2 for sl in sc.product_layers if len(sl.scope) == 2)
-    assert all(len(sc.layer_inputs(sl)) == 4 for sl in sc.product_layers if len(sl.scope) > 2)
+    assert all(
+        len(sc.layer_inputs(sl)) == 2 for sl in sc.product_layers if len(sc.layer_scope(sl)) == 2
+    )
+    assert all(
+        len(sc.layer_inputs(sl)) == 4 for sl in sc.product_layers if len(sc.layer_scope(sl)) > 2
+    )

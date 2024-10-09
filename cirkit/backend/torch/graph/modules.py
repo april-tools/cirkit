@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar, cast
 
 import torch
 from torch import Tensor, nn
 
-from cirkit.utils.algorithms import DiAcyclicGraph
+from cirkit.utils.algorithms import DiAcyclicGraph, subgraph
 
 
 class AbstractTorchModule(nn.Module, ABC):
@@ -19,7 +19,11 @@ class AbstractTorchModule(nn.Module, ABC):
             num_folds: The number of folds computed by the module.
         """
         super().__init__()
-        self.num_folds = num_folds
+        self._num_folds = num_folds
+
+    @property
+    def num_folds(self) -> int:
+        return self._num_folds
 
     @property
     @abstractmethod
@@ -29,6 +33,16 @@ class AbstractTorchModule(nn.Module, ABC):
         Returns:
             A tuple of attributes.
         """
+
+    @property
+    def sub_modules(self) -> Mapping[str, "AbstractTorchModule"]:
+        """Retrieve a dictionary mapping string identifiers to torch sub-modules,
+        that must be passed to the ```__init__``` method of the top-level torch module.
+
+        Returns:
+            A dictionary of torch modules.
+        """
+        return {}
 
 
 TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)
@@ -52,14 +66,31 @@ class AddressBookEntry:
 
 class AddressBook(ABC):
     def __init__(self, entries: list[AddressBookEntry]) -> None:
+        last_entry = entries[-1]
+        if last_entry.module is not None:
+            raise ValueError(
+                "The last entry of the address book must not have a module associated to it"
+            )
+        if len(last_entry.in_fold_idx) != 1:
+            raise ValueError(
+                "The last entry of the address book must have only one fold index tensor"
+            )
+        (out_fold_idx,) = last_entry.in_fold_idx
+        if len(out_fold_idx.shape) != 1:
+            raise ValueError("The output fold index tensor should be a 1-dimensional tensor")
         super().__init__()
         self._entries = entries
+        self._num_outputs = out_fold_idx.shape[0]
 
     def __len__(self) -> int:
         return len(self._entries)
 
     def __iter__(self) -> Iterator[AddressBookEntry]:
         return iter(self._entries)
+
+    @property
+    def num_outputs(self) -> int:
+        return self._num_outputs
 
     def set_device(self, device: str | torch.device | int) -> "AddressBook":
         def set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
@@ -99,9 +130,9 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
     def __init__(
         self,
-        modules: list[TorchModule],
-        in_modules: dict[TorchModule, list[TorchModule]],
-        outputs: list[TorchModule],
+        modules: Sequence[TorchModule],
+        in_modules: dict[TorchModule, Sequence[TorchModule]],
+        outputs: Sequence[TorchModule],
         *,
         fold_idx_info: FoldIndexInfo | None = None,
     ):
@@ -115,17 +146,14 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 not folded. This will be consumed (i.e., set to None) when the address book data
                 structure is built.
         """
-        modules: list = nn.ModuleList(modules)  # type: ignore
+        modules: list[TorchModule] = nn.ModuleList(modules)  # type: ignore
         super().__init__()
         super(nn.Module, self).__init__(modules, in_modules, outputs)
         self._device = None
+        self._is_folded = fold_idx_info is not None
         if fold_idx_info is None:
             fold_idx_info = self._build_unfold_index_info()
         self._address_book = self._build_address_book(fold_idx_info)
-
-    def _set_device(self, device: str | torch.device | int) -> None:
-        self._address_book.set_device(device)
-        self._device = device
 
     @property
     def device(self) -> str | torch.device | int | None:
@@ -137,6 +165,15 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         return self._device
 
     @property
+    def is_folded(self) -> bool:
+        """Retrieves whether the computational graph is folded or not.
+
+        Returns:
+            True if it is folded, False otherwise.
+        """
+        return self._is_folded
+
+    @property
     def address_book(self) -> AddressBook:
         """Retrieve the address book object of the computational graph.
 
@@ -144,6 +181,12 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             The address book.
         """
         return self._address_book
+
+    def subgraph(self, *roots: TorchModule) -> "TorchDiAcyclicGraph[TorchModule]":
+        if self.is_folded:
+            raise ValueError("Cannot extract a sub-computational graph from a folded one")
+        nodes, in_nodes = subgraph(roots, self.node_inputs)
+        return TorchDiAcyclicGraph[TorchModule](nodes, in_nodes, outputs=roots)
 
     def to(
         self,
@@ -199,6 +242,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 y = module_fn(module, *inputs)
             module_outputs.append(y)
         raise RuntimeError("The address book is malformed")
+
+    def _set_device(self, device: str | torch.device | int) -> None:
+        self._address_book.set_device(device)
+        self._device = device
 
     @abstractmethod
     def _build_unfold_index_info(self) -> FoldIndexInfo:

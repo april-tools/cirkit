@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 
 import torch
 from torch import Tensor
@@ -53,7 +53,10 @@ class LayerAddressBook(AddressBook):
 
     @classmethod
     def from_index_info(
-        cls, fold_idx_info: FoldIndexInfo, *, incomings_fn: Callable[[TorchLayer], list[TorchLayer]]
+        cls,
+        fold_idx_info: FoldIndexInfo,
+        *,
+        incomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
     ) -> "LayerAddressBook":
         # The address book entries being built
         entries: list[AddressBookEntry] = []
@@ -93,9 +96,9 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self,
         scope: Scope,
         num_channels: int,
-        layers: list[TorchLayer],
-        in_layers: dict[TorchLayer, list[TorchLayer]],
-        outputs: list[TorchLayer],
+        layers: Sequence[TorchLayer],
+        in_layers: dict[TorchLayer, Sequence[TorchLayer]],
+        outputs: Sequence[TorchLayer],
         *,
         properties: StructuralProperties,
         fold_idx_info: FoldIndexInfo | None = None,
@@ -126,22 +129,22 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def properties(self) -> StructuralProperties:
         return self._properties
 
-    def layer_inputs(self, l: TorchLayer) -> list[TorchLayer]:
+    @property
+    def layers(self) -> Sequence[TorchLayer]:
+        return self.nodes
+
+    def layer_inputs(self, l: TorchLayer) -> Sequence[TorchLayer]:
         return self.node_inputs(l)
 
-    def layer_outputs(self, l: TorchLayer) -> list[TorchLayer]:
+    def layer_outputs(self, l: TorchLayer) -> Sequence[TorchLayer]:
         return self.node_outputs(l)
 
     @property
-    def layers(self) -> list[TorchLayer]:
-        return self.nodes
-
-    @property
-    def layers_inputs(self) -> dict[TorchLayer, list[TorchLayer]]:
+    def layers_inputs(self) -> dict[TorchLayer, Sequence[TorchLayer]]:
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> dict[TorchLayer, list[TorchLayer]]:
+    def layers_outputs(self) -> dict[TorchLayer, Sequence[TorchLayer]]:
         return self.nodes_outputs
 
     def reset_parameters(self) -> None:

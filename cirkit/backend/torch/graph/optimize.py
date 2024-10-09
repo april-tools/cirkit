@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from enum import IntEnum, auto
 from typing import Generic, Protocol
 
@@ -47,8 +47,8 @@ class PatternMatcherFunc(Protocol):
         module: TorchModule,
         pattern: GraphOptPattern[TorchModule],
         *,
-        incomings_fn: Callable[[TorchModule], list[TorchModule]],
-        outcomings_fn: Callable[[TorchModule], list[TorchModule]],
+        incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
+        outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
     ) -> GraphOptMatch[TorchModule] | None:
         ...
 
@@ -66,8 +66,8 @@ def optimize_graph(
     outputs: Iterable[TorchModule],
     patterns: Iterable[GraphOptPattern],
     *,
-    incomings_fn: Callable[[TorchModule], list[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], list[TorchModule]],
+    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
     match_optimizer_fn: MatchOptimizerFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
@@ -161,8 +161,8 @@ def match_optimization_patterns(
     outputs: Iterable[TorchModule],
     patterns: Iterable[GraphOptPattern[TorchModule]],
     *,
-    incomings_fn: Callable[[TorchModule], list[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], list[TorchModule]],
+    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
 ) -> tuple[list[GraphOptMatch[TorchModule]], dict[TorchModule, GraphOptMatch[TorchModule]]]:
@@ -244,8 +244,8 @@ def _match_pattern_graph(
     modules: Iterable[TorchModule],
     pattern: GraphOptPattern[TorchModule],
     *,
-    incomings_fn: Callable[[TorchModule], list[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], list[TorchModule]],
+    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
+    outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
     pattern_matcher_fn: PatternMatcherFunc,
 ) -> Iterator[GraphOptMatch[TorchModule]]:
     # Tries to match a pattern by rooting it in all the modules of the computational graph

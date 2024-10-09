@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any, Optional
 
 import torch
@@ -64,32 +65,28 @@ class TorchInputLayer(TorchLayer, ABC):
         return self.arity
 
     @property
-    def fold_settings(self) -> tuple[Any, ...]:
-        return self.num_variables, self.num_channels, self.num_output_units
+    @abstractmethod
+    def config(self) -> Mapping[str, Any]:
+        ...
 
     @property
-    def config(self) -> dict[str, Any]:
-        return {
-            "scope_idx": self.scope_idx,
-            "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
-        }
-
-    @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {}
+
+    @property
+    def fold_settings(self) -> tuple[Any, ...]:
+        pshapes = [(n, p.shape) for n, p in self.params.items()]
+        return self.num_variables, *self.config.items(), *pshapes
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
         ...
 
-    @abstractmethod
     def integrate(self) -> Tensor:
-        ...
+        raise TypeError(f"Integration is not implemented for layers of type {type(self)}")
 
-    @abstractmethod
     def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
-        ...
+        raise TypeError(f"Sampling is not implemented for layers of type {type(self)}")
 
     def extra_repr(self) -> str:
         return (
@@ -108,7 +105,20 @@ class TorchInputLayer(TorchLayer, ABC):
         )
 
 
-class TorchExpFamilyLayer(TorchInputLayer):
+class TorchConstantLayer(TorchInputLayer, ABC):
+    def __init__(
+        self,
+        num_output_units: int,
+        num_folds: int,
+        *,
+        semiring: Semiring | None = None,
+    ) -> None:
+        super().__init__(
+            torch.empty(size=(num_folds, 0), dtype=torch.int64), num_output_units, semiring=semiring
+        )
+
+
+class TorchExpFamilyLayer(TorchInputLayer, ABC):
     """The abstract base class for Exponential Family distribution layers.
 
     Exponential Family dist:
@@ -186,15 +196,14 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         self,
         scope_idx: Tensor,
         num_output_units: int,
-        *,
         num_channels: int = 1,
+        *,
         num_categories: int = 2,
         probs: TorchParameter | None = None,
         logits: TorchParameter | None = None,
         semiring: Semiring | None = None,
     ) -> None:
         """Init class.
-
         Args:
             scope_idx: A tensor of shape (F, D), where F is the number of folds, and
                 D is the number of variables on which the input layers in each fold are defined on.
@@ -242,16 +251,18 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         )
 
     @property
-    def config(self) -> dict[str, Any]:
-        config = super().config
-        config.update(num_categories=self.num_categories)
-        return config
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_categories": self.num_categories,
+        }
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
-            return dict(probs=self.probs)
-        return dict(logits=self.logits)
+            return {"probs": self.probs}
+        return {"logits": self.logits}
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
@@ -277,7 +288,6 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         samples = dist.sample((num_samples,))  # (N, F, K, C)
         samples = samples.permute(1, 3, 2, 0)  # (F, C, K, N)
         return samples
-    
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
@@ -347,16 +357,18 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         )
 
     @property
-    def config(self) -> dict[str, Any]:
-        config = super().config
-        config.update(total_count=self.total_count)
-        return config
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "total_count": self.total_count,
+        }
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
-            return dict(probs=self.probs)
-        return dict(logits=self.logits)
+            return {"probs": self.probs}
+        return {"logits": self.logits}
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
@@ -382,8 +394,8 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
     def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Binomial(self.total_count, logits=logits)
-        samples = dist.sample((num_samples,))  # (N, F, K, C)
-        samples = samples.permute(1, 3, 2, 0)  # (F, C, K, N)
+        samples = dist.sample((num_samples,))  # (num_samples, F, K, C)
+        samples = samples.permute(1, 3, 2, 0)  # (F, C, K, num_samples)
         return samples
 
 
@@ -397,8 +409,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         self,
         scope_idx: Tensor,
         num_output_units: int,
-        *,
         num_channels: int = 1,
+        *,
         mean: TorchParameter,
         stddev: TorchParameter,
         log_partition: TorchParameter | None = None,
@@ -443,10 +455,14 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return p.shape == (self.num_output_units, self.num_channels)
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
-        params = dict(mean=self.mean, stddev=self.stddev)
+    def config(self) -> Mapping[str, Any]:
+        return {"num_output_units": self.num_output_units, "num_channels": self.num_channels}
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        params = {"mean": self.mean, "stddev": self.stddev}
         if self.log_partition is not None:
-            params.update(log_partition=self.log_partition)
+            params["log_partition"] = self.log_partition
         return params
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
@@ -468,6 +484,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         log_partition = self.log_partition()  # (F, K, C)
         return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
 
+
     def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
         samples = dist.sample((num_samples,))  # (N, F, K, C)
@@ -475,32 +492,23 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return samples
 
 
-class TorchLogPartitionLayer(TorchInputLayer):
+class TorchLogPartitionLayer(TorchConstantLayer):
     def __init__(
         self,
-        scope_idx: Tensor,
         num_output_units: int,
         *,
-        num_channels: int = 1,
-        num_folds: int = 1,
         value: TorchParameter,
         semiring: Semiring | None = None,
     ) -> None:
         """Init class.
 
         Args:
-            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
-                D is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
-                as a tensor of shape (1, D), i.e., with F = 1.
             num_output_units: The number of output units.
-            num_channels: The number of channels. Defaults to 1.
             value (Optional[Reparameterization], optional): Ignored. This layer has no parameters.
         """
         super().__init__(
-            scope_idx,
             num_output_units,
-            num_channels=num_channels,
+            value.num_folds,
             semiring=semiring,
         )
         assert value.num_folds == self.num_folds
@@ -508,16 +516,18 @@ class TorchLogPartitionLayer(TorchInputLayer):
         self.value = value
 
     @property
-    def params(self) -> dict[str, TorchParameter]:
-        params = super().params
-        params.update(value=self.value)
-        return params
+    def config(self) -> Mapping[str, Any]:
+        return {"num_output_units": self.num_output_units}
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        return {"value": self.value}
 
     def forward(self, x: Tensor) -> Tensor:
         """Run forward pass.
 
         Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
+            x (Tensor): The input to this layer, shape (F, H, B, Ki=0).
 
         Returns:
             Tensor: The output of this layer, shape (F, B, Ko).
@@ -527,11 +537,65 @@ class TorchLogPartitionLayer(TorchInputLayer):
         value = value.expand(value.shape[0], x.shape[2], value.shape[2])
         return self.semiring.map_from(value, LSESumSemiring)
 
-    def integrate(self) -> Tensor:
-        raise TypeError("Cannot integrate a layer computing a log-partition function")
+
+class TorchEvidenceLayer(TorchConstantLayer):
+    def __init__(
+        self,
+        layer: TorchInputLayer,
+        *,
+        observation: TorchParameter,
+        semiring: Semiring | None = None,
+    ) -> None:
+        if observation.num_folds != layer.num_folds:
+            raise ValueError(
+                f"The number of folds in the observation and in the layer should be the same, "
+                f"but found {observation.num_folds} and {layer.num_folds} respectively"
+            )
+        if len(observation.shape) != 2:
+            raise ValueError(
+                f"Expected observation of shape (num_channels, num_variables), "
+                f"but found {observation.shape}"
+            )
+        num_channels, num_variables = observation.shape
+        if num_channels != layer.num_channels:
+            raise ValueError(
+                f"Expected an observation with number of channels {layer.num_channels}, "
+                f"but found {num_channels}"
+            )
+        if num_variables != layer.num_variables:
+            raise ValueError(
+                f"Expected an observation with number of variables {layer.num_variables}, "
+                f"but found {num_variables}"
+            )
+        super().__init__(layer.num_output_units, layer.num_folds, semiring=semiring)
+        self.layer = layer
+        self.observation = observation
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {}
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        return {"observation": self.observation}
+
+    @property
+    def sub_modules(self) -> Mapping[str, TorchInputLayer]:
+        return {"layer": self.layer}
+
+    def forward(self, x: Tensor) -> Tensor:
+        obs = self.observation()  # (F, C, D)
+        obs = obs.unsqueeze(dim=2)  # (F, C, 1, D)
+        obs = obs.expand(obs.shape[0], obs.shape[1], x.shape[2], obs.shape[3])  # (F, C, B, D)
+        return self.layer(obs)  # (F, B, K)
 
     def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
-        raise TypeError("Cannot sample from a layer computing a log-partition function")
+        if self.num_variables != 1:
+            raise NotImplementedError("Sampling a multivariate Evidence layer is not implemented")
+        # Sampling an evidence layer translates to return the given observation
+        obs = self.observation()  # (F, C, D=1)
+        obs = obs.unsqueeze(dim=-1)  # (F, C, 1, 1)
+        return obs.expand(size=(-1, -1, self.num_output_units, num_samples))
 
 
 # TODO: could be in backends/torch/utils, can be reused by PolyGaussian
@@ -565,8 +629,8 @@ class TorchPolynomialLayer(TorchInputLayer):
         self,
         scope_idx: Tensor,
         num_output_units: int,
-        *,
         num_channels: int = 1,
+        *,
         degree: int,
         coeff: TorchParameter,
         semiring: Semiring | None = None,
@@ -605,15 +669,15 @@ class TorchPolynomialLayer(TorchInputLayer):
         return p.shape == (self.num_output_units, self.degree + 1)
 
     @property
-    def fold_settings(self) -> tuple[Any, ...]:
-        return *super().fold_settings, self.degree + 1
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "degree": self.degree,
+        }
 
     @property
-    def config(self) -> dict[str, Any]:
-        return {**super().config, "degree": self.degree}
-
-    @property
-    def params(self) -> dict[str, TorchParameter]:
+    def params(self) -> Mapping[str, TorchParameter]:
         return {"coeff": self.coeff}
 
     def forward(self, x: Tensor) -> Tensor:
@@ -627,9 +691,3 @@ class TorchPolynomialLayer(TorchInputLayer):
         """
         coeff = self.coeff()  # shape (F, Ko, dp1)
         return self.semiring.map_from(polyval(coeff, x), SumProductSemiring)
-
-    def integrate(self) -> Tensor:
-        raise TypeError("Cannot integrate a Polynomial layer")
-
-    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
-        raise TypeError("Cannot sample from a Polynomial layer")
