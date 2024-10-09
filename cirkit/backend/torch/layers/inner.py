@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Any
 
 import einops as E
@@ -39,6 +39,9 @@ class TorchInnerLayer(TorchLayer, ABC):
     @property
     def fold_settings(self) -> tuple[Any, ...]:
         return self.num_input_units, self.num_output_units, self.arity
+
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+        raise TypeError(f"Sampling not implemented for {type(self)}")
 
 
 class TorchProductLayer(TorchInnerLayer, ABC):
@@ -90,8 +93,11 @@ class TorchHadamardLayer(TorchProductLayer):
         """
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
-    def sample(self, num_samples: int, x: Tensor) -> Tensor:
-        return self.semiring.prod(x, dim=1, keepdim=False)
+    def sample(self, x: Tensor) -> tuple[Tensor, None]:
+        # Concatenate samples over disjoint variables through a sum
+        # x: (F, H, C, K, num_samples, D)
+        samples = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
+        return samples, None
 
 
 class TorchKroneckerLayer(TorchProductLayer):
@@ -138,8 +144,13 @@ class TorchKroneckerLayer(TorchProductLayer):
         # shape (F, B, Ki, Ki) -> (F, B, Ko=Ki**2).
         return self.semiring.mul(x0, x1).flatten(start_dim=-2)
 
-    def sample(self, num_samples: int, x: Tensor) -> Tensor:
-        raise NotImplementedError("Sampling of Kronecker layer is not implemented.")
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+        # x: (F, H, C, K, num_samples, D)
+        x0 = x[:, 0].unsqueeze(dim=3)  # (F, C, Ki, 1, num_samples, D)
+        x1 = x[:, 1].unsqueeze(dim=2)  # (F, C, 1, Ki, num_samples, D)
+        # shape (F, C, Ki, Ki, num_samples, D) -> (F, C, Ko=Ki**2, num_samples, D)
+        x = x0 + x1
+        return torch.flatten(x, start_dim=2, end_dim=3), None
 
 
 class TorchDenseLayer(TorchSumLayer):
@@ -196,7 +207,7 @@ class TorchDenseLayer(TorchSumLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, Ko).
 
-    def sample(self, num_samples: int, x: Tensor) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()
 
         negative = torch.any(weight < 0.0)
@@ -207,8 +218,10 @@ class TorchDenseLayer(TorchSumLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
+        # x: (F, H, C, K, num_samples, D)
         c = x.shape[2]
         d = x.shape[-1]
+        num_samples = x.shape[-2]
 
         # mixing_distribution: (F, O, K)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
@@ -287,9 +300,11 @@ class TorchMixingLayer(TorchSumLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
+        # x: (F, H, C, K, num_samples, D)
         c = x.shape[2]
         k = x.shape[-3]
         d = x.shape[-1]
+        num_samples = x.shape[-2]
 
         # mixing_distribution: (F, O, K)
         mixing_distribution = torch.distributions.Categorical(probs=weight)

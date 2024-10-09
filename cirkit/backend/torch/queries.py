@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from cirkit.backend.torch.circuits import TorchCircuit
-from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer, TorchSumLayer
 from cirkit.utils.scope import Scope
 
 
@@ -144,8 +144,10 @@ class SamplingQuery(Query):
             return samples
 
         # Sample through an inner layer
-        samples, mix_samples = layer.sample(num_samples, *inputs)
-        mixture_samples.append(mix_samples)
+        assert isinstance(layer, TorchInnerLayer)
+        samples, mix_samples = layer.sample(*inputs)
+        if mix_samples is not None:
+            mixture_samples.append(mix_samples)
         return samples
 
     def _pad_samples(self, samples: Tensor, scope_idx: Tensor) -> Tensor:
