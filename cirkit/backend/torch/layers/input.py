@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 
 import torch
 from torch import Tensor, distributions
@@ -13,7 +13,7 @@ from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSe
 class TorchInputLayer(TorchLayer, ABC):
     """The abstract base class for input layers."""
 
-    # NOTE: We use exactly the sae interface (F, H, B, K) -> (F, B, K) for __call__ of input layers:
+    # NOTE: We use exactly the safe interface (F, H, B, K) -> (F, B, K) for __call__ of input layers:
     #           1. Define arity(H)=num_channels(C), reusing the H dimension.
     #           2. Define num_input_units(K)=num_vars(D), which reuses the K dimension.
     #       For dimension D (variables), we should parse the input in circuit according to the
@@ -85,6 +85,10 @@ class TorchInputLayer(TorchLayer, ABC):
 
     @abstractmethod
     def integrate(self) -> Tensor:
+        ...
+
+    @abstractmethod
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
         ...
 
     def extra_repr(self) -> str:
@@ -199,7 +203,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             num_output_units: The number of output units.
             num_channels: The number of channels.
             num_categories: The number of categories for Categorical distribution. Defaults to 2.
-            logits: The reparameterization for layer parameters.
+            probs: The reparameterization for layer probs parameters.
+            logits: The reparameterization for layer logits parameters.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
@@ -265,6 +270,116 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             )
         logits = self.logits()
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
+
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+        raise TypeError("Sampling is not implemented for Categorical layers")
+
+
+class TorchBinomialLayer(TorchExpFamilyLayer):
+    """The Binomial distribution layer.
+
+    This is fully factorized down to univariate Binomial distributions.
+    """
+
+    # DISABLE: It's designed to have these arguments.
+    # pylint: disable-next=too-many-arguments
+    def __init__(
+        self,
+        scope_idx: Tensor,
+        num_output_units: int,
+        *,
+        num_channels: int = 1,
+        total_count: int = 1,
+        probs: Optional[TorchParameter] = None,
+        logits: Optional[TorchParameter] = None,
+        semiring: Optional[Semiring] = None,
+    ) -> None:
+        """Init class.
+
+        Args:
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
+                as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels.
+            total_count: The number of trails. Defaults to 1.
+            probs: The reparameterization for layer probs parameters.
+            logits: The reparameterization for layer logits parameters.
+        """
+        num_variables = scope_idx.shape[-1]
+        if num_variables != 1:
+            raise ValueError("The Binomial layer encodes a univariate distribution")
+        if total_count < 0:
+            raise ValueError("The number of trials must be non-negative")
+        super().__init__(
+            scope_idx,
+            num_output_units,
+            num_channels=num_channels,
+            semiring=semiring,
+        )
+        self.total_count = total_count
+        if not ((logits is None) ^ (probs is None)):
+            raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
+        if logits is None:
+            assert probs is not None
+            if not self._valid_parameter_shape(probs):
+                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
+        else:
+            if not self._valid_parameter_shape(logits):
+                raise ValueError(
+                    f"The number of folds and shape of 'logits' must match the layer's"
+                )
+        self.probs = probs
+        self.logits = logits
+
+    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == (
+            self.num_output_units,
+            self.num_channels,
+        )
+
+    @property
+    def config(self) -> dict[str, Any]:
+        config = super().config
+        config.update(total_count=self.total_count)
+        return config
+
+    @property
+    def params(self) -> dict[str, TorchParameter]:
+        if self.logits is None:
+            return dict(probs=self.probs)
+        return dict(logits=self.logits)
+
+    def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
+        if x.is_floating_point():
+            x = x.long()  # The input to Binomial should be discrete
+        x = x.permute(0, 2, 3, 1)  # (F, C, B, 1) -> (F, B, 1, C)
+        if self.logits is not None:
+            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K, C)
+            dist = distributions.Binomial(self.total_count, logits=logits)
+        else:
+            probs = self.probs().unsqueeze(dim=1)  # (F, 1, K, C)
+            dist = distributions.Binomial(self.total_count, probs=probs)
+        x = dist.log_prob(x)  # (F, B, K, C)
+        return torch.sum(x, dim=3)
+
+    def log_partition_function(self) -> Tensor:
+        if self.logits is None:
+            return torch.zeros(
+                size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
+            )
+        logits = self.logits()
+        return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
+
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        dist = distributions.Binomial(self.total_count, logits=logits)
+        samples = dist.sample((num_samples,))  # (N, F, K, C)
+        samples = samples.permute(1, 3, 2, 0)  # (F, C, K, N)
+        return samples
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
@@ -348,6 +463,9 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         log_partition = self.log_partition()  # (F, K, C)
         return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
 
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+        raise TypeError("Sampling is not implemented for Gaussian layers")
+
 
 class TorchLogPartitionLayer(TorchInputLayer):
     def __init__(
@@ -403,6 +521,9 @@ class TorchLogPartitionLayer(TorchInputLayer):
 
     def integrate(self) -> Tensor:
         raise TypeError("Cannot integrate a layer computing a log-partition function")
+
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+        raise TypeError("Cannot sample from a layer computing a log-partition function")
 
 
 # TODO: could be in backends/torch/utils, can be reused by PolyGaussian
@@ -500,4 +621,7 @@ class TorchPolynomialLayer(TorchInputLayer):
         return self.semiring.map_from(polyval(coeff, x), SumProductSemiring)
 
     def integrate(self) -> Tensor:
-        raise TypeError("Cannot integrate a PolynomialLayer")
+        raise TypeError("Cannot integrate a Polynomial layer")
+
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+        raise TypeError("Cannot sample from a Polynomial layer")

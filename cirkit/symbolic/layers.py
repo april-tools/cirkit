@@ -213,6 +213,68 @@ class CategoricalLayer(InputLayer):
         return {"logits": self.logits}
 
 
+class BinomialLayer(InputLayer):
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int,
+        total_count: int,
+        logits: Parameter | None = None,
+        probs: Parameter | None = None,
+        logits_factory: ParameterFactory | None = None,
+        probs_factory: ParameterFactory | None = None,
+    ):
+        if logits is not None and probs is not None:
+            raise ValueError("At most one between 'logits' and 'probs' can be specified")
+        if logits_factory is not None and probs_factory is not None:
+            raise ValueError(
+                "At most one between 'logits_factory' and 'probs_factory' can be specified"
+            )
+        if total_count < 0:
+            raise ValueError("The number of trials should be non negative")
+        super().__init__(scope, num_output_units, num_channels)
+        self.total_count = total_count
+        if logits is None and probs is None:
+            if logits_factory is not None:
+                logits = logits_factory(self._probs_logits_shape)
+            elif probs_factory is not None:
+                probs = probs_factory(self._probs_logits_shape)
+            else:
+                logits = Parameter.from_leaf(
+                    TensorParameter(
+                        *self._probs_logits_shape,
+                        initializer=NormalInitializer(0.0, total_count * 0.01),
+                    )
+                )
+        if logits is not None and logits.shape != self._probs_logits_shape:
+            raise ValueError(
+                f"Expected parameter shape {self._probs_logits_shape}, found {logits.shape}"
+            )
+        if probs is not None and probs.shape != self._probs_logits_shape:
+            raise ValueError(
+                f"Expected parameter shape {self._probs_logits_shape}, found {probs.shape}"
+            )
+        self.probs = probs
+        self.logits = logits
+
+    @property
+    def _probs_logits_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels
+
+    @property
+    def config(self) -> dict:
+        config = super().config
+        config.update(total_count=self.total_count)
+        return config
+
+    @property
+    def params(self) -> dict[str, Parameter]:
+        if self.logits is None:
+            return {"probs": self.probs}
+        return {"logits": self.logits}
+
+
 class GaussianLayer(InputLayer):
     """A symbolic Gaussian layer, which is parameterized by mean and standard deviations.
     Optionally, it can represent an unnormalized Gaussian layer by specifying the log partition
