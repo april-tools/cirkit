@@ -144,7 +144,7 @@ class SamplingQuery(Query):
             return samples
 
         # Sample through an inner layer
-        samples, mix_samples = layer.sample(num_samples, inputs)
+        samples, mix_samples = layer.sample(num_samples, *inputs)
         mixture_samples.append(mix_samples)
         return samples
 
