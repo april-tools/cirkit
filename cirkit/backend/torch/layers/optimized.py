@@ -144,7 +144,7 @@ class TorchCPTLayer(TorchSumProductLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
-        # x: (F, H=1, C, K, num_samples, D)
+        # x: (F, H, C, K, num_samples, D)
         x = torch.sum(x, dim=1, keepdim=True)  # (F, H=1, C, K, num_samples, D)
 
         c = x.shape[2]
@@ -156,7 +156,7 @@ class TorchCPTLayer(TorchSumProductLayer):
 
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
-        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
+        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=1, c=c, d=d)
 
         x = torch.gather(x, dim=-3, index=mixing_indices)
         x = x[:, 0]
