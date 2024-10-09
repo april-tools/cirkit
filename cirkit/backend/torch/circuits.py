@@ -41,13 +41,15 @@ class LayerAddressBook(AddressBook):
 
             # Catch the case there are no inputs coming from other modules
             # That is, we are gathering the inputs of input layers
-            assert in_graph is not None
             assert isinstance(entry.module, TorchInputLayer)
-            # in_graph: An input batch (assignments to variables) of shape (B, C, D)
-            # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
-            # x: (B, C, D) -> (B, C, F, D') -> (F, C, B, D')
-            x = in_graph[..., entry.module.scope_idx].permute(2, 1, 0, 3)
-            yield entry.module, (x,)
+            if in_graph is None:
+                yield entry.module, ()
+            else:
+                # in_graph: An input batch (assignments to variables) of shape (B, C, D)
+                # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
+                # x: (B, C, D) -> (B, C, F, D') -> (F, C, B, D')
+                x = in_graph[..., entry.module.scope_idx].permute(2, 1, 0, 3)
+                yield entry.module, (x,)
 
     @classmethod
     def from_index_info(
@@ -174,7 +176,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 class TorchCircuit(AbstractTorchCircuit):
     """The tensorized circuit with concrete computational graph in PyTorch.
 
-    This class is aimed for computation, and therefore does not include strutural properties.
+    This class is aimed for computation, and therefore does not include structural properties.
     """
 
     def __call__(self, x: Tensor) -> Tensor:

@@ -1,6 +1,8 @@
 from abc import ABC
 from typing import Any
 
+import einops as E
+import torch
 from torch import Tensor
 
 from cirkit.backend.torch.layers.base import TorchLayer
@@ -38,6 +40,9 @@ class TorchInnerLayer(TorchLayer, ABC):
     def fold_settings(self) -> tuple[Any, ...]:
         pshapes = [(n, p.shape) for n, p in self.params.items()]
         return *self.config.items(), *pshapes
+
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+        raise TypeError(f"Sampling not implemented for {type(self)}")
 
 
 class TorchProductLayer(TorchInnerLayer, ABC):
@@ -97,6 +102,12 @@ class TorchHadamardLayer(TorchProductLayer):
         """
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
+    def sample(self, x: Tensor) -> tuple[Tensor, None]:
+        # Concatenate samples over disjoint variables through a sum
+        # x: (F, H, C, K, num_samples, D)
+        x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
+        return x, None
+
 
 class TorchKroneckerLayer(TorchProductLayer):
     """The Kronecker product layer."""
@@ -150,6 +161,14 @@ class TorchKroneckerLayer(TorchProductLayer):
         # shape (F, B, Ki, Ki) -> (F, B, Ko=Ki**2).
         return self.semiring.mul(x0, x1).flatten(start_dim=-2)
 
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+        # x: (F, H, C, K, num_samples, D)
+        x0 = x[:, 0].unsqueeze(dim=3)  # (F, C, Ki, 1, num_samples, D)
+        x1 = x[:, 1].unsqueeze(dim=2)  # (F, C, 1, Ki, num_samples, D)
+        # shape (F, C, Ki, Ki, num_samples, D) -> (F, C, Ko=Ki**2, num_samples, D)
+        x = x0 + x1
+        return torch.flatten(x, start_dim=2, end_dim=3), None
+
 
 class TorchDenseLayer(TorchSumLayer):
     """The sum layer for dense sum within a layer."""
@@ -200,6 +219,31 @@ class TorchDenseLayer(TorchSumLayer):
         return self.semiring.einsum(
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, Ko).
+
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        weight = self.weight()
+        negative = torch.any(weight < 0.0)
+        if negative:
+            raise ValueError("Sampling only works with positive weights")
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        if not normalized:
+            raise ValueError("Sampling only works with a normalized parametrization")
+
+        # x: (F, H, C, K, num_samples, D)
+        c = x.shape[2]
+        d = x.shape[-1]
+        num_samples = x.shape[-2]
+
+        # mixing_distribution: (F, O, K)
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
+
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
+        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
+
+        x = torch.gather(x, dim=-3, index=mixing_indices)
+        x = x[:, 0]
+        return x, mixing_samples
 
 
 class TorchMixingLayer(TorchSumLayer):
@@ -263,3 +307,28 @@ class TorchMixingLayer(TorchSumLayer):
         return self.semiring.einsum(
             "fhbk,fkh->fbk", inputs=(x,), operands=(weight,), dim=1, keepdim=False
         )
+
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        weight = self.weight()
+        negative = torch.any(weight < 0.0)
+        if negative:
+            raise ValueError("Sampling only works with positive weights")
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        if not normalized:
+            raise ValueError("Sampling only works with a normalized parametrization")
+
+        # x: (F, H, C, K, num_samples, D)
+        c = x.shape[2]
+        k = x.shape[-3]
+        d = x.shape[-1]
+        num_samples = x.shape[-2]
+
+        # mixing_distribution: (F, O, K)
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
+
+        mixing_samples = mixing_distribution.sample((num_samples,))
+        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
+        mixing_indices = E.repeat(mixing_samples, "f k n -> f 1 c k n d", c=c, k=k, d=d)
+
+        x = torch.gather(x, 1, mixing_indices)[:, 0]
+        return x, mixing_samples

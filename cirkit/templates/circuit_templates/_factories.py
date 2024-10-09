@@ -9,7 +9,7 @@ from cirkit.symbolic.initializers import (
     NormalInitializer,
     UniformInitializer,
 )
-from cirkit.symbolic.layers import CategoricalLayer, GaussianLayer, MixingLayer
+from cirkit.symbolic.layers import BinomialLayer, CategoricalLayer, GaussianLayer, MixingLayer
 from cirkit.symbolic.parameters import (
     ClampParameter,
     Parameter,
@@ -63,6 +63,8 @@ def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
     """
     if name == "categorical":
         return functools.partial(_categorical_layer_factory, **kwargs)
+    if name == "binomial":
+        return functools.partial(_binomial_layer_factory, **kwargs)
     if name == "gaussian":
         return functools.partial(_gaussian_layer_factory, **kwargs)
     raise ValueError(f"Unknown input layer called {name}")
@@ -142,6 +144,25 @@ def _categorical_layer_factory(
         num_units,
         num_channels,
         num_categories=num_categories,
+        probs_factory=probs_factory,
+        logits_factory=logits_factory,
+    )
+
+
+def _binomial_layer_factory(
+    scope: Scope,
+    num_units: int,
+    num_channels: int,
+    *,
+    total_count: int,
+    probs_factory: ParameterFactory | None = None,
+    logits_factory: ParameterFactory | None = None,
+) -> BinomialLayer:
+    return BinomialLayer(
+        scope,
+        num_units,
+        num_channels,
+        total_count=total_count,
         probs_factory=probs_factory,
         logits_factory=logits_factory,
     )

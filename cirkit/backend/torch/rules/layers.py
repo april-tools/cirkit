@@ -10,6 +10,7 @@ from cirkit.backend.torch.layers.inner import (
     TorchMixingLayer,
 )
 from cirkit.backend.torch.layers.input import (
+    TorchBinomialLayer,
     TorchCategoricalLayer,
     TorchEvidenceLayer,
     TorchGaussianLayer,
@@ -18,6 +19,7 @@ from cirkit.backend.torch.layers.input import (
     TorchPolynomialLayer,
 )
 from cirkit.symbolic.layers import (
+    BinomialLayer,
     CategoricalLayer,
     DenseLayer,
     EvidenceLayer,
@@ -47,6 +49,24 @@ def compile_categorical_layer(
         sl.num_output_units,
         num_channels=sl.num_channels,
         num_categories=sl.num_categories,
+        probs=probs,
+        logits=logits,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> TorchBinomialLayer:
+    if sl.logits is None:
+        probs = compiler.compile_parameter(sl.probs)
+        logits = None
+    else:
+        probs = None
+        logits = compiler.compile_parameter(sl.logits)
+    return TorchBinomialLayer(
+        torch.tensor(tuple(sl.scope)),
+        sl.num_output_units,
+        num_channels=sl.num_channels,
+        total_count=sl.total_count,
         probs=probs,
         logits=logits,
         semiring=compiler.semiring,
@@ -136,6 +156,7 @@ def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> Torc
 
 DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     CategoricalLayer: compile_categorical_layer,
+    BinomialLayer: compile_binomial_layer,
     GaussianLayer: compile_gaussian_layer,
     PolynomialLayer: compile_polynomial_layer,
     HadamardLayer: compile_hadamard_layer,
