@@ -242,7 +242,10 @@ class BinomialLayer(InputLayer):
                 probs = probs_factory(self._probs_logits_shape)
             else:
                 logits = Parameter.from_leaf(
-                    TensorParameter(*self._probs_logits_shape, initializer=NormalInitializer())
+                    TensorParameter(
+                        *self._probs_logits_shape,
+                        initializer=NormalInitializer(0.0, total_count * 0.01),
+                    )
                 )
         if logits is not None and logits.shape != self._probs_logits_shape:
             raise ValueError(
