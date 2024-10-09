@@ -209,11 +209,9 @@ class TorchDenseLayer(TorchSumLayer):
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()
-
         negative = torch.any(weight < 0.0)
         if negative:
             raise ValueError("Sampling only works with positive weights")
-
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
@@ -291,11 +289,9 @@ class TorchMixingLayer(TorchSumLayer):
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()
-
         negative = torch.any(weight < 0.0)
         if negative:
             raise ValueError("Sampling only works with positive weights")
-
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")

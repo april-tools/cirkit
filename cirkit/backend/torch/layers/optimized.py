@@ -136,9 +136,6 @@ class TorchCPTLayer(TorchSumProductLayer):
         )
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        # x: (F, H, C, K, num_samples, D)
-        x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
-
         weight = self.weight()
         negative = torch.any(weight < 0.0)
         if negative:
@@ -146,6 +143,9 @@ class TorchCPTLayer(TorchSumProductLayer):
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
+
+        # x: (F, H=1, C, K, num_samples, D)
+        x = torch.sum(x, dim=1, keepdim=True)  # (F, H=1, C, K, num_samples, D)
 
         c = x.shape[2]
         d = x.shape[-1]
