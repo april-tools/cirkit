@@ -289,7 +289,7 @@ class TorchMixingLayer(TorchSumLayer):
             "fhbk,fkh->fbk", inputs=(x,), operands=(weight,), dim=1, keepdim=False
         )
 
-    def sample(self, num_samples: int, x: Tensor) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()
 
         negative = torch.any(weight < 0.0)
