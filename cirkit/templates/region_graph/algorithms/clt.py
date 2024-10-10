@@ -1,7 +1,6 @@
 from collections import defaultdict
 from typing import Optional, List
 from scipy import sparse as sp
-import networkx as nx
 import numpy as np
 import torch
 
@@ -64,18 +63,21 @@ def tree2rg(tree: np.ndarray) -> RegionGraph:
     return RegionGraph(nodes, in_nodes, [root_region])
 
 
-def maximum_spanning_tree(adj_matrix: torch.Tensor, root: int):
+def maximum_spanning_tree(adj_matrix: torch.Tensor, root: Optional[int] = None):
     """Runs the maximum spanning tree of an given adjacency matrix rooted at a given variable.
 
     Args:
         adj_matrix (Tensor): The adjacency matrix.
-        root (int): The index of the variable desired as root.
+        root (Optional[int]): The index of the variable desired as root. If None, picks the one that minimizes depth.
 
     Returns:
         bfs: The BFS order of the spanning tree.
         tree: The spanning tree in form of list of predecessors.
     """
     mst = sp.csgraph.minimum_spanning_tree(-(adj_matrix.cpu().numpy() + 1.0), overwrite=True)
+    if root is None:
+        dist_from_all_nodes = sp.csgraph.dijkstra(mst.__abs__().todense(), directed=False, return_predecessors=False)
+        root = np.argmin(np.max(dist_from_all_nodes, axis=1))
     bfs, tree = sp.csgraph.breadth_first_order(mst, directed=False, i_start=root, return_predecessors=True)
     tree[root] = -1
     return bfs, tree
@@ -162,13 +164,7 @@ def learn_clt(
     else:
         raise NotImplementedError('MI computation not implemented for %s input units.' % input_type)
 
-    if root is not None:
-        bfs, tree = maximum_spanning_tree(adj_matrix=mutual_info, root=root)
-    else:
-        bfs, tree = maximum_spanning_tree(adj_matrix=mutual_info, root=0)
-        # use tree center too minimize tree depth
-        nx_tree = nx.Graph([(node, parent) for node, parent in enumerate(tree) if parent != -1])
-        bfs, tree = maximum_spanning_tree(adj_matrix=mutual_info, root=nx.center(nx_tree)[0])
+    bfs, tree = maximum_spanning_tree(adj_matrix=mutual_info, root=root)
 
     if as_region_graph:
         return tree2rg(tree)
