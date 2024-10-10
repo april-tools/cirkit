@@ -156,7 +156,7 @@ class TorchEmbeddingLayer(TorchInputLayer):
         return {
             "num_output_units": self.num_output_units,
             "num_channels": self.num_channels,
-            "num_categories": self.num_categories,
+            "num_states": self.num_states,
         }
 
     @property

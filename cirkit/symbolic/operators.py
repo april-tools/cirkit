@@ -245,15 +245,6 @@ def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> Ci
     return CircuitBlock.from_layer(sl)
 
 
-def multiply_evidence_layers(sl1: EvidenceLayer, sl2: EvidenceLayer) -> CircuitBlock:
-    if sl1.num_output_units != sl2.num_output_units:
-        raise NotImplementedError(
-            "The product of evidence layer with " "different number of units is not supported"
-        )
-    kronecker = KroneckerLayer(sl1.num_output_units, arity=2)
-    return CircuitBlock.from_nary_layer(kronecker, sl1, sl2)
-
-
 def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitBlock:
     sl = HadamardLayer(
         sl1.num_input_units * sl2.num_input_units,
@@ -364,7 +355,7 @@ DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
     ],
     LayerOperator.DIFFERENTIATION: [differentiate_polynomial_layer],
     LayerOperator.MULTIPLICATION: [
-        multiply_evidence_layers,
+        multiply_embedding_layers,
         multiply_categorical_layers,
         multiply_gaussian_layers,
         multiply_polynomial_layers,
@@ -373,6 +364,7 @@ DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
         multiply_mixing_layers,
     ],
     LayerOperator.CONJUGATION: [
+        conjugate_embedding_layer,
         conjugate_categorical_layer,
         conjugate_gaussian_layer,
         conjugate_polynomial_layer,
