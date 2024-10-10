@@ -12,8 +12,8 @@ from cirkit.templates.circuit_templates._factories import (
 
 def image_data(
     image_shape: tuple[int, int, int],
-    *,
     region_graph: str = "quad-graph",
+    *,
     input_layer: str,
     num_input_units: int,
     sum_product_layer: str,
@@ -33,6 +33,7 @@ def image_data(
         input_layer: The name of the input layer. It can be one of the following:
             'categorical' (encoding a Categorical distribution over pixel channel values),
             'binomial' (encoding a Binomial distribution over pixel channel values),
+            'embedding' (encoding an Embedding vector over pixel channel values).
         num_input_units: The number of input units per input layer.
         sum_product_layer: The name of the sum-product inner layer. It can be one of the following:
             'cp' (the canonical decomposition layer, consisting of dense layers followed by a
@@ -54,7 +55,7 @@ def image_data(
     """
     if region_graph not in ["quad-tree-2", "quad-tree-4", "quad-graph", "poon-domingos"]:
         raise ValueError(f"Unknown region graph called {region_graph}")
-    if input_layer not in ["categorical", "binomial"]:
+    if input_layer not in ["categorical", "binomial", "embedding"]:
         raise ValueError(f"Unknown input layer called {input_layer}")
     if sum_weight_param not in ["id", "softmax", "positive-clamp"]:
         raise ValueError(f"Unknown sum weight parameterization called {sum_weight_param}")
@@ -63,7 +64,15 @@ def image_data(
     rg = build_image_region_graph(region_graph, (image_shape[1], image_shape[2]))
 
     # Get the input layer factory
-    input_kwargs = {"num_categories": 256} if input_layer == "categorical" else {"total_count": 255}
+    match input_layer:
+        case "categorical":
+            input_kwargs = {"num_categories": 256}
+        case "binomial":
+            input_kwargs = {"total_count": 255}
+        case "embedding":
+            input_kwargs = {"num_states": 256}
+        case _:
+            assert False
     input_factory = name_to_input_layer_factory(input_layer, **input_kwargs)
 
     # Get the dense and mixing layers parameterization factory

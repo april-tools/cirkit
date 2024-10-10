@@ -9,7 +9,13 @@ from cirkit.symbolic.initializers import (
     NormalInitializer,
     UniformInitializer,
 )
-from cirkit.symbolic.layers import BinomialLayer, CategoricalLayer, GaussianLayer, MixingLayer
+from cirkit.symbolic.layers import (
+    BinomialLayer,
+    CategoricalLayer,
+    EmbeddingLayer,
+    GaussianLayer,
+    MixingLayer,
+)
 from cirkit.symbolic.parameters import (
     ClampParameter,
     Parameter,
@@ -25,8 +31,7 @@ def build_image_region_graph(
     name: str,
     image_shape: tuple[int, int],
 ) -> RegionGraph:
-    """
-    Build a region graph that is tailored for image data.
+    """Build a region graph that is tailored for image data.
 
     Args:
         name: The name of the region graph. It can be one of the following: 'quad-tree-2',
@@ -37,6 +42,9 @@ def build_image_region_graph(
 
     Returns:
         RegionGraph: A region graph.
+
+    Raises:
+        ValueError: If the given region graph name is not known.
     """
     if name == "quad-tree-2":
         return QuadTree(image_shape, num_patch_splits=2)
@@ -51,16 +59,21 @@ def build_image_region_graph(
 
 
 def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
-    """
-    Retrieves a factory that constructs symbolic input layers.
+    """Retrieves a factory that constructs symbolic input layers.
 
     Args:
-        name: The name of the input layer. It can be one of the following: 'categorical', 'gaussian'.
+        name: The name of the input layer. It can be one of the following:
+            'embedding', 'categorical', 'gaussian', 'binomial'.
         **kwargs: Arguments to pass to the factory.
 
     Returns:
         InputLayerFactory: A symbolic input layer factory.
+
+    Raises:
+        ValueError: If the given input layer name is not known.
     """
+    if name == "embedding":
+        return functools.partial(_embedding_layer_factory, **kwargs)
     if name == "categorical":
         return functools.partial(_categorical_layer_factory, **kwargs)
     if name == "binomial":
@@ -71,8 +84,7 @@ def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
 
 
 def name_to_parameter_factory(name: str, **kwargs) -> ParameterFactory:
-    """
-    Retrieves a factory that constructs symbolic parameters.
+    """Retrieves a factory that constructs symbolic parameters.
 
     Args:
         name: The name of the parameterization to use. It can be one of the following:
@@ -81,6 +93,9 @@ def name_to_parameter_factory(name: str, **kwargs) -> ParameterFactory:
 
     Returns:
         ParameterFactory: A symbolic parameter factory.
+
+    Raises:
+        ValueError: If the given parameterization name is not known.
     """
     if name == "id":
         return functools.partial(_id_parameter_factory, **kwargs)
@@ -92,8 +107,7 @@ def name_to_parameter_factory(name: str, **kwargs) -> ParameterFactory:
 
 
 def name_to_initializer(name: str, **kwargs) -> Initializer:
-    """
-    Retrieves a symbolic initializer object.
+    """Retrieves a symbolic initializer object.
 
     Args:
         name: The initializer name. It can be one of the following: 'uniform' (in the range 0-1),
@@ -103,6 +117,9 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
 
     Returns:
         Initializer: The symbolic initializer.
+
+    Raises:
+        ValueError: If the given initializer name is not known.
     """
     if name == "uniform":
         return UniformInitializer(0.0, 1.0)
@@ -116,8 +133,7 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
 def mixing_layer_factory(
     num_units: int, arity: int, *, weight_factory: ParameterFactory | None = None
 ) -> MixingLayer:
-    """
-    Build a mixing layer, given hyperparameters and an optional weight factory.
+    """Build a mixing layer, given hyperparameters and an optional weight factory.
 
     Args:
         num_units: The number of sum units in the layer.
@@ -128,6 +144,19 @@ def mixing_layer_factory(
         MixingLayer: A mixing layer.
     """
     return MixingLayer(num_units, arity, weight_factory=weight_factory)
+
+
+def _embedding_layer_factory(
+    scope: Scope,
+    num_units: int,
+    num_channels: int,
+    *,
+    num_states: int,
+    weight_factory: ParameterFactory | None = None,
+) -> EmbeddingLayer:
+    return EmbeddingLayer(
+        scope, num_units, num_channels, num_states=num_states, weight_factory=weight_factory
+    )
 
 
 def _categorical_layer_factory(
