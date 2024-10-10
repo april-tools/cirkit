@@ -3,10 +3,10 @@ from collections import defaultdict
 import numpy as np
 
 from cirkit.templates.region_graph.graph import (
-    RegionGraph,
-    RegionNode,
-    RegionGraphNode,
     PartitionNode,
+    RegionGraph,
+    RegionGraphNode,
+    RegionNode,
 )
 from cirkit.utils.scope import Scope
 

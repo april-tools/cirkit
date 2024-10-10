@@ -66,8 +66,7 @@ def ChowLiuTree(
 
 
 def _maximum_spanning_tree(
-    adj_matrix: Tensor,
-    root: int | None = None
+    adj_matrix: Tensor, root: int | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     """Runs the maximum spanning tree of a given adjacency matrix rooted at a given variable.
 

@@ -1,13 +1,13 @@
 import itertools
 from collections import defaultdict
 
-from cirkit.templates.region_graph.graph import (
-    RegionGraph,
-    RegionNode,
-    RegionGraphNode,
-    PartitionNode,
-)
 from cirkit.templates.region_graph.algorithms.utils import HypercubeToScope
+from cirkit.templates.region_graph.graph import (
+    PartitionNode,
+    RegionGraph,
+    RegionGraphNode,
+    RegionNode,
+)
 from cirkit.utils.scope import Scope
 
 

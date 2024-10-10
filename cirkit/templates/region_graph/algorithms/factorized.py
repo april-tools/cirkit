@@ -1,8 +1,8 @@
 from cirkit.templates.region_graph.graph import (
-    RegionGraph,
-    RegionNode,
-    RegionGraphNode,
     PartitionNode,
+    RegionGraph,
+    RegionGraphNode,
+    RegionNode,
 )
 
 
