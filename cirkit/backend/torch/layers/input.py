@@ -484,7 +484,6 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         log_partition = self.log_partition()  # (F, K, C)
         return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
 
-
     def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
         samples = dist.sample((num_samples,))  # (N, F, K, C)

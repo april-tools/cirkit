@@ -2,13 +2,13 @@ import itertools
 from collections import defaultdict, deque
 from collections.abc import Sequence
 
+from cirkit.templates.region_graph.algorithms.utils import HyperCube, HypercubeToScope
 from cirkit.templates.region_graph.graph import (
+    PartitionNode,
     RegionGraph,
     RegionGraphNode,
     RegionNode,
-    PartitionNode,
 )
-from cirkit.templates.region_graph.algorithms.utils import HypercubeToScope, HyperCube
 from cirkit.utils.scope import Scope
 
 
