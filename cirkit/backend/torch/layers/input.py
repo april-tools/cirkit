@@ -339,6 +339,13 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = self.logits()
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
 
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        dist = distributions.Categorical(logits=logits)
+        samples = dist.sample((num_samples,))  # (N, F, K, C)
+        samples = samples.permute(1, 3, 2, 0)  # (F, C, K, N)
+        return samples
+
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
     """The Binomial distribution layer.
@@ -529,6 +536,12 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             )
         log_partition = self.log_partition()  # (F, K, C)
         return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
+
+    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+        dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
+        samples = dist.sample((num_samples,))  # (N, F, K, C)
+        samples = samples.permute(1, 3, 2, 0)  # (F, C, K, N)
+        return samples
 
 
 class TorchConstantValueLayer(TorchConstantLayer):
