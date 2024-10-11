@@ -2,15 +2,12 @@ from typing import Protocol
 
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
-    BinomialLayer,
     CategoricalLayer,
     ConstantValueLayer,
     DenseLayer,
     EmbeddingLayer,
-    EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
-    KroneckerLayer,
     Layer,
     LayerOperator,
     MixingLayer,
@@ -46,7 +43,7 @@ def integrate_embedding_layer(sl: EmbeddingLayer, *, scope: Scope) -> CircuitBlo
     reduce_sum = ReduceSumParameter(sl.weight.shape, axis=2)
     reduce_prod = ReduceProductParameter(reduce_sum.shape, axis=1)
     value = Parameter.from_sequence(sl.weight.ref(), reduce_sum, reduce_prod)
-    sl = ConstantValueLayer(sl.num_output_units, value=value)
+    sl = ConstantValueLayer(sl.num_output_units, log_space=False, value=value)
     return CircuitBlock.from_layer(sl)
 
 
