@@ -5,3 +5,5 @@ from .poon_domingos import PoonDomingos as PoonDomingos
 from .quad import QuadGraph as QuadGraph
 from .quad import QuadTree as QuadTree
 from .random import RandomBinaryTree as RandomBinaryTree
+from .utils import HyperCube as HyperCube
+from .utils import HypercubeToScope as HypercubeToScope
