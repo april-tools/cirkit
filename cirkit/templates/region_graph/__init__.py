@@ -1,3 +1,4 @@
+from .algorithms import ChowLiuTree as ChowLiuTree
 from .algorithms import FullyFactorized as FullyFactorized
 from .algorithms import LinearTree as LinearTree
 from .algorithms import PoonDomingos as PoonDomingos
