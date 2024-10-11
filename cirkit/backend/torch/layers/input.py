@@ -565,11 +565,12 @@ class TorchConstantValueLayer(TorchConstantLayer):
         assert value.num_folds == self.num_folds
         assert value.shape == (num_output_units,)
         self.value = value
-        self._source_semiring = LSESumSemiring if log_space else LSESumSemiring
+        self.log_space = log_space
+        self._source_semiring = LSESumSemiring if log_space else SumProductSemiring
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_output_units": self.num_output_units}
+        return {"num_output_units": self.num_output_units, "log_space": self.log_space}
 
     @property
     def params(self) -> Mapping[str, TorchParameter]:
