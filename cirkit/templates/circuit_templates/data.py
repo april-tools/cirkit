@@ -15,10 +15,10 @@ def image_data(
     *,
     input_layer: str,
     num_input_units: int,
-    input_params: dict[str, Parameterization],
     sum_product_layer: str,
     num_sum_units: int,
-    sum_weight_param: Parameterization,
+    sum_weight_param: Parameterization | None = {},
+    input_params: dict[str, Parameterization] | None = {},
 ) -> Circuit:
     """Constructs a symbolic circuit whose structure is tailored for image data sets.
 
@@ -35,8 +35,6 @@ def image_data(
             'binomial' (encoding a Binomial distribution over pixel channel values),
             'embedding' (encoding an Embedding vector over pixel channel values).
         num_input_units: The number of input units per input layer.
-        input_params: A dictionary mapping each name of a parameter of the input layer to
-            its parameterization.
         sum_product_layer: The name of the sum-product inner layer. It can be one of the following:
             'cp' (the canonical decomposition layer, consisting of dense layers followed by a
             hadamard product layer), 'cpt' (the transposed canonical decomposition layer, consisting
@@ -45,7 +43,11 @@ def image_data(
             layer).
         num_sum_units: The number of sum units in each sum layer, i.e., either dense or mixing
             layer.
-        sum_weight_param: The parameterization to use for sum layers parameters.
+        input_params: A dictionary mapping each name of a parameter of the input layer to
+            its parameterization. If it is None, then the default parameterization of the chosen
+            input layer will be chosen.
+        sum_weight_param: The parameterization to use for sum layers parameters. If it None,
+            then a softmax parameterization of the sum weights will be used.
 
     Returns:
         Circuit: A symbolic circuit.
@@ -79,6 +81,8 @@ def image_data(
     input_factory = name_to_input_layer_factory(input_layer, **input_kwargs)
 
     # Get the sum weight factory
+    if sum_weight_param is None:
+        sum_weight_param = Parameterization(activation='softmax', initialization='normal')
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
 
     # Build and return the symbolic circuit
