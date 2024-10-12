@@ -168,9 +168,8 @@ class TorchEmbeddingLayer(TorchInputLayer):
             x = x.long()  # The input to Embedding should be discrete
         x = F.one_hot(x, self.num_states)  # (F, C, B, 1 num_states)
         x = x.squeeze(dim=3)  # (F, C, B, num_states)
-        x = x.to(torch.get_default_dtype())
         weight = self.weight()
-        x = torch.einsum("fcbi,fkci->fbkc", x, weight)
+        x = torch.einsum("fcbi,fkci->fbkc", x.to(weight.dtype), weight)
         x = self.semiring.map_from(x, SumProductSemiring)
         return self.semiring.prod(x, dim=-1)  # (F, B, K)
 
@@ -326,9 +325,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             x = x.long()  # The input to Categorical should be discrete
         x = F.one_hot(x, self.num_categories)  # (F, C, B, 1, num_categories)
         x = x.squeeze(dim=3)  # (F, C, B, num_categories)
-        x = x.to(torch.get_default_dtype())
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        x = torch.einsum("fcbi,fkci->fbk", x, logits)
+        x = torch.einsum("fcbi,fkci->fbk", x.to(logits.dtype), logits)
         return x
 
     def log_partition_function(self) -> Tensor:
@@ -567,11 +565,12 @@ class TorchConstantValueLayer(TorchConstantLayer):
         assert value.num_folds == self.num_folds
         assert value.shape == (num_output_units,)
         self.value = value
-        self._source_semiring = LSESumSemiring if log_space else LSESumSemiring
+        self.log_space = log_space
+        self._source_semiring = LSESumSemiring if log_space else SumProductSemiring
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_output_units": self.num_output_units}
+        return {"num_output_units": self.num_output_units, "log_space": self.log_space}
 
     @property
     def params(self) -> Mapping[str, TorchParameter]:
