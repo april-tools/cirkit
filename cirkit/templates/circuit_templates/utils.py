@@ -21,7 +21,13 @@ from cirkit.symbolic.parameters import (
     TensorParameter,
     UnaryParameterOp,
 )
-from cirkit.templates.region_graph import PoonDomingos, QuadGraph, QuadTree, RegionGraph
+from cirkit.templates.region_graph import (
+    PoonDomingos,
+    QuadGraph,
+    QuadTree,
+    RandomBinaryTree,
+    RegionGraph,
+)
 from cirkit.utils.scope import Scope
 
 
@@ -64,6 +70,8 @@ def build_image_region_graph(
             return QuadTree(image_shape, num_patch_splits=4)
         case "quad-graph":
             return QuadGraph(image_shape)
+        case "random-binary-tree":
+            return RandomBinaryTree(np.prod(image_shape))
         case "poon-domingos":
             delta = max(np.ceil(image_shape[0] / 8), np.ceil(image_shape[1] / 8))
             return PoonDomingos(image_shape, delta=delta)

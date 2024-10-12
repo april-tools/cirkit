@@ -29,6 +29,7 @@ def image_data(
             'quad-tree-2' (the Quad-Tree with two splits per region node),
             'quad-tree-4' (the Quad-Tree with four splits per region node),
             'quad-graph'  (the Quad-Graph region graph),
+            'random-binary-tree' (the random binary tree on flattened image pixels),
             'poon-domingos' (the Poon-Domingos architecture).
         input_layer: The name of the input layer. It can be one of the following:
             'categorical' (encoding a Categorical distribution over pixel channel values),
@@ -55,7 +56,13 @@ def image_data(
     Raises:
         ValueError: If one of the arguments is not one of the specified allowed ones.
     """
-    if region_graph not in ["quad-tree-2", "quad-tree-4", "quad-graph", "poon-domingos"]:
+    if region_graph not in [
+        "quad-tree-2",
+        "quad-tree-4",
+        "quad-graph",
+        "random-binary-tree",
+        "poon-domingos",
+    ]:
         raise ValueError(f"Unknown region graph called {region_graph}")
     if input_layer not in ["categorical", "binomial", "embedding"]:
         raise ValueError(f"Unknown input layer called {input_layer}")
