@@ -8,12 +8,12 @@ import cirkit.symbolic.functional as SF
 from cirkit.symbolic.circuit import are_compatible
 from cirkit.symbolic.layers import (
     CategoricalLayer,
+    ConstantValueLayer,
     DenseLayer,
     EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
-    LogPartitionLayer,
     PolynomialLayer,
 )
 from cirkit.symbolic.parameters import (
@@ -67,7 +67,7 @@ def test_integrate_circuit(num_units: int, input_layer: str):
     assert int_sc.is_structured_decomposable
     assert not int_sc.scope
     assert len(list(int_sc.inputs)) == len(list(sc.inputs))
-    assert all(isinstance(isl, LogPartitionLayer) for isl in int_sc.inputs)
+    assert all(isinstance(isl, ConstantValueLayer) for isl in int_sc.inputs)
     assert len(list(int_sc.inner_layers)) == len(list(sc.inner_layers))
 
 
@@ -178,7 +178,7 @@ def test_multiply_integrate_circuits(num_units: int, input_layer: str):
     int_sc = SF.integrate(sc)
     assert not int_sc.scope
     assert len(list(int_sc.inputs)) == len(list(sc.inputs))
-    assert all(isinstance(isl, LogPartitionLayer) for isl in int_sc.inputs)
+    assert all(isinstance(isl, ConstantValueLayer) for isl in int_sc.inputs)
     assert len(list(int_sc.inner_layers)) == len(list(sc.inner_layers))
     dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), int_sc.inner_layers))
     assert all(isinstance(l.weight.output, KroneckerParameter) for l in dense_layers)

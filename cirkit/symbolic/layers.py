@@ -199,6 +199,75 @@ class EvidenceLayer(ConstantLayer):
         return {"observation": self.observation}
 
 
+class EmbeddingLayer(InputLayer):
+    """A symbolic Embedding layer, which is parameterized by as many embedding matrices as
+    the number of variables. Each embedding matrix has size M x N, where M is the number
+    of output units of the layer, and N is the number of states each variable can assume.
+    """
+
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        num_channels: int,
+        *,
+        num_states: int = 2,
+        weight: Parameter | None = None,
+        weight_factory: ParameterFactory | None = None,
+    ):
+        """Initializes an Embedding layer.
+
+        Args:
+            scope: The variables scope the layer depends on.
+            num_output_units: The number of Categorical units in the layer.
+            num_channels: The number of channels per variable.
+            num_states: The number of categories for each variable and channel.
+            weight: The weight parameter of shape (K, C, N), where K is the number of output units,
+                C is the number of channels, and N is the number of states. If it is None,
+                then either the weight factory is used (if it is not None) or a
+                weight parameter is initialized.
+            weight_factory: A factory used to construct the weight parameter,
+                if it is not given
+        """
+        if len(scope) != 1:
+            raise ValueError("The Embedding layer encodes univariate functions")
+        if num_states <= 1:
+            raise ValueError("The number of states must be at least 2")
+        super().__init__(scope, num_output_units, num_channels)
+        self.num_states = num_states
+        if weight is None:
+            if weight_factory is None:
+                weight = Parameter.from_input(
+                    TensorParameter(*self._weight_shape, initializer=NormalInitializer())
+                )
+            else:
+                weight = weight_factory(self._weight_shape)
+        if weight.shape != self._weight_shape:
+            raise ValueError(f"Expected parameter shape {self._weight_shape}, found {weight.shape}")
+        self.weight = weight
+
+    @property
+    def _weight_shape(self) -> tuple[int, ...]:
+        return (
+            self.num_output_units,
+            self.num_channels,
+            self.num_states,
+        )
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_states": self.num_states,
+        }
+
+    @property
+    def params(self) -> Mapping[str, Parameter]:
+        return {"weight": self.weight}
+
+
 class CategoricalLayer(InputLayer):
     """A symbolic Categorical layer, which is parameterized either by
     probabilities (yielding a normalized Categorical distribution) or by
@@ -293,8 +362,9 @@ class BinomialLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int,
-        total_count: int,
+        num_channels: int = 1,
+        *,
+        total_count: int = 2,
         logits: Parameter | None = None,
         probs: Parameter | None = None,
         logits_factory: ParameterFactory | None = None,
@@ -307,7 +377,7 @@ class BinomialLayer(InputLayer):
                 "At most one between 'logits_factory' and 'probs_factory' can be specified"
             )
         if total_count < 0:
-            raise ValueError("The number of trials should be non negative")
+            raise ValueError("The number of trials should be non-negative")
         super().__init__(scope, num_output_units, num_channels)
         self.total_count = total_count
         if logits is None and probs is None:
@@ -461,9 +531,7 @@ class PolynomialLayer(InputLayer):
         coeff_factory: ParameterFactory | None = None,
     ):
         if len(scope) != 1:
-            raise ValueError("The Polynomial layer encodes a univariate distribution")
-        if num_channels != 1:
-            raise ValueError("The Polynomial layer encodes a univariate distribution")
+            raise ValueError("The Polynomial layer encodes univariate functions")
         super().__init__(scope, num_output_units, num_channels)
         self.degree = degree
         if coeff is None:
@@ -495,15 +563,17 @@ class PolynomialLayer(InputLayer):
         return {"coeff": self.coeff}
 
 
-class LogPartitionLayer(ConstantLayer):
-    """A symbolic layer computing a log-partition function."""
+class ConstantValueLayer(ConstantLayer):
+    """A symbolic layer computing a constant function encoded by a parameter."""
 
-    def __init__(self, num_output_units: int, *, value: Parameter):
-        """Initializes a Log Partition layer.
+    def __init__(self, num_output_units: int, *, log_space: bool = False, value: Parameter):
+        """Initializes a constant value layer.
 
         Args:
             num_output_units: The number of output log partition functions.
-            value: The symbolic parameter representing the log partition value.
+            log_space: Whether the given value is in the log-space, i.e., this constant
+                layer should encode ```exp(value)``` rather than ```value```.
+            value: The symbolic parameter representing the encoded value.
                 This symbolic paramater should have shape (K,), where K is the number of
                 output units.
         """
@@ -511,6 +581,7 @@ class LogPartitionLayer(ConstantLayer):
         if value.shape != self._value_shape:
             raise ValueError(f"Expected parameter shape {self._value_shape}, found {value.shape}")
         self.value = value
+        self.log_space = log_space
 
     @property
     def _value_shape(self) -> tuple[int, ...]:
@@ -518,7 +589,7 @@ class LogPartitionLayer(ConstantLayer):
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_output_units": self.num_output_units}
+        return {"num_output_units": self.num_output_units, "log_space": self.log_space}
 
     @property
     def params(self) -> Mapping[str, Parameter]:

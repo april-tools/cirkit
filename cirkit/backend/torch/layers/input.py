@@ -118,6 +118,62 @@ class TorchConstantLayer(TorchInputLayer, ABC):
         )
 
 
+class TorchEmbeddingLayer(TorchInputLayer):
+    def __init__(
+        self,
+        scope_idx: Tensor,
+        num_output_units: int,
+        num_channels: int = 1,
+        *,
+        num_states: int = 2,
+        weight: TorchParameter,
+        semiring: Semiring | None = None,
+    ) -> None:
+        if num_states <= 1:
+            raise ValueError("The number of states must be at least 2")
+        super().__init__(
+            scope_idx,
+            num_output_units,
+            num_channels=num_channels,
+            semiring=semiring,
+        )
+        self.num_states = num_states
+        if not self._valid_parameter_shape(weight):
+            raise ValueError(f"The number of folds and shape of 'weight' must match the layer's")
+        self.weight = weight
+
+    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == (
+            self.num_output_units,
+            self.num_channels,
+            self.num_states,
+        )
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_states": self.num_states,
+        }
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        return {"weight": self.weight}
+
+    def forward(self, x: Tensor) -> Tensor:
+        if x.is_floating_point():
+            x = x.long()  # The input to Embedding should be discrete
+        x = F.one_hot(x, self.num_states)  # (F, C, B, 1 num_states)
+        x = x.squeeze(dim=3)  # (F, C, B, num_states)
+        weight = self.weight()
+        x = torch.einsum("fcbi,fkci->fbkc", x.to(weight.dtype), weight)
+        x = self.semiring.map_from(x, SumProductSemiring)
+        return self.semiring.prod(x, dim=-1)  # (F, B, K)
+
+
 class TorchExpFamilyLayer(TorchInputLayer, ABC):
     """The abstract base class for Exponential Family distribution layers.
 
@@ -269,9 +325,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             x = x.long()  # The input to Categorical should be discrete
         x = F.one_hot(x, self.num_categories)  # (F, C, B, 1, num_categories)
         x = x.squeeze(dim=3)  # (F, C, B, num_categories)
-        x = x.to(torch.get_default_dtype())
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        x = torch.einsum("fcbi,fkci->fbk", x, logits)
+        x = torch.einsum("fcbi,fkci->fbk", x.to(logits.dtype), logits)
         return x
 
     def log_partition_function(self) -> Tensor:
@@ -384,12 +439,8 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         return torch.sum(x, dim=3)
 
     def log_partition_function(self) -> Tensor:
-        if self.logits is None:
-            return torch.zeros(
-                size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
-            )
-        logits = self.logits()
-        return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
+        device = self.logits.device if self.logits is not None else self.probs.device
+        return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
 
     def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
@@ -491,11 +542,12 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return samples
 
 
-class TorchLogPartitionLayer(TorchConstantLayer):
+class TorchConstantValueLayer(TorchConstantLayer):
     def __init__(
         self,
         num_output_units: int,
         *,
+        log_space: bool = False,
         value: TorchParameter,
         semiring: Semiring | None = None,
     ) -> None:
@@ -513,10 +565,12 @@ class TorchLogPartitionLayer(TorchConstantLayer):
         assert value.num_folds == self.num_folds
         assert value.shape == (num_output_units,)
         self.value = value
+        self.log_space = log_space
+        self._source_semiring = LSESumSemiring if log_space else SumProductSemiring
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_output_units": self.num_output_units}
+        return {"num_output_units": self.num_output_units, "log_space": self.log_space}
 
     @property
     def params(self) -> Mapping[str, TorchParameter]:
@@ -534,7 +588,7 @@ class TorchLogPartitionLayer(TorchConstantLayer):
         value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
         # (F, Ko) -> (F, B, O)
         value = value.expand(value.shape[0], x.shape[2], value.shape[2])
-        return self.semiring.map_from(value, LSESumSemiring)
+        return self.semiring.map_from(value, self._source_semiring)
 
 
 class TorchEvidenceLayer(TorchConstantLayer):
