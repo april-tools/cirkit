@@ -89,7 +89,7 @@ def image_data(
 
     # Get the sum weight factory
     if sum_weight_param is None:
-        sum_weight_param = Parameterization(activation='softmax', initialization='normal')
+        sum_weight_param = Parameterization(activation="softmax", initialization="normal")
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
 
     # Build and return the symbolic circuit
