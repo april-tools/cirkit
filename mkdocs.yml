@@ -1,5 +1,31 @@
 site_name: cirkit
+site_url: https://example.com
 repo_url: https://github.com/april-tools/cirkit
+nav:
+  - Home: 'README.md'
+  - Notebooks: 'notebooks/README.md'
+  - API documentation: 'api/'
+plugins:
+  - search
+  - autorefs
+  - gen-files:
+      scripts:
+        - scripts/generate_api_pages.py
+  - literate-nav:
+      nav_file: overview.md
+  - section-index
+  - mkdocstrings:
+      handlers:
+        python:
+          import:
+            - https://docs.python.org/3/objects.inv
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
 theme:
   name: "material"
   palette:
@@ -18,22 +44,13 @@ theme:
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.top
+    - navigation.instant
     - search.highlight
     - search.suggest
     - toc.follow
-plugins:
-  - search
-  - autorefs
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            docstring_style: google
-            show_root_heading: true
-            show_root_full_path: false
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
-nav:
-  - Home: 'README.md'
-  - Notebooks: 'notebooks/README.md'
-  - API Documentation: 'api/index.md'
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format

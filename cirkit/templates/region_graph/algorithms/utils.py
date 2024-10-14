@@ -75,7 +75,7 @@ def tree2rg(tree: np.ndarray) -> RegionGraph:
 
     Args:
         tree (np.ndarray): A tree in form of list of predecessors, i.e. tree[i] is the parent of i,
-        and is equal to -1 when i is root.
+            and is equal to -1 when i is root.
 
     Returns:
         A region graph.

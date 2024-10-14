@@ -35,6 +35,9 @@ dev = [
   "mkdocs",
   "mkdocs-material",
   "mkdocstrings-python",
+  "mkdocs-gen-files",
+  "mkdocs-literate-nav",
+  "mkdocs-section-index",
   "black[jupyter]~=23.0",
   "mypy==1.7.1",  # should be specific version for stable typing
   "pylint~=3.0.0",

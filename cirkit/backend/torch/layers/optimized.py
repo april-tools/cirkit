@@ -189,7 +189,7 @@ class TorchTensorDotLayer(TorchSumLayer):
 
         Args:
             num_input_units (int): The number of input units.
-            num_outpfrom functools import cached_propertyut_units (int): The number of output units.
+            num_output_units (int): The number of output units.
             num_folds (int): The number of channels. Defaults to 1.
             weight (TorchParameter): The reparameterization for layer parameters.
         """

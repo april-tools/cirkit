@@ -187,7 +187,7 @@ class TorchDenseLayer(TorchSumLayer):
 
         Args:
             num_input_units (int): The number of input units.
-            num_outpfrom functools import cached_propertyut_units (int): The number of output units.
+            num_output_units (int): The number of output units.
             weight (TorchParameter): The reparameterization for layer parameters.
             num_folds (int): The number of channels. Defaults to 1.
         """
