@@ -3,6 +3,7 @@
 ::: cirkit.symbolic.layers.InputLayer
 ::: cirkit.symbolic.layers.CategoricalLayer
 ::: cirkit.symbolic.layers.GaussianLayer
+::: cirkit.symbolic.layers.PolynomialLayer
 ::: cirkit.symbolic.layers.ProductLayer
 ::: cirkit.symbolic.layers.HadamardLayer
 ::: cirkit.symbolic.layers.KroneckerLayer
