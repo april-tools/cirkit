@@ -17,8 +17,8 @@ def image_data(
     num_input_units: int,
     sum_product_layer: str,
     num_sum_units: int,
-    sum_weight_param: Parameterization | None = {},
-    input_params: dict[str, Parameterization] | None = {},
+    input_params: dict[str, Parameterization] | None = None,
+    sum_weight_param: Parameterization | None = None,
 ) -> Circuit:
     """Constructs a symbolic circuit whose structure is tailored for image data sets.
 
@@ -81,10 +81,11 @@ def image_data(
             input_kwargs = {"num_states": 256}
         case _:
             assert False
-    input_kwargs.update(
-        (name + "_factory", parameterization_to_factory(param))
-        for name, param in input_params.items()
-    )
+    if input_params is not None:
+        input_kwargs.update(
+            (name + "_factory", parameterization_to_factory(param))
+            for name, param in input_params.items()
+        )
     input_factory = name_to_input_layer_factory(input_layer, **input_kwargs)
 
     # Get the sum weight factory

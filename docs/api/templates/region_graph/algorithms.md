@@ -5,3 +5,4 @@
 ::: cirkit.templates.region_graph.algorithms.QuadTree
 ::: cirkit.templates.region_graph.algorithms.QuadGraph
 ::: cirkit.templates.region_graph.algorithms.PoonDomingos
+::: cirkit.templates.region_graph.algorithms.ChowLiuTree

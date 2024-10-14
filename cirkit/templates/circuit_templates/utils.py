@@ -52,9 +52,9 @@ def build_image_region_graph(
 
     Args:
         name: The name of the region graph. It can be one of the following: 'quad-tree-2',
-         'quad-tree-4', 'quad-graph', 'poon-domingos'. For the Poon-Domingos region graph, the delta
-         parameter used to split patches is automatically set to max(ceil(H/8), ceil(W/8)) for
-         images of shape (H, W).
+            'quad-tree-4', 'quad-graph', 'random-binary-tree', 'poon-domingos'.
+            For the Poon-Domingos region graph, the delta parameter used to split patches is
+            automatically set to max(ceil(H/8), ceil(W/8)) for images of shape (H, W).
         image_shape: The shape of the image.
 
     Returns:
@@ -85,7 +85,7 @@ def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
     Args:
         name: The name of the input layer. It can be one of the following:
             'embedding', 'categorical', 'gaussian', 'binomial'.
-        **kwargs: Arguments to pass to the factory.
+        kwargs: Arguments to pass to the factory.
 
     Returns:
         InputLayerFactory: A symbolic input layer factory.
@@ -151,7 +151,7 @@ def name_to_parameter_activation(
     Args:
         name: The name of the parameter activation. It can be either 'none',
             'softmax', or 'positive-clamp'.
-        **kwargs: Optional arguments to pass to symbolic unary parameter.
+        kwargs: Optional arguments to pass to symbolic unary parameter.
 
     Returns:
         None: If name is 'none'
@@ -202,9 +202,9 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
 
     Args:
         name: The initialization name. It can be one of the following: 'uniform' (in the range 0-1),
-         'normal' (with mean 0 and standard deviation 1), 'dirichlet' (with concentration
-         parameters 1).
-        **kwargs: Optional arguments to pass to the initializer.
+            'normal' (with mean 0 and standard deviation 1), 'dirichlet' (with concentration
+            parameters 1).
+        kwargs: Optional arguments to pass to the initializer.
 
     Returns:
         Initializer: The symbolic initializer.
