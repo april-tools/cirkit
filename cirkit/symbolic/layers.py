@@ -520,6 +520,8 @@ class GaussianLayer(InputLayer):
 
 
 class PolynomialLayer(InputLayer):
+    """A symbolic layer that evaluates polynomials."""
+
     def __init__(
         self,
         scope: Scope,
@@ -530,6 +532,21 @@ class PolynomialLayer(InputLayer):
         coeff: Parameter | None = None,
         coeff_factory: ParameterFactory | None = None,
     ):
+        """Initializes a polynomial layer,
+
+        Args:
+            scope: The variables scope the layer depends on.
+            num_output_units: The number of units each encoding a polynomial in the layer.
+            num_channels: The number of channels per variable.
+            degree: The degree of the polynomials.
+            coeff: The coefficient parameter of shape (K, degree + 1), where K is the
+                number of output units. If it is None, then either the coefficient factory
+                is used (if it not None), or a default
+                symbolic parameter will be instantiated with a
+                [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
+                symbolic initializer.
+            coeff_factory: A factory used to construct the coeff parameter, if it is not specified.
+        """
         if len(scope) != 1:
             raise ValueError("The Polynomial layer encodes univariate functions")
         super().__init__(scope, num_output_units, num_channels)
