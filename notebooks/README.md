@@ -10,7 +10,7 @@ jupyter notebook
 # Suggested Path through Notebooks
 
 
-While you can explore the notebooks in any order, we recommend you start from [learning a circuit](learning-a-circuit.ipynb) and proceed as in the graph below.
+While you can explore the notebooks in any order, we recommend you start from the **learning-a-circuit.ipynb** notebook, and proceed as in the graph below.
 
 ```mermaid
 graph TD;
