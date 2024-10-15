@@ -340,8 +340,19 @@ def conjugate_mixing_layer(sl: MixingLayer) -> CircuitBlock:
 
 
 class LayerOperatorFunc(Protocol):
+    """The layer operator function protocol."""
+
     def __call__(self, *sl: Layer, **kwargs) -> CircuitBlock:
-        ...
+        """Apply an operator on one or more layers.
+
+        Args:
+            *sl: The sequence of layers.
+            **kwargs: The hyperparameters of the operator.
+
+        Returns:
+            A circuit block representing the sub computational graph resulting from
+                the application of the operator.
+        """
 
 
 DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {

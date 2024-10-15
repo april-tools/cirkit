@@ -444,8 +444,30 @@ def _repeat(iterable: Iterable[_T], /, *, times: int) -> Iterable[_T]:
 
 
 def differentiate(
-    sc: Circuit, registry: OperatorRegistry | None = None, *, order: int = 1
+    sc: Circuit, order: int = 1, *, registry: OperatorRegistry | None = None
 ) -> Circuit:
+    """Represent the differential of a symbolic circuit with respect to its variables scope
+        as a circuit. The operator requires the input circuit to be smooth and decomposable,
+        and a higher-order differential can be computed. The symbolic circuit resulting from the
+        differentiation operator is another smooth and decomposable circuit with as many output
+        layers as the number of variables in the scope of the input circuit.
+
+    Args:
+        sc: The symbolic circuit.
+        order: The differentiation order.
+        registry: A registry of symbolic layer operators. If it is None, then the one in
+            the current context will be used. See the
+            [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
+            for more details.
+
+    Returns:
+        A multi-output smooth and decomposable symbolic circuit computing the
+            differential of the input circuit with respect to each variable.
+
+    Raises:
+        StructuralPropertyError: If the given circuit is not smooth and decomposable.
+        ValueError: If the given differentiation order is not a positive integer.
+    """
     if not sc.is_smooth or not sc.is_decomposable:
         raise StructuralPropertyError(
             "Only smooth and decomposable circuits can be efficiently differentiated."

@@ -27,17 +27,12 @@ classifiers = [
 dependencies = [
   "torch~=2.3.0",
   "numpy>=1.23.0,<2.0.0",
-  "einops~=0.8.0"
+  "einops~=0.8.0",
+  "scipy~=1.14.0"
 ]
 
 [project.optional-dependencies]
 dev = [
-  "mkdocs",
-  "mkdocs-material",
-  "mkdocstrings-python",
-  "mkdocs-gen-files",
-  "mkdocs-literate-nav",
-  "mkdocs-section-index",
   "black[jupyter]~=23.0",
   "mypy==1.7.1",  # should be specific version for stable typing
   "pylint~=3.0.0",
@@ -45,7 +40,14 @@ dev = [
   "pytest",  # this is required to lint the test files
   "pytest-cov",
   "pylint-per-file-ignores",  # TODO: wait for native support in pylint
-  "scipy>=1.10.0"  # this is required for testing
+]
+docs = [
+  "mkdocs",
+  "mkdocs-material",
+  "mkdocstrings-python",
+  "mkdocs-gen-files",
+  "mkdocs-literate-nav",
+  "mkdocs-section-index",
 ]
 notebooks = [
   "notebook",

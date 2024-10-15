@@ -25,7 +25,8 @@ class ParameterNode(ABC):
         Returns:
             The copy of the parameter node.
         """
-        return self.__class__(**self.config)
+        cls = self.__class__
+        return cls(**self.config)
 
     @property
     @abstractmethod
@@ -102,7 +103,24 @@ class TensorParameter(ParameterInput):
 
 
 class ConstantParameter(TensorParameter):
+    """A symbolic tensor parameter representing a constant tensor, i.e.,
+    a tensor that is not learnable.
+    """
+
     def __init__(self, *shape: int, value: Number | np.ndarray = 0.0):
+        """Initializes a constant symbolic parameter.
+
+        Args:
+            *shape: The shape of the parameter.
+            value: The values stored in the parameter. It can be either a number or
+                a Numpy array having the same shape of the given one.
+
+        Raises:
+            ValueError: If the given value is a Numpy array having a different shape
+                than the given one.
+        """
+        if isinstance(value, np.ndarray) and value.shape != shape:
+            raise ValueError("The shape of the Numpy array is not equal to the given shape")
         initializer = ConstantTensorInitializer(value)
         super().__init__(
             *shape,
@@ -118,7 +136,14 @@ class ConstantParameter(TensorParameter):
 
 
 class ReferenceParameter(ParameterInput):
+    """A symbolic reference parameter representing a symbolic link to a tensor parameter."""
+
     def __init__(self, parameter: TensorParameter):
+        """Initializes a reference parameter.
+
+        Args:
+            parameter: The tensor parameter to point to.
+        """
         super().__init__()
         self._parameter = parameter
 
@@ -131,24 +156,56 @@ class ReferenceParameter(ParameterInput):
         return {"parameter": self._parameter}
 
     def deref(self) -> TensorParameter:
+        """Dereference the pointer.
+
+        Returns:
+            The tensor paramter being pointed to.
+        """
         return self._parameter
 
 
 class ParameterOp(ParameterNode, ABC):
-    def __init__(self, *in_shapes: tuple[int, ...], **kwargs):
+    """A symbolic parameter operator, i.e., an inner node of the symbolic parameter
+    computational graph.
+    """
+
+    def __init__(self, *in_shapes: tuple[int, ...]):
+        """Initializes a symbolic parameter operator.
+
+        Args:
+            *in_shapes: A sequence of the shapes of each input. The length of this
+                sequence is the arity of the parameter operator.
+        """
         self._in_shapes = in_shapes
 
     @property
     def in_shapes(self) -> tuple[tuple[int, ...], ...]:
+        """Retrieves the shapes of the inputs to the parameter operator.
+
+        Returns:
+            A sequence of shapes, one for each input.
+        """
         return self._in_shapes
 
 
 class UnaryParameterOp(ParameterOp, ABC):
+    """A symbolic parameter operator that represents a unary operation."""
+
     def __init__(self, in_shape: tuple[int, ...]):
+        """Initializes a symbolic unary parameter operator.
+
+        Args:
+            in_shape: The shape of the input.
+        """
         super().__init__(in_shape)
 
     @property
     def in_shape(self) -> tuple[int, ...]:
+        """Retrieves the shape of the input.
+
+        Returns:
+            The shape of the input.
+        """
         return self._in_shapes[0]
 
     @property
@@ -157,15 +214,33 @@ class UnaryParameterOp(ParameterOp, ABC):
 
 
 class BinaryParameterOp(ParameterOp, ABC):
+    """A symbolic parameter operator that represents a binary operation."""
+
     def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]):
+        """Initializes a symbolic binary parameter operator.
+
+        Args:
+            in_shape1: The shape of the first input.
+            in_shape2: The shape of the second input.
+        """
         super().__init__(in_shape1, in_shape2)
 
     @property
     def in_shape1(self) -> tuple[int, ...]:
+        """Retrieves the shape of the first input.
+
+        Returns:
+            The shape of the first input.
+        """
         return self._in_shapes[0]
 
     @property
     def in_shape2(self) -> tuple[int, ...]:
+        """Retrieves the shape of the second input.
+
+        Returns:
+            The shape of the second input.
+        """
         return self._in_shapes[1]
 
     @property
@@ -174,19 +249,38 @@ class BinaryParameterOp(ParameterOp, ABC):
 
 
 class EntrywiseParameterOp(UnaryParameterOp, ABC):
+    """A symbolic parameter operator that represents a unary function
+    that is applied entrywise to the input parameter tensor.
+    """
+
     @property
     def shape(self) -> tuple[int, ...]:
         return self.in_shape
 
 
 class ReduceParameterOp(UnaryParameterOp, ABC):
+    """A symbolic parameter operator that represents a unary function
+    that is a reduction along one dimension of the input parameter tensor.
+    """
+
     def __init__(self, in_shape: tuple[int, ...], *, axis: int = -1):
-        assert 0 <= axis < len(in_shape)
+        """Initializes a symbolic reduce parameter operator.
+
+        Args:
+            in_shape: The shape of the input.
+            axis: The axis of the input being reduced.
+        """
+        axis = axis if axis >= 0 else axis + len(in_shape)
         super().__init__(in_shape)
-        self._axis = axis if axis >= 0 else axis + len(in_shape)
+        self._axis = axis
 
     @property
     def axis(self) -> int:
+        """Retrieves the axis of the input being reduced.
+
+        Returns:
+            The axis dimension.
+        """
         return self._axis
 
     @property
@@ -201,7 +295,18 @@ class ReduceParameterOp(UnaryParameterOp, ABC):
 
 
 class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
+    """A symbolic parameter operator that represents a unary function
+    that is applied entrywise to the input parameter tensor,
+    and this unary function is obtained by reducing one input dimension.
+    """
+
     def __init__(self, in_shape: tuple[int, ...], *, axis: int = -1):
+        """Initializes an entrywise reduce parameter operator.
+
+        Args:
+            in_shape: The shape of the input.
+            axis: The axis of the input being reduced.
+        """
         super().__init__(in_shape)
         axis = axis if axis >= 0 else axis + len(in_shape)
         assert 0 <= axis < len(in_shape)
@@ -209,6 +314,11 @@ class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
 
     @property
     def axis(self) -> int:
+        """Retrieves the axis of the input being reduced.
+
+        Returns:
+            The axis dimension.
+        """
         return self._axis
 
     @property
@@ -219,7 +329,18 @@ class EntrywiseReduceParameterOp(EntrywiseParameterOp, ABC):
 
 
 class IndexParameter(UnaryParameterOp):
+    """A symbolic parameter operator that indexes an input parameter tensor
+    along one axis.
+    """
+
     def __init__(self, in_shape: tuple[int, ...], *, indices: list[int], axis: int = -1):
+        """Initializes a symbolc index parameter.
+
+        Args:
+            in_shape: The shape of the input.
+            indices: The indices to index.
+            axis: The axis of the input tensor being indexed.
+        """
         super().__init__(in_shape)
         axis = axis if axis >= 0 else axis + len(in_shape)
         assert 0 <= axis < len(in_shape)
@@ -229,10 +350,20 @@ class IndexParameter(UnaryParameterOp):
 
     @property
     def indices(self) -> list[int]:
+        """Retrieves the indices.
+
+        Returns:
+            The indices.
+        """
         return self._indices
 
     @property
     def axis(self) -> int:
+        """Retrieves the axis being indexed.
+
+        Returns:
+            The axis.
+        """
         return self._axis
 
     @property
@@ -252,7 +383,15 @@ class IndexParameter(UnaryParameterOp):
 
 
 class SumParameter(BinaryParameterOp):
+    """A symbolic parameter operator representing the element-wise sum of its inputs."""
+
     def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]) -> None:
+        """Initializes a symbolic sum parameter operator.
+
+        Args:
+            in_shape1: The shape of the first input.
+            in_shape2: The shape of the second input.
+        """
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2)
 
@@ -262,7 +401,15 @@ class SumParameter(BinaryParameterOp):
 
 
 class HadamardParameter(BinaryParameterOp):
+    """A symbolic parameter operator representing the element-wise product of its inputs."""
+
     def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]):
+        """Initializes a symbolic Hadamard parameter operator.
+
+        Args:
+            in_shape1: The shape of the first input.
+            in_shape2: The shape of the second input.
+        """
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2)
 
@@ -272,7 +419,15 @@ class HadamardParameter(BinaryParameterOp):
 
 
 class KroneckerParameter(BinaryParameterOp):
+    """A symbolic parameter operator representing the Kronecker product of its inputs."""
+
     def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...]):
+        """Initializes a symbolic Kronecker parameter operator.
+
+        Args:
+            in_shape1: The shape of the first input.
+            in_shape2: The shape of the second input.
+        """
         assert len(in_shape1) == len(in_shape2)
         super().__init__(in_shape1, in_shape2)
 
@@ -282,9 +437,18 @@ class KroneckerParameter(BinaryParameterOp):
 
 
 class OuterParameterOp(BinaryParameterOp):
-    def __init__(
-        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, axis: int = -1
-    ) -> None:
+    """A symbolic parameter operator computing a function applied over all possible combinations
+    of entries along one axis of the input tensors.
+    """
+
+    def __init__(self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, axis: int = -1):
+        """Initializes a symbolic parameter outer operator.
+
+        Args:
+            in_shape1: The shape of the first input.
+            in_shape2: The shape of the second input.
+            axis: The axis of both inputs along which the function is applied.
+        """
         assert len(in_shape1) == len(in_shape2)
         axis = axis if axis >= 0 else axis + len(in_shape1)
         assert 0 <= axis < len(in_shape1)
@@ -295,6 +459,11 @@ class OuterParameterOp(BinaryParameterOp):
 
     @property
     def axis(self) -> int:
+        """Retrieves the axis.
+
+        Returns:
+            The axis.
+        """
         return self._axis
 
     @property
@@ -310,45 +479,77 @@ class OuterParameterOp(BinaryParameterOp):
 
 
 class OuterProductParameter(OuterParameterOp):
-    ...
+    """A symbolic parameter operator represeting the outer product of two parameter tensors
+    along one axis.
+    """
 
 
 class OuterSumParameter(OuterParameterOp):
-    ...
+    """A symbolic parameter operator represeting the outer sum of two parameter tensors
+    along one axis.
+    """
 
 
 class ExpParameter(EntrywiseParameterOp):
-    ...
+    """A symbolic parameter operator representing the exponential of a parameter tensor."""
 
 
 class LogParameter(EntrywiseParameterOp):
-    ...
+    """A symbolic parameter operator representing the logarithm of a parameter tensor."""
 
 
 class SquareParameter(EntrywiseParameterOp):
-    ...
+    """A symbolic parameter operator representing the entry-wise square of a parameter
+    tensor.
+    """
 
 
 class SoftplusParameter(EntrywiseParameterOp):
-    ...
+    """A symbolic parameter operator representing the entry-wise application of
+    the softplus function to a parameter tensor.
+    """
 
 
 class SigmoidParameter(EntrywiseParameterOp):
-    ...
+    """A symbolic parameter operator representing the entry-wise application of
+    the sigmoid function to a parameter tensor.
+    """
 
 
 class ScaledSigmoidParameter(EntrywiseParameterOp):
+    """A symbolic parameter operator representing the entry-wise application of
+    the rescaled sigmoid function to a parameter tensor.
+    """
+
     def __init__(self, in_shape: tuple[int, ...], vmin: float, vmax: float):
+        """Initializes a symbolic scaled sigmoid parameter operator.
+
+        Args:
+            in_shape: The shape of the input.
+            vmin: The minimum output value.
+            vmax: The maximum output value
+        """
+        assert vmin < vmax
         super().__init__(in_shape)
         self._vmin = vmin
         self._vmax = vmax
 
     @property
     def vmin(self) -> float:
+        """Retrieves the minimum output value.
+
+        Returns:
+            The minimum value.
+        """
         return self._vmin
 
     @property
     def vmax(self) -> float:
+        """Retrieves the minimum output value.
+
+        Returns:
+            The maximum value.
+        """
         return self._vmax
 
     @property
@@ -360,7 +561,7 @@ class ScaledSigmoidParameter(EntrywiseParameterOp):
 
 
 class ClampParameter(EntrywiseParameterOp):
-    """Clamp reparameterization."""
+    """A symbolic parameter operator representing the element-wise clamping operator."""
 
     def __init__(
         self,
@@ -368,7 +569,17 @@ class ClampParameter(EntrywiseParameterOp):
         *,
         vmin: float | None = None,
         vmax: float | None = None,
-    ) -> None:
+    ):
+        """Initializes a symbolic clamp parameter operator. At least one between
+            the minimum and maximum value must be specified.
+
+        Args:
+            in_shape: The shape of the input.
+            vmin: The minimum value to clamp to. If it is None, then clamping for
+                the minimum value is not performed.
+            vmax: The maximum value to clamp to. If it is None, then clamping for
+                the maximum value is not performed.
+        """
         assert vmin is not None or vmax is not None
         super().__init__(in_shape)
         self._vmin = vmin
@@ -376,10 +587,20 @@ class ClampParameter(EntrywiseParameterOp):
 
     @property
     def vmin(self) -> float:
+        """Retrieves the minimum clamping value.
+
+        Returns:
+            The minimum clamping value.
+        """
         return self._vmin
 
     @property
     def vmax(self) -> float:
+        """Retrieves the maximum clamping value.
+
+        Returns:
+            The maximum clamping value.
+        """
         return self._vmax
 
     @property
@@ -391,33 +612,51 @@ class ClampParameter(EntrywiseParameterOp):
 
 
 class ConjugateParameter(EntrywiseParameterOp):
-    ...
+    """A symbolic parameter operator representing the element-wise complex conjugation
+    operation of its input.
+    """
 
 
 class ReduceSumParameter(ReduceParameterOp):
-    ...
+    """A symbolic parameter operator representing the sum reduction along one dimension."""
 
 
 class ReduceProductParameter(ReduceParameterOp):
-    ...
+    """A symbolic parameter operator representing the product reduction along one dimension."""
 
 
 class ReduceLSEParameter(ReduceParameterOp):
-    ...
+    """A symbolic parameter operator representing the LogSumExp reduction along one dimension."""
 
 
 class SoftmaxParameter(EntrywiseReduceParameterOp):
-    ...
+    """A symbolic parameter operator representing the application of the Softmax function
+    along one dimension.
+    """
 
 
 class LogSoftmaxParameter(EntrywiseReduceParameterOp):
-    ...
+    """A symoblic parameter operator representing the application of the LogSoftmax function
+    along one dimension.
+    """
 
 
 class GaussianProductMean(ParameterOp):
-    def __init__(
-        self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]
-    ) -> None:
+    """A symbolic parameter operator computing the mean of the product of two Gaussians,
+    given the means and standard deviations of the input Gaussians. Note that we assume
+    Gaussians being univariate.
+    """
+
+    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+        """Initializes a symbolic Gaussian product mean, given the shape of the input means
+            and standard deviations.
+
+        Args:
+            in_gaussian1_shape: The shape of the mean and standard deviations of the first
+                univariate Gaussians. Any shape is allowed.
+            in_gaussian2_shape: The shape of the mean and standard deviations of the second
+                univariate Gaussians. Any shape is allowed.
+        """
         assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
@@ -434,9 +673,20 @@ class GaussianProductMean(ParameterOp):
 
 
 class GaussianProductStddev(BinaryParameterOp):
-    def __init__(
-        self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]
-    ) -> None:
+    """A symbolic parameter operator computing the standard deviation of the product of
+    two Gaussians, given the standard deviations of the input Gaussians.
+    """
+
+    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+        """Initializes a symbolic Gaussian product standard deviation,
+            given the shape of the input standard deviations.
+
+        Args:
+            in_gaussian1_shape: The shape of the standard deviations of the first
+                univariate Gaussians. Any shape is allowed.
+            in_gaussian2_shape: The shape of the standard deviations of the second
+                univariate Gaussians. Any shape is allowed.
+        """
         assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
@@ -453,9 +703,20 @@ class GaussianProductStddev(BinaryParameterOp):
 
 
 class GaussianProductLogPartition(ParameterOp):
-    def __init__(
-        self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]
-    ) -> None:
+    """A symbolic parameter operator computing the log partition function of the product of
+    two Gaussians, given the means and standard deviations of the input Gaussians.
+    """
+
+    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+        """Initializes a symbolic Gaussian product log partition function,
+            given the shape of the input means and standard deviations.
+
+        Args:
+            in_gaussian1_shape: The shape of the mean and standard deviations of the first
+                univariate Gaussians. Any shape is allowed.
+            in_gaussian2_shape: The shape of the mean and standard deviations of the second
+                univariate Gaussians. Any shape is allowed.
+        """
         assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
         super().__init__(in_gaussian1_shape, in_gaussian2_shape)
 
@@ -472,7 +733,9 @@ class GaussianProductLogPartition(ParameterOp):
 
 
 class PolynomialProduct(BinaryParameterOp):
-    # Use default __init__
+    """A symbolic parameter operator representing the coefficients of a polynomial resulting
+    from the product of two polynomial.
+    """
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -483,7 +746,20 @@ class PolynomialProduct(BinaryParameterOp):
 
 
 class PolynomialDifferential(UnaryParameterOp):
+    """A symbolic parameter operator representing the coefficients of a polynomial resulting
+    from the differentiation of a polynomial.
+    """
+
     def __init__(self, in_shape: tuple[int, ...], *, order: int = 1):
+        """Initializes a symbolic polynomial differential coefficients.
+
+        Args:
+            in_shape: The shape of the coefficients of the input polynomial.
+            order: The differentiation order.
+
+        Raises:
+            ValuerError: if the differentiation order is not a positive integer.
+        """
         if order <= 0:
             raise ValueError("The order of differentiation must be positive.")
         super().__init__(in_shape)
@@ -618,10 +894,10 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         # Build a new symbolic parameter's computational graph, where the parameter tensors
         # become references to the tensors of the 'self' parameter's computational graph.
         # All the other nodes are new objects.
-        def replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
+        def _replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
             return ReferenceParameter(n) if isinstance(n, TensorParameter) else copy(n)
 
-        return self._process_nodes(replace_ref_or_copy)
+        return self._process_nodes(_replace_ref_or_copy)
 
     def _process_nodes(self, process_fn: Callable[[ParameterNode], ParameterNode]) -> "Parameter":
         # Process all the nodes by following the topological ordering and using a function

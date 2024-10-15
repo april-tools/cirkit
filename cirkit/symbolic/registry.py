@@ -110,8 +110,10 @@ class OperatorRegistry(AbstractContextManager):
         self._rules[op][signature] = func
 
 
-# Context variable holding the current global operator registry.
-# This is updated when entering an operator registry context.
 OPERATOR_REGISTRY: ContextVar[OperatorRegistry] = ContextVar(
     "OPERATOR_REGISTRY", default=OperatorRegistry.from_default_rules()
 )
+"""
+Context variable holding the current global operator registry.
+This is updated when entering an operator registry context.
+"""
