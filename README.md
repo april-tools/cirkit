@@ -4,12 +4,6 @@
 
 ![cirkit logo](./logo.png)
 
-LL: abstract
-
-## Project Structure
-
-LL: to write
-
 ## How to Install the Library
 
 cirkit currently requires Python 3.10 and PyTorch 2.3 or above versions.
