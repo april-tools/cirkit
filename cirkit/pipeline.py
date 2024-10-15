@@ -16,10 +16,28 @@ from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import LayerOperator
 from cirkit.symbolic.operators import LayerOperatorFunc
 from cirkit.symbolic.registry import OperatorRegistry
+from cirkit.utils.scope import Scope
 
 
 class PipelineContext(AbstractContextManager):
+    """A pipeline context is a Python context manager used to compile
+    circuits and specify backend-specific compilation flags and optimizations.
+    A pipeline context can also be used to register compilation rules for user-defined
+    layers, parameterizations and initialization methods. Furthermore, new layer operators
+    can be added to the context.
+    """
+
     def __init__(self, backend: str = "torch", **backend_kwargs):
+        """Initialzes a pipeline context, given the compilation backend and
+            the compilation flags.
+
+        Args:
+            backend: The compilation backend.  The only backend supported is 'torch'.
+            backend_kwargs: The compilation flags to pass to the compiler.
+
+        Raises:
+            ValuerError: if the compilation backend is unknown.
+        """
         if backend not in SUPPORTED_BACKENDS:
             raise NotImplementedError(f"Backend '{backend}' is not implemented")
         # Backend specs
@@ -37,12 +55,32 @@ class PipelineContext(AbstractContextManager):
 
     @classmethod
     def from_default_backend(cls) -> "PipelineContext":
+        """Construts a pipeline context from the default backend.
+            The default backend is 'torch'.
+
+        Returns:
+            A pipeline context from the default backend by specifying default
+                values for the compilation flags.
+        """
         return PipelineContext(backend="torch", semiring="lse-sum", fold=True, optimize=True)
 
     def __getitem__(self, sc: Circuit) -> CompiledCircuit:
+        """Retrieves a compiled circuit, given a symbolic one.
+
+        Args:
+            sc: The symbolic circuit.
+
+        Returns:
+            The circuit compiled from the given symbolic circuit.
+        """
         return self._compiler.get_compiled_circuit(sc)
 
     def __enter__(self) -> "PipelineContext":
+        """Enters a pipeline context.
+
+        Returns:
+            Itself.
+        """
         self._op_registry.__enter__()
         self._token = _PIPELINE_CONTEXT.set(self)
         return self
@@ -53,39 +91,114 @@ class PipelineContext(AbstractContextManager):
         __exc_value: BaseException | None,
         __traceback: TracebackType | None,
     ) -> bool | None:
+        """Exit a pipeline context."""
         ret = self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
         _PIPELINE_CONTEXT.reset(self._token)
         self._token = None
         return ret
 
     def add_operator_rule(self, op: LayerOperator, func: LayerOperatorFunc):
+        """Add a new layer operator to the context.
+
+        Args:
+            op: The layer operator.
+            func: The layer operator implementation.
+        """
         self._op_registry.add_rule(op, func)
 
     def add_layer_compilation_rule(self, func: LayerCompilationFunc):
+        """Add a new layer compilation rule to the current compilation backend.
+
+        Args:
+            func: The layer compilation rule.
+        """
         self._compiler.add_layer_rule(func)
 
     def add_parameter_compilation_rule(self, func: ParameterCompilationFunc):
+        """Add a new parameter compilation rule to the current compilation backend.
+
+        Args:
+            func: The parameter compilation rule.
+        """
         self._compiler.add_parameter_rule(func)
 
     def add_initializer_compilation_rule(self, func: InitializerCompilationFunc):
+        """Add a new initialization method compilation rule to the current compilation backend.
+
+        Args:
+            func: The initializer compilation rule.
+        """
         self._compiler.add_initializer_rule(func)
 
     def compile(self, sc: Circuit) -> CompiledCircuit:
+        """Compile a symbolic circuit.
+
+        Args:
+            sc: The symbolic circuit.
+
+        Returns:
+            A compiled circuit, whose type depends on the chosen compilation backend.
+        """
         return self._compiler.compile(sc)
 
     def is_compiled(self, sc: Circuit) -> bool:
+        """Check whether a symbolic circuit has been compiled in this context.
+
+        Args:
+            sc: The symbolic circuit.
+
+        Returns:
+            True if the given symbolic circuit has been compiled in this context, False otherwise.
+        """
         return self._compiler.is_compiled(sc)
 
     def has_symbolic(self, cc: CompiledCircuit) -> bool:
+        """Check whether a compiled circuit has a corresponding symbolic circuit
+            in this context.
+
+        Args:
+            cc: The compiled circuit.
+
+        Returns:
+            False if the given compiled circuit has been compiled in this context, False otherwise.
+        """
         return self._compiler.has_symbolic(cc)
 
     def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
+        """Retrieves a compiled circuit, given a symbolic one.
+
+        Args:
+            sc: The symbolic circuit.
+
+        Returns:
+            The circuit compiled from the given symbolic circuit.
+        """
         return self._compiler.get_compiled_circuit(sc)
 
     def get_symbolic_circuit(self, cc: CompiledCircuit) -> Circuit:
+        """Retrieves a symbolic circuit, given a compiled one.
+
+        Args:
+            cc: The compiled circuit.
+
+        Returns:
+            The symbolic circuit associated to the given compiled one.
+        """
         return self._compiler.get_symbolic_circuit(cc)
 
     def concatenate(self, *cc: CompiledCircuit) -> CompiledCircuit:
+        """Circuit concatenation interface for compiled circuits.
+            See [concantenate][cirkit.symbolic.functional.concatenate] for more details.
+
+        Args:
+            *cc: A sequence of compiled circuits.
+
+        Returns:
+            The circuit that encodes the concatenation of the given circuits.
+
+        Raises:
+            ValueError: if the given circuits have not been compiled in this context.
+        """
         for i, cci in enumerate(cc):
             if not self._compiler.has_symbolic(cci):
                 raise ValueError(f"The {i}-th given compiled circuit is not known in this pipeline")
@@ -93,7 +206,21 @@ class PipelineContext(AbstractContextManager):
         cat_sc = SF.concatenate(*sc, registry=self._op_registry)
         return self.compile(cat_sc)
 
-    def integrate(self, cc: CompiledCircuit, scope: Iterable[int] | None = None) -> CompiledCircuit:
+    def integrate(self, cc: CompiledCircuit, scope: Scope | None = None) -> CompiledCircuit:
+        """Circuit integration interface for compiled circuits.
+            See [concantenate][cirkit.symbolic.functional.integrate] for more details.
+
+        Args:
+            cc: A compiled circuit.
+            scope: The variables scope to integrate. If it is None, then all variables
+                the given circuit is defined on are integrated.
+
+        Returns:
+            The circuit that encodes the integration over (some) variables of the given circuit.
+
+        Raises:
+            ValueError: if the given circuit has not been compiled in this context.
+        """
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(cc)
@@ -101,6 +228,19 @@ class PipelineContext(AbstractContextManager):
         return self.compile(int_sc)
 
     def multiply(self, cc1: CompiledCircuit, cc2: CompiledCircuit) -> CompiledCircuit:
+        """Circuit multiplication interface for compiled circuits.
+            See [multiply][cirkit.symbolic.functional.multiply] for more details.
+
+        Args:
+            cc1: The first compiled circuit.
+            cc2: The second compiled circuit.
+
+        Returns:
+            The circuit that encodes the multiplicaton between the given circuits.
+
+        Raises:
+            ValueError: if the given circuits have not been compiled in this context.
+        """
         if not self._compiler.has_symbolic(cc1):
             raise ValueError("The first compiled circuit is not known in this pipeline")
         if not self._compiler.has_symbolic(cc2):
@@ -111,15 +251,41 @@ class PipelineContext(AbstractContextManager):
         return self.compile(prod_sc)
 
     def differentiate(self, cc: CompiledCircuit, *, order: int = 1) -> CompiledCircuit:
+        """Circuit differentiation interface for compiled circuits.
+            See [differentiate][cirkit.symbolic.functional.differentiate] for more details.
+
+        Args:
+            cc: The compiled circuit.
+            order: The differentiation order.
+
+        Returns:
+            The circuit that encodes the differentiation of the given compiled circuit.
+
+        Raises:
+            ValueError: if the given circuit has not been compiled in this context.
+            ValueError: if the differentiation order is not a positive integer.
+        """
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         if order <= 0:
             raise ValueError("The order of differentiation must be positive.")
         sc = self._compiler.get_symbolic_circuit(cc)
-        diff_sc = SF.differentiate(sc, registry=self._op_registry, order=order)
+        diff_sc = SF.differentiate(sc, order=order, registry=self._op_registry)
         return self.compile(diff_sc)
 
     def conjugate(self, cc: CompiledCircuit) -> CompiledCircuit:
+        """Circuit conjugation interface for compiled circuits.
+            See [conjugate][cirkit.symbolic.functional.conjugate] for more details.
+
+        Args:
+            cc: The compiled circuit.
+
+        Returns:
+            The circuit that encodes the complex conjugation of the given compiled circuit.
+
+        Raises:
+            ValueError: if the given circuit has not been compiled in this context.
+        """
         if not self._compiler.has_symbolic(cc):
             raise ValueError("The given compiled circuit is not known in this pipeline")
         sc = self._compiler.get_symbolic_circuit(cc)
@@ -175,6 +341,7 @@ def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:
     if backend not in SUPPORTED_BACKENDS:
         raise NotImplementedError(f"Backend '{backend}' is not implemented")
     if backend == "torch":
+        # pylint: disable-next=import-outside-toplevel
         from cirkit.backend.torch.compiler import TorchCompiler
 
         return TorchCompiler(**backend_kwargs)

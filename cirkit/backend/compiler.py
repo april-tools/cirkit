@@ -39,22 +39,64 @@ InitializerCompilationSign = type[Initializer]
 
 
 class LayerCompilationFunc(Protocol):
+    """The layer compilation function protocol."""
+
     def __call__(self, compiler: "AbstractCompiler", sl: Layer, **kwargs) -> Any:
-        ...
+        """Compile a symbolic layer, given a compiler.
+
+        Args:
+            compiler: The compiler.
+            sl: The symbolic layer.
+            **kwargs: The optional arguments for the compilation.
+
+        Returns:
+            A representation of the compiled layer, which depends on the chosen compilation backend.
+        """
 
 
 class ParameterCompilationFunc(Protocol):
+    """The parameter node compilation function protocol."""
+
     def __call__(self, compiler: "AbstractCompiler", p: ParameterNode, **kwargs) -> Any:
-        ...
+        """Compile a symbolic parameter node, given a compiler.
+
+        Args:
+            compiler: The compiler.
+            p: The symbolic parameter node.
+            **kwargs: The optional arguments for the compilation.
+
+        Returns:
+            A representation of the compiled parameter node,
+                which depends on the chosen compilation backend.
+        """
 
 
 class InitializerCompilationFunc(Protocol):
+    """The initialization method compilation function protocol."""
+
     def __call__(self, compiler: "AbstractCompiler", init: Initializer, **kwargs) -> Any:
-        ...
+        """Compile a symbolic initializer, given a compiler.
+
+        Args:
+            compiler: The compiler.
+            init: The symbolic initializer.
+            **kwargs: The optional arguments for the compilation.
+
+        Returns:
+            A representation of the compiled initializer,
+                which depends on the chosen compilation backend.
+        """
 
 
 class CompilationRuleNotFound(Exception):
+    """An exception that is raised when a compilation rule is not found."""
+
     def __init__(self, msg: str):
+        """Initializes a compilation rule not found exception.
+
+        Args:
+            msg: The message of the exception.
+        """
         super().__init__(msg)
 
 
