@@ -1,5 +1,6 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.10](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/downloads/release/python-3100/)
+[![Documentation Status](https://readthedocs.org/projects/cirkit-docs/badge/?version=latest)](https://cirkit-docs.readthedocs.io/en/latest/?badge=latest)
 [![codecov](https://codecov.io/gh/april-tools/cirkit/branch/main/graph/badge.svg?token=MLHONY840L)](https://codecov.io/gh/april-tools/cirkit)
 
 ![cirkit logo](./logo.png)
