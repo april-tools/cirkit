@@ -18,7 +18,7 @@ pip install -U pip        # update pip
 pip install -e ".[dev]"
 ```
 This will install not only the core dependencies of the library itself (e.g., PyTorch) but also additional dependencies useful for development (e.g., PyTest).
-It also installs other development tools, such as PyLint and MyPy.
+It also installs other development tools, such as Black, PyLint and MyPy.
 
 ### Additional Requirements for Jupyter Notebooks
 
@@ -32,7 +32,13 @@ pip install ".[notebooks]"
 ### Build Documentation Locally
 
 Whenever you write documentation, you can check how it would look like by building HTML pages locally.
-To do so, run the following at the root level of the repository directory.
+To do so, install the dependencies for building documentation:
+
+```shell
+pip install ".[docs]"
+```
+
+Then, run the following at the root level of the repository directory.
 
 ```shell
 mkdocs serve
