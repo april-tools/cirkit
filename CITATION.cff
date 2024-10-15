@@ -1,0 +1,25 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: cirkit
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: The APRIL Lab
+    family-names: 
+repository-code: 'https://github.com/april-tools/cirkit'
+abstract: >-
+  Cirkit is a machine learning library for building
+  probabilistic models which are efficient and expressive.
+keywords:
+  - machine learning
+  - probabilistic circuits
+  - tensor factorizations
+  - sum product networks
+license: GPL-3.0
+commit: 5a025a9babef9434f8ddece628187eb5ba70a3f3
+version: '0.1'
+date-released: '2024-10-15'
