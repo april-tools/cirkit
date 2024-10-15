@@ -5,6 +5,37 @@
 
 ![cirkit logo](./logo.png)
 
+
+# What is Cirkit? :electric_plug:
+
+
+**cirkit** is a framework for building, learning and reasoning about **probabilistic machine learning** models, such as [circuits](https://arxiv.org/abs/2409.07953) and [tensor networks](https://arxiv.org/abs/1708.00006), which are **tractable** ( ⬆️ ) and **expressive** ( ➡️ ).
+
+<img src="https://github.com/user-attachments/assets/258ebbd5-d603-46d1-99bd-8fed07bf9bd5" width="100%">
+
+# Main Features
+
+* ⚡ **Exact and Efficient Inference** : Support for tractable operations that are automatically compiled to efficient computational graphs that run on the GPU.
+* **Compatible**: Seamlessly integrate your circuit with deep learning models; run on any device compatible with PyTorch.
+* **Modular and Extensible**: Support for user-defined layers and parameterizations that extend the symbolic language of cirkit.
+* **Templates for Common Cases** : Templates for constructing circuits by mixing layers and structures with a few lines of code.
+
+
+## Project Structure :open_file_folder:
+
+
+```
+.
+├── cirkit              Main Code
+│   ├── backend         Circuits to Numerical Operations (Currently via PyTorch backend)
+│   ├── symbolic        Circuits / Layers / Operators / Compilation
+│   ├── templates       APIs for easy use (e.g. region graphs, data modalities)
+│   └── utils
+├── docs
+├── notebooks           Start here: Examples
+└── tests
+```
+
 ## How to Install the Library
 
 cirkit currently requires Python 3.10 and PyTorch 2.3 or above versions.
@@ -28,7 +59,12 @@ If you want to execute the Jupyter notebooks in the ```notebooks/``` directory, 
 pip install ".[notebooks]"
 ```
 
-## Development
+## Documentation 📘
+
+For more details [see the Documentation here](https://cirkit-docs.readthedocs.io/en/latest/).
+
+
+## Development 🛠️
 
 ### Build Documentation Locally
 
@@ -79,3 +115,39 @@ bash scripts/coverage.sh [--FORMAT] [pytest_arg ...]
 Optionally,
 1. Use a `--FORMAT` (e.g. `--xml`) flag for exporting converage to file.
 2. Pass additional args to pytest (files to test etc.).
+
+
+## Papers :scroll:
+
+
+If you want to learn more about the internals of cirkit, a good starting point is [What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?](https://arxiv.org/abs/2409.07953).
+
+
+## Papers Implemented in Cirkit
+
+| **Papers**          | **Links within Cirkit** |
+|--------------------|------------------------|
+| [Sum of Squares Circuits](https://arxiv.org/abs/2408.11778) 🆘 | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
+| [Scaling Continuous Latent Variable Models as Probabilistic Integral Circuits](https://arxiv.org/abs/2406.06494) | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
+| [What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?](https://arxiv.org/abs/2409.07953) | See [Region Graphs](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) and [Folding](https://github.com/april-tools/cirkit/blob/main/notebooks/compilation-options.ipynb)|
+| [Random Sum-Product Networks: A Simple and Effective Approach to Probabilistic Deep Learning](https://proceedings.mlr.press/v115/peharz20a) | See [Random Binary Tree](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) |
+| [Einsum Networks: Fast and Scalable Learning of Tractable Probabilistic Circuits](https://arxiv.org/abs/2004.06231) | See [Optimizing the Circuit Layers](https://github.com/april-tools/cirkit/blob/main/notebooks/compilation-options.ipynb) |
+
+
+## Citation
+
+[comment]: <> (The following bib file can be generated from the github page via the "Cite this repository" button. To update bib, simply update the CITATIONS.cff file by uploading current cff file to https://citation-file-format.github.io/ and modifying it )
+
+If you use cirkit in your publications, please cite:
+
+```
+@software{The_APRIL_Lab_cirkit_2024,
+author = {The APRIL Lab},
+license = {GPL-3.0},
+month = oct,
+title = {{cirkit}},
+url = {https://github.com/april-tools/cirkit},
+version = {0.1},
+year = {2024}
+}
+```
