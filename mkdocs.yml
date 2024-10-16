@@ -19,6 +19,8 @@ plugins:
         python:
           import:
             - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://pytorch.org/docs/stable/objects.inv
           options:
             docstring_style: google
             show_root_heading: true
