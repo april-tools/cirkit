@@ -130,6 +130,7 @@ class SamplingQuery(Query):
             raise ValueError("The number of samples must be a positive number")
 
         mixture_samples: list[Tensor] = []
+        # samples: (O, C, K, num_samples, D)
         samples = self._circuit.evaluate(
             module_fn=functools.partial(
                 self._layer_fn,
@@ -137,8 +138,10 @@ class SamplingQuery(Query):
                 mixture_samples=mixture_samples,
             ),
         )
-        samples = samples[0, 0]  # (C, N, D)
-        samples = samples.permute(1, 0, 2)  # (N, C, D)
+        # samples: (num_samples, O, K, C, D)
+        samples = samples.permute(3, 0, 2, 1, 4)
+        # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
+        samples = samples[:, 0, 0]  # (num_samples, C, D)
         return samples, mixture_samples
 
     def _layer_fn(
@@ -166,6 +169,7 @@ class SamplingQuery(Query):
         if scope_idx.shape[1] != 1:
             raise NotImplementedError("Padding is only implemented for univariate samples")
 
+        # padded_samples: (F, C, K, num_samples, D)
         padded_samples = torch.zeros(
             (*samples.shape, len(self._circuit.scope)), device=samples.device, dtype=samples.dtype
         )
