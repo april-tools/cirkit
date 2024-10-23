@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 include = ["cirkit*"]
 
 [project]
-name = "cirkit"
+name = "libcirkit"
 version = "0.0.1"
 description = "a python framework to build, learn and reason about probabilistic circuits and tensor networks"
 readme = "README.md"
