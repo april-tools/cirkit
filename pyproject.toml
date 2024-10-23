@@ -7,12 +7,22 @@ include = ["cirkit*"]
 
 [project]
 name = "cirkit"
-version = "0.0.0"
-description = ""
+version = "0.0.1"
+description = "a python framework to build, learn and reason about probabilistic circuits and tensor networks"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text="GPLv3" }
-keywords = []
+keywords = [
+  "probabilistic-modeling",
+  "tractable-models",
+  "probabilistic-inference",
+  "probabilistic-circuits",
+  "probabilistic-machine-learning",
+  "probabilistic-reasoning",
+  "tensor-network-decompositions",
+  "tractable-inference",
+  "tensor-net"
+]
 authors = [
   { name="The APRIL Lab." }
 ]
@@ -30,6 +40,12 @@ dependencies = [
   "einops~=0.8.0",
   "scipy~=1.14.0"
 ]
+
+[project.urls]
+"Homepage" = "https://github.com/april-tools/cirkit"
+"Bug Tracker" = "https://github.com/april-tools/cirkit/issues"
+"Coverage" = "https://app.codecov.io/gh/april-tools/cirkit"
+"Documentation" = "https://cirkit-docs.readthedocs.io"
 
 [project.optional-dependencies]
 dev = [
@@ -57,9 +73,6 @@ notebooks = [
   "pandas",
   "h5py"
 ]
-
-[project.urls]
-"Homepage" = "https://github.com/april-tools/cirkit"
 
 ################################################################################
 # Anything below this line does count to the "hash of pyproject" in workflows,
