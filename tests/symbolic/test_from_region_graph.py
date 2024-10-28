@@ -40,12 +40,14 @@ def test_build_circuit_qg_3x3_cp():
         isinstance(sl, CategoricalLayer) and len(sc.layer_scope(sl)) == 1 for sl in sc.inputs
     )
     assert len(list(sc.product_layers)) == 14
-    assert len(list(sl for sl in sc.sum_layers if isinstance(sl, DenseLayer))) == 28
+    assert len(list(sl for sl in sc.sum_layers if isinstance(sl, DenseLayer))) == 30
     assert len(list(sl for sl in sc.sum_layers if isinstance(sl, MixingLayer))) == 2
     assert (
         len(list(sl for sl in sc.product_layers if sc.layer_scope(sl) == Scope([0, 1, 3, 4]))) == 2
     )
     assert len(list(sl for sl in sc.product_layers if sc.layer_scope(sl) == Scope(range(9)))) == 2
+    (out_sl,) = sc.outputs
+    assert isinstance(out_sl, MixingLayer)
 
 
 def test_build_circuit_qt4_3x3_cp():
@@ -65,7 +67,7 @@ def test_build_circuit_qt4_3x3_cp():
         isinstance(sl, CategoricalLayer) and len(sc.layer_scope(sl)) == 1 for sl in sc.inputs
     )
     assert len(list(sc.product_layers)) == 4
-    assert len(list(sl for sl in sc.sum_layers if isinstance(sl, DenseLayer))) == 12
+    assert len(list(sl for sl in sc.sum_layers if isinstance(sl, DenseLayer))) == 13
     assert len(list(sl for sl in sc.sum_layers if isinstance(sl, MixingLayer))) == 0
     assert all(
         len(sc.layer_inputs(sl)) == 2 for sl in sc.product_layers if len(sc.layer_scope(sl)) == 2
@@ -73,3 +75,5 @@ def test_build_circuit_qt4_3x3_cp():
     assert all(
         len(sc.layer_inputs(sl)) == 4 for sl in sc.product_layers if len(sc.layer_scope(sl)) > 2
     )
+    (out_sl,) = sc.outputs
+    assert isinstance(out_sl, DenseLayer)
