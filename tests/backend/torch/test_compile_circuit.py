@@ -154,7 +154,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     nodes_c = list(circuit.topological_ordering())
 
     # check numbers of nodes by type
-    assert len(nodes_sc) == len(nodes_c) == 53
+    assert len(nodes_sc) == len(nodes_c) == 55
     for n1, n2 in zip(nodes_sc[:9], nodes_c[:9]):
         assert (
             isinstance(n1, CategoricalLayer)
@@ -175,7 +175,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     assert (
         sum([1 for n1 in nodes_sc if isinstance(n1, DenseLayer)])
         == sum([1 for n2 in nodes_c if isinstance(n2, TorchDenseLayer)])
-        == 28
+        == 30
     )
     assert (
         sum([1 for n1 in nodes_sc if isinstance(n1, HadamardLayer)])
@@ -251,7 +251,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
         if tuple(sorted(tuple(sc.layer_scope(n1)))) == (0, 1, 3, 4):
             assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
         elif tuple(sorted(tuple(sc.layer_scope(n1)))) in [(6, 7, 8), (2, 5, 8)]:
-            assert n2.weight._nodes[0]._ptensor.shape == (1, 1, 8)
+            assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
         scopes[tuple(sorted(tuple(sc.layer_scope(n1))))] += 1
     assert dense_scopes == scopes
 
@@ -270,7 +270,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     for n1, n2 in zip(nodes_sc[48:], nodes_c[48:]):
         if not isinstance(n1, DenseLayer):
             break
-        assert n2.weight._nodes[0]._ptensor.shape == (1, 1, 8)
+        assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
         scopes[tuple(sorted(tuple(sc.layer_scope(n1))))] += 1
     assert dense_scopes == scopes
 
