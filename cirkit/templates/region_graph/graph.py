@@ -4,7 +4,7 @@ from abc import ABC
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from functools import cached_property
-from typing import TypeAlias, TypedDict, cast, final
+from typing import Sequence, TypeAlias, TypedDict, cast, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -78,9 +78,9 @@ class PartitionNode(RegionGraphNode):
 class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     def __init__(
         self,
-        nodes: list[RegionGraphNode],
-        in_nodes: dict[RegionGraphNode, list[RegionGraphNode]],
-        outputs: list[RegionGraphNode],
+        nodes: Sequence[RegionGraphNode],
+        in_nodes: dict[RegionGraphNode, Sequence[RegionGraphNode]],
+        outputs: Sequence[RegionGraphNode],
     ) -> None:
         super().__init__(nodes, in_nodes, outputs)
         self._check_structure()
@@ -125,16 +125,16 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                     f" but found {len(rgn_outs)} parent nodes"
                 )
 
-    def region_inputs(self, rgn: RegionNode) -> list[PartitionNode]:
+    def region_inputs(self, rgn: RegionNode) -> Sequence[PartitionNode]:
         return [cast(PartitionNode, node) for node in self.node_inputs(rgn)]
 
-    def partition_inputs(self, ptn: PartitionNode) -> list[RegionNode]:
+    def partition_inputs(self, ptn: PartitionNode) -> Sequence[RegionNode]:
         return [cast(RegionNode, node) for node in self.node_inputs(ptn)]
 
-    def region_outputs(self, rgn: RegionNode) -> list[PartitionNode]:
+    def region_outputs(self, rgn: RegionNode) -> Sequence[PartitionNode]:
         return [cast(PartitionNode, node) for node in self.node_outputs(rgn)]
 
-    def partition_outputs(self, ptn: PartitionNode) -> list[RegionNode]:
+    def partition_outputs(self, ptn: PartitionNode) -> Sequence[RegionNode]:
         return [cast(RegionNode, node) for node in self.node_outputs(ptn)]
 
     @property
