@@ -6,6 +6,8 @@ from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Protocol, cast
 
+import numpy as np
+
 from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.symbolic.layers import (
     DenseLayer,
@@ -17,7 +19,23 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
+from cirkit.symbolic.parameters import (
+    ConstantParameter,
+    Parameter,
+    ParameterFactory,
+    TensorParameter,
+)
+from cirkit.templates.circuit_templates.logic import (
+    BottomNode,
+    ConjunctionNode,
+    DisjunctionNode,
+    LiteralNode,
+    LogicCircuitNode,
+    LogicGraph,
+    NegatedLiteralNode,
+    TopNode,
+    default_literal_input_factory,
+)
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
 from cirkit.utils.algorithms import (
     DiAcyclicGraph,
@@ -870,6 +888,111 @@ class Circuit(DiAcyclicGraph[Layer]):
             in_layers[sum_sl] = [prod_sl]
 
         return cls(num_channels, layers, in_layers, [layers[-1]])
+
+    @classmethod
+    def from_logic_circuit(
+        cls,
+        logic_graph: LogicGraph,
+        *,
+        literal_input_factory: InputLayerFactory = None,
+        negated_literal_input_factory: InputLayerFactory = None,
+        weight_factory: ParameterFactory | None = None,
+        num_channels: int = 1,
+    ) -> "Circuit":
+        """
+        Construct a symbolic circuit from a logic circuit graph.
+        If input factories for literals and their negation are not provided the it
+        falls back to a categorical input layer with two categories parametrized by
+        the constant vector [0, 1] for a literal and [1, 0] for its negation.
+
+        Args:
+            logic_graph: The logic circuit graph.
+            literal_input_factory: A factory that builds an input layer for literals.
+            negated_literal_input_factory: A factory that builds an input layer for negated literals.
+            weight_factory: The factory to construct the weight of sum layers. It can be None,
+                or a parameter factory, i.e., a map from a shape to a symbolic parameter.
+                If None is used, the default weight factory uses non-trainable unitary parameters,
+                which instantiate a regular boolean logic graph.
+            num_channels: The number of channels for each variable.
+
+        Returns:
+            Circuit: A symbolic circuit.
+
+        Raises:
+            ValueError: If only one of literal_input_factory and negated_literal_input_factory is specified.
+        """
+        in_layers: dict[Layer, Sequence[Layer]] = {}
+        node_to_layer: dict[LogicCircuitNode, Layer] = {}
+
+        if (literal_input_factory is None) ^ (negated_literal_input_factory is None):
+            raise ValueError(
+                "Either both 'literal_input_factory' and 'negated_literal_input_factory' \
+                must be provided or none."
+            )
+
+        if literal_input_factory is None and negated_literal_input_factory is None:
+            # default factory is locally imported when needed to avoid circular imports
+            literal_input_factory = default_literal_input_factory(negated=False)
+            negated_literal_input_factory = default_literal_input_factory(negated=True)
+
+        if weight_factory is None:
+            # default to unitary weights
+            def weight_factory(n: tuple[int]) -> Parameter:
+                return Parameter.from_input(ConstantParameter(*n, value=np.ones(n)))
+
+        # map each input literal to a symbolic input layer
+        for i in logic_graph.inputs:
+            match i:
+                case LiteralNode():
+                    node_to_layer[i] = literal_input_factory(
+                        Scope([i.literal]), num_units=1, num_channels=num_channels
+                    )
+                case NegatedLiteralNode():
+                    node_to_layer[i] = negated_literal_input_factory(
+                        Scope([i.literal]), num_units=1, num_channels=num_channels
+                    )
+
+        for node in logic_graph.topological_ordering():
+            match node:
+                case ConjunctionNode():
+                    product_node = HadamardLayer(1, arity=len(logic_graph.node_inputs(node)))
+
+                    # if the product node contains Bottom Node as input then the
+                    # the node can be pruned altogether since the result is trivial
+                    if not any((isinstance(i, BottomNode) for i in logic_graph.node_inputs(node))):
+                        # top nodes can be pruned from the product node since they do not contribute
+                        in_layers[product_node] = [
+                            node_to_layer[i]
+                            for i in logic_graph.node_inputs(node)
+                            if not isinstance(i, TopNode) and i in node_to_layer
+                        ]
+                        node_to_layer[node] = product_node
+
+                case DisjunctionNode():
+                    # bottom nodes can be pruned from the sum node since they do not contribute
+                    sum_inputs = [
+                        node_to_layer[i]
+                        for i in logic_graph.node_inputs(node)
+                        if not isinstance(i, BottomNode) and i in node_to_layer
+                    ]
+
+                    sum_node = MixingLayer(1, arity=len(sum_inputs), weight_factory=weight_factory)
+                    in_layers[sum_node] = sum_inputs
+                    node_to_layer[node] = sum_node
+
+        # since we are pruning nodes during the mapping procedure, it might happen that some layers
+        # are not connected to any other layer, and they are not the output node
+        # in that case, they can be safely removed
+        in_layers = {
+            layer: layer_inputs
+            for layer, layer_inputs in in_layers.items()
+            if any((layer in l for l in in_layers.values()))
+            or layer == node_to_layer[logic_graph.output]
+        }
+
+        layers = list(set(itertools.chain(*in_layers.values())).union(in_layers.keys()))
+
+        return cls(num_channels, layers, in_layers, [node_to_layer[logic_graph.output]])
 
 
 def are_compatible(sc1: Circuit, sc2: Circuit) -> bool:
