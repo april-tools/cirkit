@@ -296,6 +296,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
                 raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
         self.probs = probs
         self.logits = logits
+        self.idx_mode = (
+            len(torch.unique(self.scope_idx)) > 4096 or self.num_categories > 256
+        )
 
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
@@ -324,14 +327,25 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         if x.is_floating_point():
             x = x.long()  # The input to Categorical should be discrete
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        if len(torch.unique(self.scope_idx)) > 4096 or self.num_categories > 256:
+        if self.idx_mode:
             if self.num_channels == 1:
-                x = logits[:, :, 0, :].transpose(1, 2)[range(self.num_folds), x[:, 0, :, 0].t()].transpose(0, 1)
+                x = (
+                    logits[:, :, 0, :]
+                    .transpose(1, 2)[range(self.num_folds), x[:, 0, :, 0].t()]
+                    .transpose(0, 1)
+                )
             else:
                 x = x[..., 0].permute(2, 0, 1)
-                x = logits[
-                    torch.arange(self.num_folds).unsqueeze(1), :, torch.arange(self.num_channels).unsqueeze(0),
-                    x].sum(2).transpose(0, 1)
+                x = (
+                    logits[
+                        torch.arange(self.num_folds).unsqueeze(1),
+                        :,
+                        torch.arange(self.num_channels).unsqueeze(0),
+                        x,
+                    ]
+                    .sum(2)
+                    .transpose(0, 1)
+                )
         else:
             x = F.one_hot(x, self.num_categories)  # (F, C, B, 1, num_categories)
             x = x.squeeze(dim=3)  # (F, C, B, num_categories)
