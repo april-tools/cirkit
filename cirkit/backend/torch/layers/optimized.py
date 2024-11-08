@@ -1,4 +1,3 @@
-from abc import ABC
 from collections.abc import Mapping
 from typing import Any
 
@@ -6,16 +5,12 @@ import einops as E
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.layers import TorchInnerLayer, TorchSumLayer
+from cirkit.backend.torch.layers import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
 
 
-class TorchSumProductLayer(TorchInnerLayer, ABC):
-    ...
-
-
-class TorchTuckerLayer(TorchSumProductLayer):
+class TorchTuckerLayer(TorchInnerLayer):
     """The Tucker (2) layer, which is a fused dense-kronecker.
 
     A ternary einsum is used to fuse the sum and product.
@@ -81,7 +76,7 @@ class TorchTuckerLayer(TorchSumProductLayer):
         )
 
 
-class TorchCPTLayer(TorchSumProductLayer):
+class TorchCPTLayer(TorchInnerLayer):
     """The Candecomp Parafac (collapsed) layer, which is a fused dense-hadamard.
 
     The fusion actually does not gain anything, and is just a plain connection. We don't because \
@@ -173,7 +168,7 @@ class TorchCPTLayer(TorchSumProductLayer):
         return x, mixing_samples
 
 
-class TorchTensorDotLayer(TorchSumLayer):
+class TorchTensorDotLayer(TorchInnerLayer):
     """The sum layer for dense sum within a layer."""
 
     def __init__(

@@ -6,18 +6,15 @@ from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Protocol, cast
 
-from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.symbolic.layers import (
-    DenseLayer,
     HadamardLayer,
     InputLayer,
     KroneckerLayer,
     Layer,
-    MixingLayer,
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
+from cirkit.symbolic.parameters import ParameterFactory
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
 from cirkit.utils.algorithms import (
     DiAcyclicGraph,
@@ -628,26 +625,12 @@ class Circuit(DiAcyclicGraph[Layer]):
         in_layers: dict[Layer, list[Layer]] = {}
         node_to_layer: dict[RegionGraphNode, Layer] = {}
 
-        def default_mixing_layer_factory(num_units: int, arity: int) -> MixingLayer:
-            if sum_weight_factory is None:
-                initializer = ConstantTensorInitializer(1.0 / arity)
-                weight = Parameter.from_input(
-                    TensorParameter(
-                        num_units,
-                        arity,
-                        initializer=initializer,
-                        learnable=False,
-                    )
-                )
-                return MixingLayer(num_units, arity, weight=weight)
-            return MixingLayer(num_units, arity, weight_factory=sum_weight_factory)
-
         def build_cp_(
             rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
-        ) -> HadamardLayer | DenseLayer:
+        ) -> HadamardLayer | SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             denses = [
-                DenseLayer(
+                SumLayer(
                     node_to_layer[rgn_in].num_output_units,
                     num_sum_units,
                     weight_factory=sum_weight_factory,
@@ -666,7 +649,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 node_to_layer[rgn] = hadamard
                 return hadamard
             # Otherwise, introduce an additional sum layer to ensure the output layer is a sum
-            output_dense = DenseLayer(
+            output_dense = SumLayer(
                 hadamard.num_output_units, num_classes, weight_factory=sum_weight_factory
             )
             layers.append(output_dense)
@@ -676,7 +659,7 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         def build_cp_transposed_(
             rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
-        ) -> DenseLayer:
+        ) -> SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             num_in_units = list({li.num_output_units for li in layer_ins})
             if len(num_in_units) > 1:
@@ -685,7 +668,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             num_units = num_sum_units if region_graph.region_outputs(rgn) else num_classes
             hadamard = HadamardLayer(num_in_units[0], arity=len(rgn_partitioning))
-            dense = DenseLayer(num_in_units[0], num_units, weight_factory=sum_weight_factory)
+            dense = SumLayer(num_in_units[0], num_units, weight_factory=sum_weight_factory)
             layers.append(hadamard)
             layers.append(dense)
             in_layers[hadamard] = layer_ins
@@ -693,7 +676,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             node_to_layer[rgn] = dense
             return dense
 
-        def build_tucker_(rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]) -> DenseLayer:
+        def build_tucker_(rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]) -> SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             num_in_units = list({li.num_output_units for li in layer_ins})
             if len(num_in_units) > 1:
@@ -702,7 +685,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             num_units = num_sum_units if region_graph.region_outputs(rgn) else num_classes
             kronecker = KroneckerLayer(num_in_units[0], arity=len(rgn_partitioning))
-            dense = DenseLayer(
+            dense = SumLayer(
                 kronecker.num_output_units,
                 num_units,
                 weight_factory=sum_weight_factory,
@@ -714,7 +697,10 @@ class Circuit(DiAcyclicGraph[Layer]):
             node_to_layer[rgn] = dense
             return dense
 
-        # Set the mixing factory as the default one (see above), if not given
+        # Set the mixing factory as the default one, if not given
+        def default_mixing_layer_factory(num_units: int, arity: int) -> SumLayer:
+            return SumLayer.from_mixing_weights(num_units, arity)
+
         if mixing_factory is None:
             mixing_factory = default_mixing_layer_factory
 
@@ -846,7 +832,7 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         input_sl = input_factory(Scope([ordering[0]]), num_units, num_channels)
         layers.append(input_sl)
-        sum_sl = DenseLayer(num_units, num_units, weight_factory=weight_factory)
+        sum_sl = SumLayer(num_units, num_units, weight_factory=weight_factory)
         layers.append(sum_sl)
         in_layers[sum_sl] = [input_sl]
 
@@ -861,7 +847,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             in_layers[prod_sl] = [last_dense, input_sl]
 
             num_units_out = num_units if i != len(ordering) - 1 else num_classes
-            sum_sl = DenseLayer(
+            sum_sl = SumLayer(
                 num_units,
                 num_units_out,
                 weight_factory=weight_factory,

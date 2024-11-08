@@ -3,8 +3,11 @@ from collections.abc import Mapping
 from enum import IntEnum, auto
 from typing import Any, cast
 
+import numpy as np
+
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
+    ConstantParameter,
     Parameter,
     ParameterFactory,
     ScaledSigmoidParameter,
@@ -683,34 +686,37 @@ class KroneckerLayer(ProductLayer):
         return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
-class SumLayer(Layer, ABC):
-    """The abstract base class for symbolic sum layers."""
-
-
-class DenseLayer(SumLayer):
-    """The symbolic dense layer. A dense layer computes a matrix-by-vector product W * u,
-    where W is a SxK matrix and u is the output vector of length K of another layer."""
+class SumLayer(Layer):
+    """The symbolic sum layer. A dense layer computes a matrix-by-vector product W * u,
+    where W is a matrix of shape (num_output_units, arity * num_input_units), where the arity is
+    the number of layers that are input to the sum layer, and num_input_units is the number of
+    units in each input layer. In the product W * u above, u is the vector obtained by
+    concatenating the outputs of all layers that are input to the sum layer. Note that if the arity
+    is exactly 1, then this layer computes a simple linear transformation of an input vector."""
 
     def __init__(
         self,
         num_input_units: int,
         num_output_units: int,
+        arity: int = 1,
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
     ):
         """Initializes a dense layer.
 
         Args:
-            num_input_units: The number of units of the input layer.
-            num_output_units: The number of sum units in the dense layer.
-            weight: The symbolic weight matrix parameter, having shape (S, K), where S is the
-                number of output units and K is the number of input units. It can be None.
+            num_input_units: The number of units of the input layers.
+            num_output_units: The number of sum units in the sum layer.
+            arity: The arity of the layer, i.e., the number of input layers to the sum layer.
+                Defaults to 1.
+            weight: The symbolic weight matrix parameter, having shape
+                (num_output_units, arity * num_input_units). It can be None.
             weight_factory: A factory that constructs the symbolic weight matrix parameter,
                 if the given weight is None. If this factory is also None, then a weight
                 parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
                 as initializer will be instantiated.
         """
-        super().__init__(num_input_units, num_output_units, arity=1)
+        super().__init__(num_input_units, num_output_units, arity=arity)
         if weight is None:
             if weight_factory is None:
                 weight = Parameter.from_input(
@@ -724,64 +730,44 @@ class DenseLayer(SumLayer):
 
     @property
     def _weight_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_input_units
+        return self.num_output_units, self.arity * self.num_input_units
 
-    @property
-    def config(self) -> Mapping[str, Any]:
-        return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
-
-    @property
-    def params(self) -> Mapping[str, Parameter]:
-        return {"weight": self.weight}
-
-
-class MixingLayer(SumLayer):
-    """The symbolic mixing sum layer. A mixing layer takes N layers as inputs, where each one
-    outputs a K-dimensional vector, and computes a weighted sum over them. Therefore, the
-    output of a mixing layer is also a K-dimensional vector."""
-
-    def __init__(
-        self,
-        num_units: int,
-        arity: int,
-        weight: Parameter | None = None,
-        weight_factory: ParameterFactory | None = None,
-    ):
-        """Initializes a mixing layer.
+    @classmethod
+    def from_mixing_weights(cls, num_input_units: int, arity: int = 2) -> "SumLayer":
+        """Construct a symbolic sum layer using the so called mixing weights.
+        The mixing weights are constant parameters in a sum layer resulting it to compute
+        an element-wise average of the input vectors. Sum layers parameterized in this way
+        are also called _mixing layers_. In a _mixing layer_, the arity is expected to be
+        at least 2, and the layers that are input to it must have the same number of units.
 
         Args:
-            num_units: The number of units in each of the input layers.
-            arity: The arity of the layer, i.e., the number of input layers to the mixing layer.
-            weight: The symbolic weight matrix parameter, having shape (K, R), where K is the
-                number of units and R is the arity. It can be None.
-            weight_factory: A factory that constructs the symbolic weight matrix parameter,
-                if the given weight is None. If this factory is also None, then a weight
-                parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
-                as initializer will be instantiated.
+            num_input_units: The number of units of the input layers, thus also output units.
+            arity: The arity of the layer, i.e., the number of input layers to the sum layer.
+                It must be greater or equal 2.
+
+        Returns:
+            A sum layer with mixing weights, or a _mixing layer_.
         """
-        super().__init__(num_units, num_units, arity)
-        if weight is None:
-            if weight_factory is None:
-                weight = Parameter.from_input(
-                    TensorParameter(*self._weight_shape, initializer=NormalInitializer())
-                )
-            else:
-                weight = weight_factory(self._weight_shape)
-        if weight.shape != self._weight_shape:
-            raise ValueError(f"Expected parameter shape {self._weight_shape}, found {weight.shape}")
-        self.weight = weight
-
-    @property
-    def num_units(self) -> int:
-        return self.num_input_units
-
-    @property
-    def _weight_shape(self) -> tuple[int, ...]:
-        return self.num_input_units, self.arity
+        if arity < 2:
+            raise ValueError("The arity must be greater or equal 2")
+        normalized_weights = np.diag(np.full(shape=(num_input_units,), fill_value=1.0 / arity))
+        mixing_weights = np.concatenate([normalized_weights] * arity, axis=1)
+        return cls(
+            num_input_units,
+            num_input_units,
+            arity=arity,
+            weight=Parameter.from_input(
+                ConstantParameter(*mixing_weights.shape, value=mixing_weights)
+            ),
+        )
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_units": self.num_units, "arity": self.arity}
+        return {
+            "num_input_units": self.num_input_units,
+            "num_output_units": self.num_output_units,
+            "arity": self.arity,
+        }
 
     @property
     def params(self) -> Mapping[str, Parameter]:

@@ -3,12 +3,7 @@ from typing import TYPE_CHECKING, cast
 import torch
 
 from cirkit.backend.compiler import LayerCompilationFunc, LayerCompilationSign
-from cirkit.backend.torch.layers.inner import (
-    TorchDenseLayer,
-    TorchHadamardLayer,
-    TorchKroneckerLayer,
-    TorchMixingLayer,
-)
+from cirkit.backend.torch.layers.inner import TorchHadamardLayer, TorchKroneckerLayer, TorchSumLayer
 from cirkit.backend.torch.layers.input import (
     TorchBinomialLayer,
     TorchCategoricalLayer,
@@ -23,14 +18,13 @@ from cirkit.symbolic.layers import (
     BinomialLayer,
     CategoricalLayer,
     ConstantValueLayer,
-    DenseLayer,
     EmbeddingLayer,
     EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
-    MixingLayer,
     PolynomialLayer,
+    SumLayer,
 )
 
 if TYPE_CHECKING:
@@ -131,16 +125,9 @@ def compile_kronecker_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> To
     )
 
 
-def compile_dense_layer(compiler: "TorchCompiler", sl: DenseLayer) -> TorchDenseLayer:
+def compile_sum_layer(compiler: "TorchCompiler", sl: SumLayer) -> TorchSumLayer:
     weight = compiler.compile_parameter(sl.weight)
-    return TorchDenseLayer(
-        sl.num_input_units, sl.num_output_units, weight=weight, semiring=compiler.semiring
-    )
-
-
-def compile_mixing_layer(compiler: "TorchCompiler", sl: MixingLayer) -> TorchMixingLayer:
-    weight = compiler.compile_parameter(sl.weight)
-    return TorchMixingLayer(
+    return TorchSumLayer(
         sl.num_input_units,
         sl.num_output_units,
         arity=sl.arity,
@@ -177,8 +164,7 @@ DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc
     PolynomialLayer: compile_polynomial_layer,
     HadamardLayer: compile_hadamard_layer,
     KroneckerLayer: compile_kronecker_layer,
-    DenseLayer: compile_dense_layer,
-    MixingLayer: compile_mixing_layer,
+    SumLayer: compile_sum_layer,
     ConstantValueLayer: compile_constant_value_layer,
     EvidenceLayer: compile_evidence_layer,
 }

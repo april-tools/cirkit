@@ -9,12 +9,12 @@ from cirkit.symbolic.circuit import are_compatible
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     ConstantValueLayer,
-    DenseLayer,
     EvidenceLayer,
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
     PolynomialLayer,
+    SumLayer,
 )
 from cirkit.symbolic.parameters import (
     ConjugateParameter,
@@ -91,14 +91,14 @@ def test_multiply_circuits(num_units: int, input_layer: str):
     assert len(list(sc.inner_layers)) == len(list(sc1.inner_layers))
     assert len(list(sc.inner_layers)) == len(list(sc2.inner_layers))
     assert all(l.num_output_units == prod_num_units for l in sc.inputs)
-    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), sc.inner_layers))
+    dense_layers = list(filter(lambda l: isinstance(l, SumLayer), sc.inner_layers))
     assert all(isinstance(l.weight.output, KroneckerParameter) for l in dense_layers)
     assert all(
         l.weight.shape == (prod_num_units, prod_num_units)
         for l in dense_layers
         if sc.layer_outputs(l)
     )
-    prod_layers = list(filter(lambda l: not isinstance(l, DenseLayer), sc.inner_layers))
+    prod_layers = list(filter(lambda l: not isinstance(l, SumLayer), sc.inner_layers))
     assert all(isinstance(l, HadamardLayer) for l in prod_layers)
     assert all(l.num_input_units == prod_num_units for l in dense_layers if sc.layer_outputs(l))
     assert all(l.num_output_units == prod_num_units for l in dense_layers if sc.layer_outputs(l))
@@ -149,7 +149,7 @@ def test_multiply_evidence_circuit(num_units: int, input_layer: str):
     assert len(kls) == 3
     kls = sorted(kls, key=sc4.layer_scope)
     assert all(sc4.layer_scope(kl) == Scope([]) for kl in kls)
-    assert any(all(isinstance(kli, DenseLayer) for kli in sc4.layer_inputs(kl)) for kl in kls)
+    assert any(all(isinstance(kli, SumLayer) for kli in sc4.layer_inputs(kl)) for kl in kls)
 
     obs_rest = {
         1: 1 if input_layer == "bernoulli" else -2.72,
@@ -180,14 +180,14 @@ def test_multiply_integrate_circuits(num_units: int, input_layer: str):
     assert len(list(int_sc.inputs)) == len(list(sc.inputs))
     assert all(isinstance(isl, ConstantValueLayer) for isl in int_sc.inputs)
     assert len(list(int_sc.inner_layers)) == len(list(sc.inner_layers))
-    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), int_sc.inner_layers))
+    dense_layers = list(filter(lambda l: isinstance(l, SumLayer), int_sc.inner_layers))
     assert all(isinstance(l.weight.output, KroneckerParameter) for l in dense_layers)
     assert all(
         l.weight.shape == (prod_num_units, prod_num_units)
         for l in dense_layers
         if sc.layer_outputs(l)
     )
-    prod_layers = list(filter(lambda l: not isinstance(l, DenseLayer), sc.inner_layers))
+    prod_layers = list(filter(lambda l: not isinstance(l, SumLayer), sc.inner_layers))
     assert all(isinstance(l, HadamardLayer) for l in prod_layers)
     assert all(l.num_input_units == prod_num_units for l in dense_layers if sc.layer_outputs(l))
     assert all(l.num_output_units == prod_num_units for l in dense_layers if sc.layer_outputs(l))
@@ -204,12 +204,12 @@ def test_conjugate_circuit(num_units: int, input_layer: str):
     sc = SF.conjugate(sc1)
     assert len(list(sc.inputs)) == len(list(sc.inputs))
     assert len(list(sc.inner_layers)) == len(list(sc.inner_layers))
-    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), sc.inner_layers))
+    dense_layers = list(filter(lambda l: isinstance(l, SumLayer), sc.inner_layers))
     assert all(isinstance(l.weight.output, ConjugateParameter) for l in dense_layers)
     assert all(
         l.weight.shape == (num_units, num_units) for l in dense_layers if sc.layer_outputs(l)
     )
-    prod_layers = list(filter(lambda l: not isinstance(l, DenseLayer), sc.inner_layers))
+    prod_layers = list(filter(lambda l: not isinstance(l, SumLayer), sc.inner_layers))
     assert all(isinstance(l, HadamardLayer) for l in prod_layers)
     assert all(l.num_input_units == num_units for l in dense_layers if sc.layer_outputs(l))
     assert all(l.num_output_units == num_units for l in dense_layers if sc.layer_outputs(l))
@@ -249,6 +249,6 @@ def test_differentiate_circuit(num_units: int) -> None:
         for dl, sl in _batched(diff_inputs, 2)
     )
     assert len(diff_inner) == sum(len(sc.layer_scope(l)) for l in sc_inner) + len(sc_inner)
-    dense_layers = list(filter(lambda l: isinstance(l, DenseLayer), diff_sc.inner_layers))
+    dense_layers = list(filter(lambda l: isinstance(l, SumLayer), diff_sc.inner_layers))
     assert dense_layers
     # TODO: should we keep more info for diff layer ordering? i.e. testing order wrt each var

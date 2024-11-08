@@ -295,7 +295,6 @@ def pc2qpc(
     ff_dim: int | None = None,
     ff_sigma: float | None = 1.0,
     learn_ff: bool | None = False,
-    freeze_mixing_layers: bool | None = True,
 ):
     def param_to_buffer(model: torch.nn.Module):
         """Turns all parameters of a module into buffers."""
@@ -372,7 +371,9 @@ def pc2qpc(
                 tensor_parameter=node.stddev.nodes[0],
                 reparam=None if len(node.stddev.nodes) == 1 else node.stddev.nodes[0],
             )
-        elif isinstance(node, (TorchDenseLayer, TorchTuckerLayer, TorchCPTLayer)):
+        elif isinstance(node, (TorchSumLayer, TorchTuckerLayer, TorchCPTLayer)):
+            if isinstance(node, TorchSumLayer) and node.arity > 1:
+                continue
             assert (
                 len(node.weight.nodes) == 1
             ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
@@ -388,7 +389,7 @@ def pc2qpc(
                     ]
                 )
                 == 0
-            ), f"Cannot model a dense layer with shape {weight_shape}!"
+            ), f"Cannot model a sum layer with shape {weight_shape}!"
             is_tucker = isinstance(node, TorchTuckerLayer)
             nip = int(max(squeezed_weight_shape[1:]) ** (0.5 if is_tucker else 1))
             num_dim = sum(
@@ -410,8 +411,6 @@ def pc2qpc(
                 w_quad=w_quad,
                 tensor_parameter=node.weight.nodes[0],
             )
-        elif isinstance(node, TorchMixingLayer) and freeze_mixing_layers:
-            node.weight.nodes[0]._ptensor.fill_(1 / node.arity)
         elif isinstance(node, (TorchHadamardLayer, TorchKroneckerLayer)):
             pass
         else:

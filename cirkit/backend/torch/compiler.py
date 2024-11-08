@@ -548,6 +548,7 @@ def _match_layer_pattern(
     outcomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
 ) -> LayerOptMatch | None:
     ppatterns = pattern.ppatterns()
+    cpatterns = pattern.cpatterns()
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
     matched_layers = []
@@ -566,7 +567,12 @@ def _match_layer_pattern(
         if len(out_nodes) > 1 and lid != 0:
             return None
 
-        # Second, attempt to match the patterns specified for its parameters
+        # Second, attempt to match the configuration patterns for the layer
+        for cname, cvalue in cpatterns[lid].items():
+            if layer.config[cname] != cvalue:
+                return None
+
+        # Third, attempt to match the patterns specified for its parameters
         lpmatches = {}
         for pname, ppattern in ppatterns[lid].items():
             pgraph = layer.params[pname]

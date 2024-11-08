@@ -1,10 +1,10 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from cirkit.backend.torch.layers import (
-    TorchDenseLayer,
     TorchHadamardLayer,
     TorchKroneckerLayer,
     TorchLayer,
+    TorchSumLayer,
     TorchTuckerLayer,
 )
 from cirkit.backend.torch.layers.optimized import TorchCPTLayer, TorchTensorDotLayer
@@ -29,11 +29,15 @@ class TuckerPattern(LayerOptPattern):
 
     @classmethod
     def entries(cls) -> list[type[TorchLayer]]:
-        return [TorchDenseLayer, TorchKroneckerLayer]
+        return [TorchSumLayer, TorchKroneckerLayer]
 
     @classmethod
     def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
         return [{} for _ in cls.entries()]
+
+    @classmethod
+    def cpatterns(cls) -> list[dict[str, Any]]:
+        return [{"arity": 1}, {}]
 
 
 class CandecompPattern(LayerOptPattern):
@@ -43,11 +47,15 @@ class CandecompPattern(LayerOptPattern):
 
     @classmethod
     def entries(cls) -> list[type[TorchLayer]]:
-        return [TorchDenseLayer, TorchHadamardLayer]
+        return [TorchSumLayer, TorchHadamardLayer]
 
     @classmethod
     def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
         return [{} for _ in cls.entries()]
+
+    @classmethod
+    def cpatterns(cls) -> list[dict[str, Any]]:
+        return [{"arity": 1}, {}]
 
 
 class DenseKroneckerPattern(LayerOptPattern):
@@ -57,11 +65,15 @@ class DenseKroneckerPattern(LayerOptPattern):
 
     @classmethod
     def entries(cls) -> list[type[TorchLayer]]:
-        return [TorchDenseLayer]
+        return [TorchSumLayer]
 
     @classmethod
     def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
         return [{"weight": KroneckerOutParameterPattern}]
+
+    @classmethod
+    def cpatterns(cls) -> list[dict[str, Any]]:
+        return [{"arity": 1}]
 
 
 class TensorDotKroneckerPattern(LayerOptPattern):
@@ -77,9 +89,13 @@ class TensorDotKroneckerPattern(LayerOptPattern):
     def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
         return [{"weight": KroneckerOutParameterPattern}]
 
+    @classmethod
+    def cpatterns(cls) -> list[dict[str, Any]]:
+        return [{}]
+
 
 def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchTuckerLayer]:
-    dense = cast(TorchDenseLayer, match.entries[0])
+    dense = cast(TorchSumLayer, match.entries[0])
     kronecker = cast(TorchKroneckerLayer, match.entries[1])
     tucker = TorchTuckerLayer(
         kronecker.num_input_units,
@@ -92,7 +108,7 @@ def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[Torch
 
 
 def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchCPTLayer]:
-    dense = cast(TorchDenseLayer, match.entries[0])
+    dense = cast(TorchSumLayer, match.entries[0])
     hadamard = cast(TorchHadamardLayer, match.entries[1])
     cpt = TorchCPTLayer(
         hadamard.num_input_units,
@@ -137,7 +153,7 @@ def _apply_tensordot_rule(
 def apply_dense_tensordot(
     compiler: "TorchCompiler", match: LayerOptMatch
 ) -> tuple[TorchTensorDotLayer, TorchTensorDotLayer]:
-    dense = cast(TorchDenseLayer, match.entries[0])
+    dense = cast(TorchSumLayer, match.entries[0])
     weight_patterns = match.pentries[0]["weight"]
     kronecker = cast(TorchKroneckerParameter, weight_patterns[0].entries[0])
     return _apply_tensordot_rule(

@@ -4,14 +4,13 @@ from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     CategoricalLayer,
     ConstantValueLayer,
-    DenseLayer,
     EmbeddingLayer,
     GaussianLayer,
     HadamardLayer,
     Layer,
     LayerOperator,
-    MixingLayer,
     PolynomialLayer,
+    SumLayer,
 )
 from cirkit.symbolic.parameters import (
     ConjugateParameter,
@@ -250,25 +249,14 @@ def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitB
     return CircuitBlock.from_layer(sl)
 
 
-def multiply_dense_layers(sl1: DenseLayer, sl2: DenseLayer) -> CircuitBlock:
+def multiply_sum_layers(sl1: SumLayer, sl2: SumLayer) -> CircuitBlock:
     weight = Parameter.from_binary(
         KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
     )
-    sl = DenseLayer(
+    sl = SumLayer(
         sl1.num_input_units * sl2.num_input_units,
         sl1.num_output_units * sl2.num_output_units,
-        weight=weight,
-    )
-    return CircuitBlock.from_layer(sl)
-
-
-def multiply_mixing_layers(sl1: MixingLayer, sl2: MixingLayer) -> CircuitBlock:
-    weight = Parameter.from_binary(
-        KroneckerParameter(sl1.weight.shape, sl2.weight.shape), sl1.weight.ref(), sl2.weight.ref()
-    )
-    sl = MixingLayer(
-        sl1.num_input_units * sl2.num_input_units,
-        sl1.arity * sl2.arity,
+        arity=sl1.arity * sl2.arity,
         weight=weight,
     )
     return CircuitBlock.from_layer(sl)
@@ -327,15 +315,9 @@ def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
     return CircuitBlock.from_layer(sl)
 
 
-def conjugate_dense_layer(sl: DenseLayer) -> CircuitBlock:
+def conjugate_sum_layer(sl: SumLayer) -> CircuitBlock:
     weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
-    sl = DenseLayer(sl.num_input_units, sl.num_output_units, weight=weight)
-    return CircuitBlock.from_layer(sl)
-
-
-def conjugate_mixing_layer(sl: MixingLayer) -> CircuitBlock:
-    weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
-    sl = MixingLayer(sl.num_input_units, sl.arity, weight=weight)
+    sl = SumLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity, weight=weight)
     return CircuitBlock.from_layer(sl)
 
 
@@ -368,16 +350,14 @@ DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
         multiply_gaussian_layers,
         multiply_polynomial_layers,
         multiply_hadamard_layers,
-        multiply_dense_layers,
-        multiply_mixing_layers,
+        multiply_sum_layers,
     ],
     LayerOperator.CONJUGATION: [
         conjugate_embedding_layer,
         conjugate_categorical_layer,
         conjugate_gaussian_layer,
         conjugate_polynomial_layer,
-        conjugate_dense_layer,
-        conjugate_mixing_layer,
+        conjugate_sum_layer,
     ],
 }
 LayerOperatorSign = tuple[type[Layer], ...]

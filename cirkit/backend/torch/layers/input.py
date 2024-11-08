@@ -296,9 +296,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
                 raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
         self.probs = probs
         self.logits = logits
-        self.idx_mode = (
-            len(torch.unique(self.scope_idx)) > 4096 or self.num_categories > 256
-        )
+        self.idx_mode = len(torch.unique(self.scope_idx)) > 4096 or self.num_categories > 256
 
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
