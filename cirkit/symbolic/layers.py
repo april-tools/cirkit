@@ -7,7 +7,6 @@ import numpy as np
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
-    ConstantParameter,
     Parameter,
     ParameterFactory,
     ScaledSigmoidParameter,
@@ -731,35 +730,6 @@ class SumLayer(Layer):
     @property
     def _weight_shape(self) -> tuple[int, ...]:
         return self.num_output_units, self.arity * self.num_input_units
-
-    @classmethod
-    def from_mixing_weights(cls, num_input_units: int, arity: int = 2) -> "SumLayer":
-        """Construct a symbolic sum layer using the so called mixing weights.
-        The mixing weights are constant parameters in a sum layer resulting it to compute
-        an element-wise average of the input vectors. Sum layers parameterized in this way
-        are also called _mixing layers_. In a _mixing layer_, the arity is expected to be
-        at least 2, and the layers that are input to it must have the same number of units.
-
-        Args:
-            num_input_units: The number of units of the input layers, thus also output units.
-            arity: The arity of the layer, i.e., the number of input layers to the sum layer.
-                It must be greater or equal 2.
-
-        Returns:
-            A sum layer with mixing weights, or a _mixing layer_.
-        """
-        if arity < 2:
-            raise ValueError("The arity must be greater or equal 2")
-        normalized_weights = np.diag(np.full(shape=(num_input_units,), fill_value=1.0 / arity))
-        mixing_weights = np.concatenate([normalized_weights] * arity, axis=1)
-        return cls(
-            num_input_units,
-            num_input_units,
-            arity=arity,
-            weight=Parameter.from_input(
-                ConstantParameter(*mixing_weights.shape, value=mixing_weights)
-            ),
-        )
 
     @property
     def config(self) -> Mapping[str, Any]:

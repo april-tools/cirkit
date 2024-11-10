@@ -4,6 +4,7 @@ from cirkit.symbolic.circuit import Circuit
 from cirkit.templates.circuit_templates.utils import (
     Parameterization,
     build_image_region_graph,
+    convex_nary_sum_parameterization_factory,
     name_to_input_layer_factory,
     parameterization_to_factory,
 )
@@ -19,6 +20,7 @@ def image_data(
     num_sum_units: int,
     input_params: dict[str, Parameterization] | None = None,
     sum_weight_param: Parameterization | None = None,
+    use_convex_nary_sum: bool = True,
 ) -> Circuit:
     """Constructs a symbolic circuit whose structure is tailored for image data sets.
 
@@ -49,6 +51,11 @@ def image_data(
             input layer will be chosen.
         sum_weight_param: The parameterization to use for sum layers parameters. If it None,
             then a softmax parameterization of the sum weights will be used.
+        use_convex_nary_sum: Whether to parameterize sum layers having arity > 1 in a way such
+            that they compute a convex combinations of the their input vectors.
+            Sum layers having this semantics are also sometimes referred to as "mixing" layers.
+            If it is False, then the same parameterization specified by sum_weight_param will
+            be used. Defaults to True.
 
     Returns:
         Circuit: A symbolic circuit.
@@ -90,10 +97,16 @@ def image_data(
         )
     input_factory = name_to_input_layer_factory(input_layer, **input_kwargs)
 
-    # Get the sum weight factory
+    # Set the sum weight factory
     if sum_weight_param is None:
         sum_weight_param = Parameterization(activation="softmax", initialization="normal")
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
+
+    # Set the nary sum weight factory
+    if use_convex_nary_sum:
+        nary_sum_weight_factory = convex_nary_sum_parameterization_factory
+    else:
+        nary_sum_weight_factory = sum_weight_factory
 
     # Build and return the symbolic circuit
     return Circuit.from_region_graph(
@@ -101,6 +114,7 @@ def image_data(
         input_factory=input_factory,
         sum_product=sum_product_layer,
         sum_weight_factory=sum_weight_factory,
+        nary_sum_weight_factory=nary_sum_weight_factory,
         num_channels=image_shape[0],
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,

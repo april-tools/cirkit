@@ -372,6 +372,10 @@ def pc2qpc(
                 reparam=None if len(node.stddev.nodes) == 1 else node.stddev.nodes[0],
             )
         elif isinstance(node, (TorchSumLayer, TorchTuckerLayer, TorchCPTLayer)):
+            # Ignore the parameterization of sum layers having arity > 1
+            # TODO: (LL) do we really want to freeze them? what do we gain?
+            #       Freezing them here has become complicated, as we are now deprecating
+            #       the idea of mixing layer as a different kind of sum layer.
             if isinstance(node, TorchSumLayer) and node.arity > 1:
                 continue
             assert (

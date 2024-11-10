@@ -7,6 +7,7 @@ import numpy as np
 from cirkit.symbolic.circuit import InputLayerFactory
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.initializers import (
+    ConstantTensorInitializer,
     DirichletInitializer,
     Initializer,
     NormalInitializer,
@@ -119,19 +120,6 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     Raises:
         ValueError: If one of the settings in the given parameterization is unknown.
     """
-
-    def _build_tensor_parameter(
-        shape: tuple[int, ...],
-        *,
-        unary_op_factory: Callable[[tuple[int, ...]], UnaryParameterOp] | None,
-        dtype: DataType,
-        initializer: Initializer,
-    ) -> Parameter:
-        tensor = TensorParameter(*shape, dtype=dtype, initializer=initializer)
-        if unary_op_factory is None:
-            return Parameter.from_input(tensor)
-        return Parameter.from_unary(unary_op_factory(shape), tensor)
-
     unary_op_factory = name_to_parameter_activation(param.activation)
     dtype = name_to_dtype(param.dtype)
     initializer = name_to_initializer(param.initialization)
@@ -140,6 +128,37 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
         unary_op_factory=unary_op_factory,
         dtype=dtype,
         initializer=initializer,
+    )
+
+
+def convex_nary_sum_parameterization_factory(shape: tuple[int, ...]) -> Parameter:
+    """Construct the parameter of a sum layer with arity > 1 what encodes a convex combination
+    of the input vectors to it.
+
+    Args:
+        shape: The shape of the parameter. It must be (num_units, arity * num_units), where
+            num_units is the size of the input vectors, and arity is the number of them.
+
+    Returns:
+        Parameter: A symbolic parameter.
+
+    Raises:
+        ValueError: If the given shape is not valid as per its description.
+    """
+    if len(shape) != 2 or shape[1] % shape[0] != 0:
+        raise ValueError(f"Expected shape (num_units, arity * num_units), but found {shape}")
+    num_units = shape[0]
+    arity = shape[1] // num_units
+    normalized_weights = np.diag(np.full(shape=(num_units,), fill_value=1.0 / arity))
+    mixing_weights = np.concatenate([normalized_weights] * arity, axis=1)
+    with np.errstate(divide="ignore"):
+        log_mixing_weights = np.log(mixing_weights)
+    return Parameter.from_unary(
+        SoftmaxParameter(log_mixing_weights.shape),
+        TensorParameter(
+            *log_mixing_weights.shape,
+            initializer=ConstantTensorInitializer(log_mixing_weights),
+        ),
     )
 
 
@@ -221,6 +240,19 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
             return DirichletInitializer(1.0, **kwargs)
         case _:
             raise ValueError(f"Unknown initializer called {name}")
+
+
+def _build_tensor_parameter(
+    shape: tuple[int, ...],
+    *,
+    unary_op_factory: Callable[[tuple[int, ...]], UnaryParameterOp] | None,
+    dtype: DataType,
+    initializer: Initializer,
+) -> Parameter:
+    tensor = TensorParameter(*shape, dtype=dtype, initializer=initializer)
+    if unary_op_factory is None:
+        return Parameter.from_input(tensor)
+    return Parameter.from_unary(unary_op_factory(shape), tensor)
 
 
 def _embedding_layer_factory(

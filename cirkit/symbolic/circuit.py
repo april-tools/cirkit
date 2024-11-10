@@ -274,23 +274,6 @@ class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
         """
 
 
-class MixingLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
-    """The protocol of a factory that constructs mixing layers,
-    i.e., layers computing a linear sum over two or more input layers, and
-    that have the same number of sum units as the units in each input layer."""
-
-    def __call__(self, num_units: int, arity: int) -> SumLayer:
-        """Constructs a mixing layer.
-
-        Args:
-            num_units: The number of units in each layer that is an input.
-            arity: The number of input layers.
-
-        Returns:
-            SumLayer: A mixing layer.
-        """
-
-
 class Circuit(DiAcyclicGraph[Layer]):
     """The symbolic circuit representation."""
 
@@ -554,9 +537,9 @@ class Circuit(DiAcyclicGraph[Layer]):
         input_factory: InputLayerFactory,
         sum_product: str | None = None,
         sum_weight_factory: ParameterFactory | None = None,
+        nary_sum_weight_factory: ParameterFactory | None = None,
         sum_factory: SumLayerFactory | None = None,
         prod_factory: ProductLayerFactory | None = None,
-        mixing_factory: MixingLayerFactory | None = None,
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
@@ -575,19 +558,15 @@ class Circuit(DiAcyclicGraph[Layer]):
             region_graph: The region graph.
             input_factory: A factory that builds an input layer.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
-            sum_weight_factory: The factory to construct the weight of the sum-product layer
-                abstraction and mixing layers. It can be None, or a parameter factory, i.e., a map
-                from a shape to a symbolic parameter.
+            sum_weight_factory: The factory to construct the weights of the sum layers.
+                It can be None, or a parameter factory, i.e., a map
+                from a shape to a symbolic parameter. If it is None, then the default
+                weight factory of the sum layer is used instead.
+            nary_sum_weight_factory: The factory to construct the weight of sum layers havity arity
+                greater than one. If it is None, then it will have the same value and semantics of
+                the given sum_weight_factory.
             sum_factory: A factory that builds a sum layer. It can be None.
             prod_factory: A factory that builds a product layer. It can be None.
-            mixing_factory: A factory that builds a mixing layer, i.e., a layer used to parameterize
-                a region node that is decomposed into more than one partitioning. If it is None,
-                then it is assumed to be a factory that builds a
-                [MixingLayer][cirkit.symbolic.layers.MixingLayer].
-                If 'sum_weight_factory' is None then the weight parameters are not
-                learnable and are initialized to the constant 1/H, where H is the arity of the
-                mixing layer, i.e., the number of input layers. Otherwise, 'sum_weight_factory' is
-                used to construct the weights of the mixing layers.
             num_channels: The number of channels for each variable.
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
@@ -620,6 +599,8 @@ class Circuit(DiAcyclicGraph[Layer]):
                 "At most one between 'sum_product' and the pair 'sum_factory' and 'prod_factory'"
                 " must be specified"
             )
+        if nary_sum_weight_factory is None:
+            nary_sum_weight_factory = sum_weight_factory
 
         layers: list[Layer] = []
         in_layers: dict[Layer, list[Layer]] = {}
@@ -696,13 +677,6 @@ class Circuit(DiAcyclicGraph[Layer]):
             in_layers[dense] = [kronecker]
             node_to_layer[rgn] = dense
             return dense
-
-        # Set the mixing factory as the default one, if not given
-        def default_mixing_layer_factory(num_units: int, arity: int) -> SumLayer:
-            return SumLayer.from_mixing_weights(num_units, arity)
-
-        if mixing_factory is None:
-            mixing_factory = default_mixing_layer_factory
 
         # Set the sum-product layer builder, if necessary
         sum_prod_builder_: Callable[[RegionNode, Sequence[RegionNode]], Layer] | None
@@ -786,7 +760,12 @@ class Circuit(DiAcyclicGraph[Layer]):
                         )
                         for ptn in region_inputs
                     ]
-                mix_sl = mixing_factory(num_units, len(mix_ins))
+                mix_sl = SumLayer(
+                    num_units,
+                    num_units,
+                    arity=len(mix_ins),
+                    weight_factory=nary_sum_weight_factory,
+                )
                 layers.append(mix_sl)
                 in_layers[mix_sl] = mix_ins
                 node_to_layer[node] = mix_sl
