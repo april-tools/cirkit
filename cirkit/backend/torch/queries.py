@@ -17,7 +17,16 @@ class Query(ABC):
 
 
 class IntegrateQuery(Query):
-    """The integration query object."""
+    """The integration query object allows marginalising out variables.
+
+    Computes output in two forward passes:
+        a) The normal circuit forward pass for input x
+        b) The integration forward pass where all variables are marginalised
+
+    A mask over random variables is computed based on the scopes passed as
+    input. This determines whether the integrated or normal circuit result
+    is returned for each variable.
+    """
 
     def __init__(self, circuit: TorchCircuit) -> None:
         """Initialize an integration query object.
@@ -36,7 +45,7 @@ class IntegrateQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, x: Tensor, *, integrate_vars: Scope) -> Tensor:
+    def __call__(self, x: Tensor, *, integrate_vars: [Scope]) -> Tensor:
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
@@ -50,19 +59,20 @@ class IntegrateQuery(Query):
                 where B is the batch size, O is the number of output vectors of the circuit, and
                 K is the number of units in each output vector.
         """
-        if not integrate_vars <= self._circuit.scope:
-            raise ValueError("The variables to marginalize must be a subset of the circuit scope")
-        integrate_vars_idx = torch.tensor(tuple(integrate_vars), device=self._circuit.device)
+        # Convert list of scopes to a boolean mask of dimension (B, N) where
+        # N is the number of variables in the circuit's scope. 
+        integrate_vars_mask = IntegrateQuery.scopes_to_mask(self._circuit, integrate_vars)
+
         output = self._circuit.evaluate(
             x,
             module_fn=functools.partial(
-                IntegrateQuery._layer_fn, integrate_vars_idx=integrate_vars_idx
+                IntegrateQuery._layer_fn, integrate_vars_mask=integrate_vars_mask
             ),
         )  # (O, B, K)
         return output.transpose(0, 1)  # (B, O, K)
 
     @staticmethod
-    def _layer_fn(layer: TorchLayer, x: Tensor, *, integrate_vars_idx: Tensor) -> Tensor:
+    def _layer_fn(layer: TorchLayer, x: Tensor, *, integrate_vars_mask: Tensor) -> Tensor:
         # Evaluate a layer: if it is not an input layer, then evaluate it in the usual
         # feed-forward way. Otherwise, use the variables to integrate to solve the marginal
         # queries on the input layers.
@@ -71,20 +81,72 @@ class IntegrateQuery(Query):
             return output
         if layer.num_variables > 1:
             raise NotImplementedError("Integration of multivariate input layers is not supported")
-        # integration_mask: Boolean mask of shape (F, 1)
-        integration_mask = torch.isin(layer.scope_idx, integrate_vars_idx)
+        # integrate_vars_mask is a boolean tensor of dim (B, N)
+        # where N is the number of variables in the scope of the whole circuit.
+        #
+        # layer.scope_idx contains a subset of the variable_idxs of the scope
+        # but may be a reshaped tensor; the shape and order of the variables may be different.
+        #
+        # as such, we need to use the idxs in layer.scope_idx to lookup the values from
+        # the integrate_vars_mask - this will return the correct shape and values.
+        #
+        # if integrate_vars_mask was a vector, we could do integrate_vars_mask[layer.scope_idx]
+        # the vmap below applies the above across the B dimension
+
+        # integration_mask has dimension (B, F, Ko)
+        integration_mask = torch.vmap(lambda x: x[layer.scope_idx])(integrate_vars_mask)
+        # permute to match integration_output: integration_mask has dimension (F, B, Ko)
+        integration_mask = integration_mask.permute([1,0,2])
+        
         if not torch.any(integration_mask).item():
             return output
-        # output: output of the layer of shape (F, B, Ko)
-        # integration_mask: Boolean mask of shape (F, 1, 1)
-        # integration_output: result of the integration of the layer of shape (F, 1, Ko)
-        integration_mask = integration_mask.unsqueeze(dim=2)
+
         integration_output = layer.integrate()
         # Use the integration mask to select which output should be the result of
         # an integration operation, and which should not be
         # This is done in parallel for all folds, and regardless of whether the
         # circuit is folded or unfolded
         return torch.where(integration_mask, integration_output, output)
+
+    @staticmethod
+    def scopes_to_mask(circuit, batch_integrate_vars: [Scope]):
+        """Accepts a batch of scopes and returns a boolean mask as a tensor with
+        True in positions of specified scope indices and False otherwise.
+        """
+        # If we passed a single scope, assume B = 1
+        if isinstance(batch_integrate_vars, Scope):
+            batch_integrate_vars = [batch_integrate_vars]
+
+        batch_size = len(batch_integrate_vars)
+        # There are cases where the circuit.scope may change,
+        # e.g. we may marginalise out X_1 and the length of the scope may be smaller
+        # but the actual scope will not have been shifted.
+        num_rvs = max(circuit.scope) + 1
+        num_idxs = sum(len(s) for s in batch_integrate_vars)
+
+        # TODO: Maybe consider using a sparse tensor
+        mask = torch.zeros((batch_size, num_rvs),
+                           dtype=torch.bool,
+                           device=circuit.device)
+
+        # Catch case of only empty scopes where the following command will fail
+        if num_idxs == 0:
+            return mask
+
+        batch_idxs, rv_idxs = zip(*((i, idx)
+                                    for i, idxs in enumerate(batch_integrate_vars)
+                                    for idx in idxs if idxs))
+
+        # Check that we have not asked to marginalise variables that are not defined
+        invalid_idxs = Scope(rv_idxs) - circuit.scope
+        if invalid_idxs:
+            raise ValueError("The variables to marginalize must be a subset of "
+                             " the circuit scope. Invalid variables"
+                             " not in scope: %s." % list(invalid_idxs))
+
+        mask[batch_idxs, rv_idxs] = True
+
+        return mask
 
 
 class SamplingQuery(Query):
