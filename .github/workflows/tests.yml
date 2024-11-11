@@ -35,7 +35,7 @@ jobs:
         run: |
           ./scripts/coverage.sh --xml
       - name: Upload coverage reports to Codecov
-        if: ${{ github.event.push && (github.event.push.ref == github.event.repository.default_branch) && !github.event.pull_request }}$
+        if: ${{ github.event_name == 'push' && github.event.push.ref == github.event.repository.default_branch }}$
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
