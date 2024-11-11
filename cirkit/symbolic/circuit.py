@@ -25,7 +25,7 @@ from cirkit.symbolic.parameters import (
     ParameterFactory,
     TensorParameter,
 )
-from cirkit.templates.circuit_templates.logic import (
+from cirkit.templates.logic import (
     BottomNode,
     ConjunctionNode,
     DisjunctionNode,

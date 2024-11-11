@@ -3,7 +3,7 @@ import re
 from collections import defaultdict
 from itertools import chain
 
-from cirkit.templates.circuit_templates.logic.graph import (
+from cirkit.templates.logic.graph import (
     BottomNode,
     ConjunctionNode,
     DisjunctionNode,
