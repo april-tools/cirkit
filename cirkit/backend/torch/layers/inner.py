@@ -46,11 +46,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         raise TypeError(f"Sampling not implemented for {type(self)}")
 
 
-class TorchProductLayer(TorchInnerLayer, ABC):
-    ...
-
-
-class TorchHadamardLayer(TorchProductLayer):
+class TorchHadamardLayer(TorchInnerLayer):
     """The Hadamard product layer."""
 
     def __init__(
@@ -106,7 +102,7 @@ class TorchHadamardLayer(TorchProductLayer):
         return x, None
 
 
-class TorchKroneckerLayer(TorchProductLayer):
+class TorchKroneckerLayer(TorchInnerLayer):
     """The Kronecker product layer."""
 
     def __init__(

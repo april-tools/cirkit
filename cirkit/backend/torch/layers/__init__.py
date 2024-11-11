@@ -2,7 +2,6 @@ from .base import TorchLayer as TorchLayer
 from .inner import TorchHadamardLayer as TorchHadamardLayer
 from .inner import TorchInnerLayer as TorchInnerLayer
 from .inner import TorchKroneckerLayer as TorchKroneckerLayer
-from .inner import TorchProductLayer as TorchProductLayer
 from .inner import TorchSumLayer as TorchSumLayer
 from .input import TorchCategoricalLayer as TorchCategoricalLayer
 from .input import TorchConstantValueLayer as TorchLogPartitionLayer
