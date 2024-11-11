@@ -140,7 +140,7 @@ class IntegrateQuery(Query):
         # Check that we have not asked to marginalise variables that are not defined
         invalid_idxs = Scope(rv_idxs) - circuit.scope
         if invalid_idxs:
-            raise ValueError("The variables to marginalize must be a subset of "
+            raise ValueError("The variables to marginalize must be a subset of"
                              " the circuit scope. Invalid variables"
                              " not in scope: %s." % list(invalid_idxs))
 

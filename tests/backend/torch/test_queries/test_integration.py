@@ -119,3 +119,26 @@ def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(semiring: st
         assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs['mar'][(1, 0, 1, 1, None)]))
     else:
         raise ValueError('Unexpected semiring: "%s"' % semiring)
+
+
+def test_batch_fails_on_out_of_scope(semiring='sum-product', fold=True, optimize=True):
+    # Check that passing a single mask results in broadcasting
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
+        return_ground_truth=True
+    )
+
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
+    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+
+    mar_query = IntegrateQuery(tc)
+    # Scope 5 does not exist so this should error
+    mask = [Scope([0]), Scope([5])]
+    # The first score should be partition function, as we marginalised out all vars.
+    # The second score, should be our precomputed marginal.
+    with pytest.raises(ValueError, match='not in scope:.*?5'):
+        mar_scores = mar_query(inputs, integrate_vars=mask)
