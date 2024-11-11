@@ -52,7 +52,9 @@ def test_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, o
     "semiring,fold,optimize",
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True]),
 )
-def test_batch_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, optimize: bool):
+def test_batch_query_marginalize_monotonic_pc_categorical(
+    semiring: str, fold: bool, optimize: bool
+):
     # Check using a mask with batching works
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
@@ -74,13 +76,13 @@ def test_batch_query_marginalize_monotonic_pc_categorical(semiring: str, fold: b
     # The second score, should be our precomputed marginal.
     mar_scores = mar_query(inputs, integrate_vars=mask)
 
-    if semiring == 'sum-product':
+    if semiring == "sum-product":
         assert torch.isclose(mar_scores[0], torch.tensor(gt_partition_func))
-        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs['mar'][(1, 0, 1, 1, None)]))
-    elif semiring == 'lse-sum':
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+    elif semiring == "lse-sum":
         mar_scores = torch.exp(mar_scores)
         assert torch.isclose(mar_scores[0], torch.tensor(gt_partition_func))
-        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs['mar'][(1, 0, 1, 1, None)]))
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
     else:
         raise ValueError('Unexpected semiring: "%s"' % semiring)
 
@@ -89,7 +91,9 @@ def test_batch_query_marginalize_monotonic_pc_categorical(semiring: str, fold: b
     "semiring,fold,optimize",
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True]),
 )
-def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, optimize: bool):
+def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(
+    semiring: str, fold: bool, optimize: bool
+):
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
@@ -110,18 +114,18 @@ def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(semiring: st
     # The second score, should be our precomputed marginal.
     mar_scores = mar_query(inputs, integrate_vars=mask)
 
-    if semiring == 'sum-product':
-        assert torch.isclose(mar_scores[0], torch.tensor(gt_outputs['mar'][(1, 0, 1, 1, None)]))
-        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs['mar'][(1, 0, 1, 1, None)]))
-    elif semiring == 'lse-sum':
+    if semiring == "sum-product":
+        assert torch.isclose(mar_scores[0], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+    elif semiring == "lse-sum":
         mar_scores = torch.exp(mar_scores)
-        assert torch.isclose(mar_scores[0], torch.tensor(gt_outputs['mar'][(1, 0, 1, 1, None)]))
-        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs['mar'][(1, 0, 1, 1, None)]))
+        assert torch.isclose(mar_scores[0], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
     else:
         raise ValueError('Unexpected semiring: "%s"' % semiring)
 
 
-def test_batch_fails_on_out_of_scope(semiring='sum-product', fold=True, optimize=True):
+def test_batch_fails_on_out_of_scope(semiring="sum-product", fold=True, optimize=True):
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
@@ -140,5 +144,5 @@ def test_batch_fails_on_out_of_scope(semiring='sum-product', fold=True, optimize
     mask = [Scope([0]), Scope([5])]
     # The first score should be partition function, as we marginalised out all vars.
     # The second score, should be our precomputed marginal.
-    with pytest.raises(ValueError, match='not in scope:.*?5'):
+    with pytest.raises(ValueError, match="not in scope:.*?5"):
         mar_scores = mar_query(inputs, integrate_vars=mask)

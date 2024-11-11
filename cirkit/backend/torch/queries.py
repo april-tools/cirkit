@@ -60,7 +60,7 @@ class IntegrateQuery(Query):
                 K is the number of units in each output vector.
         """
         # Convert list of scopes to a boolean mask of dimension (B, N) where
-        # N is the number of variables in the circuit's scope. 
+        # N is the number of variables in the circuit's scope.
         integrate_vars_mask = IntegrateQuery.scopes_to_mask(self._circuit, integrate_vars)
 
         output = self._circuit.evaluate(
@@ -96,8 +96,8 @@ class IntegrateQuery(Query):
         # integration_mask has dimension (B, F, Ko)
         integration_mask = torch.vmap(lambda x: x[layer.scope_idx])(integrate_vars_mask)
         # permute to match integration_output: integration_mask has dimension (F, B, Ko)
-        integration_mask = integration_mask.permute([1,0,2])
-        
+        integration_mask = integration_mask.permute([1, 0, 2])
+
         if not torch.any(integration_mask).item():
             return output
 
@@ -125,24 +125,24 @@ class IntegrateQuery(Query):
         num_idxs = sum(len(s) for s in batch_integrate_vars)
 
         # TODO: Maybe consider using a sparse tensor
-        mask = torch.zeros((batch_size, num_rvs),
-                           dtype=torch.bool,
-                           device=circuit.device)
+        mask = torch.zeros((batch_size, num_rvs), dtype=torch.bool, device=circuit.device)
 
         # Catch case of only empty scopes where the following command will fail
         if num_idxs == 0:
             return mask
 
-        batch_idxs, rv_idxs = zip(*((i, idx)
-                                    for i, idxs in enumerate(batch_integrate_vars)
-                                    for idx in idxs if idxs))
+        batch_idxs, rv_idxs = zip(
+            *((i, idx) for i, idxs in enumerate(batch_integrate_vars) for idx in idxs if idxs)
+        )
 
         # Check that we have not asked to marginalise variables that are not defined
         invalid_idxs = Scope(rv_idxs) - circuit.scope
         if invalid_idxs:
-            raise ValueError("The variables to marginalize must be a subset of"
-                             " the circuit scope. Invalid variables"
-                             " not in scope: %s." % list(invalid_idxs))
+            raise ValueError(
+                "The variables to marginalize must be a subset of"
+                " the circuit scope. Invalid variables"
+                " not in scope: %s." % list(invalid_idxs)
+            )
 
         mask[batch_idxs, rv_idxs] = True
 
