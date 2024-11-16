@@ -78,12 +78,17 @@ class TensorParameter(ParameterInput):
             dtype: The data type.
 
         Raises:
-            ValueError: If the shape contains dimensions that are not positive.
+            ValueError: If the shape is empty or contains dimensions that are not positive.
+            ValueError: If the initializer does not allow the parameter shape.
         """
         super().__init__()
-        if any(d <= 0 for d in shape):
-            raise ValueError(f"The given shape {shape} is not valid")
-        self._shape = tuple(shape)
+        if len(shape) < 1 or any(d <= 0 for d in shape):
+            raise ValueError(
+                f"The shape {shape} must be non-empty and have positive dimension sizes"
+            )
+        if not initializer.allows_shape(shape):
+            raise ValueError(f"The shape {shape} is not valid for the initializer {initializer}")
+        self._shape = shape
         self.initializer = initializer
         self.learnable = learnable
         self.dtype = dtype

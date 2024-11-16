@@ -10,12 +10,14 @@ from cirkit.symbolic.initializers import (
     ConstantTensorInitializer,
     DirichletInitializer,
     Initializer,
+    MixingWeightInitializer,
     NormalInitializer,
     UniformInitializer,
 )
 from cirkit.symbolic.layers import BinomialLayer, CategoricalLayer, EmbeddingLayer, GaussianLayer
 from cirkit.symbolic.parameters import (
     ClampParameter,
+    ConstantParameter,
     Parameter,
     ParameterFactory,
     SoftmaxParameter,
@@ -149,15 +151,13 @@ def convex_nary_sum_parameterization_factory(shape: tuple[int, ...]) -> Paramete
         raise ValueError(f"Expected shape (num_units, arity * num_units), but found {shape}")
     num_units = shape[0]
     arity = shape[1] // num_units
-    normalized_weights = np.diag(np.full(shape=(num_units,), fill_value=1.0 / arity))
-    mixing_weights = np.concatenate([normalized_weights] * arity, axis=1)
-    with np.errstate(divide="ignore"):
-        log_mixing_weights = np.log(mixing_weights)
+    shape = (num_units, num_units * arity)
     return Parameter.from_unary(
-        SoftmaxParameter(log_mixing_weights.shape),
+        SoftmaxParameter(shape),
         TensorParameter(
-            *log_mixing_weights.shape,
-            initializer=ConstantTensorInitializer(log_mixing_weights),
+            *shape,
+            learnable=True,
+            initializer=MixingWeightInitializer(NormalInitializer(), fill_value=-float("inf")),
         ),
     )
 
