@@ -21,7 +21,7 @@ from cirkit.backend.torch.graph.optimize import (
     match_optimization_patterns,
     optimize_graph,
 )
-from cirkit.backend.torch.initializers import stacked_initializer_
+from cirkit.backend.torch.initializers import foldwise_initializer_
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.backend.torch.layers.input import TorchConstantLayer
 from cirkit.backend.torch.optimization.layers import (
@@ -370,7 +370,7 @@ def _fold_parameter_nodes_group(
             num_folds=len(group),
             requires_grad=group[0].requires_grad,
             initializer_=functools.partial(
-                stacked_initializer_, initializers=list(map(lambda p: p.initializer, group))
+                foldwise_initializer_, initializers=list(map(lambda p: p.initializer, group))
             ),
             dtype=group[0].dtype,
         )
