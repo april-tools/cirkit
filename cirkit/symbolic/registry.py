@@ -25,7 +25,7 @@ class OperatorSignatureNotFound(Exception):
         self._signature = tuple(signature)
 
     def __str__(self) -> str:
-        signature_repr = ", ".join(map(lambda cls: cls.__name__, self._signature))
+        signature_repr = ", ".join(cls.__name__ for cls in self._signature)
         operator_repr = self._operator.name
         return f"Symbolic operator '{operator_repr}' for signature ({signature_repr}) not found"
 
@@ -97,11 +97,9 @@ class OperatorRegistry(AbstractContextManager):
         del args["return"]
         arg_names = list(args.keys())
         arg_types = [args[a] for a in arg_names]
-        arg_layer_types = list(
-            filter(
-                lambda x: isinstance(x[1], type) and issubclass(x[1], Layer), enumerate(arg_types)
-            )
-        )
+        arg_layer_types = [
+            x for x in enumerate(arg_types) if isinstance(x[1], type) and issubclass(x[1], Layer)
+        ]
         arg_layer_types_locs, signature = zip(*arg_layer_types)
         if arg_layer_types_locs != tuple(range(len(arg_layer_types_locs))):
             raise ValueError(

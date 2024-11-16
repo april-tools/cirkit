@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import ChainMap
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from copy import copy
 from functools import cached_property
 from itertools import chain
@@ -652,29 +652,45 @@ class GaussianProductMean(ParameterOp):
     Gaussians being univariate.
     """
 
-    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+    def __init__(
+        self,
+        in_mean1_shape: tuple[int, ...],
+        in_stddev1_shape: tuple[int, ...],
+        in_mean2_shape: tuple[int, ...],
+        in_stddev2_shape: tuple[int, ...],
+    ):
         """Initializes a symbolic Gaussian product mean, given the shape of the input means
             and standard deviations.
 
         Args:
-            in_gaussian1_shape: The shape of the mean and standard deviations of the first
-                univariate Gaussians. Any shape is allowed.
-            in_gaussian2_shape: The shape of the mean and standard deviations of the second
-                univariate Gaussians. Any shape is allowed.
+            in_mean1_shape: The shape of the mean of the first univariate Gaussians.
+            in_stddev1_shape: The shape of the standard deviations of the first
+                univariate Gaussians.
+            in_mean2_shape: The shape of the mean of the second univariate Gaussians.
+            in_stddev2_shape: The shape of the standard deviations of the second
+                univariate Gaussians.
         """
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+        assert in_mean1_shape == in_stddev1_shape
+        assert in_mean2_shape == in_stddev2_shape
+        assert in_mean1_shape[1] == in_mean2_shape[1]
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
         return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][0] * self.in_shapes[2][0],
             self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {
+            "in_mean1_shape": self.in_shapes[0],
+            "in_stddev1_shape": self.in_shapes[1],
+            "in_mean2_shape": self.in_shapes[2],
+            "in_stddev2_shape": self.in_shapes[3],
+        }
 
 
 class GaussianProductStddev(BinaryParameterOp):
@@ -682,18 +698,18 @@ class GaussianProductStddev(BinaryParameterOp):
     two Gaussians, given the standard deviations of the input Gaussians.
     """
 
-    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+    def __init__(self, in_stddev1_shape: tuple[int, ...], in_stddev2_shape: tuple[int, ...]):
         """Initializes a symbolic Gaussian product standard deviation,
             given the shape of the input standard deviations.
 
         Args:
-            in_gaussian1_shape: The shape of the standard deviations of the first
-                univariate Gaussians. Any shape is allowed.
-            in_gaussian2_shape: The shape of the standard deviations of the second
-                univariate Gaussians. Any shape is allowed.
+            in_stddev1_shape: The shape of the standard deviations of the first
+                univariate Gaussians.
+            in_stddev2_shape: The shape of the standard deviations of the second
+                univariate Gaussians.
         """
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(in_stddev1_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -704,7 +720,7 @@ class GaussianProductStddev(BinaryParameterOp):
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {"in_stddev1_shape": self.in_shapes[0], "in_stddev2_shape": self.in_shapes[1]}
 
 
 class GaussianProductLogPartition(ParameterOp):
@@ -712,29 +728,45 @@ class GaussianProductLogPartition(ParameterOp):
     two Gaussians, given the means and standard deviations of the input Gaussians.
     """
 
-    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+    def __init__(
+        self,
+        in_mean1_shape: tuple[int, ...],
+        in_stddev1_shape: tuple[int, ...],
+        in_mean2_shape: tuple[int, ...],
+        in_stddev2_shape: tuple[int, ...],
+    ):
         """Initializes a symbolic Gaussian product log partition function,
             given the shape of the input means and standard deviations.
 
         Args:
-            in_gaussian1_shape: The shape of the mean and standard deviations of the first
-                univariate Gaussians. Any shape is allowed.
-            in_gaussian2_shape: The shape of the mean and standard deviations of the second
-                univariate Gaussians. Any shape is allowed.
+            in_mean1_shape: The shape of the mean of the first univariate Gaussians.
+            in_stddev1_shape: The shape of the standard deviations of the first
+                univariate Gaussians.
+            in_mean2_shape: The shape of the mean of the second univariate Gaussians.
+            in_stddev2_shape: The shape of the standard deviations of the second
+                univariate Gaussians.
         """
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+        assert in_mean1_shape == in_stddev1_shape
+        assert in_mean2_shape == in_stddev2_shape
+        assert in_mean1_shape[1] == in_mean2_shape[1]
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
         return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][0] * self.in_shapes[2][0],
             self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {
+            "in_mean1_shape": self.in_shapes[0],
+            "in_stddev1_shape": self.in_shapes[1],
+            "in_mean2_shape": self.in_shapes[2],
+            "in_stddev2_shape": self.in_shapes[3],
+        }
 
 
 class PolynomialProduct(BinaryParameterOp):
@@ -788,6 +820,33 @@ class PolynomialDifferential(UnaryParameterOp):
 class Parameter(RootedDiAcyclicGraph[ParameterNode]):
     """The symbolic parameter computational graph. A symbolic parameter is a computational graph
     consisting of symbolic nodes, which represent how to compute a tensor parameter."""
+
+    def __init__(
+        self,
+        nodes: Sequence[ParameterNode],
+        in_nodes: dict[ParameterNode, Sequence[ParameterNode]],
+        outputs: Sequence[ParameterNode],
+    ):
+        super().__init__(nodes, in_nodes, outputs)
+
+        # Check the computational graph is consistent w.r.t.
+        # the input and output shapes of each computational node
+        for node in self.nodes:
+            if isinstance(node, ParameterInput):
+                continue
+            assert isinstance(node, ParameterNode)
+            node_ins = self.node_inputs(node)
+            if len(node.in_shapes) != len(node_ins):
+                raise ValueError(
+                    f"{node}: expected number of inputs {len(node.in_shapes)}, "
+                    f"but found {len(node_ins)}"
+                )
+            node_ins_shapes = tuple(n.shape for n in node_ins)
+            if node.in_shapes != node_ins_shapes:
+                raise ValueError(
+                    f"{node}: expected input shapes {node.in_shapes}, "
+                    f"but found {node_ins_shapes}"
+                )
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -910,6 +969,9 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
             self.topological_ordering(), self.outputs, process_fn, incomings_fn=self.node_inputs
         )
         return Parameter(nodes, in_nodes, outputs)
+
+    def __repr__(self) -> str:
+        return f"{Parameter.__name__}(shape={self.shape})"
 
 
 class ParameterFactory(Protocol):

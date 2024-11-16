@@ -299,15 +299,25 @@ class Circuit(DiAcyclicGraph[Layer]):
         self.num_channels = num_channels
         self.operation = operation
 
-        # Build scopes bottom-up
+        # Build scopes bottom-up, and check the consistency of the layers, w.r.t.
+        # the arity and the number of input and output units
         self._scopes: dict[Layer, Scope] = {}
         for sl in self.topological_ordering():
             if isinstance(sl, InputLayer):
                 self._scopes[sl] = sl.scope
                 continue
-            self._scopes[sl] = Scope.union(
-                *tuple(self._scopes[sli] for sli in self.layer_inputs(sl))
-            )
+            sl_ins = self.layer_inputs(sl)
+            self._scopes[sl] = Scope.union(*tuple(self._scopes[sli] for sli in sl_ins))
+            if sl.arity != len(sl_ins):
+                raise ValueError(
+                    f"{sl}: expected arity {sl.arity}, " f"but found {len(sl_ins)} input layers"
+                )
+            sl_ins_units = [sli.num_output_units for sli in sl_ins]
+            if any(sl.num_input_units != num_units for num_units in sl_ins_units):
+                raise ValueError(
+                    f"{sl}: expected number of input units {sl.num_input_units}, "
+                    f"but found input layers {sl_ins}"
+                )
         self.scope = Scope.union(*tuple(self._scopes[sl] for sl in self.outputs))
 
     @property

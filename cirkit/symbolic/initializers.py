@@ -174,11 +174,11 @@ class MixingWeightInitializer(Initializer):
         self._fill_value = fill_value
 
     @property
-    def initializer() -> Initializer:
+    def initializer(self) -> Initializer:
         return self._initializer
 
     @property
-    def fill_value() -> float:
+    def fill_value(self) -> float:
         return self._fill_value
 
     @property
@@ -186,7 +186,7 @@ class MixingWeightInitializer(Initializer):
         return {"initializer": self._initializer, "fill_value": self._fill_value}
 
     def allows_shape(self, shape: tuple[int, ...]) -> bool:
-        if len(shape) != 2 or shape[1] % shape[0] != 0:
+        if len(shape) != 2 or shape[1] % shape[0]:
             return False
         mixing_weights_shape = (shape[0], shape[1] // shape[0])
         return self._initializer.allows_shape(mixing_weights_shape)

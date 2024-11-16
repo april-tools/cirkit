@@ -161,24 +161,25 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
             f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
         )
 
-    gaussian1_shape, gaussian2_shape = sl1.mean.shape, sl2.mean.shape
     mean = Parameter.from_nary(
-        GaussianProductMean(gaussian1_shape, gaussian2_shape),
+        GaussianProductMean(sl1.mean.shape, sl1.stddev.shape, sl2.mean.shape, sl2.stddev.shape),
         sl1.mean.ref(),
-        sl2.mean.ref(),
         sl1.stddev.ref(),
+        sl2.mean.ref(),
         sl2.stddev.ref(),
     )
     stddev = Parameter.from_binary(
-        GaussianProductStddev(gaussian1_shape, gaussian2_shape),
+        GaussianProductStddev(sl1.stddev.shape, sl2.stddev.shape),
         sl1.stddev.ref(),
         sl2.stddev.ref(),
     )
     log_partition = Parameter.from_nary(
-        GaussianProductLogPartition(gaussian1_shape, gaussian2_shape),
+        GaussianProductLogPartition(
+            sl1.mean.shape, sl1.stddev.shape, sl2.mean.shape, sl2.stddev.shape
+        ),
         sl1.mean.ref(),
-        sl2.mean.ref(),
         sl1.stddev.ref(),
+        sl2.mean.ref(),
         sl2.stddev.ref(),
     )
 

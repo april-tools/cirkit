@@ -663,26 +663,38 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
 class TorchGaussianProductMean(TorchParameterOp):
     def __init__(
         self,
-        in_gaussian1_shape: tuple[int, ...],
-        in_gaussian2_shape: tuple[int, ...],
+        in_mean1_shape: tuple[int, ...],
+        in_stddev1_shape: tuple[int, ...],
+        in_mean2_shape: tuple[int, ...],
+        in_stddev2_shape: tuple[int, ...],
         *,
         num_folds: int = 1,
     ) -> None:
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
+        assert in_mean1_shape == in_stddev1_shape
+        assert in_mean2_shape == in_stddev2_shape
+        assert in_mean1_shape[1] == in_mean2_shape[1]
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(
+            in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape, num_folds=num_folds
+        )
 
     @property
     def shape(self) -> tuple[int, ...]:
         return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][0] * self.in_shapes[2][0],
             self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {
+            "in_mean1_shape": self.in_shapes[0],
+            "in_stddev1_shape": self.in_shapes[1],
+            "in_mean2_shape": self.in_shapes[2],
+            "in_stddev2_shape": self.in_shapes[3],
+        }
 
-    def forward(self, mean1: Tensor, mean2: Tensor, stddev1: Tensor, stddev2: Tensor) -> Tensor:
+    def forward(self, mean1: Tensor, stddev1: Tensor, mean2: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, K1, C)
         var2 = torch.square(stddev2)  # (F, K2, C)
         inv_var12 = torch.reciprocal(
@@ -697,13 +709,13 @@ class TorchGaussianProductMean(TorchParameterOp):
 class TorchGaussianProductStddev(TorchBinaryParameterOp):
     def __init__(
         self,
-        in_gaussian1_shape: tuple[int, ...],
-        in_gaussian2_shape: tuple[int, ...],
+        in_stddev1_shape: tuple[int, ...],
+        in_stddev2_shape: tuple[int, ...],
         *,
         num_folds: int = 1,
     ) -> None:
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(in_stddev1_shape, in_stddev2_shape, num_folds=num_folds)
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -714,7 +726,7 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {"in_stddev1_shape": self.in_shapes[0], "in_stddev2_shape": self.in_shapes[1]}
 
     def forward(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, K1, C)
@@ -728,31 +740,43 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
 class TorchGaussianProductLogPartition(TorchParameterOp):
     def __init__(
         self,
-        in_gaussian1_shape: tuple[int, ...],
-        in_gaussian2_shape: tuple[int, ...],
+        in_mean1_shape: tuple[int, ...],
+        in_stddev1_shape: tuple[int, ...],
+        in_mean2_shape: tuple[int, ...],
+        in_stddev2_shape: tuple[int, ...],
         *,
         num_folds: int = 1,
     ) -> None:
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape, num_folds=num_folds)
+        assert in_mean1_shape == in_stddev1_shape
+        assert in_mean2_shape == in_stddev2_shape
+        assert in_mean1_shape[1] == in_mean2_shape[1]
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(
+            in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape, num_folds=num_folds
+        )
         self._log_two_pi = np.log(2.0 * np.pi)
 
     @property
     def shape(self) -> tuple[int, ...]:
         return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][0] * self.in_shapes[2][0],
             self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {
+            "in_mean1_shape": self.in_shapes[0],
+            "in_stddev1_shape": self.in_shapes[1],
+            "in_mean2_shape": self.in_shapes[2],
+            "in_stddev2_shape": self.in_shapes[3],
+        }
 
     def forward(
         self,
         mean1: Tensor,
-        mean2: Tensor,
         stddev1: Tensor,
+        mean2: Tensor,
         stddev2: Tensor,
     ) -> Tensor:
         var1 = torch.square(stddev1)  # (F, K1, C)

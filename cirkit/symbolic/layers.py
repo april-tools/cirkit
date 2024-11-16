@@ -101,6 +101,18 @@ class Layer(ABC):
         ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
         return type(self)(**self.config, **ref_params)
 
+    def __repr__(self) -> str:
+        config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
+        params_repr = ", ".join(f"{k}={v}" for k, v in self.params.items())
+        return (
+            f"{self.__class__.__name__}("
+            f"num_input_units={self.num_input_units}, "
+            f"num_output_units={self.num_output_units}, "
+            f"arity={self.arity}, "
+            f"config=({config_repr}), "
+            f"params=({params_repr})"
+        )
+
 
 class InputLayer(Layer, ABC):
     """The symbolic input layer class."""
@@ -140,6 +152,19 @@ class InputLayer(Layer, ABC):
             int: The number of channels per variable.
         """
         return self.arity
+
+    def __repr__(self) -> str:
+        config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
+        params_repr = ", ".join(f"{k}={v}" for k, v in self.params.items())
+        return (
+            f"{self.__class__.__name__}("
+            f"scope={self.scope}, "
+            f"num_channels={self.arity}, "
+            f"num_output_units={self.num_output_units}, "
+            f"config=({config_repr})"
+            f"params=({params_repr})"
+            ")"
+        )
 
 
 class ConstantLayer(InputLayer, ABC):
