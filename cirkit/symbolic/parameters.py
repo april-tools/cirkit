@@ -832,10 +832,15 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         # Check the computational graph is consistent w.r.t.
         # the input and output shapes of each computational node
         for node in self.nodes:
+            node_ins = self.node_inputs(node)
             if isinstance(node, ParameterInput):
+                if len(node_ins):
+                    raise ValueError(
+                        f"{node}: found an input parameter node with {len(node_ins)} other inputs, "
+                        "but expected none"
+                    )
                 continue
             assert isinstance(node, ParameterNode)
-            node_ins = self.node_inputs(node)
             if len(node.in_shapes) != len(node_ins):
                 raise ValueError(
                     f"{node}: expected number of inputs {len(node.in_shapes)}, "

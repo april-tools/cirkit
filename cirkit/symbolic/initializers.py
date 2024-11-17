@@ -29,6 +29,10 @@ class Initializer(ABC):
             True if the shape is supported, False otherwise.
         """
 
+    def __repr__(self) -> str:
+        config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
+        return f"{self.__class__.__name__}({config_repr})"
+
 
 class ElementwiseInitializer(Initializer, ABC):
     """An elementwise initializer initializes a parameter tensor by setting each entry

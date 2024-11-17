@@ -303,10 +303,15 @@ class Circuit(DiAcyclicGraph[Layer]):
         # the arity and the number of input and output units
         self._scopes: dict[Layer, Scope] = {}
         for sl in self.topological_ordering():
+            sl_ins = self.layer_inputs(sl)
             if isinstance(sl, InputLayer):
                 self._scopes[sl] = sl.scope
+                if len(sl_ins):
+                    raise ValueError(
+                        f"{sl}: found an input layer with {len(sl_ins)} layer inputs, "
+                        "but expected none"
+                    )
                 continue
-            sl_ins = self.layer_inputs(sl)
             self._scopes[sl] = Scope.union(*tuple(self._scopes[sli] for sli in sl_ins))
             if sl.arity != len(sl_ins):
                 raise ValueError(
