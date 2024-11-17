@@ -371,7 +371,10 @@ class LSESumSemiring(SemiringImpl):
         #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
         xs = [cast(Tensor, xi) for xi in xs]
-        max_xs = [torch.max(xi, dim=dim, keepdim=True)[0] for xi in xs]
+        max_xs = [
+            torch.clamp(torch.amax(xi, dim=dim, keepdim=True), min=torch.finfo(xi.dtype).min)
+            for xi in xs
+        ]
         exp_xs = [torch.exp(xi - max_xi) for xi, max_xi in zip(xs, max_xs)]
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
@@ -427,7 +430,12 @@ class ComplexLSESumSemiring(SemiringImpl):
         #       generators, because generators can't save much if we want to reuse.
         # CAST: Expected tuple of Tensor but got Ts.
         xs = [cast(Tensor, xi) for xi in xs]
-        max_xs = [torch.max(xi.real, dim=dim, keepdim=True)[0] for xi in xs]
+        max_xs = [
+            torch.clamp(
+                torch.amax(xi.real, dim=dim, keepdim=True), min=torch.finfo(xi.real.dtype).min
+            )
+            for xi in xs
+        ]
         exp_xs = [torch.exp(xi - max_xi) for xi, max_xi in zip(xs, max_xs)]
 
         # NOTE: exp_x is not tuple, but list still can be unpacked with *.
