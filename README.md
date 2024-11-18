@@ -22,6 +22,27 @@
 * **Templates for Common Cases** : Templates for constructing circuits by mixing layers and structures with a few lines of code.
 
 
+## Supported Model Families and Inference
+
+|                     **Model Family**                      | **Queries**        | **Notebook**                                                                                                       |
+| :-------------------------------------------------------: | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [📈 Monotonic Circuits](https://arxiv.org/abs/2409.07953) | mar, con, sam, exp | [Region Graphs](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) |
+|   [📷 PICS Circuits](https://arxiv.org/abs/2406.06494)    | mar, con, sam, exp | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb)            |
+|    [🆘 SoS Circuits](https://arxiv.org/abs/2408.11778)    | mar, con, exp      | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb)                |
+
+
+## Supported Queries
+
+Queries can be implemented either **symbolically**, i.e. by compiling a circuit that is specific to calculating the given quantity, or by applying a **query** to a compiled circuit.
+
+| **Query** | **Query**                                     | **[Symbolic](https://github.com/april-tools/cirkit/blob/main/cirkit/symbolic/functional.py)** | **[PyTorch](https://github.com/april-tools/cirkit/blob/main/cirkit/backend/torch/queries.py)** |
+| :-------: | --------------------------------------------- | :-------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------: |
+|    mar    | $\int p(\mathbf{x}, \mathbf{z}) d\mathbf{z}$  |                                           integrate                                           |                                        integrate query                                         |
+|    con    | $p(\mathbf{x} \mid \mathbf{z})$               |                                      integrate, evidence                                      |                                        integrate query                                         |
+|    sam    | $\mathbf{x} \sim p(\mathbf{x})$               |                                               -                                               |                                         sampling query                                         |
+|    exp    | $\int p(\mathbf{x})f(\mathbf{x}) d\mathbf{x}$ |                                      multiply, integrate                                      |                                               -                                                |
+
+
 ## Project Structure :open_file_folder:
 
 
