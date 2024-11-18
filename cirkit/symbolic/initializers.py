@@ -162,35 +162,3 @@ class DirichletInitializer(Initializer):
             return True
         assert isinstance(self.alpha, list)
         return shape[axis] == len(self.alpha)
-
-
-class MixingWeightInitializer(Initializer):
-    def __init__(self, initializer: Initializer, fill_value: float = 0.0):
-        """A symbolic initializer that describes the initialization of the weights of a sum
-        layer with arity > 1, using the pattern of a "mixing layer", i.e., a sum layer that
-        computes an element-wise weighted summation of the input vectors.
-
-        Args:
-            initializer: The symbolic initializer used to initialize the mixing weights.
-            fill_value: The value used to fill the weight entries outside the mixing pattern.
-        """
-        self._initializer = initializer
-        self._fill_value = fill_value
-
-    @property
-    def initializer(self) -> Initializer:
-        return self._initializer
-
-    @property
-    def fill_value(self) -> float:
-        return self._fill_value
-
-    @property
-    def config(self) -> dict[str, Any]:
-        return {"initializer": self._initializer, "fill_value": self._fill_value}
-
-    def allows_shape(self, shape: tuple[int, ...]) -> bool:
-        if len(shape) != 2 or shape[1] % shape[0]:
-            return False
-        mixing_weights_shape = (shape[0], shape[1] // shape[0])
-        return self._initializer.allows_shape(mixing_weights_shape)

@@ -4,7 +4,7 @@ from cirkit.symbolic.circuit import Circuit
 from cirkit.templates.circuit_templates.utils import (
     Parameterization,
     build_image_region_graph,
-    convex_nary_sum_parameterization_factory,
+    mixing_weight_factory,
     name_to_input_layer_factory,
     parameterization_to_factory,
 )
@@ -20,7 +20,7 @@ def image_data(
     num_sum_units: int,
     input_params: dict[str, Parameterization] | None = None,
     sum_weight_param: Parameterization | None = None,
-    use_convex_nary_sum: bool = True,
+    use_mixing_weights: bool = True,
 ) -> Circuit:
     """Constructs a symbolic circuit whose structure is tailored for image data sets.
 
@@ -51,11 +51,11 @@ def image_data(
             input layer will be chosen.
         sum_weight_param: The parameterization to use for sum layers parameters. If it None,
             then a softmax parameterization of the sum weights will be used.
-        use_convex_nary_sum: Whether to parameterize sum layers having arity > 1 in a way such
-            that they compute a convex combinations of the their input vectors.
+        use_mixing_weights: Whether to parameterize sum layers having arity > 1 in a way such
+            that they compute a linear combinations of the input vectors, instead of computing
+            a matrix-vector product where the vector is the concatenation of input vectors.
             Sum layers having this semantics are also sometimes referred to as "mixing" layers.
-            If it is False, then the same parameterization specified by sum_weight_param will
-            be used. Defaults to True.
+            Defaults to True.
 
     Returns:
         Circuit: A symbolic circuit.
@@ -103,8 +103,8 @@ def image_data(
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
 
     # Set the nary sum weight factory
-    if use_convex_nary_sum:
-        nary_sum_weight_factory = convex_nary_sum_parameterization_factory
+    if use_mixing_weights:
+        nary_sum_weight_factory = mixing_weight_factory
     else:
         nary_sum_weight_factory = sum_weight_factory
 

@@ -3,19 +3,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
+from pylint.checkers import initialize
 
 from cirkit.symbolic.circuit import InputLayerFactory
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.initializers import (
     DirichletInitializer,
     Initializer,
-    MixingWeightInitializer,
     NormalInitializer,
     UniformInitializer,
 )
 from cirkit.symbolic.layers import BinomialLayer, CategoricalLayer, EmbeddingLayer, GaussianLayer
 from cirkit.symbolic.parameters import (
     ClampParameter,
+    MixingWeightParameter,
     Parameter,
     ParameterFactory,
     SoftmaxParameter,
@@ -125,14 +126,14 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     initializer = name_to_initializer(param.initialization)
     return functools.partial(
         _build_tensor_parameter,
-        unary_op_factory=unary_op_factory,
+        unary_op_factory,
         dtype=dtype,
         initializer=initializer,
     )
 
 
-def convex_nary_sum_parameterization_factory(shape: tuple[int, ...]) -> Parameter:
-    """Construct the parameter of a sum layer with arity > 1 what encodes a convex combination
+def mixing_weight_factory(shape: tuple[int, ...], *, param: Parameterization) -> Parameter:
+    """Construct the parameter of a sum layer with arity > 1 what encodes a linear combination
     of the input vectors to it.
 
     Args:
@@ -149,15 +150,8 @@ def convex_nary_sum_parameterization_factory(shape: tuple[int, ...]) -> Paramete
         raise ValueError(f"Expected shape (num_units, arity * num_units), but found {shape}")
     num_units = shape[0]
     arity = shape[1] // num_units
-    shape = (num_units, num_units * arity)
-    return Parameter.from_unary(
-        SoftmaxParameter(shape),
-        TensorParameter(
-            *shape,
-            learnable=True,
-            initializer=MixingWeightInitializer(NormalInitializer(), fill_value=-float("inf")),
-        ),
-    )
+    param_factory = parameterization_to_factory(param)
+    return Parameter.from_unary(MixingWeightParameter(shape), param_factory((num_units, arity)))
 
 
 def name_to_parameter_activation(
@@ -242,15 +236,15 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
 
 def _build_tensor_parameter(
     shape: tuple[int, ...],
-    *,
-    unary_op_factory: Callable[[tuple[int, ...]], UnaryParameterOp] | None,
+    *unary_op_factories: Callable[[tuple[int, ...]], UnaryParameterOp],
     dtype: DataType,
     initializer: Initializer,
 ) -> Parameter:
     tensor = TensorParameter(*shape, dtype=dtype, initializer=initializer)
-    if unary_op_factory is None:
+    if not unary_op_factories:
         return Parameter.from_input(tensor)
-    return Parameter.from_unary(unary_op_factory(shape), tensor)
+    unary_ops = [op_factory(shape) for op_factory in unary_op_factories]
+    return Parameter.from_sequence(tensor, *unary_ops)
 
 
 def _embedding_layer_factory(

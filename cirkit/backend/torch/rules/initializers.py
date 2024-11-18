@@ -6,16 +6,10 @@ import torch
 from torch import nn
 
 from cirkit.backend.compiler import InitializerCompilationFunc, InitializerCompilationSign
-from cirkit.backend.torch.initializers import (
-    InitializerFunc,
-    copy_from_ndarray_,
-    dirichlet_,
-    mixing_weights_,
-)
+from cirkit.backend.torch.initializers import InitializerFunc, copy_from_ndarray_, dirichlet_
 from cirkit.symbolic.initializers import (
     ConstantTensorInitializer,
     DirichletInitializer,
-    MixingWeightInitializer,
     NormalInitializer,
     UniformInitializer,
 )
@@ -51,19 +45,9 @@ def compile_dirichlet_initializer(
     return functools.partial(dirichlet_, alpha=init.alpha, dim=axis)
 
 
-def compile_mixing_weights_initializer(
-    compiler: "TorchCompiler", init: MixingWeightInitializer
-) -> InitializerFunc:
-    mixing_weights_fn_ = compiler.compile_initializer(init.initializer)
-    return functools.partial(
-        mixing_weights_, weights_init_=mixing_weights_fn_, fill_value=init.fill_value
-    )
-
-
 DEFAULT_INITIALIZER_COMPILATION_RULES: dict[InitializerCompilationSign, InitializerCompilationFunc] = {  # type: ignore[misc]
     ConstantTensorInitializer: compile_constant_tensor_initializer,
     UniformInitializer: compile_uniform_initializer,
     NormalInitializer: compile_normal_initializer,
     DirichletInitializer: compile_dirichlet_initializer,
-    MixingWeightInitializer: compile_mixing_weights_initializer,
 }

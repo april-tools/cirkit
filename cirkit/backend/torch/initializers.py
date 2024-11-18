@@ -47,23 +47,3 @@ def dirichlet_(tensor: Tensor, alpha: float | list[float], *, dim: int = -1) -> 
     samples = dirichlet.sample(torch.Size([d for i, d in enumerate(shape) if i != dim]))
     tensor.copy_(torch.transpose(samples, dim, -1))
     return tensor
-
-
-def mixing_weights_(
-    tensor: Tensor, weights_init_: InitializerFunc, fill_value: float = 0.0
-) -> Tensor:
-    if len(tensor.shape) < 2 or tensor.shape[-1] % tensor.shape[-2] != 0:
-        raise ValueError(
-            f"Expected destination shape (..., num_units, arity * num_units), "
-            f"but found {tensor.shape}"
-        )
-    num_units = tensor.shape[-2]
-    arity = tensor.shape[-1] // tensor.shape[-2]
-    # Initialize the mixing weights, then reshape them to be the sum layer weights
-    weights = torch.empty(num_units, arity, dtype=tensor.dtype)
-    weights_init_(weights)
-    # (arity, num_units, num_units)
-    diag_weights = torch.vmap(torch.diag)(weights.T)
-    diag_weights[:, ~torch.eye(num_units, dtype=torch.bool)] = fill_value
-    # (num_units, arity, num_units) -> (num_units, arity * num_units)
-    return tensor.copy_(diag_weights.permute(1, 0, 2).flatten(start_dim=1))

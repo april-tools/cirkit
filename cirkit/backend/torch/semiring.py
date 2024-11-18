@@ -372,7 +372,11 @@ class LSESumSemiring(SemiringImpl):
         # CAST: Expected tuple of Tensor but got Ts.
         xs = [cast(Tensor, xi) for xi in xs]
         max_xs = [
-            torch.clamp(torch.amax(xi, dim=dim, keepdim=True), min=torch.finfo(xi.dtype).min)
+            torch.clamp(
+                torch.amax(xi, dim=dim, keepdim=True),
+                min=torch.finfo(xi.dtype).min,
+                max=torch.finfo(xi.dtype).max,
+            )
             for xi in xs
         ]
         exp_xs = [torch.exp(xi - max_xi) for xi, max_xi in zip(xs, max_xs)]
@@ -432,7 +436,9 @@ class ComplexLSESumSemiring(SemiringImpl):
         xs = [cast(Tensor, xi) for xi in xs]
         max_xs = [
             torch.clamp(
-                torch.amax(xi.real, dim=dim, keepdim=True), min=torch.finfo(xi.real.dtype).min
+                torch.amax(xi.real, dim=dim, keepdim=True),
+                min=torch.finfo(xi.real.dtype).min,
+                max=torch.finfo(xi.real.dtype).max,
             )
             for xi in xs
         ]

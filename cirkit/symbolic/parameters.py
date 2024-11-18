@@ -646,6 +646,17 @@ class LogSoftmaxParameter(EntrywiseReduceParameterOp):
     """
 
 
+class MixingWeightParameter(UnaryParameterOp):
+    def __init__(self, in_shape: tuple[int, ...]):
+        super().__init__(in_shape)
+        if len(in_shape) < 2 or in_shape[1] % in_shape[0] != 0:
+            raise ValueError(f"Expected shape (num_units, arity * num_units), but found {in_shape}")
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self.in_shape[0], self.in_shape[0] * self.in_shape[1]
+
+
 class GaussianProductMean(ParameterOp):
     """A symbolic parameter operator computing the mean of the product of two Gaussians,
     given the means and standard deviations of the input Gaussians. Note that we assume
