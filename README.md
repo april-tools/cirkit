@@ -11,7 +11,8 @@
 
 **cirkit** is a framework for building, learning and reasoning about **probabilistic machine learning** models, such as [circuits](https://arxiv.org/abs/2409.07953) and [tensor networks](https://arxiv.org/abs/1708.00006), which are **tractable** ( ⬆️ ) and **expressive** ( ➡️ ).
 
-![cirkit](https://github.com/user-attachments/assets/cc1c648d-6c04-4d2c-b83a-1b0939b62d35)
+![cirkit](https://github.com/user-attachments/assets/2b40b697-f4dc-4fee-8a14-31ec8245a269)
+
 
 
 # Main Features
