@@ -34,12 +34,12 @@
 
 The supported queries are tabulated below.
 
-| **Query** | **Query**                                     | **[Symbolic](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/symbolic/functional/)** | **[PyTorch](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/backend/torch/queries/)** |
-| :-------: | --------------------------------------------- | :-------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------: |
-|    mar    | $\int p(\mathbf{x}, \mathbf{z}) d\mathbf{z}$  |                                           integrate                                           |                                        integrate query                                         |
-|    con    | $p(\mathbf{x} \mid \mathbf{z})$               |                                      integrate, evidence                                      |                                        integrate query                                         |
-|    sam    | $\mathbf{x} \sim p(\mathbf{x})$               |                                               -                                               |                                         sampling query                                         |
-|    exp    | $\int p(\mathbf{x})f(\mathbf{x}) d\mathbf{x}$ |                                      multiply, integrate                                      |                                               -                                                |
+| **Abbreviation** |  **Query**       | **Math**                                     | **[Symbolic](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/symbolic/functional/)** | **[PyTorch](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/backend/torch/queries/)** |
+| :-------: | :---------: | --------------------------------------------- | :-------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------: |
+|    mar    | marginal | $\int p(\mathbf{x}, \mathbf{z}) d\mathbf{z}$  |                                           integrate                                           |                                        integrate query                                         |
+|    con    | conditional | $p(\mathbf{x} \mid \mathbf{z})$               |                                      integrate and evidence                                      |                                        integrate query                                         |
+|    sam    | sample  | $\mathbf{x} \sim p(\mathbf{x})$               |                                               -                                               |                                         sampling query                                         |
+|    exp    | expectation | $\int p(\mathbf{x})f(\mathbf{x}) d\mathbf{x}$ |                                      multiply and integrate                                      |                                               -                                                |
 
 ### Symbolic vs PyTorch
 Queries can be implemented either **symbolically**, i.e. by constructing a new circuit which implements the query [^1], or by directly applying a **query** to a compiled circuit in PyTorch. In the latter case, the query is evaluated using a forward pass of the existing circuit.
