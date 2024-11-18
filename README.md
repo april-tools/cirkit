@@ -30,21 +30,23 @@
 |   [📷 PICS Circuits](https://arxiv.org/abs/2406.06494)    | mar, con, sam, exp | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb)            |
 |    [🆘 SoS Circuits](https://arxiv.org/abs/2408.11778)    | mar, con, exp      | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb)                |
 
-
 ## Supported Queries
 
-Queries can be implemented either **symbolically**, i.e. by compiling a circuit that is specific to calculating the given quantity, or by applying a **query** to a compiled circuit.
+The supported queries are tabulated below.
 
-| **Query** | **Query**                                     | **[Symbolic](https://github.com/april-tools/cirkit/blob/main/cirkit/symbolic/functional.py)** | **[PyTorch](https://github.com/april-tools/cirkit/blob/main/cirkit/backend/torch/queries.py)** |
+| **Query** | **Query**                                     | **[Symbolic](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/symbolic/functional/)** | **[PyTorch](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/backend/torch/queries/)** |
 | :-------: | --------------------------------------------- | :-------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------: |
 |    mar    | $\int p(\mathbf{x}, \mathbf{z}) d\mathbf{z}$  |                                           integrate                                           |                                        integrate query                                         |
 |    con    | $p(\mathbf{x} \mid \mathbf{z})$               |                                      integrate, evidence                                      |                                        integrate query                                         |
 |    sam    | $\mathbf{x} \sim p(\mathbf{x})$               |                                               -                                               |                                         sampling query                                         |
 |    exp    | $\int p(\mathbf{x})f(\mathbf{x}) d\mathbf{x}$ |                                      multiply, integrate                                      |                                               -                                                |
 
+### Symbolic vs PyTorch
+Queries can be implemented either **symbolically**, i.e. by constructing a new circuit which implements the query [^1], or by directly applying a **query** to a compiled circuit in PyTorch. In the latter case, the query is evaluated using a forward pass of the existing circuit.
+
+[^1]: Symbolic queries are especially useful when you want to combine the resulting circuit with other circuits.
 
 ## Project Structure :open_file_folder:
-
 
 ```
 .
