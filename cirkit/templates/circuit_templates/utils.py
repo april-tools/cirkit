@@ -126,19 +126,20 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     initializer = name_to_initializer(param.initialization)
     return functools.partial(
         _build_tensor_parameter,
-        unary_op_factory,
+        unary_op_factory=unary_op_factory,
         dtype=dtype,
         initializer=initializer,
     )
 
 
-def mixing_weight_factory(shape: tuple[int, ...], *, param: Parameterization) -> Parameter:
+def mixing_weight_factory(shape: tuple[int, ...], *, param_factory: ParameterFactory) -> Parameter:
     """Construct the parameter of a sum layer with arity > 1 what encodes a linear combination
     of the input vectors to it.
 
     Args:
         shape: The shape of the parameter. It must be (num_units, arity * num_units), where
             num_units is the size of the input vectors, and arity is the number of them.
+        param_factory: The parameter factory used to construct the mixing weights.
 
     Returns:
         Parameter: A symbolic parameter.
@@ -150,8 +151,10 @@ def mixing_weight_factory(shape: tuple[int, ...], *, param: Parameterization) ->
         raise ValueError(f"Expected shape (num_units, arity * num_units), but found {shape}")
     num_units = shape[0]
     arity = shape[1] // num_units
-    param_factory = parameterization_to_factory(param)
-    return Parameter.from_unary(MixingWeightParameter(shape), param_factory((num_units, arity)))
+    mixing_weights_shape = num_units, arity
+    return Parameter.from_unary(
+        MixingWeightParameter(mixing_weights_shape), param_factory(mixing_weights_shape)
+    )
 
 
 def name_to_parameter_activation(
@@ -236,15 +239,14 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
 
 def _build_tensor_parameter(
     shape: tuple[int, ...],
-    *unary_op_factories: Callable[[tuple[int, ...]], UnaryParameterOp],
+    unary_op_factory: Callable[[tuple[int, ...]], UnaryParameterOp] | None,
     dtype: DataType,
     initializer: Initializer,
 ) -> Parameter:
     tensor = TensorParameter(*shape, dtype=dtype, initializer=initializer)
-    if not unary_op_factories:
+    if unary_op_factory is None:
         return Parameter.from_input(tensor)
-    unary_ops = [op_factory(shape) for op_factory in unary_op_factories]
-    return Parameter.from_sequence(tensor, *unary_ops)
+    return Parameter.from_unary(unary_op_factory(shape), tensor)
 
 
 def _embedding_layer_factory(

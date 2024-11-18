@@ -1,3 +1,4 @@
+import functools
 from typing import Any
 
 from cirkit.symbolic.circuit import Circuit
@@ -104,7 +105,9 @@ def image_data(
 
     # Set the nary sum weight factory
     if use_mixing_weights:
-        nary_sum_weight_factory = mixing_weight_factory
+        nary_sum_weight_factory = functools.partial(
+            mixing_weight_factory, param_factory=sum_weight_factory
+        )
     else:
         nary_sum_weight_factory = sum_weight_factory
 

@@ -664,8 +664,8 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
 class TorchMixingWeightParameter(TorchUnaryParameterOp):
     def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1):
         super().__init__(in_shape, num_folds=num_folds)
-        if len(in_shape) < 2 or in_shape[1] % in_shape[0] != 0:
-            raise ValueError(f"Expected shape (num_units, arity * num_units), but found {in_shape}")
+        if len(in_shape) != 2:
+            raise ValueError(f"Expected shape (num_units, arity), but found {in_shape}")
 
     @property
     def shape(self) -> tuple[int, ...]:
