@@ -28,8 +28,8 @@
 |                     **Model Family**                      | **Queries**        | **Notebook**                                                                                                       |
 | :-------------------------------------------------------: | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | [📈 Monotonic Circuits](https://arxiv.org/abs/2409.07953) | mar, con, sam, exp | [Region Graphs](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) |
-|   [📷 PICs Circuits](https://arxiv.org/abs/2406.06494)    | mar, con, sam, exp | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb)            |
-|    [🆘 SoS Circuits](https://arxiv.org/abs/2408.11778)    | mar, con, exp      | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb)                |
+|   [📷 PICs Circuits](https://arxiv.org/abs/2406.06494)    | mar, con, sam, exp | [PICs](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb)            |
+|    [🆘 SoS Circuits](https://arxiv.org/abs/2408.11778)    | mar, con, exp      | [SoS](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb)                |
 
 ## Supported Queries
 
@@ -152,10 +152,10 @@ If you want to learn more about the internals of cirkit, a good starting point i
 
 | **Papers**          | **Links within Cirkit** |
 |--------------------|------------------------|
-| [🆘 Subtractive Mixture Models via Squaring: Representation and Learning](https://april-tools.github.io/publications/loconte2023subtractive) | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
-| [🆘 Sum of Squares Circuits](https://april-tools.github.io/publications/loconte2024sos) | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
-| [📷 Probabilistic Integral Circuits](https://april-tools.github.io/publications/gala2023pic) | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
-| [📷 Scaling Continuous Latent Variable Models as Probabilistic Integral Circuits](https://april-tools.github.io/publications/gala2024tenpics) | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
+| [🆘 Subtractive Mixture Models via Squaring: Representation and Learning](https://april-tools.github.io/publications/loconte2023subtractive) | [SoS notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
+| [🆘 Sum of Squares Circuits](https://april-tools.github.io/publications/loconte2024sos) | [SoS notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
+| [📷 Probabilistic Integral Circuits](https://april-tools.github.io/publications/gala2023pic) | [PICs notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
+| [📷 Scaling Continuous Latent Variable Models as Probabilistic Integral Circuits](https://april-tools.github.io/publications/gala2024tenpics) | [PICs notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
 | [What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?](https://april-tools.github.io/publications/loconte2024tfpc) | See [Region Graphs](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) and [Folding](https://github.com/april-tools/cirkit/blob/main/notebooks/compilation-options.ipynb)|
 | [Random Sum-Product Networks: A Simple and Effective Approach to Probabilistic Deep Learning](https://proceedings.mlr.press/v115/peharz20a) | See [Random Binary Tree](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) |
 | [Einsum Networks: Fast and Scalable Learning of Tractable Probabilistic Circuits](https://arxiv.org/abs/2004.06231) | See [Optimizing the Circuit Layers](https://github.com/april-tools/cirkit/blob/main/notebooks/compilation-options.ipynb) |
