@@ -39,7 +39,7 @@ The supported queries are tabulated below.
 |    mar    | marginal | $\int p(\mathbf{x}, \mathbf{z}) d\mathbf{z}$  |                                           integrate                                           |                                        integrate query                                         |
 |    con    | conditional | $p(\mathbf{x} \mid \mathbf{z})$               |                                      integrate and evidence                                      |                                        integrate query                                         |
 |    sam    | sample  | $\mathbf{x} \sim p(\mathbf{x})$               |                                               -                                               |                                         sampling query                                         |
-|    exp    | expectation | $\int p(\mathbf{x})f(\mathbf{x}) d\mathbf{x}$ |                                      multiply and integrate                                      |                                               -                                                |
+|    exp    | expectation | $\mathbb{E}_{\mathbf{x} \sim p(\mathbf{x})}\left \[ f(\mathbf{x}) \right \] = \int p(\mathbf{x})f(\mathbf{x}) d\mathbf{x}$ |                                      multiply and integrate                                      |                                               -                                                |
 
 ### Symbolic vs PyTorch
 Queries can be implemented either **symbolically**, i.e. by constructing a new circuit which implements the query [^1], or by directly applying a **query** to a compiled circuit in PyTorch. In the latter case, the query is evaluated using a forward pass of the existing circuit.
