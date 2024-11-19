@@ -3,8 +3,6 @@ from collections.abc import Mapping
 from enum import IntEnum, auto
 from typing import Any, cast
 
-import numpy as np
-
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
     Parameter,
