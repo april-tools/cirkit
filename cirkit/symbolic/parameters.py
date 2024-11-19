@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import ChainMap
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from copy import copy
 from functools import cached_property
 from itertools import chain
@@ -78,12 +78,17 @@ class TensorParameter(ParameterInput):
             dtype: The data type.
 
         Raises:
-            ValueError: If the shape contains dimensions that are not positive.
+            ValueError: If the shape is empty or contains dimensions that are not positive.
+            ValueError: If the initializer does not allow the parameter shape.
         """
         super().__init__()
-        if any(d <= 0 for d in shape):
-            raise ValueError(f"The given shape {shape} is not valid")
-        self._shape = tuple(shape)
+        if len(shape) < 1 or any(d <= 0 for d in shape):
+            raise ValueError(
+                f"The shape {shape} must be non-empty and have positive dimension sizes"
+            )
+        if not initializer.allows_shape(shape):
+            raise ValueError(f"The shape {shape} is not valid for the initializer {initializer}")
+        self._shape = shape
         self.initializer = initializer
         self.learnable = learnable
         self.dtype = dtype
@@ -641,35 +646,62 @@ class LogSoftmaxParameter(EntrywiseReduceParameterOp):
     """
 
 
+class MixingWeightParameter(UnaryParameterOp):
+    def __init__(self, in_shape: tuple[int, ...]):
+        if len(in_shape) != 2:
+            raise ValueError(f"Expected shape (num_units, arity), but found {in_shape}")
+        super().__init__(in_shape)
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self.in_shape[0], self.in_shape[0] * self.in_shape[1]
+
+
 class GaussianProductMean(ParameterOp):
     """A symbolic parameter operator computing the mean of the product of two Gaussians,
     given the means and standard deviations of the input Gaussians. Note that we assume
     Gaussians being univariate.
     """
 
-    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+    def __init__(
+        self,
+        in_mean1_shape: tuple[int, ...],
+        in_stddev1_shape: tuple[int, ...],
+        in_mean2_shape: tuple[int, ...],
+        in_stddev2_shape: tuple[int, ...],
+    ):
         """Initializes a symbolic Gaussian product mean, given the shape of the input means
             and standard deviations.
 
         Args:
-            in_gaussian1_shape: The shape of the mean and standard deviations of the first
-                univariate Gaussians. Any shape is allowed.
-            in_gaussian2_shape: The shape of the mean and standard deviations of the second
-                univariate Gaussians. Any shape is allowed.
+            in_mean1_shape: The shape of the mean of the first univariate Gaussians.
+            in_stddev1_shape: The shape of the standard deviations of the first
+                univariate Gaussians.
+            in_mean2_shape: The shape of the mean of the second univariate Gaussians.
+            in_stddev2_shape: The shape of the standard deviations of the second
+                univariate Gaussians.
         """
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+        assert in_mean1_shape == in_stddev1_shape
+        assert in_mean2_shape == in_stddev2_shape
+        assert in_mean1_shape[1] == in_mean2_shape[1]
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
         return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][0] * self.in_shapes[2][0],
             self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {
+            "in_mean1_shape": self.in_shapes[0],
+            "in_stddev1_shape": self.in_shapes[1],
+            "in_mean2_shape": self.in_shapes[2],
+            "in_stddev2_shape": self.in_shapes[3],
+        }
 
 
 class GaussianProductStddev(BinaryParameterOp):
@@ -677,18 +709,18 @@ class GaussianProductStddev(BinaryParameterOp):
     two Gaussians, given the standard deviations of the input Gaussians.
     """
 
-    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+    def __init__(self, in_stddev1_shape: tuple[int, ...], in_stddev2_shape: tuple[int, ...]):
         """Initializes a symbolic Gaussian product standard deviation,
             given the shape of the input standard deviations.
 
         Args:
-            in_gaussian1_shape: The shape of the standard deviations of the first
-                univariate Gaussians. Any shape is allowed.
-            in_gaussian2_shape: The shape of the standard deviations of the second
-                univariate Gaussians. Any shape is allowed.
+            in_stddev1_shape: The shape of the standard deviations of the first
+                univariate Gaussians.
+            in_stddev2_shape: The shape of the standard deviations of the second
+                univariate Gaussians.
         """
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(in_stddev1_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -699,7 +731,7 @@ class GaussianProductStddev(BinaryParameterOp):
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {"in_stddev1_shape": self.in_shapes[0], "in_stddev2_shape": self.in_shapes[1]}
 
 
 class GaussianProductLogPartition(ParameterOp):
@@ -707,29 +739,45 @@ class GaussianProductLogPartition(ParameterOp):
     two Gaussians, given the means and standard deviations of the input Gaussians.
     """
 
-    def __init__(self, in_gaussian1_shape: tuple[int, ...], in_gaussian2_shape: tuple[int, ...]):
+    def __init__(
+        self,
+        in_mean1_shape: tuple[int, ...],
+        in_stddev1_shape: tuple[int, ...],
+        in_mean2_shape: tuple[int, ...],
+        in_stddev2_shape: tuple[int, ...],
+    ):
         """Initializes a symbolic Gaussian product log partition function,
             given the shape of the input means and standard deviations.
 
         Args:
-            in_gaussian1_shape: The shape of the mean and standard deviations of the first
-                univariate Gaussians. Any shape is allowed.
-            in_gaussian2_shape: The shape of the mean and standard deviations of the second
-                univariate Gaussians. Any shape is allowed.
+            in_mean1_shape: The shape of the mean of the first univariate Gaussians.
+            in_stddev1_shape: The shape of the standard deviations of the first
+                univariate Gaussians.
+            in_mean2_shape: The shape of the mean of the second univariate Gaussians.
+            in_stddev2_shape: The shape of the standard deviations of the second
+                univariate Gaussians.
         """
-        assert in_gaussian1_shape[1] == in_gaussian2_shape[1]
-        super().__init__(in_gaussian1_shape, in_gaussian2_shape)
+        assert in_mean1_shape == in_stddev1_shape
+        assert in_mean2_shape == in_stddev2_shape
+        assert in_mean1_shape[1] == in_mean2_shape[1]
+        assert in_stddev1_shape[1] == in_stddev2_shape[1]
+        super().__init__(in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
         return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
+            self.in_shapes[0][0] * self.in_shapes[2][0],
             self.in_shapes[0][1],
         )
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_gaussian1_shape": self.in_shapes[0], "in_gaussian2_shape": self.in_shapes[1]}
+        return {
+            "in_mean1_shape": self.in_shapes[0],
+            "in_stddev1_shape": self.in_shapes[1],
+            "in_mean2_shape": self.in_shapes[2],
+            "in_stddev2_shape": self.in_shapes[3],
+        }
 
 
 class PolynomialProduct(BinaryParameterOp):
@@ -783,6 +831,38 @@ class PolynomialDifferential(UnaryParameterOp):
 class Parameter(RootedDiAcyclicGraph[ParameterNode]):
     """The symbolic parameter computational graph. A symbolic parameter is a computational graph
     consisting of symbolic nodes, which represent how to compute a tensor parameter."""
+
+    def __init__(
+        self,
+        nodes: Sequence[ParameterNode],
+        in_nodes: dict[ParameterNode, Sequence[ParameterNode]],
+        outputs: Sequence[ParameterNode],
+    ):
+        super().__init__(nodes, in_nodes, outputs)
+
+        # Check the computational graph is consistent w.r.t.
+        # the input and output shapes of each computational node
+        for node in self.nodes:
+            node_ins = self.node_inputs(node)
+            if isinstance(node, ParameterInput):
+                if len(node_ins):
+                    raise ValueError(
+                        f"{node}: found an input parameter node with {len(node_ins)} other inputs, "
+                        "but expected none"
+                    )
+                continue
+            assert isinstance(node, ParameterOp)
+            if len(node.in_shapes) != len(node_ins):
+                raise ValueError(
+                    f"{node}: expected number of inputs {len(node.in_shapes)}, "
+                    f"but found {len(node_ins)}"
+                )
+            node_ins_shapes = tuple(n.shape for n in node_ins)
+            if node.in_shapes != node_ins_shapes:
+                raise ValueError(
+                    f"{node}: expected input shapes {node.in_shapes}, "
+                    f"but found {node_ins_shapes}"
+                )
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -906,6 +986,9 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         )
         return Parameter(nodes, in_nodes, outputs)
 
+    def __repr__(self) -> str:
+        return f"{Parameter.__name__}(shape={self.shape})"
+
 
 class ParameterFactory(Protocol):
     """A factory that constucts symbolic parameter given a shape."""
@@ -919,3 +1002,43 @@ class ParameterFactory(Protocol):
         Returns:
             A parameter whose output shape is equal to the given shape.
         """
+
+
+def mixing_weight_factory(shape: tuple[int, ...], *, param_factory: ParameterFactory) -> Parameter:
+    """Construct the parameters of a [sum layer][cirkit.symbolic.layers.SumLayer] with
+    arity > 1 such that it encodes a linear combination of the input vectors it receives.
+    A sum layer with this semantics is also referred to as "mixing layer" in some papers
+    (see references below).
+    A mixing layer is parameterized by a parameter matrix $\mathbf{W}\in\bbR^{K\times H}$,
+    where $K$ is the number of sum units, and H is the number of input vectors; and it computes
+    $\sum_{i=1}^H \mathbf{w}_{:i} \mathbf{x}_i$. This function firstly constructs $\mathbf{W}$ given
+    a parameter factory, and then reshapes it into a $K\times KH$ parameter matrix for a sum layer
+    that mimics a mixing layer.
+
+    References:
+        * R. Peharz et al. (2020), Einsum Networks: Fast and Scalable Learning of
+            Tractable Probabilistic Circuits
+        * Loconte et al. (2024), What is the Relationship between Tensor Factorizations
+            and Circuits (and How Can We Exploit it)?
+
+    Args:
+        shape: The shape of the parameter. It must be (num_units, arity * num_units), where
+            num_units is the number of sum units or, equivalently the size of the input vectors,
+            and arity is the number of them.
+        param_factory: The parameter factory used to construct the mixing weights of shape
+            (num_units, arity).
+
+    Returns:
+        Parameter: A symbolic parameter.
+
+    Raises:
+        ValueError: If the given shape is not of the form (num_units, arity * num_units).
+    """
+    if len(shape) != 2 or shape[1] % shape[0]:
+        raise ValueError(f"Expected shape (num_units, arity * num_units), but found {shape}")
+    num_units = shape[0]
+    arity = shape[1] // num_units
+    mixing_weights_shape = num_units, arity
+    return Parameter.from_unary(
+        MixingWeightParameter(mixing_weights_shape), param_factory(mixing_weights_shape)
+    )

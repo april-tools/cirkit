@@ -107,6 +107,7 @@ def evidence(
 
     Raises:
         ValueError: If the observation contains variables not defined in the scope of the circuit.
+        NotImplementedError: If the evidence of a multivariate input layer needs to be constructed.
     """
     if not all(
         (isinstance(value, Number) or len(value) == 1)
@@ -221,7 +222,7 @@ def integrate(
         scope = sc.scope
     if not scope:
         raise ValueError("There are no variables to integrate over")
-    elif not scope <= sc.scope:
+    if not scope <= sc.scope:
         raise ValueError(
             "The variables scope to integrate must be a subset of the scope of the circuit"
         )
@@ -328,7 +329,7 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: OperatorRegistry | None = 
 
         # Check whether we are multiplying layers over disjoint scope
         # If that is the case, then we just need to introduce a Kronecker product layer
-        if len(sc1.layer_scope(l1) & sc2.layer_scope(l2)) == 0:
+        if not sc1.layer_scope(l1) & sc2.layer_scope(l2):
             if l1.num_output_units != l2.num_output_units:
                 raise NotImplementedError(
                     f"Layers over disjoint scopes can be multiplied if they have the same size, "
@@ -608,7 +609,7 @@ def differentiate(
         operation=CircuitOperation(
             operator=CircuitOperator.DIFFERENTIATION,
             operands=(sc,),
-            metadata=dict(order=order),
+            metadata={"order": order},
         ),
     )
 
