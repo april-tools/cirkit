@@ -2,10 +2,10 @@ import functools
 from typing import Any
 
 from cirkit.symbolic.circuit import Circuit
+from cirkit.symbolic.parameters import mixing_weight_factory
 from cirkit.templates.circuit_templates.utils import (
     Parameterization,
     build_image_region_graph,
-    mixing_weight_factory,
     name_to_input_layer_factory,
     parameterization_to_factory,
 )

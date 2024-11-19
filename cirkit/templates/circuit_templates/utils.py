@@ -3,7 +3,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
-from pylint.checkers import initialize
 
 from cirkit.symbolic.circuit import InputLayerFactory
 from cirkit.symbolic.dtypes import DataType
@@ -16,7 +15,6 @@ from cirkit.symbolic.initializers import (
 from cirkit.symbolic.layers import BinomialLayer, CategoricalLayer, EmbeddingLayer, GaussianLayer
 from cirkit.symbolic.parameters import (
     ClampParameter,
-    MixingWeightParameter,
     Parameter,
     ParameterFactory,
     SoftmaxParameter,
@@ -30,7 +28,6 @@ from cirkit.templates.region_graph import (
     RandomBinaryTree,
     RegionGraph,
 )
-from cirkit.utils.scope import Scope
 
 
 @dataclass(frozen=True)
@@ -97,13 +94,13 @@ def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
     """
     match name:
         case "embedding":
-            return functools.partial(_embedding_layer_factory, **kwargs)
+            return functools.partial(EmbeddingLayer, **kwargs)
         case "categorical":
-            return functools.partial(_categorical_layer_factory, **kwargs)
+            return functools.partial(CategoricalLayer, **kwargs)
         case "binomial":
-            return functools.partial(_binomial_layer_factory, **kwargs)
+            return functools.partial(BinomialLayer, **kwargs)
         case "gaussian":
-            return functools.partial(_gaussian_layer_factory, **kwargs)
+            return functools.partial(GaussianLayer, **kwargs)
         case _:
             raise ValueError(f"Unknown input layer called {name}")
 
@@ -129,31 +126,6 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
         unary_op_factory=unary_op_factory,
         dtype=dtype,
         initializer=initializer,
-    )
-
-
-def mixing_weight_factory(shape: tuple[int, ...], *, param_factory: ParameterFactory) -> Parameter:
-    """Construct the parameter of a sum layer with arity > 1 what encodes a linear combination
-    of the input vectors to it.
-
-    Args:
-        shape: The shape of the parameter. It must be (num_units, arity * num_units), where
-            num_units is the size of the input vectors, and arity is the number of them.
-        param_factory: The parameter factory used to construct the mixing weights.
-
-    Returns:
-        Parameter: A symbolic parameter.
-
-    Raises:
-        ValueError: If the given shape is not valid as per its description.
-    """
-    if len(shape) != 2 or shape[1] % shape[0]:
-        raise ValueError(f"Expected shape (num_units, arity * num_units), but found {shape}")
-    num_units = shape[0]
-    arity = shape[1] // num_units
-    mixing_weights_shape = num_units, arity
-    return Parameter.from_unary(
-        MixingWeightParameter(mixing_weights_shape), param_factory(mixing_weights_shape)
     )
 
 
@@ -247,67 +219,3 @@ def _build_tensor_parameter(
     if unary_op_factory is None:
         return Parameter.from_input(tensor)
     return Parameter.from_unary(unary_op_factory(shape), tensor)
-
-
-def _embedding_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    num_states: int,
-    weight_factory: ParameterFactory | None = None,
-) -> EmbeddingLayer:
-    return EmbeddingLayer(
-        scope, num_units, num_channels, num_states=num_states, weight_factory=weight_factory
-    )
-
-
-def _categorical_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    num_categories: int,
-    probs_factory: ParameterFactory | None = None,
-    logits_factory: ParameterFactory | None = None,
-) -> CategoricalLayer:
-    return CategoricalLayer(
-        scope,
-        num_units,
-        num_channels,
-        num_categories=num_categories,
-        probs_factory=probs_factory,
-        logits_factory=logits_factory,
-    )
-
-
-def _binomial_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    total_count: int,
-    probs_factory: ParameterFactory | None = None,
-    logits_factory: ParameterFactory | None = None,
-) -> BinomialLayer:
-    return BinomialLayer(
-        scope,
-        num_units,
-        num_channels,
-        total_count=total_count,
-        probs_factory=probs_factory,
-        logits_factory=logits_factory,
-    )
-
-
-def _gaussian_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    mean_factory: ParameterFactory | None = None,
-    stddev_factory: ParameterFactory | None = None,
-) -> GaussianLayer:
-    return GaussianLayer(
-        scope, num_units, num_channels, mean_factory=mean_factory, stddev_factory=stddev_factory
-    )

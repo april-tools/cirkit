@@ -711,12 +711,20 @@ class KroneckerLayer(ProductLayer):
 
 
 class SumLayer(Layer):
-    """The symbolic sum layer. A dense layer computes a matrix-by-vector product W * u,
-    where W is a matrix of shape (num_output_units, arity * num_input_units), where the arity is
-    the number of layers that are input to the sum layer, and num_input_units is the number of
-    units in each input layer. In the product W * u above, u is the vector obtained by
+    """The symbolic sum layer. A sum layer computes a matrix-by-vector product
+    $\mathbf{W} \mathbf{x}$, where $\mathbf{W}\in\bbR^{K_1\times HK_2}$, where $K_1$ is the number
+    of output units, $K_2$ is the number of input units, and $H$ is the arity, i.e., the number of
+    layers that are input to the sum layer.
+    In the product $\mathbf{W} \mathbf{x}$ above, $\mathbf{x}$ is the vector obtained by
     concatenating the outputs of all layers that are input to the sum layer. Note that if the arity
-    is exactly 1, then this layer computes a simple linear transformation of an input vector."""
+    is exactly 1, then this layer computes a simple linear transformation of an input vector.
+
+    Depending on the parameterization of the parameter matrix $\mathbf{W}$, a different semantics
+    can be set for the sum layer. For instance, if the parameter weight factory is chosen to be the
+    [mixing weight factory][cirkit.symbolic.parameters.mixing_weight_factory], then the sum layer
+    computes a weighted linear combination of the input vectors. See the
+    [mixing weight factory][cirkit.symbolic.parameters.mixing_weight_factory] for more details.
+    """
 
     def __init__(
         self,

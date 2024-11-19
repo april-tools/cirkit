@@ -851,7 +851,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
                         "but expected none"
                     )
                 continue
-            assert isinstance(node, ParameterNode)
+            assert isinstance(node, ParameterOp)
             if len(node.in_shapes) != len(node_ins):
                 raise ValueError(
                     f"{node}: expected number of inputs {len(node.in_shapes)}, "
@@ -1002,3 +1002,43 @@ class ParameterFactory(Protocol):
         Returns:
             A parameter whose output shape is equal to the given shape.
         """
+
+
+def mixing_weight_factory(shape: tuple[int, ...], *, param_factory: ParameterFactory) -> Parameter:
+    """Construct the parameters of a [sum layer][cirkit.symbolic.layers.SumLayer] with
+    arity > 1 such that it encodes a linear combination of the input vectors it receives.
+    A sum layer with this semantics is also referred to as "mixing layer" in some papers
+    (see references below).
+    A mixing layer is parameterized by a parameter matrix $\mathbf{W}\in\bbR^{K\times H}$,
+    where $K$ is the number of sum units, and H is the number of input vectors; and it computes
+    $\sum_{i=1}^H \mathbf{w}_{:i} \mathbf{x}_i$. This function firstly constructs $\mathbf{W}$ given
+    a parameter factory, and then reshapes it into a $K\times KH$ parameter matrix for a sum layer
+    that mimics a mixing layer.
+
+    References:
+        * R. Peharz et al. (2020), Einsum Networks: Fast and Scalable Learning of
+            Tractable Probabilistic Circuits
+        * Loconte et al. (2024), What is the Relationship between Tensor Factorizations
+            and Circuits (and How Can We Exploit it)?
+
+    Args:
+        shape: The shape of the parameter. It must be (num_units, arity * num_units), where
+            num_units is the number of sum units or, equivalently the size of the input vectors,
+            and arity is the number of them.
+        param_factory: The parameter factory used to construct the mixing weights of shape
+            (num_units, arity).
+
+    Returns:
+        Parameter: A symbolic parameter.
+
+    Raises:
+        ValueError: If the given shape is not of the form (num_units, arity * num_units).
+    """
+    if len(shape) != 2 or shape[1] % shape[0]:
+        raise ValueError(f"Expected shape (num_units, arity * num_units), but found {shape}")
+    num_units = shape[0]
+    arity = shape[1] // num_units
+    mixing_weights_shape = num_units, arity
+    return Parameter.from_unary(
+        MixingWeightParameter(mixing_weights_shape), param_factory(mixing_weights_shape)
+    )

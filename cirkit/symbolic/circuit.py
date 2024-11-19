@@ -801,7 +801,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         """Construct a symbolic circuit mimicking a hidden markov model (HMM) of
           a given variable ordering. Product Layers are of type
           [HadamardLayer][cirkit.symbolic.layers.HadamardLayer], and sum layers are of type
-          [DenseLayer][cirkit.symbolic.layers.DenseLayer].
+          [SumLayer][cirkit.symbolic.layers.SumLayer].
 
         Args:
             ordering: The input order of variables of the HMM.
