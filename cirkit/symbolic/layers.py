@@ -709,7 +709,7 @@ class KroneckerLayer(ProductLayer):
 
 
 class SumLayer(Layer):
-    """The symbolic sum layer. A sum layer computes a matrix-by-vector product
+    r"""The symbolic sum layer. A sum layer computes a matrix-by-vector product
     $\mathbf{W} \mathbf{x}$, where $\mathbf{W}\in\bbR^{K_1\times HK_2}$, where $K_1$ is the number
     of output units, $K_2$ is the number of input units, and $H$ is the arity, i.e., the number of
     layers that are input to the sum layer.

@@ -1005,7 +1005,7 @@ class ParameterFactory(Protocol):
 
 
 def mixing_weight_factory(shape: tuple[int, ...], *, param_factory: ParameterFactory) -> Parameter:
-    """Construct the parameters of a [sum layer][cirkit.symbolic.layers.SumLayer] with
+    r"""Construct the parameters of a [sum layer][cirkit.symbolic.layers.SumLayer] with
     arity > 1 such that it encodes a linear combination of the input vectors it receives.
     A sum layer with this semantics is also referred to as "mixing layer" in some papers
     (see references below).
