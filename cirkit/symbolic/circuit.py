@@ -917,6 +917,8 @@ class Circuit(DiAcyclicGraph[Layer]):
         if weight_factory is None:
             # default to unitary weights
             def weight_factory(n: tuple[int]) -> Parameter:
+                # locally import numpy to avoid dependency on the whole file
+                import numpy as np
                 return Parameter.from_input(ConstantParameter(*n, value=np.ones(n)))
 
         # map each input literal to a symbolic input layer
@@ -955,7 +957,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                         if not isinstance(i, BottomNode) and i in node_to_layer
                     ]
 
-                    sum_node = MixingLayer(1, arity=len(sum_inputs), weight_factory=weight_factory)
+                    sum_node = SumLayer(len(sum_inputs), 1, arity=len(sum_inputs), weight_factory=weight_factory)
                     in_layers[sum_node] = sum_inputs
                     node_to_layer[node] = sum_node
 
