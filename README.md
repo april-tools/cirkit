@@ -11,7 +11,8 @@
 
 **cirkit** is a framework for building, learning and reasoning about **probabilistic machine learning** models, such as [circuits](https://arxiv.org/abs/2409.07953) and [tensor networks](https://arxiv.org/abs/1708.00006), which are **tractable** ( ⬆️ ) and **expressive** ( ➡️ ).
 
-![cirkit](https://github.com/user-attachments/assets/cc1c648d-6c04-4d2c-b83a-1b0939b62d35)
+![cirkit](https://github.com/user-attachments/assets/2b40b697-f4dc-4fee-8a14-31ec8245a269)
+
 
 
 # Main Features
@@ -22,8 +23,31 @@
 * **Templates for Common Cases** : Templates for constructing circuits by mixing layers and structures with a few lines of code.
 
 
-## Project Structure :open_file_folder:
+## Supported Model Families and Inference
 
+|                     **Model Family**                      | **Queries**        | **Notebook**                                                                                                       |
+| :-------------------------------------------------------: | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [📈 Monotonic Circuits](https://arxiv.org/abs/2409.07953) | mar, con, sam, exp | [Region Graphs](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) |
+|   [📷 PICs Circuits](https://arxiv.org/abs/2406.06494)    | mar, con, sam, exp | [PICs](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb)            |
+|    [🆘 SoS Circuits](https://arxiv.org/abs/2408.11778)    | mar, con, exp      | [SoS](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb)                |
+
+## Supported Queries
+
+The supported queries are tabulated below.
+
+| **Abbreviation** |  **Query**       | **Math**                                     | **[Symbolic](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/symbolic/functional/)** | **[PyTorch](https://cirkit-docs.readthedocs.io/en/latest/api/cirkit/backend/torch/queries/)** |
+| :-------: | :---------: | --------------------------------------------- | :-------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------: |
+|    mar    | marginal | $\int p(\mathbf{x}, \mathbf{z}) d\mathbf{z}$  |                                           integrate                                           |                                        integrate query                                         |
+|    con    | conditional | $p(\mathbf{x} \mid \mathbf{z})$               |                                      integrate and evidence                                      |                                        integrate query                                         |
+|    sam    | sample  | $\mathbf{x} \sim p(\mathbf{x})$               |                                               -                                               |                                         sampling query                                         |
+|    exp    | expectation | $\mathbb{E}_{\mathbf{x} \sim p(\mathbf{x})}\left \[ f(\mathbf{x}) \right \] = \int p(\mathbf{x})f(\mathbf{x}) d\mathbf{x}$ |                                      multiply and integrate                                      |                                               -                                                |
+
+### Symbolic vs PyTorch
+Queries can be implemented either **symbolically**, i.e. by constructing a new circuit which implements the query [^1], or by directly applying a **query** to a compiled circuit in PyTorch. In the latter case, the query is evaluated using a forward pass of the existing circuit.
+
+[^1]: Symbolic queries are especially useful when you want to combine the resulting circuit with other circuits.
+
+## Project Structure :open_file_folder:
 
 ```
 .
@@ -128,9 +152,11 @@ If you want to learn more about the internals of cirkit, a good starting point i
 
 | **Papers**          | **Links within Cirkit** |
 |--------------------|------------------------|
-| [Sum of Squares Circuits](https://arxiv.org/abs/2408.11778) 🆘 | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
-| [Scaling Continuous Latent Variable Models as Probabilistic Integral Circuits](https://arxiv.org/abs/2406.06494) | [notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
-| [What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?](https://arxiv.org/abs/2409.07953) | See [Region Graphs](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) and [Folding](https://github.com/april-tools/cirkit/blob/main/notebooks/compilation-options.ipynb)|
+| [🆘 Subtractive Mixture Models via Squaring: Representation and Learning](https://april-tools.github.io/publications/loconte2023subtractive) | [SoS notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
+| [🆘 Sum of Squares Circuits](https://april-tools.github.io/publications/loconte2024sos) | [SoS notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb) |
+| [📷 Probabilistic Integral Circuits](https://april-tools.github.io/publications/gala2023pic) | [PICs notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
+| [📷 Scaling Continuous Latent Variable Models as Probabilistic Integral Circuits](https://april-tools.github.io/publications/gala2024tenpics) | [PICs notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb) |
+| [What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?](https://april-tools.github.io/publications/loconte2024tfpc) | See [Region Graphs](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) and [Folding](https://github.com/april-tools/cirkit/blob/main/notebooks/compilation-options.ipynb)|
 | [Random Sum-Product Networks: A Simple and Effective Approach to Probabilistic Deep Learning](https://proceedings.mlr.press/v115/peharz20a) | See [Random Binary Tree](https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb) |
 | [Einsum Networks: Fast and Scalable Learning of Tractable Probabilistic Circuits](https://arxiv.org/abs/2004.06231) | See [Optimizing the Circuit Layers](https://github.com/april-tools/cirkit/blob/main/notebooks/compilation-options.ipynb) |
 

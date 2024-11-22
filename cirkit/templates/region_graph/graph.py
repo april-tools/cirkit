@@ -2,9 +2,9 @@ import itertools
 import json
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
-from typing import Sequence, TypeAlias, TypedDict, cast, final
+from typing import TypeAlias, TypedDict, cast, final
 
 import numpy as np
 from numpy.typing import NDArray

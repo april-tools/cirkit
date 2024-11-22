@@ -46,15 +46,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         raise TypeError(f"Sampling not implemented for {type(self)}")
 
 
-class TorchProductLayer(TorchInnerLayer, ABC):
-    ...
-
-
-class TorchSumLayer(TorchInnerLayer, ABC):
-    ...
-
-
-class TorchHadamardLayer(TorchProductLayer):
+class TorchHadamardLayer(TorchInnerLayer):
     """The Hadamard product layer."""
 
     def __init__(
@@ -110,7 +102,7 @@ class TorchHadamardLayer(TorchProductLayer):
         return x, None
 
 
-class TorchKroneckerLayer(TorchProductLayer):
+class TorchKroneckerLayer(TorchInnerLayer):
     """The Kronecker product layer."""
 
     def __init__(
@@ -171,13 +163,14 @@ class TorchKroneckerLayer(TorchProductLayer):
         return torch.flatten(x, start_dim=2, end_dim=3), None
 
 
-class TorchDenseLayer(TorchSumLayer):
-    """The sum layer for dense sum within a layer."""
+class TorchSumLayer(TorchInnerLayer):
+    """The sum layer."""
 
     def __init__(
         self,
         num_input_units: int,
         num_output_units: int,
+        arity: int = 1,
         *,
         weight: TorchParameter,
         semiring: Semiring | None = None,
@@ -192,91 +185,7 @@ class TorchDenseLayer(TorchSumLayer):
             num_folds (int): The number of channels. Defaults to 1.
         """
         assert weight.num_folds == num_folds
-        assert weight.shape == (num_output_units, num_input_units)
-        super().__init__(
-            num_input_units, num_output_units, arity=1, semiring=semiring, num_folds=num_folds
-        )
-        self.weight = weight
-
-    @property
-    def config(self) -> Mapping[str, Any]:
-        return {"num_input_units": self.num_input_units, "num_output_units": self.num_output_units}
-
-    @property
-    def params(self) -> Mapping[str, TorchParameter]:
-        return {"weight": self.weight}
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
-        x = x.squeeze(dim=1)  # shape (F, H=1, B, Ki) -> (F, B, Ki).
-        weight = self.weight()
-        return self.semiring.einsum(
-            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-        )  # shape (F, B, Ko).
-
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        weight = self.weight()
-        negative = torch.any(weight < 0.0)
-        if negative:
-            raise ValueError("Sampling only works with positive weights")
-        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
-        if not normalized:
-            raise ValueError("Sampling only works with a normalized parametrization")
-
-        # x: (F, H, C, K, num_samples, D)
-        c = x.shape[2]
-        d = x.shape[-1]
-        num_samples = x.shape[-2]
-
-        # mixing_distribution: (F, O, K)
-        mixing_distribution = torch.distributions.Categorical(probs=weight)
-
-        mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
-        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=self.arity, c=c, d=d)
-
-        x = torch.gather(x, dim=-3, index=mixing_indices)
-        x = x[:, 0]
-        return x, mixing_samples
-
-
-class TorchMixingLayer(TorchSumLayer):
-    """The sum layer for mixture among layers.
-
-    It can also be used as a sparse sum within a layer when arity=1.
-    """
-
-    def __init__(
-        self,
-        num_input_units: int,
-        num_output_units: int,
-        arity: int = 2,
-        *,
-        weight: TorchParameter,
-        semiring: Semiring | None = None,
-        num_folds: int = 1,
-    ) -> None:
-        """Init class.
-
-        Args:
-            num_input_units (int): The number of input units.
-            num_output_units (int): The number of output units, must be the same as input.
-            arity (int, optional): The arity of the layer. Defaults to 2.
-            weight (TorchParameter): The reparameterization for layer parameters.
-            num_folds (int): The number of channels. Defaults to 1.
-        """
-        assert (
-            num_output_units == num_input_units
-        ), "The number of input and output units must be the same for MixingLayer."
-        assert weight.num_folds == num_folds
-        assert weight.shape == (num_output_units, arity)
+        assert weight.shape == (num_output_units, arity * num_input_units)
         super().__init__(
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
@@ -303,11 +212,13 @@ class TorchMixingLayer(TorchSumLayer):
         Returns:
             Tensor: The output of this layer, shape (F, B, Ko).
         """
-        # shape (F, H, B, K) -> (F, B, K).
+        # x: (F, H, B, Ki) -> (F, B, H * Ki)
+        # weight: (F, Ko, H * Ki)
+        x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
         weight = self.weight()
         return self.semiring.einsum(
-            "fhbk,fkh->fbk", inputs=(x,), operands=(weight,), dim=1, keepdim=False
-        )
+            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+        )  # shape (F, B, Ko).
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()
@@ -318,18 +229,22 @@ class TorchMixingLayer(TorchSumLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
-        # x: (F, H, C, K, num_samples, D)
-        c = x.shape[2]
-        k = x.shape[-3]
-        d = x.shape[-1]
-        num_samples = x.shape[-2]
+        # x: (F, H, C, Ki, num_samples, D) -> (F, C, H * Ki, num_samples, D)
+        x = x.permute(0, 2, 1, 3, 4, 5).flatten(2, 3)
+        c = x.shape[1]
+        num_samples = x.shape[3]
+        d = x.shape[4]
 
-        # mixing_distribution: (F, O, K)
+        # mixing_distribution: (F, Ko, H * Ki)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
+        # mixing_samples: (num_samples, F, Ko) -> (F, Ko, num_samples)
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f 1 c k n d", c=c, k=k, d=d)
 
-        x = torch.gather(x, 1, mixing_indices)[:, 0]
+        # mixing_indices: (F, C, Ko, num_samples, D)
+        mixing_indices = E.repeat(mixing_samples, "f k n -> f c k n d", c=c, d=d)
+
+        # x: (F, C, Ko, num_samples, D)
+        x = torch.gather(x, dim=2, index=mixing_indices)
         return x, mixing_samples

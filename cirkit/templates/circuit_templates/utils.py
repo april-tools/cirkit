@@ -28,7 +28,6 @@ from cirkit.templates.region_graph import (
     RandomBinaryTree,
     RegionGraph,
 )
-from cirkit.utils.scope import Scope
 
 
 @dataclass(frozen=True)
@@ -95,13 +94,13 @@ def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
     """
     match name:
         case "embedding":
-            return functools.partial(_embedding_layer_factory, **kwargs)
+            return functools.partial(EmbeddingLayer, **kwargs)
         case "categorical":
-            return functools.partial(_categorical_layer_factory, **kwargs)
+            return functools.partial(CategoricalLayer, **kwargs)
         case "binomial":
-            return functools.partial(_binomial_layer_factory, **kwargs)
+            return functools.partial(BinomialLayer, **kwargs)
         case "gaussian":
-            return functools.partial(_gaussian_layer_factory, **kwargs)
+            return functools.partial(GaussianLayer, **kwargs)
         case _:
             raise ValueError(f"Unknown input layer called {name}")
 
@@ -119,19 +118,6 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     Raises:
         ValueError: If one of the settings in the given parameterization is unknown.
     """
-
-    def _build_tensor_parameter(
-        shape: tuple[int, ...],
-        *,
-        unary_op_factory: Callable[[tuple[int, ...]], UnaryParameterOp] | None,
-        dtype: DataType,
-        initializer: Initializer,
-    ) -> Parameter:
-        tensor = TensorParameter(*shape, dtype=dtype, initializer=initializer)
-        if unary_op_factory is None:
-            return Parameter.from_input(tensor)
-        return Parameter.from_unary(unary_op_factory(shape), tensor)
-
     unary_op_factory = name_to_parameter_activation(param.activation)
     dtype = name_to_dtype(param.dtype)
     initializer = name_to_initializer(param.initialization)
@@ -223,65 +209,13 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
             raise ValueError(f"Unknown initializer called {name}")
 
 
-def _embedding_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    num_states: int,
-    weight_factory: ParameterFactory | None = None,
-) -> EmbeddingLayer:
-    return EmbeddingLayer(
-        scope, num_units, num_channels, num_states=num_states, weight_factory=weight_factory
-    )
-
-
-def _categorical_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    num_categories: int,
-    probs_factory: ParameterFactory | None = None,
-    logits_factory: ParameterFactory | None = None,
-) -> CategoricalLayer:
-    return CategoricalLayer(
-        scope,
-        num_units,
-        num_channels,
-        num_categories=num_categories,
-        probs_factory=probs_factory,
-        logits_factory=logits_factory,
-    )
-
-
-def _binomial_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    total_count: int,
-    probs_factory: ParameterFactory | None = None,
-    logits_factory: ParameterFactory | None = None,
-) -> BinomialLayer:
-    return BinomialLayer(
-        scope,
-        num_units,
-        num_channels,
-        total_count=total_count,
-        probs_factory=probs_factory,
-        logits_factory=logits_factory,
-    )
-
-
-def _gaussian_layer_factory(
-    scope: Scope,
-    num_units: int,
-    num_channels: int,
-    *,
-    mean_factory: ParameterFactory | None = None,
-    stddev_factory: ParameterFactory | None = None,
-) -> GaussianLayer:
-    return GaussianLayer(
-        scope, num_units, num_channels, mean_factory=mean_factory, stddev_factory=stddev_factory
-    )
+def _build_tensor_parameter(
+    shape: tuple[int, ...],
+    unary_op_factory: Callable[[tuple[int, ...]], UnaryParameterOp] | None,
+    dtype: DataType,
+    initializer: Initializer,
+) -> Parameter:
+    tensor = TensorParameter(*shape, dtype=dtype, initializer=initializer)
+    if unary_op_factory is None:
+        return Parameter.from_input(tensor)
+    return Parameter.from_unary(unary_op_factory(shape), tensor)

@@ -21,7 +21,7 @@ from cirkit.backend.torch.graph.optimize import (
     match_optimization_patterns,
     optimize_graph,
 )
-from cirkit.backend.torch.initializers import stacked_initializer_
+from cirkit.backend.torch.initializers import foldwise_initializer_
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.backend.torch.layers.input import TorchConstantLayer
 from cirkit.backend.torch.optimization.layers import (
@@ -370,7 +370,7 @@ def _fold_parameter_nodes_group(
             num_folds=len(group),
             requires_grad=group[0].requires_grad,
             initializer_=functools.partial(
-                stacked_initializer_, initializers=list(map(lambda p: p.initializer, group))
+                foldwise_initializer_, initializers=list(map(lambda p: p.initializer, group))
             ),
             dtype=group[0].dtype,
         )
@@ -548,6 +548,7 @@ def _match_layer_pattern(
     outcomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
 ) -> LayerOptMatch | None:
     ppatterns = pattern.ppatterns()
+    cpatterns = pattern.cpatterns()
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
     matched_layers = []
@@ -566,7 +567,12 @@ def _match_layer_pattern(
         if len(out_nodes) > 1 and lid != 0:
             return None
 
-        # Second, attempt to match the patterns specified for its parameters
+        # Second, attempt to match the configuration patterns for the layer
+        for cname, cvalue in cpatterns[lid].items():
+            if layer.config[cname] != cvalue:
+                return None
+
+        # Third, attempt to match the patterns specified for its parameters
         lpmatches = {}
         for pname, ppattern in ppatterns[lid].items():
             pgraph = layer.params[pname]
