@@ -53,7 +53,7 @@ def test_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, o
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [False, True]),
 )
 def test_batch_query_marginalize_monotonic_pc_categorical(
-        semiring: str, fold: bool, optimize: bool, input_tensor: bool
+    semiring: str, fold: bool, optimize: bool, input_tensor: bool
 ):
     # Check using a mask with batching works
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
@@ -70,9 +70,9 @@ def test_batch_query_marginalize_monotonic_pc_categorical(
 
     mar_query = IntegrateQuery(tc)
     if input_tensor:
-        mask = torch.tensor([[True, True, True, True, True],
-                             [False, False, False, False, True]],
-                            dtype=torch.bool)
+        mask = torch.tensor(
+            [[True, True, True, True, True], [False, False, False, False, True]], dtype=torch.bool
+        )
     else:
         # Create two masks, one is marginalising out everything
         # and another is marginalising out only the last variable
@@ -97,7 +97,7 @@ def test_batch_query_marginalize_monotonic_pc_categorical(
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [False, True]),
 )
 def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(
-        semiring: str, fold: bool, optimize: bool, input_tensor: bool
+    semiring: str, fold: bool, optimize: bool, input_tensor: bool
 ):
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
@@ -137,7 +137,9 @@ def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(
     "input_tensor",
     itertools.product([False, True]),
 )
-def test_batch_fails_on_out_of_scope(input_tensor, semiring="sum-product", fold=True, optimize=True):
+def test_batch_fails_on_out_of_scope(
+    input_tensor, semiring="sum-product", fold=True, optimize=True
+):
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
@@ -154,9 +156,10 @@ def test_batch_fails_on_out_of_scope(input_tensor, semiring="sum-product", fold=
     mar_query = IntegrateQuery(tc)
     if input_tensor:
         # Scope 5 does not exist so this should error
-        mask = torch.tensor([[False, False, False, False, True, True],
-                             [False, False, False, False, True, True]],
-                            dtype=torch.bool)
+        mask = torch.tensor(
+            [[False, False, False, False, True, True], [False, False, False, False, True, True]],
+            dtype=torch.bool,
+        )
         # The first score should be partition function, as we marginalised out all vars.
         # The second score, should be our precomputed marginal.
         with pytest.raises(ValueError, match="was defined over %d != 5 variables" % mask.shape[1]):
@@ -174,7 +177,9 @@ def test_batch_fails_on_out_of_scope(input_tensor, semiring="sum-product", fold=
     "input_tensor",
     itertools.product([False, True]),
 )
-def test_batch_fails_on_wrong_batch_size(input_tensor, semiring="sum-product", fold=True, optimize=True):
+def test_batch_fails_on_wrong_batch_size(
+    input_tensor, semiring="sum-product", fold=True, optimize=True
+):
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
@@ -191,10 +196,14 @@ def test_batch_fails_on_wrong_batch_size(input_tensor, semiring="sum-product", f
     mar_query = IntegrateQuery(tc)
     if input_tensor:
         # Input batch size is 2, passing 3 masks
-        mask = torch.tensor([[False, False, False, False, True],
-                             [False, False, False, False, True],
-                             [False, False, False, False, True]],
-                            dtype=torch.bool)
+        mask = torch.tensor(
+            [
+                [False, False, False, False, True],
+                [False, False, False, False, True],
+                [False, False, False, False, True],
+            ],
+            dtype=torch.bool,
+        )
         # The first score should be partition function, as we marginalised out all vars.
         # The second score, should be our precomputed marginal.
         with pytest.raises(ValueError, match="Found #inputs = 2 != 3"):
@@ -225,9 +234,9 @@ def test_batch_fails_on_wrong_tensor_dtype(semiring="sum-product", fold=True, op
     mar_query = IntegrateQuery(tc)
 
     # Input batch size is 2, passing 3 masks
-    mask = torch.tensor([[False, False, False, False, True],
-                         [False, False, False, False, True]],
-                        dtype=torch.int32)
+    mask = torch.tensor(
+        [[False, False, False, False, True], [False, False, False, False, True]], dtype=torch.int32
+    )
     # The first score should be partition function, as we marginalised out all vars.
     # The second score, should be our precomputed marginal.
     with pytest.raises(ValueError, match="Expected dtype of tensor to be torch.bool"):
