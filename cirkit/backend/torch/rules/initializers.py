@@ -38,7 +38,7 @@ def compile_normal_initializer(
     return functools.partial(nn.init.normal_, mean=init.mean, std=init.stddev)
 
 
-def compiler_dirichlet_initializer(
+def compile_dirichlet_initializer(
     compiler: "TorchCompiler", init: DirichletInitializer
 ) -> InitializerFunc:
     axis = init.axis if init.axis < 0 else init.axis + 1
@@ -49,5 +49,5 @@ DEFAULT_INITIALIZER_COMPILATION_RULES: dict[InitializerCompilationSign, Initiali
     ConstantTensorInitializer: compile_constant_tensor_initializer,
     UniformInitializer: compile_uniform_initializer,
     NormalInitializer: compile_normal_initializer,
-    DirichletInitializer: compiler_dirichlet_initializer,
+    DirichletInitializer: compile_dirichlet_initializer,
 }

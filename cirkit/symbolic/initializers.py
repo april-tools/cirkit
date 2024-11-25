@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from numbers import Number
 from typing import Any
 
@@ -17,6 +17,31 @@ class Initializer(ABC):
             A dictionary mapping hyperparameter names to their values.
         """
         return {}
+
+    @abstractmethod
+    def allows_shape(self, shape: tuple[int, ...]) -> bool:
+        """Checks whether the given parameter shape is supported by the initializer.
+
+        Args:
+            shape: The parameter shape.
+
+        Returns:
+            True if the shape is supported, False otherwise.
+        """
+
+    def __repr__(self) -> str:
+        config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
+        return f"{self.__class__.__name__}({config_repr})"
+
+
+class ElementwiseInitializer(Initializer, ABC):
+    """An elementwise initializer initializes a parameter tensor by setting each entry
+    using the same function, such as by sampling independently from a univariate distribution.
+    Therefore, an elementwise initializer allows any parameter shape by default.
+    """
+
+    def allows_shape(self, shape: tuple[int, ...]) -> bool:
+        return True
 
 
 class ConstantTensorInitializer(Initializer):
@@ -41,8 +66,17 @@ class ConstantTensorInitializer(Initializer):
     def config(self) -> dict[str, Any]:
         return {"value": self.value}
 
+    def allows_shape(self, shape: tuple[int, ...]) -> bool:
+        if isinstance(self.value, Number):
+            return True
+        assert isinstance(self.value, np.ndarray)
+        try:
+            return np.broadcast_shapes(self.value.shape, shape) == shape
+        except ValueError:
+            return False
 
-class UniformInitializer(Initializer):
+
+class UniformInitializer(ElementwiseInitializer):
     """A symbolic uniform initializer, which initializes all the entries of a tensor
     by sampling independently from a univariate uniform distribution."""
 
@@ -66,7 +100,7 @@ class UniformInitializer(Initializer):
         return {"a": self.a, "b": self.b}
 
 
-class NormalInitializer(Initializer):
+class NormalInitializer(ElementwiseInitializer):
     """A symbolic normal initializer, which initializes all the entries of a tensor
     by sampling independently from a univariate normal distribution."""
 
@@ -119,3 +153,12 @@ class DirichletInitializer(Initializer):
     @property
     def config(self) -> dict[str, Any]:
         return {"alpha": self.alpha, "axis": self.axis}
+
+    def allows_shape(self, shape: tuple[int, ...]) -> bool:
+        axis = self.axis + len(shape) if self.axis < 0 else self.axis
+        if axis >= len(shape):
+            return False
+        if isinstance(self.alpha, float):
+            return True
+        assert isinstance(self.alpha, list)
+        return shape[axis] == len(self.alpha)

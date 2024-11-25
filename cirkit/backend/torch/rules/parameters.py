@@ -15,6 +15,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchKroneckerParameter,
     TorchLogParameter,
     TorchLogSoftmaxParameter,
+    TorchMixingWeightParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
     TorchPointerParameter,
@@ -44,6 +45,7 @@ from cirkit.symbolic.parameters import (
     KroneckerParameter,
     LogParameter,
     LogSoftmaxParameter,
+    MixingWeightParameter,
     OuterProductParameter,
     OuterSumParameter,
     PolynomialDifferential,
@@ -220,6 +222,13 @@ def compile_log_softmax_parameter(
     return TorchLogSoftmaxParameter(in_shape, dim=p.axis)
 
 
+def compile_mixing_weight_parameter(
+    compiler: "TorchCompiler", p: MixingWeightParameter
+) -> TorchMixingWeightParameter:
+    (in_shape,) = p.in_shapes
+    return TorchMixingWeightParameter(in_shape)
+
+
 def compile_gaussian_product_mean(
     compiler: "TorchCompiler", p: GaussianProductMean
 ) -> TorchGaussianProductMean:
@@ -272,6 +281,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCom
     ReduceLSEParameter: compile_reduce_lse_parameter,
     SoftmaxParameter: compile_softmax_parameter,
     LogSoftmaxParameter: compile_log_softmax_parameter,
+    MixingWeightParameter: compile_mixing_weight_parameter,
     GaussianProductMean: compile_gaussian_product_mean,
     GaussianProductStddev: compile_gaussian_product_stddev,
     GaussianProductLogPartition: compile_gaussian_product_log_partition,

@@ -6,18 +6,15 @@ from enum import IntEnum, auto
 from functools import cached_property
 from typing import Any, Protocol, cast
 
-from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.symbolic.layers import (
-    DenseLayer,
     HadamardLayer,
     InputLayer,
     KroneckerLayer,
     Layer,
-    MixingLayer,
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
+from cirkit.symbolic.parameters import ParameterFactory
 from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
 from cirkit.utils.algorithms import (
     DiAcyclicGraph,
@@ -277,23 +274,6 @@ class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
         """
 
 
-class MixingLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
-    """The protocol of a factory that constructs mixing layers,
-    i.e., layers computing a linear sum over two or more input layers, and
-    that have the same number of sum units as the units in each input layer."""
-
-    def __call__(self, num_units: int, arity: int) -> SumLayer:
-        """Constructs a mixing layer.
-
-        Args:
-            num_units: The number of units in each layer that is an input.
-            arity: The number of input layers.
-
-        Returns:
-            SumLayer: A mixing layer.
-        """
-
-
 class Circuit(DiAcyclicGraph[Layer]):
     """The symbolic circuit representation."""
 
@@ -319,15 +299,30 @@ class Circuit(DiAcyclicGraph[Layer]):
         self.num_channels = num_channels
         self.operation = operation
 
-        # Build scopes bottom-up
+        # Build scopes bottom-up, and check the consistency of the layers, w.r.t.
+        # the arity and the number of input and output units
         self._scopes: dict[Layer, Scope] = {}
         for sl in self.topological_ordering():
+            sl_ins = self.layer_inputs(sl)
             if isinstance(sl, InputLayer):
                 self._scopes[sl] = sl.scope
+                if len(sl_ins):
+                    raise ValueError(
+                        f"{sl}: found an input layer with {len(sl_ins)} layer inputs, "
+                        "but expected none"
+                    )
                 continue
-            self._scopes[sl] = Scope.union(
-                *tuple(self._scopes[sli] for sli in self.layer_inputs(sl))
-            )
+            self._scopes[sl] = Scope.union(*tuple(self._scopes[sli] for sli in sl_ins))
+            if sl.arity != len(sl_ins):
+                raise ValueError(
+                    f"{sl}: expected arity {sl.arity}, " f"but found {len(sl_ins)} input layers"
+                )
+            sl_ins_units = [sli.num_output_units for sli in sl_ins]
+            if any(sl.num_input_units != num_units for num_units in sl_ins_units):
+                raise ValueError(
+                    f"{sl}: expected number of input units {sl.num_input_units}, "
+                    f"but found input layers {sl_ins}"
+                )
         self.scope = Scope.union(*tuple(self._scopes[sl] for sl in self.outputs))
 
     @property
@@ -557,9 +552,9 @@ class Circuit(DiAcyclicGraph[Layer]):
         input_factory: InputLayerFactory,
         sum_product: str | None = None,
         sum_weight_factory: ParameterFactory | None = None,
+        nary_sum_weight_factory: ParameterFactory | None = None,
         sum_factory: SumLayerFactory | None = None,
         prod_factory: ProductLayerFactory | None = None,
-        mixing_factory: MixingLayerFactory | None = None,
         num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
@@ -578,19 +573,15 @@ class Circuit(DiAcyclicGraph[Layer]):
             region_graph: The region graph.
             input_factory: A factory that builds an input layer.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
-            sum_weight_factory: The factory to construct the weight of the sum-product layer
-                abstraction and mixing layers. It can be None, or a parameter factory, i.e., a map
-                from a shape to a symbolic parameter.
+            sum_weight_factory: The factory to construct the weights of the sum layers.
+                It can be None, or a parameter factory, i.e., a map
+                from a shape to a symbolic parameter. If it is None, then the default
+                weight factory of the sum layer is used instead.
+            nary_sum_weight_factory: The factory to construct the weight of sum layers havity arity
+                greater than one. If it is None, then it will have the same value and semantics of
+                the given sum_weight_factory.
             sum_factory: A factory that builds a sum layer. It can be None.
             prod_factory: A factory that builds a product layer. It can be None.
-            mixing_factory: A factory that builds a mixing layer, i.e., a layer used to parameterize
-                a region node that is decomposed into more than one partitioning. If it is None,
-                then it is assumed to be a factory that builds a
-                [MixingLayer][cirkit.symbolic.layers.MixingLayer].
-                If 'sum_weight_factory' is None then the weight parameters are not
-                learnable and are initialized to the constant 1/H, where H is the arity of the
-                mixing layer, i.e., the number of input layers. Otherwise, 'sum_weight_factory' is
-                used to construct the weights of the mixing layers.
             num_channels: The number of channels for each variable.
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
@@ -623,31 +614,19 @@ class Circuit(DiAcyclicGraph[Layer]):
                 "At most one between 'sum_product' and the pair 'sum_factory' and 'prod_factory'"
                 " must be specified"
             )
+        if nary_sum_weight_factory is None:
+            nary_sum_weight_factory = sum_weight_factory
 
         layers: list[Layer] = []
         in_layers: dict[Layer, list[Layer]] = {}
         node_to_layer: dict[RegionGraphNode, Layer] = {}
 
-        def default_mixing_layer_factory(num_units: int, arity: int) -> MixingLayer:
-            if sum_weight_factory is None:
-                initializer = ConstantTensorInitializer(1.0 / arity)
-                weight = Parameter.from_input(
-                    TensorParameter(
-                        num_units,
-                        arity,
-                        initializer=initializer,
-                        learnable=False,
-                    )
-                )
-                return MixingLayer(num_units, arity, weight=weight)
-            return MixingLayer(num_units, arity, weight_factory=sum_weight_factory)
-
         def build_cp_(
             rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
-        ) -> HadamardLayer | DenseLayer:
+        ) -> HadamardLayer | SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             denses = [
-                DenseLayer(
+                SumLayer(
                     node_to_layer[rgn_in].num_output_units,
                     num_sum_units,
                     weight_factory=sum_weight_factory,
@@ -666,7 +645,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 node_to_layer[rgn] = hadamard
                 return hadamard
             # Otherwise, introduce an additional sum layer to ensure the output layer is a sum
-            output_dense = DenseLayer(
+            output_dense = SumLayer(
                 hadamard.num_output_units, num_classes, weight_factory=sum_weight_factory
             )
             layers.append(output_dense)
@@ -676,7 +655,7 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         def build_cp_transposed_(
             rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
-        ) -> DenseLayer:
+        ) -> SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             num_in_units = list({li.num_output_units for li in layer_ins})
             if len(num_in_units) > 1:
@@ -685,7 +664,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             num_units = num_sum_units if region_graph.region_outputs(rgn) else num_classes
             hadamard = HadamardLayer(num_in_units[0], arity=len(rgn_partitioning))
-            dense = DenseLayer(num_in_units[0], num_units, weight_factory=sum_weight_factory)
+            dense = SumLayer(num_in_units[0], num_units, weight_factory=sum_weight_factory)
             layers.append(hadamard)
             layers.append(dense)
             in_layers[hadamard] = layer_ins
@@ -693,7 +672,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             node_to_layer[rgn] = dense
             return dense
 
-        def build_tucker_(rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]) -> DenseLayer:
+        def build_tucker_(rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]) -> SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
             num_in_units = list({li.num_output_units for li in layer_ins})
             if len(num_in_units) > 1:
@@ -702,7 +681,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 )
             num_units = num_sum_units if region_graph.region_outputs(rgn) else num_classes
             kronecker = KroneckerLayer(num_in_units[0], arity=len(rgn_partitioning))
-            dense = DenseLayer(
+            dense = SumLayer(
                 kronecker.num_output_units,
                 num_units,
                 weight_factory=sum_weight_factory,
@@ -713,10 +692,6 @@ class Circuit(DiAcyclicGraph[Layer]):
             in_layers[dense] = [kronecker]
             node_to_layer[rgn] = dense
             return dense
-
-        # Set the mixing factory as the default one (see above), if not given
-        if mixing_factory is None:
-            mixing_factory = default_mixing_layer_factory
 
         # Set the sum-product layer builder, if necessary
         sum_prod_builder_: Callable[[RegionNode, Sequence[RegionNode]], Layer] | None
@@ -800,7 +775,12 @@ class Circuit(DiAcyclicGraph[Layer]):
                         )
                         for ptn in region_inputs
                     ]
-                mix_sl = mixing_factory(num_units, len(mix_ins))
+                mix_sl = SumLayer(
+                    num_units,
+                    num_units,
+                    arity=len(mix_ins),
+                    weight_factory=nary_sum_weight_factory,
+                )
                 layers.append(mix_sl)
                 in_layers[mix_sl] = mix_ins
                 node_to_layer[node] = mix_sl
@@ -821,7 +801,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         """Construct a symbolic circuit mimicking a hidden markov model (HMM) of
           a given variable ordering. Product Layers are of type
           [HadamardLayer][cirkit.symbolic.layers.HadamardLayer], and sum layers are of type
-          [DenseLayer][cirkit.symbolic.layers.DenseLayer].
+          [SumLayer][cirkit.symbolic.layers.SumLayer].
 
         Args:
             ordering: The input order of variables of the HMM.
@@ -846,7 +826,7 @@ class Circuit(DiAcyclicGraph[Layer]):
 
         input_sl = input_factory(Scope([ordering[0]]), num_units, num_channels)
         layers.append(input_sl)
-        sum_sl = DenseLayer(num_units, num_units, weight_factory=weight_factory)
+        sum_sl = SumLayer(num_units, num_units, weight_factory=weight_factory)
         layers.append(sum_sl)
         in_layers[sum_sl] = [input_sl]
 
@@ -861,7 +841,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             in_layers[prod_sl] = [last_dense, input_sl]
 
             num_units_out = num_units if i != len(ordering) - 1 else num_classes
-            sum_sl = DenseLayer(
+            sum_sl = SumLayer(
                 num_units,
                 num_units_out,
                 weight_factory=weight_factory,

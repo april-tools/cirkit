@@ -11,11 +11,11 @@ from cirkit.symbolic.initializers import (
 )
 from cirkit.symbolic.layers import (
     CategoricalLayer,
-    DenseLayer,
     GaussianLayer,
     HadamardLayer,
     Layer,
     PolynomialLayer,
+    SumLayer,
 )
 from cirkit.symbolic.parameters import (
     ExpParameter,
@@ -99,7 +99,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
             TensorParameter(*shape, initializer=DirichletInitializer())
         )
     dense_layers = {
-        scope: DenseLayer(
+        scope: SumLayer(
             num_input_units=num_units,
             num_output_units=1 if len(scope) == 2 else num_units,
             weight_factory=dense_weight_factory,
@@ -222,7 +222,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
             TensorParameter(*shape, initializer=DirichletInitializer())
         )
     dense_layers = {
-        scope: DenseLayer(
+        scope: SumLayer(
             num_input_units=num_units,
             num_output_units=1 if len(scope) == 5 else num_units,
             weight_factory=dense_weight_factory,
@@ -296,7 +296,7 @@ def build_monotonic_structured_categorical_cpt_pc(
             bernoulli_probs[tuple(sl.scope)]
         )
     for sl in circuit.sum_layers:
-        assert isinstance(sl, DenseLayer)
+        assert isinstance(sl, SumLayer)
         next(sl.weight.inputs).initializer = ConstantTensorInitializer(
             dense_weights[tuple(circuit.layer_scope(sl))]
         )
@@ -419,7 +419,7 @@ def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
             gaussian_mean_stddev[tuple(sl.scope)][1]
         )
     for sl in circuit.sum_layers:
-        assert isinstance(sl, DenseLayer)
+        assert isinstance(sl, SumLayer)
         next(sl.weight.inputs).initializer = ConstantTensorInitializer(
             dense_weights[tuple(circuit.layer_scope(sl))]
         )

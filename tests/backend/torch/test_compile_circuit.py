@@ -9,13 +9,13 @@ from scipy import integrate
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
-from cirkit.backend.torch.layers import TorchDenseLayer, TorchHadamardLayer, TorchMixingLayer
+from cirkit.backend.torch.layers import TorchHadamardLayer, TorchSumLayer
 from cirkit.backend.torch.layers.input import TorchCategoricalLayer
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import DirichletInitializer
-from cirkit.symbolic.layers import CategoricalLayer, DenseLayer, HadamardLayer, MixingLayer
+from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, SumLayer
 from cirkit.symbolic.parameters import Parameter, TensorParameter
 from cirkit.templates.region_graph import QuadGraph
 from cirkit.utils.scope import Scope
@@ -159,12 +159,10 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
         assert (
             isinstance(n1, CategoricalLayer)
             and isinstance(n2, TorchCategoricalLayer)
-            or isinstance(n1, DenseLayer)
-            and isinstance(n2, TorchDenseLayer)
+            or isinstance(n1, SumLayer)
+            and isinstance(n2, TorchSumLayer)
             or isinstance(n1, HadamardLayer)
             and isinstance(n2, TorchHadamardLayer)
-            or isinstance(n1, MixingLayer)
-            and isinstance(n2, TorchMixingLayer)
         )
 
     assert (
@@ -173,8 +171,8 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
         == 9
     )
     assert (
-        sum([1 for n1 in nodes_sc if isinstance(n1, DenseLayer)])
-        == sum([1 for n2 in nodes_c if isinstance(n2, TorchDenseLayer)])
+        sum([1 for n1 in nodes_sc if isinstance(n1, SumLayer) and n1.arity == 1])
+        == sum([1 for n2 in nodes_c if isinstance(n2, TorchSumLayer) and n2.arity == 1])
         == 30
     )
     assert (
@@ -183,8 +181,8 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
         == 14
     )
     assert (
-        sum([1 for n1 in nodes_sc if isinstance(n1, MixingLayer)])
-        == sum([1 for n2 in nodes_c if isinstance(n2, TorchMixingLayer)])
+        sum([1 for n1 in nodes_sc if isinstance(n1, SumLayer) and n1.arity > 1])
+        == sum([1 for n2 in nodes_c if isinstance(n2, TorchSumLayer) and n2.arity > 1])
         == 2
     )
 
@@ -201,7 +199,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     dense_scopes = Counter([0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 6, 7, 8, 8])
     scopes = Counter()
     for n1, n2 in zip(nodes_sc[9:], nodes_c[9:]):
-        if not isinstance(n1, DenseLayer):
+        if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
         assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
         assert len(sc.layer_scope(n1)) == 1
@@ -221,7 +219,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     dense_scopes = Counter([(0, 1), (3, 4), (0, 3), (1, 4), (2, 5), (2, 5), (6, 7), (6, 7)])
     scopes = Counter()
     for n1, n2 in zip(nodes_sc[29:], nodes_c[29:]):
-        if not isinstance(n1, DenseLayer):
+        if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
         assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
         scopes[tuple(sorted(tuple(sc.layer_scope(n1))))] += 1
@@ -239,14 +237,14 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     # after the first 37+4=41 layers, 1 mixing layer must follow, whose scope is defined below
     mixing_scope = (0, 1, 3, 4)
     assert mixing_scope == tuple(sorted(tuple(sc.layer_scope(nodes_sc[41]))))
-    assert nodes_c[41].weight._nodes[0]._ptensor.shape == (1, 8, 2)
+    assert nodes_c[41].weight._nodes[0]._ptensor.shape == (1, 8, 8 * 2)
 
     # after the first 41+1=42 layers, 4 dense layers must follow, whose scopes are defined below
     # this time though, 2 layers are KxK and 2 1xK
     dense_scopes = Counter([(0, 1, 3, 4), (0, 1, 3, 4), (6, 7, 8), (2, 5, 8)])
     scopes = Counter()
     for n1, n2 in zip(nodes_sc[42:], nodes_c[42:]):
-        if not isinstance(n1, DenseLayer):
+        if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
         if tuple(sorted(tuple(sc.layer_scope(n1)))) == (0, 1, 3, 4):
             assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
@@ -268,7 +266,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     dense_scopes = Counter([(0, 1, 2, 3, 4, 5), (0, 1, 3, 4, 6, 7)])
     scopes = Counter()
     for n1, n2 in zip(nodes_sc[48:], nodes_c[48:]):
-        if not isinstance(n1, DenseLayer):
+        if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
         assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
         scopes[tuple(sorted(tuple(sc.layer_scope(n1))))] += 1

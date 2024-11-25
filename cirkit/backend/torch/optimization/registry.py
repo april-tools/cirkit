@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from cirkit.backend.registry import CompilerRegistry
 from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDefn
@@ -29,7 +29,11 @@ class LayerOptPatternDefn(GraphOptPatternDefn[TorchLayer]):
 
     @classmethod
     def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
-        return [{} for _ in cls.entries()]
+        ...
+
+    @classmethod
+    def cpatterns(cls) -> list[dict[str, Any]]:
+        ...
 
 
 LayerOptPattern = type[LayerOptPatternDefn]

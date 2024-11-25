@@ -7,7 +7,14 @@ from torch import Tensor
 InitializerFunc = Callable[[Tensor], Tensor]
 
 
-def copy_from_ndarray_(tensor: torch.Tensor, *, array: np.ndarray) -> Tensor:
+def foldwise_initializer_(t: Tensor, *, initializers: list[InitializerFunc | None]) -> Tensor:
+    for i, initializer_ in enumerate(initializers):
+        if initializer_ is not None:
+            initializer_(t[i])
+    return t
+
+
+def copy_from_ndarray_(tensor: Tensor, *, array: np.ndarray) -> Tensor:
     t = torch.from_numpy(array)
     default_float_dtype = torch.get_default_dtype()
     if t.is_floating_point():
@@ -21,7 +28,7 @@ def copy_from_ndarray_(tensor: torch.Tensor, *, array: np.ndarray) -> Tensor:
     return tensor.copy_(t)
 
 
-def dirichlet_(tensor: torch.Tensor, alpha: float | list[float], *, dim: int = -1) -> Tensor:
+def dirichlet_(tensor: Tensor, alpha: float | list[float], *, dim: int = -1) -> Tensor:
     shape = tensor.shape
     if len(shape) == 0:
         raise ValueError(
@@ -35,15 +42,8 @@ def dirichlet_(tensor: torch.Tensor, alpha: float | list[float], *, dim: int = -
             raise ValueError(
                 "The selected dim of the tensor and the size of concentration parameters do not match"
             )
-        concentration = torch.tensor(alpha)
+        concentration = Tensor(alpha)
     dirichlet = torch.distributions.Dirichlet(concentration)
     samples = dirichlet.sample(torch.Size([d for i, d in enumerate(shape) if i != dim]))
     tensor.copy_(torch.transpose(samples, dim, -1))
     return tensor
-
-
-def stacked_initializer_(t: Tensor, *, initializers: list[InitializerFunc | None]) -> Tensor:
-    for i, initializer_ in enumerate(initializers):
-        if initializer_ is not None:
-            initializer_(t[i])
-    return t
