@@ -957,7 +957,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                         if not isinstance(i, BottomNode) and i in node_to_layer
                     ]
 
-                    sum_node = SumLayer(len(sum_inputs), 1, arity=len(sum_inputs), weight_factory=weight_factory)
+                    sum_node = SumLayer(1, 1, arity=len(sum_inputs), weight_factory=weight_factory)
                     in_layers[sum_node] = sum_inputs
                     node_to_layer[node] = sum_node
 
