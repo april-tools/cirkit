@@ -1,5 +1,6 @@
 import functools
 from abc import ABC
+from collections.abc import Iterable
 
 import torch
 from torch import Tensor
@@ -45,7 +46,7 @@ class IntegrateQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, x: Tensor, *, integrate_vars: [Scope]) -> Tensor:
+    def __call__(self, x: Tensor, *, integrate_vars: Tensor | Scope | Iterable[Scope]) -> Tensor:
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
@@ -53,15 +54,48 @@ class IntegrateQuery(Query):
                 channels per variable, and D is the number of variables.
             integrate_vars: The variables to integrate. It must be a subset of the variables on
                 which the circuit given in the constructor is defined on.
-
+                The format can be one of the following three:
+                    1. Tensor of shape (B, D) where B is the batch size and D is the number of
+                        variables in the scope of the circuit. Its dtype should be torch.bool
+                        and have True in the positions of random variables that should be
+                        marginalised out and False elsewhere.
+                    2. Scope, in this case the same integration mask is applied for all entries
+                        of the batch
+                    3. List of Scopes, where the length of the list must be either 1 or B. If
+                        the list has length 1, behaves as above.
         Returns:
             The result of the integration query, given as a tensor of shape (B, O, K),
                 where B is the batch size, O is the number of output vectors of the circuit, and
                 K is the number of units in each output vector.
         """
-        # Convert list of scopes to a boolean mask of dimension (B, N) where
-        # N is the number of variables in the circuit's scope.
-        integrate_vars_mask = IntegrateQuery.scopes_to_mask(self._circuit, integrate_vars)
+        if isinstance(integrate_vars, Tensor):
+            # Check type of tensor is boolean
+            if integrate_vars.dtype != torch.bool:
+                raise ValueError('Expected dtype of tensor to be torch.bool, got %s'
+                                 % integrate_vars.dtype)
+            # If single dimensional tensor, assume batch size = 1
+            if len(integrate_vars.shape) == 1:
+                integrate_vars = torch.unsqueeze(integrate_vars, 0)
+            # If the scope is correct, proceed, otherwise error
+            num_vars = max(self._circuit.scope) + 1
+            if integrate_vars.shape[1] == num_vars:
+                integrate_vars_mask = integrate_vars
+            else:
+                raise ValueError('Circuit scope has %d variables but integrate_vars'
+                                 ' was defined over %d != %d variables.' %
+                                 (num_vars, integrate_vars.shape[1], num_vars))
+        else:
+            # Convert list of scopes to a boolean mask of dimension (B, N) where
+            # N is the number of variables in the circuit's scope. 
+            integrate_vars_mask = IntegrateQuery.scopes_to_mask(self._circuit, integrate_vars)
+
+        # Check batch sizes of input x and mask are compatible
+        if integrate_vars_mask.shape[0] not in (1, x.shape[0]):
+            raise ValueError('The number of scopes to integrate over must'
+                             ' either match the batch size of x, or be 1 if you'
+                             ' want to broadcast.'
+                             ' Found #inputs = %d != %d = len(integrate_vars)'
+                             % (x.shape[0], integrate_vars_mask.shape[0]))
 
         output = self._circuit.evaluate(
             x,
@@ -96,8 +130,8 @@ class IntegrateQuery(Query):
         # integration_mask has dimension (B, F, Ko)
         integration_mask = torch.vmap(lambda x: x[layer.scope_idx])(integrate_vars_mask)
         # permute to match integration_output: integration_mask has dimension (F, B, Ko)
-        integration_mask = integration_mask.permute([1, 0, 2])
-
+        integration_mask = integration_mask.permute([1,0,2])
+        
         if not torch.any(integration_mask).item():
             return output
 
@@ -117,7 +151,7 @@ class IntegrateQuery(Query):
         if isinstance(batch_integrate_vars, Scope):
             batch_integrate_vars = [batch_integrate_vars]
 
-        batch_size = len(batch_integrate_vars)
+        batch_size = len(tuple(batch_integrate_vars))
         # There are cases where the circuit.scope may change,
         # e.g. we may marginalise out X_1 and the length of the scope may be smaller
         # but the actual scope will not have been shifted.
@@ -125,24 +159,24 @@ class IntegrateQuery(Query):
         num_idxs = sum(len(s) for s in batch_integrate_vars)
 
         # TODO: Maybe consider using a sparse tensor
-        mask = torch.zeros((batch_size, num_rvs), dtype=torch.bool, device=circuit.device)
+        mask = torch.zeros((batch_size, num_rvs),
+                           dtype=torch.bool,
+                           device=circuit.device)
 
         # Catch case of only empty scopes where the following command will fail
         if num_idxs == 0:
             return mask
 
-        batch_idxs, rv_idxs = zip(
-            *((i, idx) for i, idxs in enumerate(batch_integrate_vars) for idx in idxs if idxs)
-        )
+        batch_idxs, rv_idxs = zip(*((i, idx)
+                                    for i, idxs in enumerate(batch_integrate_vars)
+                                    for idx in idxs if idxs))
 
         # Check that we have not asked to marginalise variables that are not defined
         invalid_idxs = Scope(rv_idxs) - circuit.scope
         if invalid_idxs:
-            raise ValueError(
-                "The variables to marginalize must be a subset of"
-                " the circuit scope. Invalid variables"
-                " not in scope: %s." % list(invalid_idxs)
-            )
+            raise ValueError("The variables to marginalize must be a subset of "
+                             " the circuit scope. Invalid variables"
+                             " not in scope: %s." % list(invalid_idxs))
 
         mask[batch_idxs, rv_idxs] = True
 
