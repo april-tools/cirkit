@@ -43,6 +43,8 @@ class Parameterization:
     """The activation function. Defaults to 'none', i.e., no activation."""
     dtype: str = "real"
     """The data type. Defaults to 'real', i.e., real numbers."""
+    initialization_kwargs: dict[str, Any] = field(default_factory=dict)
+    """Additional arguments to pass to the initializatiot method."""
     activation_kwargs: dict[str, Any] = field(default_factory=dict)
     """Additional arguments to pass to the activation function."""
 
@@ -124,7 +126,7 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     """
     unary_op_factory = name_to_parameter_activation(param.activation, **param.activation_kwargs)
     dtype = name_to_dtype(param.dtype)
-    initializer = name_to_initializer(param.initialization)
+    initializer = name_to_initializer(param.initialization, **param.initialization_kwargs)
     return functools.partial(
         _build_tensor_parameter,
         unary_op_factory=unary_op_factory,
@@ -204,13 +206,24 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
     Raises:
         ValueError: If the given initialization name is not known.
     """
+    kwargs = kwargs.copy()
     match name:
         case "uniform":
-            return UniformInitializer(0.0, 1.0)
+            if "a" not in kwargs:
+                kwargs["a"] = 0.0
+            if "b" not in kwargs:
+                kwargs["b"] = 1.0
+            return UniformInitializer(**kwargs)
         case "normal":
-            return NormalInitializer(0.0, 1.0)
+            if "mean" not in kwargs:
+                kwargs["mean"] = 0.0
+            if "stddev" not in kwargs:
+                kwargs["stddev"] = 1.0
+            return NormalInitializer(**kwargs)
         case "dirichlet":
-            return DirichletInitializer(1.0, **kwargs)
+            if "alpha" not in kwargs:
+                kwargs["alpha"] = 1.0
+            return DirichletInitializer(**kwargs)
         case _:
             raise ValueError(f"Unknown initializer called {name}")
 

@@ -10,16 +10,20 @@ from cirkit.utils.scope import Scope
 
 
 @pytest.mark.parametrize(
-    "rank,param,weighted",
+    "rank,factor_param,weight_param",
     itertools.product(
         [1, 5],
         [None, Parameterization(activation="softmax", initialization="normal")],
-        [False, True],
+        [None, Parameterization(activation="softmax", initialization="normal")],
     ),
 )
-def test_cp(rank: int, param: Parameterization | None, weighted: bool):
+def test_cp(
+    rank: int, factor_param: Parameterization | None, weight_param: Parameterization | None
+):
     shape = (256, 32, 32)
-    circuit = tensor_factorizations.cp(shape, rank, param=param, weighted=weighted)
+    circuit = tensor_factorizations.cp(
+        shape, rank, factor_param=factor_param, weight_param=weight_param
+    )
     assert circuit.scope == Scope(range(len(shape)))
     input_layers = list(circuit.inputs)
     product_layers = list(circuit.product_layers)
@@ -32,15 +36,12 @@ def test_cp(rank: int, param: Parameterization | None, weighted: bool):
     assert len(sum_layers) == 1 and isinstance(sum_layers[0], SumLayer)
     assert sum_layers[0].num_input_units == rank and sum_layers[0].num_output_units == 1
     assert sum_layers[0].arity == 1
-    if param is None:
+    if factor_param is None:
         assert all(len(sl.weight.nodes) == 1 for sl in input_layers)
     else:
         assert all(len(sl.weight.nodes) == 2 for sl in input_layers)
-    if weighted:
-        if param is None:
-            assert len(sum_layers[0].weight.nodes) == 1
-        else:
-            assert len(sum_layers[0].weight.nodes) == 2
+    if weight_param is not None:
+        assert len(sum_layers[0].weight.nodes) == 2
     else:
         assert len(sum_layers[0].weight.nodes) == 1
         assert isinstance(sum_layers[0].weight.nodes[0], ConstantParameter)
