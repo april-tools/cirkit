@@ -4,8 +4,8 @@ import pytest
 
 from cirkit.symbolic.layers import EmbeddingLayer, HadamardLayer, SumLayer
 from cirkit.symbolic.parameters import ConstantParameter
-from cirkit.templates.utils import Parameterization
 from cirkit.templates import tensor_factorizations
+from cirkit.templates.utils import Parameterization
 from cirkit.utils.scope import Scope
 
 
@@ -13,8 +13,8 @@ from cirkit.utils.scope import Scope
     "rank,param,weighted",
     itertools.product(
         [1, 5],
-        [None, Parameterization(activation='softmax', initialization='normal')],
-        [False, True]
+        [None, Parameterization(activation="softmax", initialization="normal")],
+        [False, True],
     ),
 )
 def test_cp(rank: int, param: Parameterization | None, weighted: bool):

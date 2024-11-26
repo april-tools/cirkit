@@ -9,8 +9,8 @@ def cp(
     shape: tuple[int, ...],
     rank: int,
     *,
-    param: Parameterization | None = None,
-    weighted: bool = False
+    factor_param: Parameterization | None = None,
+    weight_param: Parameterization | None = None,
 ) -> Circuit:
     """Constructs a circuit encoding a CP factorization of an n-dimensional tensor.
 
@@ -31,12 +31,12 @@ def cp(
     where $\mathbf{w}\in\bbR^R$ are additional weights.
 
     This method allows you to specify different types of parameterizations for the factors and
-    possibly the additional weights. For example, if the argument ```param``` is equal to a
+    possibly the additional weights. For example, if the arguments ```factor_param``` and
+    ```weight_param``` are both equal to a
     [parameterization][cirkit.templates.utils.Parameterization]
-    ```Parameterization(activation="softmax", initialization="normal")```, and the argument
-    ```weighted``` is set to True, then the returned circuit encodes a probabilistic model
-    that is a mixture of fully-factorized models. That is, the returned circuit $c$ encodes
-    the factorization of a non-negative tensor
+    ```Parameterization(activation="softmax", initialization="normal")```,
+    then the returned circuit encodes a probabilistic model that is a mixture of fully-factorized
+    models. That is, the returned circuit $c$ encodes the factorization of a non-negative tensor
     $\mathcal{T}\in\mathbb{R}_+^{I_1\times \ldots\times I_n}$ as the distribution
     $$
     p(X_1,\ldots,X_n) = t_{X_1\codts X_n} = \sum_{i=1}^R p(Z=i) \: p(X_1\mid Z=i) \cdots p(X_n\mid Z=i),
@@ -46,10 +46,11 @@ def cp(
     Args:
         shape: The shape of the tensor to encode the CP factorization of.
         rank: The rank of the CP factorization. Defaults to 1.
-        param: The parameterization to use for the factor matrices, and for the
-            additional weights of the CP factorization if ```weighted``` is True.
-        weighted: Whether to construct a circuit encoding the weighted CP factorization.
-            Defaults to False.
+        factor_param: The parameterization to use for the factor matrices.
+            If None, then it defaults to no activation and uses an initialization based on
+            independently sampling from a standard Gaussian distribution.
+        weight_param: The parameterization to use for the weight coefficients.
+            If None, then it defaults to fixed weights set all to one.
 
     Returns:
         Circuit: A circuit encoding a (possibly weighted) CP factorization.
@@ -63,27 +64,30 @@ def cp(
     if rank < 1:
         raise ValueError("The factorization rank should be a positive number")
 
-    # Retrieve the weight factory to parameterize the embeddings and
-    # possibly the sum layer weight
-    if param is None:
-        param = Parameterization(activation="none", initialization="normal")
-    weight_factory = parameterization_to_factory(param)
+    # Retrieve the factory to parameterize the embeddings
+    if factor_param is None:
+        factor_param = Parameterization(activation="none", initialization="normal")
+    embedding_factory = parameterization_to_factory(factor_param)
 
-    # Retrieve the sum layer weight, depending on whether we want a weighted CP factorization
-    sum_weight = weight_factory((1, rank)) if weighted else Parameter.from_input(
-        ConstantParameter(1, rank, value=1.0)
-    )
+    # Retrieve the sum layer weight, depending on whether we the CP factorization is weighted
+    if weight_param is None:
+        weight = Parameter.from_input(ConstantParameter(1, rank, value=1.0))
+        weight_factory = None
+    else:
+        weight_factory = parameterization_to_factory(weight_param)
+        weight = None
 
     # Construct the embedding, hadamard and sum layers
     embedding_layers = [
-        EmbeddingLayer(Scope([i]), rank, 1, num_states=dim, weight_factory=weight_factory)
+        EmbeddingLayer(Scope([i]), rank, 1, num_states=dim, weight_factory=embedding_factory)
         for i, dim in enumerate(shape)
     ]
     hadamard_layer = HadamardLayer(rank, arity=len(shape))
-    sum_layer = SumLayer(rank, 1, arity=1, weight=sum_weight)
+    sum_layer = SumLayer(rank, 1, arity=1, weight=weight, weight_factory=weight_factory)
 
     return Circuit(
-        1, layers=embedding_layers + [hadamard_layer, sum_layer],
+        1,
+        layers=embedding_layers + [hadamard_layer, sum_layer],
         in_layers={sum_layer: [hadamard_layer], hadamard_layer: embedding_layers},
         outputs=[sum_layer],
     )

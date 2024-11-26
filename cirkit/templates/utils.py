@@ -1,6 +1,7 @@
 import functools
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -17,6 +18,7 @@ from cirkit.symbolic.parameters import (
     ClampParameter,
     Parameter,
     ParameterFactory,
+    SigmoidParameter,
     SoftmaxParameter,
     TensorParameter,
     UnaryParameterOp,
@@ -41,6 +43,8 @@ class Parameterization:
     """The activation function. Defaults to 'none', i.e., no activation."""
     dtype: str = "real"
     """The data type. Defaults to 'real', i.e., real numbers."""
+    activation_kwargs: dict[str, Any] = field(default_factory=dict)
+    """Additional arguments to pass to the activation function."""
 
 
 def build_image_region_graph(
@@ -118,7 +122,7 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     Raises:
         ValueError: If one of the settings in the given parameterization is unknown.
     """
-    unary_op_factory = name_to_parameter_activation(param.activation)
+    unary_op_factory = name_to_parameter_activation(param.activation, **param.activation_kwargs)
     dtype = name_to_dtype(param.dtype)
     initializer = name_to_initializer(param.initialization)
     return functools.partial(
@@ -136,7 +140,7 @@ def name_to_parameter_activation(
 
     Args:
         name: The name of the parameter activation. It can be either 'none',
-            'softmax', or 'positive-clamp'.
+            'softmax', 'sigmoid', or 'positive-clamp'.
         **kwargs: Optional arguments to pass to symbolic unary parameter.
 
     Returns:
@@ -152,6 +156,8 @@ def name_to_parameter_activation(
             return None
         case "softmax":
             return functools.partial(SoftmaxParameter, **kwargs)
+        case "sigmoid":
+            return functools.partial(SigmoidParameter)
         case "positive-clamp":
             if "vmin" not in kwargs:
                 kwargs["vmin"] = 1e-18
