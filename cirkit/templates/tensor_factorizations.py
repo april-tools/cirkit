@@ -12,7 +12,7 @@ def cp(
     factor_param: Parameterization | None = None,
     weight_param: Parameterization | None = None,
 ) -> Circuit:
-    """Constructs a circuit encoding a CP factorization of an n-dimensional tensor.
+    r"""Constructs a circuit encoding a CP factorization of an n-dimensional tensor.
 
     Formally, given the shape of a tensor $\mathcal{T}\in\mathbb{R}^{I_1\times \ldots\times I_n}$,
     this method returns a circuit $c$ over $n$ discrete random variables $\{X_j\}_{j=1}^n$,
