@@ -3,7 +3,7 @@ from typing import Any
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.parameters import mixing_weight_factory
-from cirkit.templates.circuit_templates.utils import (
+from cirkit.templates.utils import (
     Parameterization,
     build_image_region_graph,
     name_to_input_layer_factory,
