@@ -858,7 +858,7 @@ class Circuit(DiAcyclicGraph[Layer]):
     def plot(
         self,
         out_path: str | PathLike[str] | None = None,
-        graph_direction: str = "vertical",
+        orientation: str = "vertical",
         node_shape: str = "box",
         label_font: str = "times italic bold",
         label_size: str = "21pt",
@@ -867,7 +867,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         sum_color: str | Callable[[SumLayer], str] = "#607d8b",
         product_label: str | Callable[[ProductLayer], str] = "⊙",
         product_color: str | Callable[[ProductLayer], str] = "#24a5af",
-        input_label: str | Callable[[InputLayer], str] = lambda l: str(list(l.scope)),
+        input_label: str | Callable[[InputLayer], str] = lambda l: " ".join(map(str, l.scope)),
         input_color: str | Callable[[InputLayer], str] = "#ffbd2a",
     ) -> graphviz.Digraph:
         """Plot the current symbolic circuit using graphviz.
@@ -884,7 +884,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                  'xdot1.4', 'cmapx_np', 'dot', 'tiff', 'ps2', 'gd2', 'gv', 'ps', 'jpg',
                  'imap_np', 'wbmp', 'vml', 'eps', 'xdot1.2', 'pov', 'pict', 'ismap', 'exr'}.
                  See https://graphviz.org/docs/outputs/ for more.
-            graph_direction (str, optional): Direction of the graph. "vertical" puts the root
+            orientation (str, optional): Orientation of the graph. "vertical" puts the root
                 node at the top, "horizontal" at left. Defaults to "vertical".
             node_shape (str, optional): Default shape for a node in the graph. Defaults to "box".
                 See https://graphviz.org/doc/info/shapes.html for the supported shapes.
@@ -923,7 +923,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         if fmt not in graphviz.FORMATS:
             raise ValueError(f"Supported formats are {graphviz.FORMATS}.")
 
-        if graph_direction not in ["vertical", "horizontal"]:
+        if orientation not in ["vertical", "horizontal"]:
             raise ValueError("Supported graph directions are only 'vertical' and 'horizontal'.")
 
         dot: graphviz.Digraph = graphviz.Digraph(
@@ -938,13 +938,13 @@ class Circuit(DiAcyclicGraph[Layer]):
             engine="dot",
         )
 
-        dot.graph_attr["rankdir"] = "BT" if graph_direction == "vertical" else "LR"
+        dot.graph_attr["rankdir"] = "BT" if orientation == "vertical" else "LR"
 
         for layer in self.layers:
             match layer:
                 case HadamardLayer():
                     dot.node(
-                        str(layer),
+                        str(id(layer)),
                         product_label if isinstance(product_label, str) else product_label(layer),
                         color=product_color
                         if isinstance(product_color, str)
@@ -952,20 +952,20 @@ class Circuit(DiAcyclicGraph[Layer]):
                     )
                 case SumLayer():
                     dot.node(
-                        str(layer),
+                        str(id(layer)),
                         sum_label if isinstance(sum_label, str) else sum_label(layer),
                         color=sum_color if isinstance(sum_color, str) else sum_color(layer),
                     )
                 case InputLayer():
                     dot.node(
-                        str(layer),
+                        str(id(layer)),
                         input_label if isinstance(input_label, str) else input_label(layer),
                         color=input_color if isinstance(input_color, str) else input_color(layer),
                     )
 
         for node, inputs in self.layers_inputs.items():
             for i in inputs:
-                dot.edge(str(i), str(node))
+                dot.edge(str(id(i)), str(id(node)))
 
         if out_path is not None:
             out_path: Path = Path(out_path).with_suffix("")
