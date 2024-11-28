@@ -996,6 +996,7 @@ class Circuit(DiAcyclicGraph[Layer]):
     ) -> graphviz.Digraph:
         """Plot the current symbolic circuit using graphviz.
         A graphviz object is returned, which can be visualized in jupyter notebooks.
+        If format is not provided, SVG is used for optimal rendering in notebooks.
 
         Args:
             out_path ( str | PathLike[str] | None, optional): The output path where the plot is save
@@ -1043,9 +1044,12 @@ class Circuit(DiAcyclicGraph[Layer]):
         Returns:
             graphviz.Digraph: _description_
         """
-        fmt: str = Path(out_path).suffix.replace(".", "")
-        if fmt not in graphviz.FORMATS:
-            raise ValueError(f"Supported formats are {graphviz.FORMATS}.")
+        if out_path is None:
+            fmt: str = "svg"
+        else:
+            fmt: str = Path(out_path).suffix.replace(".", "")
+            if fmt not in graphviz.FORMATS:
+                raise ValueError(f"Supported formats are {graphviz.FORMATS}.")
 
         if orientation not in ["vertical", "horizontal"]:
             raise ValueError("Supported graph directions are only 'vertical' and 'horizontal'.")
