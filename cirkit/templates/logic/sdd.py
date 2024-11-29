@@ -29,7 +29,7 @@ def sliding_window(iterable, n):
 
 class SDD(LogicGraph):
     @staticmethod
-    def load(filename: str, enforce_smooth: bool = True) -> "SDD":
+    def load(filename: str) -> "SDD":
         """Load the SDD from a file.
         The file will be opened with mode="r" and encoding="utf-8".
 
@@ -44,9 +44,7 @@ class SDD(LogicGraph):
 
         Args:
             filename (str): The file name for loading.
-            enforce_smooth: If True then smoothness is enforced while constructing the symbolic
-                circuit.
-
+            
         Returns:
             LogicGraph: The loaded logic graph.
         """
@@ -94,7 +92,5 @@ class SDD(LogicGraph):
         nodes = set(chain(*in_nodes.values())).union(in_nodes.keys())
 
         graph = LogicGraph(nodes=nodes, in_nodes=in_nodes, outputs=[nodes_map[0]])
-        if enforce_smooth:
-            graph = graph.smooth()
-
+        
         return graph

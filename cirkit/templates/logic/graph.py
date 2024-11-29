@@ -73,7 +73,40 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
         in_nodes: dict[LogicCircuitNode, Sequence[LogicCircuitNode]],
         outputs: Sequence[LogicCircuitNode],
     ) -> None:
+        if len(outputs) != 1:
+            assert ValueError("A logic graphs can only have one output!")
         super().__init__(nodes, in_nodes, outputs)
+
+    def simplify(self) -> "LogicGraph":
+        """
+        Simplify a graph by removed trivial nodes and propagating the result.
+
+        Returns:
+            LogicGraph: The simplified graph, where all bottom and top nodes have
+                been removed through simplification. 
+        """
+        in_nodes = dict(self.nodes_inputs.copy())
+        root = next(self.outputs)
+
+        absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
+        null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
+        
+        absorbed_nodes = [
+            n
+            for n, children in in_nodes.items()
+            if any([isinstance(child, absorbing_element(n)) for child in children])
+        ]
+        
+        # update the graph
+        in_nodes = {
+            n: [child for child in children if not isinstance(child, null_element(n)) and child not in absorbed_nodes]
+            for n, children in in_nodes.items()
+            if n not in absorbed_nodes
+        }
+
+        nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
+        
+        return LogicGraph(nodes=nodes, in_nodes=in_nodes, outputs=[root])
 
     @property
     def inputs(self) -> Iterator[LogicCircuitNode]:
@@ -131,19 +164,37 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
         for d in disjunctions:
             d_scope = self.node_scope(d)
 
-            for conj in in_nodes[d]:
-                missing_literals = d_scope.difference(self.node_scope(conj))
+            for input_to_d in in_nodes[d]:
+                to_add_for_smoothing: list[LogicCircuitNode] = []
+                missing_literals = d_scope.difference(self.node_scope(input_to_d))
 
                 if len(missing_literals) > 0:
                     for ml in missing_literals:
                         if ml not in smoothing_map:
-                            ml_conjunction = ConjunctionNode()
-                            in_nodes[ml_conjunction] = [
+                            # construct a conjunction representing the literal ml
+                            # for smoothing purposes
+                            smooth_ml = DisjunctionNode()
+                            in_nodes[smooth_ml] = [
                                 literal_map.get((ml, True), LiteralNode(ml)),
                                 literal_map.get((ml, False), NegatedLiteralNode(ml)),
                             ]
-                            smoothing_map[ml] = ml_conjunction
-                        in_nodes[conj].append(smoothing_map[ml])
+                            smoothing_map[ml] = smooth_ml
+                        
+                        to_add_for_smoothing.append(smoothing_map[ml])
+                
+                    # if input to disjunction is a conjunction or a disjunction 
+                    # then directly add to its inputs else create an ad-hoc node
+                    if input_to_d in in_nodes:
+                        in_nodes[input_to_d].extend(to_add_for_smoothing)
+                    else:
+                        ad_hoc = ConjunctionNode()
+                        in_nodes[ad_hoc] = to_add_for_smoothing
+                        in_nodes[ad_hoc].append(input_to_d)
+
+                        # replace input_to_d with the ad-hoc disjunction
+                        in_nodes[d].remove(input_to_d)
+                        # add to the top so that it does not get checked again
+                        in_nodes[d].insert(0, ad_hoc)
 
         nodes = set(itertools.chain(*in_nodes.values())).union(in_nodes.keys())
         return LogicGraph(nodes, in_nodes, self._outputs)

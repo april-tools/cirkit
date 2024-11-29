@@ -881,6 +881,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         negated_literal_input_factory: InputLayerFactory = None,
         weight_factory: ParameterFactory | None = None,
         num_channels: int = 1,
+        enforce_smoothness: bool = True
     ) -> "Circuit":
         """
         Construct a symbolic circuit from a logic circuit graph.
@@ -897,6 +898,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 If None is used, the default weight factory uses non-trainable unitary parameters,
                 which instantiate a regular boolean logic graph.
             num_channels: The number of channels for each variable.
+            enforce_smoothness: Enforces smoothness of the circuit to support efficient marginalization.
 
         Returns:
             Circuit: A symbolic circuit.
@@ -904,6 +906,11 @@ class Circuit(DiAcyclicGraph[Layer]):
         Raises:
             ValueError: If only one of literal_input_factory and negated_literal_input_factory is specified.
         """
+        if enforce_smoothness:
+            simplified_graph = logic_graph.smooth().simplify()
+        else:
+            simplified_graph = logic_graph.simplify()
+        
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicCircuitNode, Layer] = {}
 
@@ -926,7 +933,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                 return Parameter.from_input(ConstantParameter(*n, value=np.ones(n)))
 
         # map each input literal to a symbolic input layer
-        for i in logic_graph.inputs:
+        for i in simplified_graph.inputs:
             match i:
                 case LiteralNode():
                     node_to_layer[i] = literal_input_factory(
@@ -937,47 +944,20 @@ class Circuit(DiAcyclicGraph[Layer]):
                         Scope([i.literal]), num_units=1, num_channels=num_channels
                     )
 
-        for node in logic_graph.topological_ordering():
+        for node in simplified_graph.topological_ordering():
             match node:
                 case ConjunctionNode():
-                    product_node = HadamardLayer(1, arity=len(logic_graph.node_inputs(node)))
-
-                    # if the product node contains Bottom Node as input then the
-                    # the node can be pruned altogether since the result is trivial
-                    if not any((isinstance(i, BottomNode) for i in logic_graph.node_inputs(node))):
-                        # top nodes can be pruned from the product node since they do not contribute
-                        in_layers[product_node] = [
-                            node_to_layer[i]
-                            for i in logic_graph.node_inputs(node)
-                            if not isinstance(i, TopNode) and i in node_to_layer
-                        ]
-                        node_to_layer[node] = product_node
-
+                    product_node = HadamardLayer(1, arity=len(simplified_graph.node_inputs(node)))
+                    in_layers[product_node] = [node_to_layer[i] for i in simplified_graph.node_inputs(node)]
+                    node_to_layer[node] = product_node
                 case DisjunctionNode():
-                    # bottom nodes can be pruned from the sum node since they do not contribute
-                    sum_inputs = [
-                        node_to_layer[i]
-                        for i in logic_graph.node_inputs(node)
-                        if not isinstance(i, BottomNode) and i in node_to_layer
-                    ]
-
-                    sum_node = SumLayer(1, 1, arity=len(sum_inputs), weight_factory=weight_factory)
-                    in_layers[sum_node] = sum_inputs
+                    sum_node = SumLayer(1, 1, arity=len(simplified_graph.node_inputs(node)), weight_factory=weight_factory)
+                    in_layers[sum_node] = [node_to_layer[i] for i in simplified_graph.node_inputs(node)]
                     node_to_layer[node] = sum_node
-
-        # since we are pruning nodes during the mapping procedure, it might happen that some layers
-        # are not connected to any other layer, and they are not the output node
-        # in that case, they can be safely removed
-        in_layers = {
-            layer: layer_inputs
-            for layer, layer_inputs in in_layers.items()
-            if any((layer in l for l in in_layers.values()))
-            or layer == node_to_layer[logic_graph.output]
-        }
 
         layers = list(set(itertools.chain(*in_layers.values())).union(in_layers.keys()))
 
-        return cls(num_channels, layers, in_layers, [node_to_layer[logic_graph.output]])
+        return cls(num_channels, layers, in_layers, [node_to_layer[simplified_graph.output]])
 
     def plot(
         self,
