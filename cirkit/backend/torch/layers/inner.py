@@ -28,10 +28,10 @@ class TorchInnerLayer(TorchLayer, ABC):
         Args:
             num_input_units: The number of input units.
             num_output_units: The number of output units.
-            arity: The arity of the layer. Defaults to 2.
+            arity: The arity of the layer.
             semiring: The evaluation semiring.
                 Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
-            num_folds: The number of channels. Defaults to 1.
+            num_folds: The number of channels.
         """
         super().__init__(
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
@@ -46,12 +46,12 @@ class TorchInnerLayer(TorchLayer, ABC):
         """Invoke the forward function.
 
         Args:
-            x: The tensor input to this layer, having shape (F, H, B, Ki), where F
-                is the number of folds, H is the arity, B is the batch size, and
-                Ki is the number of input units.
+            x: The tensor input to this layer, having shape $(F, H, B, K_i)$, where $F$
+                is the number of folds, $H$ is the arity, $B$ is the batch size, and
+                $K_i$ is the number of input units.
 
         Returns:
-            Tensor: The tensor output of this layer, having shape (F, B, Ko), where Ko
+            Tensor: The tensor output of this layer, having shape $(F, B, K_o)$, where $K_o$
                 is the number of output units.
         """
 
@@ -60,9 +60,9 @@ class TorchInnerLayer(TorchLayer, ABC):
 
         Args:
             x: A tensor representing the input variable assignments, having shape
-                (F, H, C, K, N, D), where F is the number of folds, H is the arity,
-                C is the number of channels, K is the numbe rof input units, N is the number
-                of samples, D is the number of variables.
+                $(F, H, C, K, N, D)$, where $F$ is the number of folds, $H$ is the arity,
+                $C$ is the number of channels, $K$ is the numbe rof input units, $N$ is the number
+                of samples, $D$ is the number of variables.
 
         Returns:
             Tensor: A new tensor representing the new variable assignements the layers gives
@@ -93,10 +93,10 @@ class TorchHadamardLayer(TorchInnerLayer):
         Args:
             num_input_units: The number of input units, which is equal to the number of
                 output units.
-            arity: The arity of the layer. Defaults to 2.
+            arity: The arity of the layer.
             semiring: The evaluation semiring.
                 Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
-            num_folds: The number of channels. Defaults to 1.
+            num_folds: The number of channels.
 
         Raises:
             ValueError: If the arity is not at least 2.
@@ -147,7 +147,7 @@ class TorchKroneckerLayer(TorchInnerLayer):
             arity: The arity of the layer. Defaults to 2 (which is the only supported arity).
             semiring: The evaluation semiring.
                 Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
-            num_folds: The number of channels. Defaults to 1.
+            num_folds: The number of channels.
 
         Raises:
             ValueError: If the arity is not at least 2.
@@ -206,13 +206,13 @@ class TorchSumLayer(TorchInnerLayer):
         Args:
             num_input_units: The number of input units.
             num_output_units: The number of output units.
-            arity: The arity of the layer. Defaults to 2.
-            weight: The weight parameter, which must have shape (F, Ko, Ki\cdot H),
-                where F is the number of folds, Ko is the number of output units,
-                    Ki is the number of input units, and H is the arity.
+            arity: The arity of the layer.
+            weight: The weight parameter, which must have shape $(F, K_o, K_i\cdot H)$,
+                where $F$ is the number of folds, $K_o$ is the number of output units,
+                   $K_i$ is the number of input units, and $H$ is the arity.
             semiring: The evaluation semiring.
                 Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
-            num_folds: The number of channels. Defaults to 1.
+            num_folds: The number of channels.
 
         Raises:
             ValueError: If the arity is not a positive integer.
@@ -254,12 +254,12 @@ class TorchSumLayer(TorchInnerLayer):
 
     def forward(self, x: Tensor) -> Tensor:
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
-        # weight: (F, Ko, H * Ki)
+        # weight: (F, Ko,$H$* Ki)
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
         weight = self.weight()
         return self.semiring.einsum(
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-        )  # shape (F, B, Ko).
+        )  # shape $(F, B, K_o)$.
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()

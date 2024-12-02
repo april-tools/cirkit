@@ -6,22 +6,33 @@ from typing import Any, final
 import numpy as np
 import torch
 from torch import Tensor, nn
-from triton.language import tensor
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
 
 
 class TorchParameterNode(AbstractTorchModule, ABC):
-    """The abstract base class for all reparameterizations."""
+    """The computational node of a torch parameter computational graph.
+    See [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter]
+    for more details."""
 
-    def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
-        """Init class."""
+    def __init__(self, *, num_folds: int = 1):
+        """Initialize a parameter node.
+
+        Args:
+            num_folds: The number of folds.
+        """
         super().__init__(num_folds=num_folds)
 
     @property
     @abstractmethod
     def shape(self) -> tuple[int, ...]:
-        ...
+        r"""Retrieve the shape of of the tensor computed by the node.
+        Note that if the shape is $(K_1,\ldots,K_n)$ and the number of folds i $F$,
+        then the node outputs a tensor of shape $(F,K_1,\ldots,K_n)$.
+
+        Returns:
+            The shape of the computed tensor.
+        """
 
     @property
     def config(self) -> dict[str, Any]:

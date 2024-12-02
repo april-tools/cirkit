@@ -28,10 +28,10 @@ class TorchLayer(AbstractTorchModule, ABC):
         Args:
             num_input_units: The number of input units.
             num_output_units: The number of output units.
-            arity: The arity of the layer. Defaults to 1.
+            arity: The arity of the layer.
             semiring: The evaluation semiring.
                 Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
-            num_folds: The number of folds. Defaults to 1.
+            num_folds: The number of folds.
 
         Raises:
             ValueError: If the number of input units is negative.
