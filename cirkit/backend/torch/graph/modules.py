@@ -62,8 +62,8 @@ TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)
 @dataclass(frozen=True)
 class FoldIndexInfo:
     """The folding index information of a folded computational graph, i.e.,
-    a [directed acylic graph][cirkit.backend.torch.modules.TorchDiAcyclicGraph]
-    of [torch modules][cirkit.backend.torch.modules.AbstractTorchModule].
+    a [directed acylic graph][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph]
+    of [torch modules][cirkit.backend.torch.graph.modules.AbstractTorchModule].
 
     This data class stores (i) the topological ordering, (ii) the input fold index
     information for each torch module, and (iii) the output fold index information.
@@ -104,7 +104,7 @@ class AddressBookEntry:
 class AddressBook(ABC):
     """The address book data structure, sometimes also known as book-keeping.
     The address book stores a list of
-    [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
+    [AddressBookEntry][cirkit.backend.torch.graph.modules.AddressBookEntry],
     where each entry stores the information needed to gather the inputs to each (possibly folded)
     torch module.
     """

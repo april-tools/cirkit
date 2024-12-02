@@ -22,7 +22,7 @@ class LayerAddressBook(AddressBook):
     """The address book data structure for the circuits.
     See [AbstractTorchCircuit][cirkit.backend.torch.circuits.AbstractTorchCircuit].
     The address book stores a list of
-    [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
+    [AddressBookEntry][cirkit.backend.torch.graph.modules.AddressBookEntry],
     where each entry stores the information needed to gather the inputs to each (possibly folded)
     circuit layer.
     """
@@ -257,7 +257,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 
 class TorchCircuit(AbstractTorchCircuit):
     """The torch circuit implementation.
-    Differently from [TorchConstantCircuit][circkit.backend.torch.circuits.TorchConstantCircuit],
+    Differently from [TorchConstantCircuit][cirkit.backend.torch.circuits.TorchConstantCircuit],
     this circuit expects some input tensor, i.e., the assignment to variables.
     """
 
@@ -284,7 +284,7 @@ class TorchCircuit(AbstractTorchCircuit):
 class TorchConstantCircuit(AbstractTorchCircuit):
     """The constant torch circuit implementation.
 
-    Differently from [TorchCircuit][circkit.backend.torch.circuits.TorchCircuit],
+    Differently from [TorchCircuit][cirkit.backend.torch.circuits.TorchCircuit],
     this circuit does not expect an input tensor. For instance, this circuit class is
     instantiated when a circuit encoding a partition function is compiled.
     """
