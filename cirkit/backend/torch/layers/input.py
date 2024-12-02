@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from torch import Tensor, distributions
-from torch.nn import functional as F
 
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
@@ -12,13 +11,7 @@ from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSe
 
 
 class TorchInputLayer(TorchLayer, ABC):
-    """The abstract base class for input layers."""
-
-    # NOTE: We use exactly the safe interface (F, H, B, K) -> (F, B, K) for __call__ of input layers:
-    #           1. Define arity(H)=num_channels(C), reusing the H dimension.
-    #           2. Define num_input_units(K)=num_vars(D), which reuses the K dimension.
-    #       For dimension D (variables), we should parse the input in circuit according to the
-    #       scope of the corresponding region node/symbolic input layer.
+    """The abstract base class for torch input layers."""
 
     def __init__(
         self,
@@ -28,15 +21,20 @@ class TorchInputLayer(TorchLayer, ABC):
         num_channels: int = 1,
         semiring: Semiring | None = None,
     ) -> None:
-        """Init class.
+        """Initialize a torch input layer.
 
         Args:
             scope_idx: A tensor of shape (F, D), where F is the number of folds, and
-                D is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
-                as a tensor of shape (1, D), i.e., with F = 1.
+                D is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape (D,) can be specified, which will be
+                interpreted as a tensor of shape (1, D), i.e., with F = 1.
             num_output_units: The number of output units.
             num_channels: The number of channels. Defaults to 1.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the scope index is not a vector or a matrix.
         """
         if len(scope_idx.shape) == 1:
             scope_idx = scope_idx.unsqueeze(dim=0)
@@ -54,14 +52,29 @@ class TorchInputLayer(TorchLayer, ABC):
 
     @property
     def scope_idx(self) -> Tensor:
+        """Retrieve the scope index tensor.
+
+        Returns:
+            The scope index tensor.
+        """
         return self._scope_idx
 
     @property
     def num_variables(self) -> int:
+        """The number of variables the input layer is defined on.
+
+        Returns:
+            The number of variables.
+        """
         return self.num_input_units
 
     @property
     def num_channels(self) -> int:
+        """The number of channels per variable.
+
+        Returns:
+            The number of channels.
+        """
         return self.arity
 
     @property
@@ -80,13 +93,45 @@ class TorchInputLayer(TorchLayer, ABC):
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
-        ...
+        """Invoke the forward function.
+
+        Args:
+            x: The tensor input to this layer, having shape (F, C, B, D), where F
+                is the number of folds, C is the number of channels,
+                B is the batch size, and D is the number of variables.
+
+        Returns:
+            Tensor: The tensor output of this layer, having shape (F, B, K), where K
+                is the number of output units.
+        """
 
     def integrate(self) -> Tensor:
-        raise TypeError(f"Integration is not implemented for layers of type {type(self)}")
+        r"""Integrate an input layer over all its variables' domain.
 
-    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
-        raise TypeError(f"Sampling is not implemented for layers of type {type(self)}")
+        Returns:
+            Tensor: The tensor result of the integration, having shape (F, K), where
+                F is the number of folds and K is the number of output units.
+
+        Raises:
+            TypeError: If integration is not supported by the layer.
+        """
+        raise TypeError(f"Integration is not supported for layers of type {type(self)}")
+
+    def sample(self, num_samples: int = 1) -> Tensor:
+        r"""If the input layer encodes a probability distribution, then sample from it.
+
+        Args:
+            num_samples: The number of data points to sample.
+
+        Returns:
+            Tensor: The tensorized sample, having shape (F, C, K, N), where
+                F is the number of folds, K is the number of output units,
+                C is the number of channels, and N is the number of samples.
+
+        Raises:
+            TypeError: If sampling is not supported by the layer.
+        """
+        raise TypeError(f"Sampling is not supported for layers of type {type(self)}")
 
     def extra_repr(self) -> str:
         return (
@@ -106,6 +151,10 @@ class TorchInputLayer(TorchLayer, ABC):
 
 
 class TorchConstantLayer(TorchInputLayer, ABC):
+    """An input layer encoding a constant vector function, i.e., a vector function
+    having empty scope.
+    """
+
     def __init__(
         self,
         num_output_units: int,
@@ -113,12 +162,24 @@ class TorchConstantLayer(TorchInputLayer, ABC):
         *,
         semiring: Semiring | None = None,
     ) -> None:
+        """Initializes a constant layer.
+
+        Args:
+            num_output_units: The number of output units.
+            num_folds: The number of folds.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+        """
         super().__init__(
             torch.empty(size=(num_folds, 0), dtype=torch.int64), num_output_units, semiring=semiring
         )
 
 
 class TorchEmbeddingLayer(TorchInputLayer):
+    r"""The embedding input layer, where each input function maps a discrete variable having
+    finite support \{0,\ldots,V-1\} to the corresponding entry of a V-th dimensional vector.
+    """
+
     def __init__(
         self,
         scope_idx: Tensor,
@@ -129,6 +190,29 @@ class TorchEmbeddingLayer(TorchInputLayer):
         weight: TorchParameter,
         semiring: Semiring | None = None,
     ) -> None:
+        r"""Initialize an embedding input layer.
+
+        Args:
+            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
+                D is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape (D,) can be specified, which will be
+                interpreted as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels.
+            num_states: The number of states V each variable can assume. Defaults to 2.
+            weight: The weight parameter of shape (F, K, C, N), where K is the number of output
+                units, C is the number of channels, and V is the number of states.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the scope contains more than one variable.
+            ValueError: If the number of states V is less than 2.
+            ValueError: If the parameter's shape is incorrect.
+        """
+        num_variables = scope_idx.shape[-1]
+        if num_variables != 1:
+            raise ValueError("The Embedding layer encodes univariate functions")
         if num_states <= 1:
             raise ValueError("The number of states must be at least 2")
         super().__init__(
@@ -182,55 +266,13 @@ class TorchEmbeddingLayer(TorchInputLayer):
 
 
 class TorchExpFamilyLayer(TorchInputLayer, ABC):
-    """The abstract base class for Exponential Family distribution layers.
-
-    Exponential Family dist:
-        p(x|θ) = exp(η(θ) · T(x) + log_h(x) - A(η)).
-    Ref: https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions.
-
-    However here we directly parameterize η instead of θ:
-        p(x|η) = exp(η · T(x) + log_h(x) - A(η)).
-    Implemtations provide inverse mapping from η to θ.
-
-    This implementation is fully factorized over the variables if used as multivariate, i.e., \
-    equivalent to num_vars (arity) univariate EF distributions followed by a Hadamard product of \
-    the same arity.
-    """
-
-    def __init__(
-        self,
-        scope_idx: Tensor,
-        num_output_units: int,
-        *,
-        num_channels: int = 1,
-        semiring: Semiring | None = None,
-    ) -> None:
-        """Init class.
-
-        Args:
-            scope_idx: A tensor of shape (F, D), where F is the number of folds, and
-                D is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
-                as a tensor of shape (1, D), i.e., with F = 1.
-            num_output_units: The number of output units.
-            num_channels: The number of channels. Defaults to 1.
-        """
-        super().__init__(
-            scope_idx,
-            num_output_units,
-            num_channels=num_channels,
-            semiring=semiring,
-        )
+    """The abstract base class for exponential family distribution layers.
+    An input layer that is an exponential family distribution must define two methods.
+    The first one is the ```log_unnormalized_likelihood```, used to compute the
+    possibly-unnormalized log-likelihood. The second one is the ```log_partition_function```,
+    used to compute the logarithm of the partition function."""
 
     def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
         x = self.log_unnormalized_likelihood(x)
         return self.semiring.map_from(x, LSESumSemiring)
 
@@ -240,20 +282,31 @@ class TorchExpFamilyLayer(TorchInputLayer, ABC):
 
     @abstractmethod
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
-        ...
+        """Compute the (possibly unnormalized) log-likelihood of the given inputs.
+
+        Args:
+            x: The input tensor.
+
+        Returns:
+            Tensor: The (possibly unnormalized) log-likelihood as a tensor of shape (F, K),
+                where F is the number of folds and K is the number of output units.
+        """
 
     @abstractmethod
     def log_partition_function(self) -> Tensor:
-        ...
+        """Compute the logarithm of the partition function of the layer.
+
+        Returns:
+            Tensor: The logarithm of the partition function as a tensor of shape (F, K),
+                where F is the number of folds and K is the number of output units.
+                Note that it will be a tensor of zeros if the layer encodes already normalized
+                exponential family distributions.
+        """
 
 
 class TorchCategoricalLayer(TorchExpFamilyLayer):
-    """The Categorical distribution layer.
+    """The Categorical distribution layer, parameterized by either probabilities or logits."""
 
-    This is fully factorized down to univariate Categorical distributions.
-    """
-
-    # DISABLE: It's designed to have these arguments.
     # pylint: disable-next=too-many-arguments
     def __init__(
         self,
@@ -266,7 +319,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits: TorchParameter | None = None,
         semiring: Semiring | None = None,
     ) -> None:
-        """Init class.
+        """Initialize a Categorical layer.
+
         Args:
             scope_idx: A tensor of shape (F, D), where F is the number of folds, and
                 D is the number of variables on which the input layers in each fold are defined on.
@@ -275,8 +329,18 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             num_output_units: The number of output units.
             num_channels: The number of channels.
             num_categories: The number of categories for Categorical distribution. Defaults to 2.
-            probs: The reparameterization for layer probs parameters.
-            logits: The reparameterization for layer logits parameters.
+            probs: The probabilities parameter of shape (F, K, C, V), where K is the number of
+                output units, C is the number of channels, and V is the number of categories.
+            logits: The logits parameter of shape (F, K, C, V), where K is the number of
+                output units, C is the number of channels, and V is the number of categories.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the scope contains more than one variable.
+            ValueError: If the number of categories is negative.
+            ValueError: If both the probs and logits parameters are provided, or none of them.
+            ValueError: If the parameter's shape is incorrect.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
@@ -297,21 +361,28 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         if logits is None:
             assert probs is not None
             if not self._valid_parameter_shape(probs):
-                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
-        else:
-            if not self._valid_parameter_shape(logits):
-                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
+                raise ValueError(
+                    f"Expected number of folds {self.num_folds} "
+                    f"and shape {self._probs_logits_shape} for 'probs', found"
+                    f"{probs.num_folds} and {probs.shape}, respectively"
+                )
+        elif not self._valid_parameter_shape(logits):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._probs_logits_shape} for 'logits', found"
+                f"{logits.num_folds} and {logits.shape}, respectively"
+            )
         self.probs = probs
         self.logits = logits
 
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return p.shape == (
-            self.num_output_units,
-            self.num_channels,
-            self.num_categories,
-        )
+        return p.shape == self._probs_logits_shape
+
+    @property
+    def _probs_logits_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels, self.num_categories
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -351,7 +422,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = self.logits()
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
 
-    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+    def sample(self, num_samples: int = 1) -> Tensor:
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Categorical(logits=logits)
         samples = dist.sample((num_samples,))  # (N, F, K, C)
@@ -374,11 +445,11 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         *,
         num_channels: int = 1,
         total_count: int = 1,
-        probs: Optional[TorchParameter] = None,
-        logits: Optional[TorchParameter] = None,
-        semiring: Optional[Semiring] = None,
+        probs: TorchParameter | None = None,
+        logits: TorchParameter | None = None,
+        semiring: Semiring | None = None,
     ) -> None:
-        """Init class.
+        """Initialize a Binomial layer.
 
         Args:
             scope_idx: A tensor of shape (F, D), where F is the number of folds, and
@@ -388,8 +459,18 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             num_output_units: The number of output units.
             num_channels: The number of channels.
             total_count: The number of trails. Defaults to 1.
-            probs: The reparameterization for layer probs parameters.
-            logits: The reparameterization for layer logits parameters.
+            probs: The probabilities parameter of shape (F, K, C), where K is the number of
+                output units, and C is the number of channels.
+            logits: The logits parameter of shape (F, K, C), where K is the number of
+                output units, and C is the number of channels.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the scope contains more than one variable.
+            ValueError: If the total count is not positive.
+            ValueError: If both the probs and logits parameters are provided, or none of them.
+            ValueError: If the parameter's shape is incorrect.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
@@ -408,11 +489,17 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         if logits is None:
             assert probs is not None
             if not self._valid_parameter_shape(probs):
-                raise ValueError(f"The number of folds and shape of 'probs' must match the layer's")
+                raise ValueError(
+                    f"Expected number of folds {self.num_folds} "
+                    f"and shape {self._probs_logits_shape} for 'probs', found"
+                    f"{probs.num_folds} and {probs.shape}, respectively"
+                )
         else:
             if not self._valid_parameter_shape(logits):
                 raise ValueError(
-                    f"The number of folds and shape of 'logits' must match the layer's"
+                    f"Expected number of folds {self.num_folds} "
+                    f"and shape {self._probs_logits_shape} for 'logits', found"
+                    f"{logits.num_folds} and {logits.shape}, respectively"
                 )
         self.probs = probs
         self.logits = logits
@@ -420,10 +507,11 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return p.shape == (
-            self.num_output_units,
-            self.num_channels,
-        )
+        return p.shape == self._probs_logits_shape
+
+    @property
+    def _probs_logits_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -456,7 +544,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         device = self.logits.device if self.logits is not None else self.probs.device
         return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
 
-    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+    def sample(self, num_samples: int = 1) -> Tensor:
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Binomial(self.total_count, logits=logits)
         samples = dist.sample((num_samples,))  # (num_samples, F, K, C)
@@ -465,10 +553,8 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
 
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
-    """The Normal distribution layer.
-
-    This is fully factorized down to univariate Gaussian distributions.
-    """
+    """The Gaussian distribution layer. Optionally, this layer can encode unnormalized Gaussian
+    distributions with the spefication of a log-partition function parameter."""
 
     def __init__(
         self,
@@ -481,7 +567,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         log_partition: TorchParameter | None = None,
         semiring: Semiring | None = None,
     ) -> None:
-        """Init class.
+        """Initialize a Gaussian layer.
 
         Args:
             scope_idx: A tensor of shape (F, D), where F is the number of folds, and
@@ -490,8 +576,21 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
                 as a tensor of shape (1, D), i.e., with F = 1.
             num_output_units: The number of output units.
             num_channels: The number of channels. Defaults to 1.
-            mean (AbstractTorchParameter): The reparameterization for layer parameters.
-            stddev (AbstractTorchParameter): The reparameterization for layer parameters.
+            mean: The mean parameter, having shape (F, K, C), where K is the number of
+                output units and C is the number of channels.
+            stddev: The standard deviation parameter, having shape (F, K, C), where K is the
+                number of output units and C is the number of channels.
+            log_partition: An optional parameter of shape (F, K, C), encoding the log-partition.
+                function. If this is not None, then the Gaussian layer encodes unnormalized
+                Gaussian likelihoods, which are then normalized with the given log-partition
+                function.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the scope contains more than one variable.
+            ValueError: If the mean and standard deviation parameter shapes are incorrect.
+            ValueError: If the log-partition function parameter shape is incorrect.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
@@ -502,22 +601,45 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             num_channels=num_channels,
             semiring=semiring,
         )
-        if not self._valid_parameters_shape(mean):
-            raise ValueError(f"The number of folds and shape of 'mean' must match the layer's")
-        if not self._valid_parameters_shape(stddev):
-            raise ValueError(f"The number of folds and shape of 'stddev' must match the layer's")
-        if log_partition is not None and not self._valid_parameters_shape(log_partition):
+        if not self._valid_mean_stddev_shape(mean):
             raise ValueError(
-                f"The number of folds and shape of 'log_partition' must match the layer's"
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._mean_stddev_shape} for 'mean', found"
+                f"{mean.num_folds} and {mean.shape}, respectively"
+            )
+        if not self._valid_mean_stddev_shape(stddev):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._mean_stddev_shape} for 'stddev', found"
+                f"{stddev.num_folds} and {stddev.shape}, respectively"
+            )
+        if log_partition is not None and not self._valid_log_partition_shape(log_partition):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._log_partition_shape} for 'log_partition', found"
+                f"{log_partition.num_folds} and {log_partition.shape}, respectively"
             )
         self.mean = mean
         self.stddev = stddev
         self.log_partition = log_partition
 
-    def _valid_parameters_shape(self, p: TorchParameter) -> bool:
+    def _valid_mean_stddev_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return p.shape == (self.num_output_units, self.num_channels)
+        return p.shape == self._mean_stddev_shape
+
+    def _valid_log_partition_shape(self, log_partition: TorchParameter) -> bool:
+        if log_partition.num_folds != self.num_folds:
+            return False
+        return log_partition.shape == self._log_partition_shape
+
+    @property
+    def _mean_stddev_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels
+
+    @property
+    def _log_partition_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -549,7 +671,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         log_partition = self.log_partition()  # (F, K, C)
         return torch.sum(log_partition, dim=2).unsqueeze(dim=1)
 
-    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+    def sample(self, num_samples: int = 1) -> Tensor:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
         samples = dist.sample((num_samples,))  # (N, F, K, C)
         samples = samples.permute(1, 3, 2, 0)  # (F, C, K, N)
@@ -557,6 +679,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
 
 class TorchConstantValueLayer(TorchConstantLayer):
+    """An input layer having empty scope and computing a constant value."""
+
     def __init__(
         self,
         num_output_units: int,
@@ -565,19 +689,34 @@ class TorchConstantValueLayer(TorchConstantLayer):
         value: TorchParameter,
         semiring: Semiring | None = None,
     ) -> None:
-        """Init class.
+        r"""Initialize a constant value input layer.
 
         Args:
             num_output_units: The number of output units.
-            value (Optional[Reparameterization], optional): Ignored. This layer has no parameters.
+            log_space: Whether the given value is in the log-space, i.e., this constant
+                layer should encode functions $\exp(x)$ rather than just x.
+            value: The tensor value encoded by the layer, given by a parameter of shape (F, K),
+                where F is the number of folds and K is the numer of output units.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the number of folds of the shape of the given value is incorrect.
         """
         super().__init__(
             num_output_units,
             value.num_folds,
             semiring=semiring,
         )
-        assert value.num_folds == self.num_folds
-        assert value.shape == (num_output_units,)
+        if value.num_folds != self.num_folds:
+            raise ValueError(
+                f"The value must have number of folds {self.num_folds}, "
+                f"but found {value.num_folds}"
+            )
+        if value.shape != (num_output_units,):
+            raise ValueError(
+                f"The shape of the value must be ({num_output_units},), " f"but found {value.shape}"
+            )
         self.value = value
         self.log_space = log_space
         self._source_semiring = LSESumSemiring if log_space else SumProductSemiring
@@ -591,14 +730,6 @@ class TorchConstantValueLayer(TorchConstantLayer):
         return {"value": self.value}
 
     def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki=0).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
         value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
         # (F, Ko) -> (F, B, O)
         value = value.expand(value.shape[0], x.shape[2], value.shape[2])
@@ -606,6 +737,8 @@ class TorchConstantValueLayer(TorchConstantLayer):
 
 
 class TorchEvidenceLayer(TorchConstantLayer):
+    """The input layer computing the output of another input layer on a given observation."""
+
     def __init__(
         self,
         layer: TorchInputLayer,
@@ -613,6 +746,21 @@ class TorchEvidenceLayer(TorchConstantLayer):
         observation: TorchParameter,
         semiring: Semiring | None = None,
     ) -> None:
+        """Initializes an evidence layer.
+
+        Args:
+            layer: The input layer on which compute the evidence of.
+            observation: The observation, i.e., the input to pass to the given input layer.
+                It must be a parameter of shape (F, C, D), where F is the number of folds
+                of the given layer, D is the number variables the given layer is defined on,
+                and C is the number channels per variable.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the number of folds or the shape of the given observation is incorrect,
+                with respect to the expected input shape of the given input layer.
+        """
         if observation.num_folds != layer.num_folds:
             raise ValueError(
                 f"The number of folds in the observation and in the layer should be the same, "
@@ -656,7 +804,7 @@ class TorchEvidenceLayer(TorchConstantLayer):
         obs = obs.expand(obs.shape[0], obs.shape[1], x.shape[2], obs.shape[3])  # (F, C, B, D)
         return self.layer(obs)  # (F, B, K)
 
-    def sample(self, num_samples: int = 1, x: Tensor | None = None) -> Tensor:
+    def sample(self, num_samples: int = 1) -> Tensor:
         if self.num_variables != 1:
             raise NotImplementedError("Sampling a multivariate Evidence layer is not implemented")
         # Sampling an evidence layer translates to return the given observation
@@ -665,32 +813,8 @@ class TorchEvidenceLayer(TorchConstantLayer):
         return obs.expand(size=(-1, -1, self.num_output_units, num_samples))
 
 
-# TODO: could be in backends/torch/utils, can be reused by PolyGaussian
-def polyval(coeff: Tensor, x: Tensor) -> Tensor:
-    """Evaluate polynomial given coefficients and point, with the shape for PolynomialLayer.
-
-    Args:
-        coeff (Tensor): The coefficients of the polynomial, shape (F, Ko, deg+1).
-        x (Tensor): The point of the variable, shape (F, H, B, Ki), where H=Ki=1.
-
-    Returns:
-        Tensor: The value of the polymonial, shape (F, B, Ko).
-    """
-    x = x.squeeze(dim=1)  # shape (F, H=1, B, Ki=1) -> (F, B, 1).
-    y = x.new_zeros(*x.shape[:-1], coeff.shape[-2])  # shape (F, B, Ko).
-
-    # TODO: iterating over dim=2 is inefficient
-    for a_n in reversed(coeff.unbind(dim=2)):  # Reverse iterator of the degree axis, shape (F, Ko).
-        # a_n shape (F, Ko) -> (F, 1, Ko).
-        y = torch.addcmul(a_n.unsqueeze(dim=1), x, y)  # y = a_n + x * y, by Horner's method.
-    return y  # shape (F, B, Ko).
-
-
 class TorchPolynomialLayer(TorchInputLayer):
-    """The Polynomial layer.
-
-    This is fully factorized down to univariate polynomials w.r.t. channels.
-    """
+    """The polynomial input layer, evaluating a vector of parameterized polynomials."""
 
     def __init__(
         self,
@@ -702,17 +826,22 @@ class TorchPolynomialLayer(TorchInputLayer):
         coeff: TorchParameter,
         semiring: Semiring | None = None,
     ) -> None:
-        """Init class.
+        """Initialize a polynomial layer.
 
         Args:
             scope_idx: A tensor of shape (F, D), where F is the number of folds, and
-                D is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape (D,) can be specified, which will be interpreted
-                as a tensor of shape (1, D), i.e., with F = 1.
-            num_output_units (int): The number of output units.
-            num_channels (int): The number of channels. Defaults to 1.
-            degree (int): The degree of polynomial.
-            coeff (AbstractTorchParameter): The reparameterization for layer parameters.
+                D is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape (D,) can be specified, which will be
+                interpreted as a tensor of shape (1, D), i.e., with F = 1.
+            num_output_units: The number of output units.
+            num_channels: The number of channels. Defaults to 1.
+            degree: The degree of polynomial.
+            coeff: The coefficient parameter, having shape (F, K, G + 1), where K is the number
+                of output units and G is the degree of the polynomial.
+
+        Raises:
+            ValueError: If the scope contains more than one variable.
+            ValueError: If the coefficients is not correct.
         """
         num_variables = scope_idx.shape[-1]
         if num_variables != 1:
@@ -727,13 +856,43 @@ class TorchPolynomialLayer(TorchInputLayer):
         )
         self.degree = degree
         if not self._valid_parameters_shape(coeff):
-            raise ValueError("The number of folds and shape of 'coeff' must match the layer's")
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._coeff_shape} for 'coeff', found"
+                f"{coeff.num_folds} and {coeff.shape}, respectively"
+            )
         self.coeff = coeff
 
     def _valid_parameters_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return p.shape == (self.num_output_units, self.degree + 1)
+        return p.shape == self._coeff_shape
+
+    @property
+    def _coeff_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.degree + 1
+
+    @staticmethod
+    def _polyval(coeff: Tensor, x: Tensor) -> Tensor:
+        """Evaluate polynomial given coefficients and point, with the shape for PolynomialLayer.
+
+        Args:
+            coeff: The coefficients of the polynomial, shape (F, Ko, deg+1).
+            x: The point of the variable, shape (F, H, B, Ki), where H=Ki=1.
+
+        Returns:
+            Tensor: The value of the polymonial, shape (F, B, Ko).
+        """
+        x = x.squeeze(dim=1)  # shape (F, H=1, B, Ki=1) -> (F, B, 1).
+        y = x.new_zeros(*x.shape[:-1], coeff.shape[-2])  # shape (F, B, Ko).
+
+        # TODO: iterating over dim=2 is inefficient
+        for a_n in reversed(
+            coeff.unbind(dim=2)
+        ):  # Reverse iterator of the degree axis, shape (F, Ko).
+            # a_n shape (F, Ko) -> (F, 1, Ko).
+            y = torch.addcmul(a_n.unsqueeze(dim=1), x, y)  # y = a_n + x * y, by Horner's method.
+        return y  # shape (F, B, Ko).
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -748,13 +907,5 @@ class TorchPolynomialLayer(TorchInputLayer):
         return {"coeff": self.coeff}
 
     def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H=C, B, Ki=D).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
         coeff = self.coeff()  # shape (F, Ko, dp1)
-        return self.semiring.map_from(polyval(coeff, x), SumProductSemiring)
+        return self.semiring.map_from(TorchPolynomialLayer._polyval(coeff, x), SumProductSemiring)

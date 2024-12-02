@@ -8,8 +8,9 @@ from cirkit.symbolic.parameters import (
     Parameter,
     ParameterFactory,
     ScaledSigmoidParameter,
+    SigmoidParameter,
     SoftmaxParameter,
-    TensorParameter, SigmoidParameter,
+    TensorParameter,
 )
 from cirkit.utils.scope import Scope
 
@@ -386,6 +387,7 @@ class BinomialLayer(InputLayer):
     """A symbolic Binomial layer, which is parameterized either by
     probabilities (yielding a normalized Binomial distribution) or by
     logits (yielding an unnormalized Binomial distribution)."""
+
     def __init__(
         self,
         scope: Scope,

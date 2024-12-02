@@ -94,9 +94,11 @@ class ParameterAddressBook(AddressBook):
 
 
 class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
-    """A torch parameter is a computational graph consisting of computational nodes,
-    and computing a tensor parameter that is then used by a circuit layer. Note that
-    a torch parameter does not take any tensor input.
+    r"""A torch parameter is a computational graph consisting of computational nodes,
+    and computing a tensor parameter that is then used by a circuit layer. That is,
+    given $F$ the number of folds, and $(K_1,\ldots,K_n)$ the shape of each parameter fold, a
+    torch parameter computes a tensor of shape $(F,K_1,\ldots,K_n)$.
+    Note that a torch parameter does not take any tensor as input.
     """
 
     @property
