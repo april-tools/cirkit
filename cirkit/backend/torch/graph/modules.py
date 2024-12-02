@@ -103,7 +103,8 @@ class AddressBookEntry:
 
 class AddressBook(ABC):
     """The address book data structure, sometimes also known as book-keeping.
-    The address book stores a list of [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
+    The address book stores a list of
+    [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
     where each entry stores the information needed to gather the inputs to each (possibly folded)
     torch module.
     """
@@ -178,14 +179,14 @@ class AddressBook(ABC):
             The same address book where the tensors contained in it have moved to the chosen device.
         """
 
-        def set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
+        def _set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
             return AddressBookEntry(
                 entry.module,
                 entry.in_module_ids,
                 [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
             )
 
-        self._entries = [set_book_entry_device(entry) for entry in self._entries]
+        self._entries = [_set_book_entry_device(entry) for entry in self._entries]
         return self
 
     @abstractmethod
@@ -291,6 +292,9 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
         Returns:
             A new torch computational graph having the given roots as the output torch modules.
+
+        Raises:
+            ValueError: If the computational graph is folded.
         """
         if self.is_folded:
             raise ValueError("Cannot extract a sub-computational graph from a folded one")

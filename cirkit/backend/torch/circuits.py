@@ -21,7 +21,8 @@ from cirkit.utils.scope import Scope
 class LayerAddressBook(AddressBook):
     """The address book data structure for the circuits.
     See [AbstractTorchCircuit][cirkit.backend.torch.circuits.AbstractTorchCircuit].
-    The address book stores a list of [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
+    The address book stores a list of
+    [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
     where each entry stores the information needed to gather the inputs to each (possibly folded)
     circuit layer.
     """

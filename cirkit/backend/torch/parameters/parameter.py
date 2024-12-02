@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-from typing import cast
 
 import torch
 from torch import Tensor
@@ -21,7 +20,8 @@ from cirkit.backend.torch.parameters.nodes import TorchParameterNode
 class ParameterAddressBook(AddressBook):
     """The address book data structure for the parameter computational graphs.
     See [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter].
-    The address book stores a list of [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
+    The address book stores a list of
+    [AddressBookEntry][cirkit.backend.torch.modules.AddressBookEntry],
     where each entry stores the information needed to gather the inputs to each (possibly folded)
     node in the parameter computational graph.
     """
@@ -30,7 +30,7 @@ class ParameterAddressBook(AddressBook):
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchParameterNode | None, tuple[Tensor, ...]]]:
         # A useful function combining the modules outputs, and then possibly applying an index
-        def select_index(mids: list[int], idx: Tensor | None) -> Tensor:
+        def _select_index(mids: list[int], idx: Tensor | None) -> Tensor:
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
             else:
@@ -44,7 +44,7 @@ class ParameterAddressBook(AddressBook):
             # Catch the case there are some inputs coming from other modules
             if in_module_ids:
                 x = tuple(
-                    select_index(mids, in_idx)
+                    _select_index(mids, in_idx)
                     for mids, in_idx in zip(in_module_ids, entry.in_fold_idx)
                 )
                 yield entry.module, x
@@ -110,19 +110,16 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        """The shape of the computed tensor parameter, without considering
-            the number of folds. That is, if the number of folds
-            (see [TorchParameter.num_folds][cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
-            is $F$ and the shape is $(K_1,\ldots,K_n)$, it means the torch parameter
-            computes a tensor of shape $(F, K_1,\ldots,K_n)$.
+        r"""The shape of the computed tensor parameter, without considering
+        the number of folds. That is, if the number of folds
+        (see [TorchParameter.num_folds][cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
+        is $F$ and the shape is $(K_1,\ldots,K_n)$, it means the torch parameter
+        computes a tensor of shape $(F, K_1,\ldots,K_n)$.
 
         Returns:
             The shape of the computed tensor parameter, without considering the number of folds.
         """
         return self.outputs[0].shape
-
-    def subgraph(self, *roots: TorchParameterNode) -> "TorchParameter":
-        return cast(TorchParameter, super().subgraph(*roots))
 
     def reset_parameters(self) -> None:
         """Reset the parameters of the parameter computational graph."""
@@ -134,7 +131,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         return super().__call__()  # type: ignore[no-any-return,misc]
 
     def forward(self) -> Tensor:
-        """Evaluate the parameter computational graph.
+        r"""Evaluate the parameter computational graph.
 
         Returns:
             Tensor: The output parameter tensor, having shape $(F, K_1,\ldots K_n)$,
