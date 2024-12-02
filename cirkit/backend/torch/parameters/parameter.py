@@ -96,8 +96,8 @@ class ParameterAddressBook(AddressBook):
 class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     r"""A torch parameter is a computational graph consisting of computational nodes,
     and computing a tensor parameter that is then used by a circuit layer. That is,
-    given $F$ the number of folds, and $(K_1,\ldots,K_n)$ the shape of each parameter fold, a
-    torch parameter computes a tensor of shape $(F,K_1,\ldots,K_n)$.
+    given F the number of folds, and (K_1,\ldots,K_n) the shape of each parameter fold, a
+    torch parameter computes a tensor of shape (F,K_1,\ldots,K_n).
     Note that a torch parameter does not take any tensor as input.
     """
 
@@ -115,8 +115,8 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         r"""The shape of the computed tensor parameter, without considering
         the number of folds. That is, if the number of folds
         (see [TorchParameter.num_folds][cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
-        is $F$ and the shape is $(K_1,\ldots,K_n)$, it means the torch parameter
-        computes a tensor of shape $(F, K_1,\ldots,K_n)$.
+        is F and the shape is (K_1,\ldots,K_n), it means the torch parameter
+        computes a tensor of shape (F, K_1,\ldots,K_n).
 
         Returns:
             The shape of the computed tensor parameter, without considering the number of folds.
@@ -136,8 +136,8 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         r"""Evaluate the parameter computational graph.
 
         Returns:
-            Tensor: The output parameter tensor, having shape $(F, K_1,\ldots K_n)$,
-                where $F$ is the number of folds, and $(K_1,\ldots,K_n)$ is the shape
+            Tensor: The output parameter tensor, having shape (F, K_1,\ldots K_n),
+                where F is the number of folds, and (K_1,\ldots,K_n) is the shape
                 of each parameter tensor slice.
         """
         return self.evaluate()
