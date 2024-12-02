@@ -9,7 +9,7 @@ from cirkit.symbolic.parameters import (
     ParameterFactory,
     ScaledSigmoidParameter,
     SoftmaxParameter,
-    TensorParameter,
+    TensorParameter, SigmoidParameter,
 )
 from cirkit.utils.scope import Scope
 
@@ -383,6 +383,9 @@ class CategoricalLayer(InputLayer):
 
 
 class BinomialLayer(InputLayer):
+    """A symbolic Binomial layer, which is parameterized either by
+    probabilities (yielding a normalized Binomial distribution) or by
+    logits (yielding an unnormalized Binomial distribution)."""
     def __init__(
         self,
         scope: Scope,
@@ -395,6 +398,25 @@ class BinomialLayer(InputLayer):
         logits_factory: ParameterFactory | None = None,
         probs_factory: ParameterFactory | None = None,
     ):
+        """Initializes a Binomial layer.
+
+        Args:
+            scope: The variables scope the layer depends on.
+            num_output_units: The number of Categorical units in the layer.
+            num_channels: The number of channels per variable.
+            total_count: The number of total counts for each variable and channel.
+            logits: The logits parameter of shape (K, C), where K is the number of output units,
+                C is the number of channels. If it is None,
+                then either the probabilities parameter is used (if it is not None) or a
+                probabilities parameter parameterized by a
+                [SigmoidParameter][cirkit.symbolic.parameters.SigmoidParameter].
+            probs: The probabilities parameter of shape (K, C) (see logits parameter
+                description). If it is None, then the logits parameter must be specified.
+            logits_factory: A factory used to construct the logits parameter, if neither logits nor
+                probabilities are given.
+            probs_factory: A factory used to construct the probabilities parameter, if neither
+                logits nor probabilities nor the logits parameter factory are given.
+        """
         if logits is not None and probs is not None:
             raise ValueError("At most one between 'logits' and 'probs' can be specified")
         if logits_factory is not None and probs_factory is not None:
@@ -410,12 +432,10 @@ class BinomialLayer(InputLayer):
                 logits = logits_factory(self._probs_logits_shape)
             elif probs_factory is not None:
                 probs = probs_factory(self._probs_logits_shape)
-            else:
-                logits = Parameter.from_input(
-                    TensorParameter(
-                        *self._probs_logits_shape,
-                        initializer=NormalInitializer(0.0, total_count * 0.01),
-                    )
+            else:  # Defaults to probs with sigmoid parameterization
+                probs = Parameter.from_unary(
+                    SigmoidParameter(self._probs_logits_shape),
+                    TensorParameter(*self._probs_logits_shape, initializer=NormalInitializer()),
                 )
         if logits is not None and logits.shape != self._probs_logits_shape:
             raise ValueError(

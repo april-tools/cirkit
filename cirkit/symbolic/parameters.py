@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import ChainMap
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from functools import cached_property
 from itertools import chain
@@ -647,6 +647,18 @@ class LogSoftmaxParameter(EntrywiseReduceParameterOp):
 
 
 class MixingWeightParameter(UnaryParameterOp):
+    r"""The symbolic mixing weights parameter node, which takes as input a matrix $\mathbf{V}$
+    of shape $(K, H)$, where $K$ is the number of units and $H$ is the arity of a
+    [SumLayer][cirkit.symbolic.layers.SumLayer], and returns a matrix $\mathbf{W}$ of shape
+    $(K, K * H)$, where $\mathbf{W}$ is the column-wise concatenation of matrices
+    $\{ \mathrm{diag}(\mathbf{v}_{:i}) \}_{i=1}^H$, $\mathbf{v}_{:i}$ denotes the $i$-th column
+    of $\mathbf{V} and $\mathrm{diag}$ transforms a vector to a diagonal matrix.
+
+    This parameter node is used in
+    [mixing_weight_factory][cirkit.symbolic.parameters.mixing_weight_factory] as to parameterize
+    a sum layer encoding a weighted combination of its input vectors.
+    """
+
     def __init__(self, in_shape: tuple[int, ...]):
         if len(in_shape) != 2:
             raise ValueError(f"Expected shape (num_units, arity), but found {in_shape}")
@@ -835,7 +847,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
     def __init__(
         self,
         nodes: Sequence[ParameterNode],
-        in_nodes: dict[ParameterNode, Sequence[ParameterNode]],
+        in_nodes: Mapping[ParameterNode, Sequence[ParameterNode]],
         outputs: Sequence[ParameterNode],
     ):
         super().__init__(nodes, in_nodes, outputs)
