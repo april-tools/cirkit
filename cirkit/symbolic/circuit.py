@@ -18,13 +18,12 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import ParameterFactory
 from cirkit.symbolic.parameters import (
-    ConstantParameter,
     Parameter,
     ParameterFactory,
-    TensorParameter,
+    TensorParameter
 )
+from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.templates.logic import (
     BottomNode,
     ConjunctionNode,
@@ -929,8 +928,8 @@ class Circuit(DiAcyclicGraph[Layer]):
             # default to unitary weights
             def weight_factory(n: tuple[int]) -> Parameter:
                 # locally import numpy to avoid dependency on the whole file
-                import numpy as np
-                return Parameter.from_input(ConstantParameter(*n, value=np.ones(n)))
+                initializer = ConstantTensorInitializer(1.0)
+                return Parameter.from_input(TensorParameter(*n, initializer=initializer))
 
         # map each input literal to a symbolic input layer
         for i in simplified_graph.inputs:
