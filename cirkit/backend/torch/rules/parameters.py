@@ -37,6 +37,7 @@ from cirkit.symbolic.parameters import (
     ConjugateParameter,
     ConstantParameter,
     ExpParameter,
+    FunctionParameter,
     GaussianProductLogPartition,
     GaussianProductMean,
     GaussianProductStddev,
@@ -105,6 +106,16 @@ def compile_reference_parameter(
     # and wrap it in a pointer parameter node.
     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+
+def compile_function_parameter(
+    compiler: "TorchCompiler", p: FunctionParameter
+) -> TorchFunctionParameter:
+    if compiler.state.has_compiled_function(p.function):
+        compiled_fn = compiler.state.retrieve_compiled_function(p.function)
+    else:
+        compiled_fn = compiler.compile_function(p.function)
+    return TorchFunctionParameter(*p.shape, function=compiled_fn, name=p.name, index=p.index)
 
 
 def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
@@ -263,6 +274,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCom
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
+    FunctionParameter: compile_function_parameter,
     IndexParameter: compile_index_parameter,
     SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,

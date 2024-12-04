@@ -2,10 +2,13 @@ import functools
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from itertools import chain
+from tokenize import group
 from typing import cast
 
 import torch
 from torch import Tensor
+from torch.cuda import graph
+from torch.overrides import TorchFunctionMode
 
 from cirkit.backend.compiler import (
     AbstractCompiler,
@@ -398,6 +401,18 @@ def _fold_parameter_nodes_group(
             )
         )
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
+    # Catch the case we are folding parameters obtained from an external function
+    if issubclass(fold_node_cls, TorchFunctionParameter):
+        assert all(isinstance(p, TorchFunctionParameter) for p in group)
+        if len(group) == 1:
+            # Catch the case we are folding a single torch function parameter
+            # In such a case, we just return it as it is
+            return group[0]
+        # Catch the case we are folding multiple torch function parameters
+        fold_idx: list[int] = list(chain.from_iterable(p.index for p in group))
+        return TorchFunctionParameter(
+            *group[0].shape, function=group[0].function, name=group[0].name, fold_idx=fold_idx
+        )
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)
     return fold_node_cls(**group[0].config, num_folds=len(group))

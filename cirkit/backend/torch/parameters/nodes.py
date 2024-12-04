@@ -279,6 +279,47 @@ class TorchPointerParameter(TorchParameterInput):
         return x[self._fold_idx]
 
 
+class TorchFunctionParameter(TorchParameterInput):
+    def __init__(
+        self, *shape: int, function: TorchLazyFunction, name: str, fold_idx: int | list[int]
+    ):
+        fold_idx = fold_idx if isinstance(fold_idx, list) else [fold_idx]
+        super().__init__(num_folds=len(fold_idx))
+        self._shape = shape
+        self._function = function
+        self._name = name
+        self.register_buffer("_fold_idx", torch.tensor(fold_idx))
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self._shape
+
+    @property
+    def function(self) -> TorchLazyFunction:
+        return self._function
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {
+            "shape": self._shape,
+            "function": self._function,
+            "name": self._name,
+            "fold_idx": self._fold_idx,
+        }
+
+    def forward(self) -> Tensor:
+        # A dictionary from parameter tensor names to their tensor value
+        y = self._function()
+        # Select the parameter tensor we want by using the name
+        y = y[self._name]  # shape: (num_slices, K_1, ..., K_n)
+        # Slice the tensor by using the fold index
+        return y[self._fold_idx]  # shape: (F, K_1, \ldots, K_n)
+
+
 class TorchParameterOp(TorchParameterNode, ABC):
     def __init__(self, *in_shapes: tuple[int, ...], num_folds: int = 1):
         super().__init__(num_folds=num_folds)
