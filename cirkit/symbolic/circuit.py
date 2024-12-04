@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum, auto
 from functools import cached_property
@@ -90,7 +90,9 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
     which can be either a sum or product layer.
     """
 
-    def __init__(self, layers: Sequence[Layer], in_layers: dict[Layer, list[Layer]], output: Layer):
+    def __init__(
+        self, layers: Sequence[Layer], in_layers: Mapping[Layer, list[Layer]], output: Layer
+    ):
         """Initializes a circuit block.
 
         Args:
@@ -123,20 +125,20 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
         return self.node_outputs(sl)
 
     @property
-    def layers_inputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_inputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the sequence of inputs to each layer.
 
         Returns:
-            Dict[Layer, Sequence[Layer]]:
+            Mapping[Layer, Sequence[Layer]]:
         """
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_outputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the sequence of outputs of each layer.
 
         Returns:
-            Dict[Layer, Sequence[Layer]]:
+            Mapping[Layer, Sequence[Layer]]:
         """
         return self.nodes_outputs
 
@@ -281,7 +283,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         self,
         num_channels: int,
         layers: Sequence[Layer],
-        in_layers: dict[Layer, Sequence[Layer]],
+        in_layers: Mapping[Layer, Sequence[Layer]],
         outputs: Sequence[Layer],
         *,
         operation: CircuitOperation | None = None,
@@ -368,7 +370,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         return self.node_outputs(sl)
 
     @property
-    def layers_inputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_inputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the list of inputs to each layer.
 
         Returns:
@@ -377,7 +379,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_outputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the list of outputs of each layer.
 
         Returns:
@@ -421,9 +423,17 @@ class Circuit(DiAcyclicGraph[Layer]):
         """
         return (sl for sl in self.layers if isinstance(sl, ProductLayer))
 
-    def subgraph(self, *roots: Layer) -> "Circuit":
-        layers, in_layers = subgraph(roots, self.layer_inputs)
-        return type(self)(self.num_channels, layers, in_layers, outputs=roots)
+    def subgraph(self, *outputs: Layer) -> "Circuit":
+        """Retrieve the sub-circuit having the given layers as outputs.
+
+        Args:
+            *outputs: The output layers.
+
+        Returns:
+            The sub-circuit having the given layers as outputs.
+        """
+        layers, in_layers = subgraph(outputs, self.layer_inputs)
+        return Circuit(self.num_channels, layers, in_layers, outputs=outputs)
 
     ##################################### Structural properties ####################################
 

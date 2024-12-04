@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from functools import cached_property
 from typing import Any
 
+import torch
 from torch import Tensor
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
@@ -11,7 +12,7 @@ from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
 class TorchLayer(AbstractTorchModule, ABC):
-    """The abstract base class for all layers."""
+    """The abstract base class for all layers implemented in torch."""
 
     def __init__(
         self,
@@ -22,13 +23,20 @@ class TorchLayer(AbstractTorchModule, ABC):
         semiring: Semiring | None = None,
         num_folds: int = 1,
     ) -> None:
-        """Init class.
+        """Initialize a layer.
 
         Args:
-            num_input_units (int): The number of input units.
-            num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer. Defaults to 1.
-            num_folds (int): The number of channels. Defaults to 1.
+            num_input_units: The number of input units.
+            num_output_units: The number of output units.
+            arity: The arity of the layer.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+            num_folds: The number of folds.
+
+        Raises:
+            ValueError: If the number of input units is negative.
+            ValueError: If the number of output units is not positive.
+            VAlueError: If the arity is not positive.
         """
         if num_input_units < 0:
             raise ValueError("The number of input units must be non-negative")
@@ -45,10 +53,24 @@ class TorchLayer(AbstractTorchModule, ABC):
     @property
     @abstractmethod
     def config(self) -> Mapping[str, Any]:
-        ...
+        """Retrieves the configuration of the layer, i.e., a dictionary mapping hyperparameters
+        of the layer to their values. The hyperparameter names must match the argument names in
+        the ```__init__``` method.
+
+        Returns:
+            Mapping[str, Any]: A dictionary from hyperparameter names to their value.
+        """
 
     @property
     def params(self) -> Mapping[str, TorchParameter]:
+        """Retrieve the torch parameters of the layer, i.e., a dictionary mapping the names of
+        the torch parameters to the actual torch parameter instance. The parameter names must
+        match the argument names in the```__init__``` method.
+
+        Returns:
+            Mapping[str, TorchParameter]: A dictionary from parameter names to the corresponding
+                torch parameter instance.
+        """
         return {}
 
     @property
@@ -61,46 +83,33 @@ class TorchLayer(AbstractTorchModule, ABC):
         """
         return {}
 
-    # Expected to be fixed, so use cached property to avoid recalculation.
     @cached_property
     def num_parameters(self) -> int:
-        """The number of parameters."""
-        return sum(p.numel() for p in self.parameters())
-
-    # Expected to be fixed, so use cached property to avoid recalculation.
-    @cached_property
-    def num_buffers(self) -> int:
-        """The number of buffers."""
-        return sum(buffer.numel() for buffer in self.buffers())
-
-    # We should run forward with layer(x) instead of layer.forward(x). However, in nn.Module, the
-    # typing and docstring for forward is not auto-copied to __call__. Therefore, we override
-    # __call__ here to provide a complete interface and documentation for layer(x).
-    # NOTE: Should we want to change the interface or docstring of forward in subclasses, __call__
-    #       also needs to be overriden to sync the change.
-    # TODO: if pytorch finds a way to sync forward and __call__, we can remove this __call__
-    def __call__(self, x: Tensor) -> Tensor:
-        """Invoke the forward function.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
+        """Retrieve the number of scalar parameters. Note that if a parameter is complex-valued,
+        this will double count them.
 
         Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
+            The number of scalar parameters.
         """
+        return sum(2 * p.numel() if torch.is_complex(p) else p.numel() for p in self.parameters())
+
+    @cached_property
+    def num_buffers(self) -> int:
+        """Retrieve the number of scalar buffers. Note that if a buffer is complex-valued,
+        this will double count them.
+
+        Returns:
+            The number of scalar buffers.
+        """
+        return sum(2 * b.numel() if torch.is_complex(b) else b.numel() for b in self.buffers())
+
+    def __call__(self, x: Tensor) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
+        ...
 
     def extra_repr(self) -> str:
         return (

@@ -1,5 +1,5 @@
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Generic, TypeVar
 
 NodeType = TypeVar("NodeType")
@@ -119,7 +119,7 @@ class Graph(Generic[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: dict[NodeType, Sequence[NodeType]],
+        in_nodes: Mapping[NodeType, Sequence[NodeType]],
     ):
         self._nodes = nodes
         self._in_nodes = in_nodes
@@ -136,11 +136,11 @@ class Graph(Generic[NodeType]):
         return self._nodes
 
     @property
-    def nodes_inputs(self) -> dict[NodeType, Sequence[NodeType]]:
+    def nodes_inputs(self) -> Mapping[NodeType, Sequence[NodeType]]:
         return self._in_nodes
 
     @property
-    def nodes_outputs(self) -> dict[NodeType, Sequence[NodeType]]:
+    def nodes_outputs(self) -> Mapping[NodeType, Sequence[NodeType]]:
         return self._out_nodes
 
     @property
@@ -152,7 +152,7 @@ class DiAcyclicGraph(Graph[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: dict[NodeType, Sequence[NodeType]],
+        in_nodes: Mapping[NodeType, Sequence[NodeType]],
         outputs: Sequence[NodeType],
     ):
         super().__init__(nodes, in_nodes)
@@ -177,7 +177,7 @@ class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: dict[NodeType, Sequence[NodeType]],
+        in_nodes: Mapping[NodeType, Sequence[NodeType]],
         outputs: Sequence[NodeType],
     ):
         if len(outputs) != 1:
