@@ -89,13 +89,33 @@ class Layer(ABC):
         """
         return {}
 
-    def copyref(self) -> "Layer":
-        """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic parameters
-        are copied by reference, thus effectively creating a symbolic parameter sharing between
-        the new layer and the layer being copied.
+    def copy(self, *, params: Mapping[str, Parameter] | None = None) -> "Layer":
+        """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic
+        parameters are copied by reference. If some parameters are specified, then
+        these are replaced when performing the copy by reference.
+
+        Args:
+            params: The parameters that must be replaced when performing the copy.
+                It can be None. If it is None, then this method defaults to a _shallow_
+                copy of the layer.
 
         Returns:
-            A shallow copy of the layer, with reference to the parameters.
+            A shallow copy of the layer.
+        """
+        if params is None:
+            return type(self)(**self.config, **self.params)
+        updated_params = dict(self.params)
+        updated_params.update(params)
+        return type(self)(**self.config, **updated_params)
+
+    def copyref(self) -> "Layer":
+        """Creates a _reference_ copy of the layer, i.e., a shallow copy where the symbolic
+        parameters are re-instantiated and where the tensor parameters are replaced to
+        reference parameters, thus effectively creating a symbolic parameter sharing between
+        the new layer and the layer being copied by _reference_.
+
+        Returns:
+            A reference copy of the layer, with reference to the parameters.
         """
         ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
         return type(self)(**self.config, **ref_params)
@@ -110,6 +130,7 @@ class Layer(ABC):
             f"arity={self.arity}, "
             f"config=({config_repr}), "
             f"params=({params_repr})"
+            ")"
         )
 
 
@@ -160,7 +181,7 @@ class InputLayer(Layer, ABC):
             f"scope={self.scope}, "
             f"num_channels={self.arity}, "
             f"num_output_units={self.num_output_units}, "
-            f"config=({config_repr})"
+            f"config=({config_repr}), "
             f"params=({params_repr})"
             ")"
         )

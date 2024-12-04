@@ -35,8 +35,8 @@ class Parameterization:
     """The settings for a parameterization: the initialization method, the activation
     function to use, and the data type of the parameter tensor."""
 
-    initialization: str
-    """The initialization method."""
+    initialization: str = "normal"
+    """The initialization method. Defaults to 'normal', i.e., a standard normal."""
     activation: str = "none"
     """The activation function. Defaults to 'none', i.e., no activation."""
     dtype: str = "real"
