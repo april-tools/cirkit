@@ -40,15 +40,15 @@ class IntegrateQuery(Query):
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
-            x: An input batch of shape (B, C, D), where B is the batch size, C is the number of
-                channels per variable, and D is the number of variables.
+            x: An input batch of shape $(B, C, D)$, where $B$ is the batch size, $C$ is the number
+                of channels per variable, and $D$ is the number of variables.
             integrate_vars: The variables to integrate. It must be a subset of the variables on
                 which the circuit given in the constructor is defined on.
 
         Returns:
-            The result of the integration query, given as a tensor of shape (B, O, K),
-                where B is the batch size, O is the number of output vectors of the circuit, and
-                K is the number of units in each output vector.
+            The result of the integration query, given as a tensor of shape $(B, O, K)$,
+                where $B$ is the batch size, $O$ is the number of output vectors of the circuit, and
+                $K$ is the number of units in each output vector.
         """
         if not integrate_vars <= self._circuit.scope:
             raise ValueError("The variables to marginalize must be a subset of the circuit scope")

@@ -122,7 +122,7 @@ class InputLayer(Layer, ABC):
         Args:
             scope: The variables scope of the layer.
             num_output_units: The number of input units in the layer.
-            num_channels: The number of channels for each variable in the scope. Defaults to 1.
+            num_channels: The number of channels for each variable in the scope.
 
         Raises:
             ValueError: If the number of outputs or the number of channels are not positive.
@@ -183,13 +183,13 @@ class EvidenceLayer(ConstantLayer):
     The only parameter of an evidence layer is a complete observation of the variables."""
 
     def __init__(self, layer: InputLayer, *, observation: Parameter):
-        """Initializes a symbolic evidence layer.
+        r"""Initializes a symbolic evidence layer.
 
         Args:
             layer: The symbolic input layer to condition, i.e., to evaluate on the observation.
             observation: The observation stored as a parameter that outputs a constant (i.e.,
-                non-learnable) tensor of shape (C, D), where D is the number of variable the
-                symbolic input layer is defined on, and C is the number of channels per variable.
+                non-learnable) tensor of shape $(C, D)$, where $D$ is the number of variable the
+                symbolic input layer is defined on, and $C$ is the number of channels per variable.
 
         Raises:
             ValueError: If the observation parameter shape has not two dimensions, or if the
@@ -226,9 +226,9 @@ class EvidenceLayer(ConstantLayer):
 
 
 class EmbeddingLayer(InputLayer):
-    """A symbolic Embedding layer, which is parameterized by as many embedding matrices as
-    the number of variables. Each embedding matrix has size M x N, where M is the number
-    of output units of the layer, and N is the number of states each variable can assume.
+    r"""A symbolic Embedding layer, which is parameterized by as many embedding matrices as
+    the number of variables. Each embedding matrix has size $M\times N$, where $M$ is the number
+    of output units of the layer, and $N$ is the number of states each variable can assume.
     """
 
     def __init__(
@@ -241,16 +241,16 @@ class EmbeddingLayer(InputLayer):
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
     ):
-        """Initializes an Embedding layer.
+        r"""Initializes an Embedding layer.
 
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Categorical units in the layer.
             num_channels: The number of channels per variable.
             num_states: The number of categories for each variable and channel.
-            weight: The weight parameter of shape (K, C, N), where K is the number of output units,
-                C is the number of channels, and N is the number of states. If it is None,
-                then either the weight factory is used (if it is not None) or a
+            weight: The weight parameter of shape $(K, C, N)$, where $K$ is the number of output
+                units, $C$ is the number of channels, and $N$ is the number of states. If it is
+                None, then either the weight factory is used (if it is not None) or a
                 weight parameter is initialized.
             weight_factory: A factory used to construct the weight parameter,
                 if it is not given
@@ -311,19 +311,19 @@ class CategoricalLayer(InputLayer):
         logits_factory: ParameterFactory | None = None,
         probs_factory: ParameterFactory | None = None,
     ):
-        """Initializes a Categorical layer.
+        r"""Initializes a Categorical layer.
 
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Categorical units in the layer.
             num_channels: The number of channels per variable.
             num_categories: The number of categories for each variable and channel.
-            logits: The logits parameter of shape (K, C, N), where K is the number of output units,
-                C is the number of channels, and N is the number of categories. If it is None,
-                then either the probabilities parameter is used (if it is not None) or a
+            logits: The logits parameter of shape $(K, C, N)$, where $K$ is the number of output
+                units, $C$ is the number of channels, and $N$ is the number of categories. If it is
+                None, then either the probabilities parameter is used (if it is not None) or a
                 probabilities parameter parameterized by a
                 [SoftmaxParameter][cirkit.symbolic.parameters.SoftmaxParameter].
-            probs: The probabilities parameter of shape (K, C, N) (see logits parameter
+            probs: The probabilities parameter of shape $(K, C, N)$ (see logits parameter
                 description). If it is None, then the logits parameter must be specified.
             logits_factory: A factory used to construct the logits parameter, if neither logits nor
                 probabilities are given.
@@ -400,19 +400,19 @@ class BinomialLayer(InputLayer):
         logits_factory: ParameterFactory | None = None,
         probs_factory: ParameterFactory | None = None,
     ):
-        """Initializes a Binomial layer.
+        r"""Initializes a Binomial layer.
 
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Categorical units in the layer.
             num_channels: The number of channels per variable.
             total_count: The number of total counts for each variable and channel.
-            logits: The logits parameter of shape (K, C), where K is the number of output units,
-                C is the number of channels. If it is None,
+            logits: The logits parameter of shape $(K, C)$, where $K$ is the number of output
+                units, $C$ is the number of channels. If it is None,
                 then either the probabilities parameter is used (if it is not None) or a
                 probabilities parameter parameterized by a
                 [SigmoidParameter][cirkit.symbolic.parameters.SigmoidParameter].
-            probs: The probabilities parameter of shape (K, C) (see logits parameter
+            probs: The probabilities parameter of shape $(K, C)$ (see logits parameter
                 description). If it is None, then the logits parameter must be specified.
             logits_factory: A factory used to construct the logits parameter, if neither logits nor
                 probabilities are given.
@@ -487,19 +487,19 @@ class GaussianLayer(InputLayer):
         mean_factory: ParameterFactory | None = None,
         stddev_factory: ParameterFactory | None = None,
     ):
-        """Initializes a Gaussian layer.
+        r"""Initializes a Gaussian layer.
 
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Gaussian units in the layer.
             num_channels: The number of channels per variable.
-            mean: The mean parameter of shape (K, C), where K is the number of output units, and
-                C is the number of channels. If it is None, then a default symbolic parameter will
+            mean: The mean parameter of shape $(K, C)$, where $K$ is the number of output units, and
+                $C$ is the number of channels. If it is None, then a default symbolic parameter will
                 be instantiated with a
                 [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
                 symbolic initializer.
-            stddev: The standard deviation parameter of shape (K, C), where K is the number of
-                output units, and C is the number of channels. If it is None, then a default
+            stddev: The standard deviation parameter of shape $(K, C)$, where $K$ is the number of
+                output units, and $C$ is the number of channels. If it is None, then a default
                 symbolic parameter will be instantiated with a
                 [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
                 symbolic initializer, which is then re-parameterized to be positve using a
@@ -579,14 +579,14 @@ class PolynomialLayer(InputLayer):
         coeff: Parameter | None = None,
         coeff_factory: ParameterFactory | None = None,
     ):
-        """Initializes a polynomial layer,
+        r"""Initializes a polynomial layer,
 
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of units each encoding a polynomial in the layer.
             num_channels: The number of channels per variable.
             degree: The degree of the polynomials.
-            coeff: The coefficient parameter of shape (K, degree + 1), where K is the
+            coeff: The coefficient parameter of shape $(K, \mathsf{degree} + 1)$, where $K$ is the
                 number of output units. If it is None, then either the coefficient factory
                 is used (if it not None), or a default
                 symbolic parameter will be instantiated with a
@@ -732,7 +732,7 @@ class KroneckerLayer(ProductLayer):
 
 class SumLayer(Layer):
     r"""The symbolic sum layer. A sum layer computes a matrix-by-vector product
-    $\mathbf{W} \mathbf{x}$, where $\mathbf{W}\in\bbR^{K_1\times HK_2}$, where $K_1$ is the number
+    $\mathbf{W} \mathbf{x}$, where $\mathbf{W}\in\mathbb{R}^{K_1\times HK_2}$, where $K_1$ is the number
     of output units, $K_2$ is the number of input units, and $H$ is the arity, i.e., the number of
     layers that are input to the sum layer.
     In the product $\mathbf{W} \mathbf{x}$ above, $\mathbf{x}$ is the vector obtained by
@@ -754,15 +754,15 @@ class SumLayer(Layer):
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
     ):
-        """Initializes a dense layer.
+        r"""Initializes a dense layer.
 
         Args:
             num_input_units: The number of units of the input layers.
             num_output_units: The number of sum units in the sum layer.
             arity: The arity of the layer, i.e., the number of input layers to the sum layer.
-                Defaults to 1.
             weight: The symbolic weight matrix parameter, having shape
-                (num_output_units, arity * num_input_units). It can be None.
+                $(K_o, K_i \times H)$, where $K_o$ is the number of output units, $K_i$ is the
+                number of input units, and $H$ is the arity. It can be None.
             weight_factory: A factory that constructs the symbolic weight matrix parameter,
                 if the given weight is None. If this factory is also None, then a weight
                 parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]

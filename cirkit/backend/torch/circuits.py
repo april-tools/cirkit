@@ -270,13 +270,13 @@ class TorchCircuit(AbstractTorchCircuit):
         following the topological ordering.
 
         Args:
-            x: The tensor input of the circuit, with shape (B, C, D), where B is the batch size,
-                C is the number of channels, and D is the number of variables.
+            x: The tensor input of the circuit, with shape $(B, C, D)$, where B is the batch size,
+                $C$ is the number of channels, and $D$ is the number of variables.
 
         Returns:
-            Tensor: The tensor output of the circuit, with shape (B, O, K),
-                where O is the number of vectorized outputs (i.e., the number of output layers),
-                and K is the number of scalars in each output (e.g., the number of classes).
+            Tensor: The tensor output of the circuit, with shape $(B, O, K)$,
+                where $O$ is the number of vectorized outputs (i.e., the number of output layers),
+                and $K$ is the number of scalars in each output (e.g., the number of classes).
         """
         return self._evaluate_layers(x)
 
@@ -298,9 +298,9 @@ class TorchConstantCircuit(AbstractTorchCircuit):
         following the topological ordering.
 
         Returns:
-            Tensor: The tensor output of the circuit, with shape (B, O, K),
-                where O is the number of vectorized outputs (i.e., the number of output layers),
-                and K is the number of scalars in each output (e.g., the number of classes).
+            Tensor: The tensor output of the circuit, with shape $(B, O, K)$,
+                where $O$ is the number of vectorized outputs (i.e., the number of output layers),
+                and $K$ is the number of scalars in each output (e.g., the number of classes).
         """
         # Evaluate the layers using some dummy input
         x = torch.empty(size=(1, self.num_channels, self.num_variables), device=self.device)
