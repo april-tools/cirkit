@@ -1,9 +1,9 @@
-from collections.abc import Iterable
 from collections import defaultdict
+from collections.abc import Iterable
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import Layer
-from cirkit.symbolic.parameters import TensorParameter, FunctionParameter, Parameter
+from cirkit.symbolic.parameters import FunctionParameter, Parameter, TensorParameter
 
 FunctionParameterSpecs = dict[str, tuple[int, ...]]
 
@@ -14,15 +14,18 @@ def parameterize(
     function: str,
     filter_layers: list[type[Layer]],
 ) -> tuple[Circuit, FunctionParameterSpecs]:
-    """
+    """Parameterize some layers of a symbolic circuit by means of an externally-provided function.
 
     Args:
-        circuit:
-        function:
-        filter_layers:
+        circuit: The symbolic circuit.
+        function: The function identifier to use.
+        filter_layers: The list of symbolic layer types to parameterize.
 
     Returns:
-        tuple[Circuit, FunctionParameterSpecs]:
+        tuple[Circuit, FunctionParameterSpecs]: A pair where the first element is a new symbolic
+            circuit whose tensor parameters have been substituted by the symbolic information that
+            the value of those parameters will come from an externally defined function. The second
+            element is a dictionary mapping coalesced tensor parameter names to their shape.
 
     Raises:
         ValueError: If the given circuit is the output of a circuit operator.
@@ -32,9 +35,7 @@ def parameterize(
     if circuit.operation is not None:
         raise ValueError("The circuit to parameterize must not be the output of a circuit operator")
 
-    def _filter_layers(
-        sls: Iterable[Layer]
-    ) -> tuple[list[Layer], list[tuple[Layer, list[str]]]]:
+    def _filter_layers(sls: Iterable[Layer]) -> tuple[list[Layer], list[tuple[Layer, list[str]]]]:
         # Retrieve the layers to externally parameterize, together with the list of identifiers
         # of the parameters to be externally parameterized
         rest_of_layers: list[Layer] = []
@@ -67,7 +68,9 @@ def parameterize(
     ) -> dict[tuple[type[Layer], tuple[str, ...], tuple[tuple[int, ...], ...]], list[Layer]]:
         # Group layers having the same layer type, parameters to parameterize externally,
         # and shape for each of the parameters
-        groups: dict[tuple[type[Layer], tuple[str, ...], tuple[tuple[int, ...], ...]], list[Layer]] = defaultdict(list)
+        groups: dict[
+            tuple[type[Layer], tuple[str, ...], tuple[tuple[int, ...], ...]], list[Layer]
+        ] = defaultdict(list)
         for sl, pnames in sls:
             sl_settings = (type(sl), tuple(pnames), tuple(sl.params[p].shape for p in pnames))
             groups[sl_settings].append(sl)
@@ -110,8 +113,9 @@ def parameterize(
                             *pgraph.shape,
                             function=function,
                             name=function_parameter_names[pname],
-                            index=i
-                    ))
+                            index=i,
+                        )
+                    )
                     for pname, pgraph in sl.params.items()
                 }
                 layers_map[sl] = sl.copy(params=sl_updated_params)
@@ -130,12 +134,7 @@ def parameterize(
         for prev_sl, sl in layers_map.items()
     }
     output_layers = [layers_map[prev_sli] for prev_sli in circuit.outputs]
-    circuit = Circuit(
-        circuit.num_channels,
-        layers,
-        in_layers=in_layers,
-        outputs=output_layers
-    )
+    circuit = Circuit(circuit.num_channels, layers, in_layers=in_layers, outputs=output_layers)
 
     # Return both the resulting circuit and the function parameter specifications
     return circuit, function_specs
