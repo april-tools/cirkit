@@ -8,6 +8,7 @@ from cirkit.backend.compiler import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
     CompiledCircuit,
+    ExternalModel,
     InitializerCompilationFunc,
     LayerCompilationFunc,
     ParameterCompilationFunc,
@@ -185,6 +186,28 @@ class PipelineContext(AbstractContextManager):
             The symbolic circuit associated to the given compiled one.
         """
         return self._compiler.get_symbolic_circuit(cc)
+
+    def add_external_model(self, model_id: str, model: ExternalModel):
+        """Register an external model implementation to the pipeline context.
+
+        Args:
+            model_id: The model identifier.
+            model: The external model object. For example, if using the torch backend, this can be
+                an object of type [torch.nn.Module][torch.nn.Module] whose forward method
+                returns a dictionary mapping parameter tensor names to their value.
+        """
+        self._compiler.add_external_model(model_id, model)
+
+    def get_external_model(self, model_id: str) -> ExternalModel:
+        """Retrieves the external model identifier by a model identifier.
+
+        Args:
+            model_id: The model identifier
+
+        Returns:
+            The external model object.
+        """
+        return self._compiler.get_external_model(model_id)
 
     def concatenate(self, *cc: CompiledCircuit) -> CompiledCircuit:
         """Circuit concatenation interface for compiled circuits.

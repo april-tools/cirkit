@@ -1,8 +1,9 @@
 import heapq
 import itertools
-from collections.abc import Iterable, Sequence
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from numbers import Number
-from typing import NamedTuple, TypeVar
+from typing import Iterable, NamedTuple, TypeVar
 
 import numpy as np
 
@@ -23,7 +24,7 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import ConstantParameter, Parameter
+from cirkit.symbolic.parameters import ConstantParameter, ModelParameter, Parameter, TensorParameter
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
@@ -701,3 +702,170 @@ def conjugate(
         output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.CONJUGATION, operands=(sc,)),
     )
+
+
+ModelParameterSpecs = dict[str, tuple[int, ...]]
+"""The model parameter specification. This is a map from a model id (a string) to the shape of
+the tensor it must compute."""
+
+
+def model_parameterize(
+    circuit: Circuit,
+    *,
+    model_id: str,
+    filter_layers: list[type[Layer]],
+) -> tuple[Circuit, ModelParameterSpecs]:
+    """Parameterize some layers of a symbolic circuit by means of an externally-provided model.
+
+    Args:
+        circuit: The symbolic circuit.
+        model_id: The model identifier to use.
+        filter_layers: The list of symbolic layer types to parameterize.
+
+    Returns:
+        tuple[Circuit, ModelParameterSpecs]: A pair where the first element is a new symbolic
+            circuit whose tensor parameters have been substituted by the symbolic information that
+            the value of those parameters will come from an externally defined model. The second
+            element is a dictionary mapping coalesced tensor parameter names to their shape.
+
+    Raises:
+        ValueError: If the given circuit is the output of a circuit operator.
+            That is, this function is designed for circuits that are entry points to a circuit
+            pipeline.
+    """
+    if circuit.operation is not None:
+        raise ValueError("The circuit to parameterize must not be the output of a circuit operator")
+
+    def _filter_layers(sls: Iterable[Layer]) -> Mapping[Layer, list[str]]:
+        # Retrieve the layers to externally parameterize, together with the list of
+        # identifiers of the parameters to be externally parameterized
+        layer_pnames: dict[Layer, list[str]] = {}
+        for sl in sls:
+            # First, we filter-out those layers that have not been specified
+            if not any(isinstance(sl, sl_cls) for sl_cls in filter_layers):
+                continue
+            # Second, we yield the layers that have at least one parameter computational graph
+            # consisting of a single tensor parameter. E.g., we drop a sum layer having
+            # a softmax re-parameterization, but we retain it if it has no re-parameterization
+            # In addition, we return the parameter name identifiers
+            layer_pnames[sl] = []
+            for pname, pgraph in sl.params.items():
+                if len(pgraph.nodes) > 1:
+                    continue
+                in_node = pgraph.nodes[0]
+                if not isinstance(in_node, TensorParameter):
+                    continue
+                layer_pnames[sl].append(pname)
+        return layer_pnames
+
+    def _coalesce_layers(
+        lps: Mapping[Layer, list[str]], group_id: int
+    ) -> tuple[
+        Mapping[Layer, dict[str, tuple[tuple[int, ...], str, int]]],
+        Mapping[str, tuple[int, ...]],
+        int,
+    ]:
+        # A mapping from a layer to a dictionary, which maps each name of the parameters
+        # to be externally parameterized to a tuple (i,ii), where (i) is the identifier of
+        # the tensor parameter to be externally computed, and (ii) is an index to such
+        # tensor parameter
+        coalesced_layer_pinfos: dict[Layer, dict[str, tuple[tuple[int, ...], str, int]]] = {}
+
+        # Group layers having the same layer type, parameters to parameterize externally,
+        # and shape for each of the parameters
+        groups: dict[
+            tuple[type[Layer], tuple[str, ...], tuple[tuple[int, ...], ...]], list[Layer]
+        ] = defaultdict(list)
+        for sl, pnames in lps.items():
+            sl_settings = (type(sl), tuple(pnames), tuple(sl.params[p].shape for p in pnames))
+            groups[sl_settings].append(sl)
+
+        # Iterate all layer groups and initialize the metadata
+        next_group_id = group_id
+        pname_model_specs: dict[str, tuple[str, tuple[int, ...]]] = {}
+        for (sl_class, pnames, pshapes), group in groups.items():
+            # Retrieve the layer class name
+            sl_class_name = sl_class.__name__
+
+            # Set the parameter group metadata, for each parmeter name
+            # This metadata includes the group tensor parameter name, and
+            # the shape of the group tensor parameter
+            for pname, pshape in zip(pnames, pshapes):
+                # E.g., "g151.SumLayer.weight"
+                group_pname = f"g{next_group_id}.{sl_class_name}.{pname}"
+                pname_model_specs[pname] = (group_pname, (len(group), *pshape))
+
+            # For each layer in the group, we store (i) the identifier of the
+            # tensor parameter to be externally computed, and (ii) an index to
+            # such tensor parameter
+            for i, sl in enumerate(group):
+                sl_pinfos: dict[str, tuple[tuple[int, ...], str, int]] = {}
+                for pname, pshape in zip(pnames, pshapes):
+                    # E.g., "g151.SumLayer.weight"
+                    group_name, _ = pname_model_specs[pname]
+                    sl_pinfos[pname] = (pshape, group_name, i)
+                coalesced_layer_pinfos[sl] = sl_pinfos
+
+            # Increment the group id
+            next_group_id += 1
+
+        # Construct the model specifications to return to the user (w.r.t. to each group here)
+        coalesced_model_specs: ModelParameterSpecs = {
+            group_name: group_pshape
+            for pname, (group_name, group_pshape) in pname_model_specs.items()
+        }
+        return coalesced_layer_pinfos, coalesced_model_specs, next_group_id
+
+    # A map from symbolic layers in the input circuit to the symbolic layers in the output circuit
+    layers_map: dict[Layer, Layer] = {}
+
+    # A dictionary mapping each introduced parameter tensor name to the corresponding tensor shape
+    model_specs: ModelParameterSpecs = {}
+
+    # Loop through each layer frontier obtained by the layerwise topological ordering
+    group_id = 0
+    for frontier in circuit.layerwise_topological_ordering():
+        # Filter-out the layers in the frontier that do not have to be externally parameterize
+        layer_pnames = _filter_layers(frontier)
+
+        # Coalesce the layers based on (i) the layer class and (ii) the shape of their parameters
+        coalesced_layer_pinfos, coalesced_model_specs, group_id = _coalesce_layers(
+            layer_pnames, group_id
+        )
+        model_specs.update(coalesced_model_specs)
+
+        # Do a shallow copy the layers in the frontier,
+        # and update the symbolic parameter computational graph of the layer
+        # parameters that need to be externally parameterized
+        for sl in frontier:
+            # Shallow copy the layers that do not need to be re-parameterized
+            pnames: list[str] | None = layer_pnames.get(sl, None)
+            if pnames is None:
+                layers_map[sl] = sl.copy()
+                continue
+
+            # Replace the parameter tensor to be externally parameterized
+            sl_params = {
+                pname: Parameter.from_input(
+                    ModelParameter(
+                        *pshape,
+                        model_id=model_id,
+                        name=name,
+                        index=index,
+                    )
+                )
+                for pname, (pshape, name, index) in coalesced_layer_pinfos[sl].items()
+            }
+            layers_map[sl] = sl.copy(params=sl_params)
+
+    # Construct the resulting circuit
+    layers = list(layers_map.values())
+    in_layers = {
+        sl: [layers_map[prev_sli] for prev_sli in circuit.layer_inputs(prev_sl)]
+        for prev_sl, sl in layers_map.items()
+    }
+    output_layers = [layers_map[prev_sli] for prev_sli in circuit.outputs]
+    circuit = Circuit(circuit.num_channels, layers, in_layers=in_layers, outputs=output_layers)
+
+    # Return both the resulting circuit and the model parameter specifications
+    return circuit, model_specs

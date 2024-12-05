@@ -150,18 +150,18 @@ class ConstantParameter(TensorParameter):
         return {"shape": self.shape, "value": self.value}
 
 
-class FunctionParameter(ParameterInput):
+class ModelParameter(ParameterInput):
     """A symbolic parameter whose value is computed by an externally-provided function.
     For example, this function can be the evaluation of a neural network.
     """
 
-    def __init__(self, *shape: int, function: str, name: str, index: int):
+    def __init__(self, *shape: int, model_id: str, name: str, index: int):
         """Initialize a symbolic function parameter.
 
         Args:
             shape: The shape of the parameter tensor, which is specified by the combination
                 of the arguments "function", "name" and "index" below.
-            function: The function name. This is a string identifier of the function that
+            model_id: The function name. This is a string identifier of the function that
                 will output a mapping between parameter tensor identifiers and their value.
             name: The name of the parameter tensor identifier.
             index: An index that selects the parameter tensor specified by the name.
@@ -180,7 +180,7 @@ class FunctionParameter(ParameterInput):
             raise ValueError("The index must be a non-negative integer")
         super().__init__()
         self._shape = shape
-        self._function = function
+        self._model_id = model_id
         self._name = name
         self._index = index
 
@@ -189,8 +189,8 @@ class FunctionParameter(ParameterInput):
         return self._shape
 
     @property
-    def function(self) -> str:
-        return self._function
+    def model_id(self) -> str:
+        return self._model_id
 
     @property
     def name(self) -> str:
@@ -204,7 +204,7 @@ class FunctionParameter(ParameterInput):
     def config(self) -> dict[str, Any]:
         return {
             "shape": self._shape,
-            "function": self._function,
+            "model_id": self._model_id,
             "name": self._name,
             "index": self._index,
         }
@@ -213,7 +213,7 @@ class FunctionParameter(ParameterInput):
         return (
             f"{self.__class__.__name__}("
             f"shape={self._shape}, "
-            f"function='{self._function}', "
+            f"model_id='{self._model_id}', "
             f"name='{self._name}', "
             f"index={self._index}"
             ")"

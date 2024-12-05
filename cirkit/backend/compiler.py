@@ -11,6 +11,7 @@ from cirkit.utils.algorithms import BiMap
 SUPPORTED_BACKENDS = ["torch"]
 
 CompiledCircuit = TypeVar("CompiledCircuit")
+ExternalModel = TypeVar("ExternalModel")
 
 
 class CompiledCircuitsMap:
@@ -152,17 +153,22 @@ class CompilerInitializerRegistry(
         return cast(InitializerCompilationSign, ann[args[-1]])
 
 
+CompilerModelRegistry = dict[str, ExternalModel]
+
+
 class AbstractCompiler(ABC):
     def __init__(
         self,
         layers_registry: CompilerLayerRegistry,
         parameters_registry: CompilerParameterRegistry,
         initializers_registry: CompilerInitializerRegistry,
+        models_registry: CompilerModelRegistry | None = None,
         **flags,
     ):
         self._layers_registry = layers_registry
         self._parameters_registry = parameters_registry
         self._initializers_registry = initializers_registry
+        self._model_registry = {} if models_registry is None else models_registry
         self._flags = flags
         self._compiled_circuits = CompiledCircuitsMap()
 
@@ -202,6 +208,12 @@ class AbstractCompiler(ABC):
         self, signature: InitializerCompilationSign
     ) -> InitializerCompilationFunc:
         return self._initializers_registry.retrieve_rule(signature)
+
+    def add_external_model(self, model_id: str, model: ExternalModel):
+        self._model_registry[model_id] = model
+
+    def get_external_model(self, model_id: str) -> ExternalModel:
+        return self._model_registry[model_id]
 
     def compile(self, sc: Circuit) -> CompiledCircuit:
         if self.is_compiled(sc):

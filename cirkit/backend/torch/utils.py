@@ -1,9 +1,9 @@
 import itertools
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Mapping, cast
 
 import torch
-from torch import Tensor, autograd
+from torch import Tensor, autograd, nn
 
 
 class SafeLog(autograd.Function):
@@ -100,3 +100,30 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
     return torch.unflatten(x, dim=start_dim, sizes=shape).movedim(
         tuple(range(start_dim, end_dim)), tuple(dims)
     )
+
+
+class ExternalModelEval(nn.Module):
+    def __init__(self, model_id: str, model: nn.Module):
+        super().__init__()
+        self._model_id = model_id
+        self._model = model
+        self._cached_output: dict[str, Tensor] | None = None
+
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    @property
+    def model(self) -> nn.Module:
+        return self._model
+
+    def reset_cache(self):
+        self._cached_output = None
+
+    def cache_forward(self, **kwargs):
+        self._cached_output = cast(Mapping[str, Tensor], self._model(**kwargs))
+
+    def forward(self) -> Mapping[str, Tensor]:
+        if self._cached_output is None:
+            raise ValueError("No output mapping is stored. Call cached_forward() method first")
+        return self._cached_output

@@ -16,6 +16,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchLogParameter,
     TorchLogSoftmaxParameter,
     TorchMixingWeightParameter,
+    TorchModelParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
     TorchPointerParameter,
@@ -31,13 +32,13 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchSumParameter,
     TorchTensorParameter,
 )
+from cirkit.backend.torch.utils import ExternalModelEval
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.parameters import (
     ClampParameter,
     ConjugateParameter,
     ConstantParameter,
     ExpParameter,
-    FunctionParameter,
     GaussianProductLogPartition,
     GaussianProductMean,
     GaussianProductStddev,
@@ -47,6 +48,7 @@ from cirkit.symbolic.parameters import (
     LogParameter,
     LogSoftmaxParameter,
     MixingWeightParameter,
+    ModelParameter,
     OuterProductParameter,
     OuterSumParameter,
     PolynomialDifferential,
@@ -108,14 +110,18 @@ def compile_reference_parameter(
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
 
 
-def compile_function_parameter(
-    compiler: "TorchCompiler", p: FunctionParameter
-) -> TorchFunctionParameter:
-    if compiler.state.has_compiled_function(p.function):
-        compiled_fn = compiler.state.retrieve_compiled_function(p.function)
+def compile_model_parameter(compiler: "TorchCompiler", p: ModelParameter) -> TorchModelParameter:
+    # Register the external model to the running state of the compiler, if needed
+    if compiler.state.has_ext_model_eval(p.model_id):
+        ext_model_eval = compiler.state.retrieve_ext_model_eval(p.model_id)
     else:
-        compiled_fn = compiler.compile_function(p.function)
-    return TorchFunctionParameter(*p.shape, function=compiled_fn, name=p.name, index=p.index)
+        # Retrieve the external model, based on the model id
+        ext_model = compiler.get_external_model(p.model_id)
+        # Build the external model evaluator, and register it
+        ext_model_eval = ExternalModelEval(p.model_id, ext_model)
+        compiler.state.register_ext_model_eval(p.model_id, ext_model_eval)
+    # Build the torch model parameter computational node
+    return TorchModelParameter(*p.shape, model_eval=ext_model_eval, name=p.name, fold_idx=p.index)
 
 
 def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
@@ -274,7 +280,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCom
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
-    FunctionParameter: compile_function_parameter,
+    ModelParameter: compile_model_parameter,
     IndexParameter: compile_index_parameter,
     SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,

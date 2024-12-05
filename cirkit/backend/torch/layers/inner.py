@@ -254,12 +254,12 @@ class TorchSumLayer(TorchInnerLayer):
 
     def forward(self, x: Tensor) -> Tensor:
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
-        # weight: (F, Ko,$H$* Ki)
+        # weight: (F, Ko, H * Ki)
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
         weight = self.weight()
         return self.semiring.einsum(
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-        )  # shape $(F, B, K_o)$.
+        )  # shape (F, B, K_o).
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()

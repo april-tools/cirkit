@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
+from cirkit.backend.torch.utils import ExternalModelEval
 
 
 class TorchParameterNode(AbstractTorchModule, ABC):
@@ -260,14 +261,14 @@ class TorchPointerParameter(TorchParameterInput):
         return self._parameter.shape
 
     @property
-    def config(self) -> dict[str, Any]:
-        return {"parameter": self._parameter}
-
-    @property
     def fold_idx(self) -> list[int] | None:
         if self._fold_idx is None:
             return None
         return self._fold_idx.cpu().tolist()
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {"parameter": self._parameter}
 
     def deref(self) -> TorchTensorParameter:
         return self._parameter
@@ -279,14 +280,14 @@ class TorchPointerParameter(TorchParameterInput):
         return x[self._fold_idx]
 
 
-class TorchFunctionParameter(TorchParameterInput):
+class TorchModelParameter(TorchParameterInput):
     def __init__(
-        self, *shape: int, function: TorchLazyFunction, name: str, fold_idx: int | list[int]
+        self, *shape: int, model_eval: ExternalModelEval, name: str, fold_idx: int | list[int]
     ):
         fold_idx = fold_idx if isinstance(fold_idx, list) else [fold_idx]
         super().__init__(num_folds=len(fold_idx))
+        super(nn.Module, self).__setattr__("_model_eval", model_eval)
         self._shape = shape
-        self._function = function
         self._name = name
         self.register_buffer("_fold_idx", torch.tensor(fold_idx))
 
@@ -295,29 +296,28 @@ class TorchFunctionParameter(TorchParameterInput):
         return self._shape
 
     @property
-    def function(self) -> TorchLazyFunction:
-        return self._function
+    def model_eval(self) -> ExternalModelEval:
+        return self._model_eval
 
     @property
     def name(self) -> str:
         return self._name
 
     @property
+    def fold_idx(self) -> list[int]:
+        return self._fold_idx.cpu().tolist()
+
+    @property
     def config(self) -> dict[str, Any]:
-        return {
-            "shape": self._shape,
-            "function": self._function,
-            "name": self._name,
-            "fold_idx": self._fold_idx,
-        }
+        return {"shape": self._shape, "model_eval": self._model_eval, "name": self._name}
 
     def forward(self) -> Tensor:
         # A dictionary from parameter tensor names to their tensor value
-        y = self._function()
+        y = self._model_eval()
         # Select the parameter tensor we want by using the name
-        y = y[self._name]  # shape: (num_slices, K_1, ..., K_n)
+        y = y[self._name]  # shape: (group_size, K_1, ..., K_n)
         # Slice the tensor by using the fold index
-        return y[self._fold_idx]  # shape: (F, K_1, \ldots, K_n)
+        return y[self._fold_idx]  # shape: (F, K_1, ..., K_n)
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
