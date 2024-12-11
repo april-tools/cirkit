@@ -41,6 +41,8 @@ class Parameterization:
     """The activation function. Defaults to 'none', i.e., no activation."""
     dtype: str = "real"
     """The data type. Defaults to 'real', i.e., real numbers."""
+    activation_kwargs: dict[str, object] | None = None
+    """Additional keyword-based arguments to be used in activation"""
 
 
 def build_image_region_graph(
@@ -118,7 +120,9 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     Raises:
         ValueError: If one of the settings in the given parameterization is unknown.
     """
-    unary_op_factory = name_to_parameter_activation(param.activation)
+    unary_op_factory = name_to_parameter_activation(
+        param.activation, **param.activation_kwargs if param.activation_kwargs else {}
+    )
     dtype = name_to_dtype(param.dtype)
     initializer = name_to_initializer(param.initialization)
     return functools.partial(
