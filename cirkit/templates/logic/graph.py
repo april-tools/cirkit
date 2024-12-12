@@ -8,7 +8,7 @@ from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.symbolic.layers import HadamardLayer, Layer, SumLayer
 from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
-from cirkit.templates.logic import default_literal_input_factory
+from cirkit.templates.logic.utils import default_literal_input_factory
 from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
 from cirkit.utils.scope import Scope
@@ -250,8 +250,8 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
 
         if (literal_input_factory is None) ^ (negated_literal_input_factory is None):
             raise ValueError(
-                "Either both 'literal_input_factory' and 'negated_literal_input_factory' \
-                    must be provided or none."
+                "Either both 'literal_input_factory' and 'negated_literal_input_factory' "
+                "must be provided or none."
             )
 
         if literal_input_factory is None and negated_literal_input_factory is None:

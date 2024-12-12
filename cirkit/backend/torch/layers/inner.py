@@ -150,7 +150,7 @@ class TorchKroneckerLayer(TorchInnerLayer):
             num_folds: The number of channels.
 
         Raises:
-            ValueError: If the arity is not at least 2.
+            NotImplementedError: If the arity is not 2.
             ValueError: If the number of input units is not the same as the number of output units.
         """
         # TODO: generalize kronecker layer as to support a greater arity
@@ -168,7 +168,6 @@ class TorchKroneckerLayer(TorchInnerLayer):
     def config(self) -> Mapping[str, Any]:
         return {
             "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
             "arity": self.arity,
         }
 
