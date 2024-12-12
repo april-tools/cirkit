@@ -83,29 +83,33 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
 
         Returns:
             LogicGraph: The simplified graph, where all bottom and top nodes have
-                been removed through simplification. 
+                been removed through simplification.
         """
         in_nodes = dict(self.nodes_inputs.copy())
         root = next(self.outputs)
 
         absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
         null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
-        
+
         absorbed_nodes = [
             n
             for n, children in in_nodes.items()
             if any([isinstance(child, absorbing_element(n)) for child in children])
         ]
-        
+
         # update the graph
         in_nodes = {
-            n: [child for child in children if not isinstance(child, null_element(n)) and child not in absorbed_nodes]
+            n: [
+                child
+                for child in children
+                if not isinstance(child, null_element(n)) and child not in absorbed_nodes
+            ]
             for n, children in in_nodes.items()
             if n not in absorbed_nodes
         }
 
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
-        
+
         return LogicGraph(nodes=nodes, in_nodes=in_nodes, outputs=[root])
 
     @property
@@ -118,7 +122,7 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
 
     @cached_property
     def num_variables(self) -> int:
-        return len({ i.literal for i in self.inputs if isinstance(i, LogicInputNode) })
+        return len({i.literal for i in self.inputs if isinstance(i, LogicInputNode)})
 
     def node_scope(self, node: LogicCircuitNode) -> Scope:
         """Compute the scope of a node.
@@ -179,10 +183,10 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
                                 literal_map.get((ml, False), NegatedLiteralNode(ml)),
                             ]
                             smoothing_map[ml] = smooth_ml
-                        
+
                         to_add_for_smoothing.append(smoothing_map[ml])
-                
-                    # if input to disjunction is a conjunction or a disjunction 
+
+                    # if input to disjunction is a conjunction or a disjunction
                     # then directly add to its inputs else create an ad-hoc node
                     if input_to_d in in_nodes:
                         in_nodes[input_to_d].extend(to_add_for_smoothing)

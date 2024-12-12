@@ -44,7 +44,7 @@ class SDD(LogicGraph):
 
         Args:
             filename (str): The file name for loading.
-            
+
         Returns:
             LogicGraph: The loaded logic graph.
         """
@@ -92,5 +92,5 @@ class SDD(LogicGraph):
         nodes = set(chain(*in_nodes.values())).union(in_nodes.keys())
 
         graph = LogicGraph(nodes=nodes, in_nodes=in_nodes, outputs=[nodes_map[0]])
-        
+
         return graph
