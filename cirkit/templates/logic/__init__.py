@@ -7,4 +7,3 @@ from .graph import LogicGraph as LogicGraph
 from .graph import NegatedLiteralNode as NegatedLiteralNode
 from .graph import TopNode as TopNode
 from .sdd import SDD as SDD
-from .utils import default_literal_input_factory as default_literal_input_factory
