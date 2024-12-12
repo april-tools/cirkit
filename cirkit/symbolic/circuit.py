@@ -1,21 +1,12 @@
 import itertools
 from collections import defaultdict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum, auto
 from functools import cached_property
-from typing import Any, Protocol, cast
+from typing import Any
 
-from cirkit.symbolic.layers import (
-    HadamardLayer,
-    InputLayer,
-    KroneckerLayer,
-    Layer,
-    ProductLayer,
-    SumLayer,
-)
-from cirkit.symbolic.parameters import ParameterFactory
-from cirkit.templates.region_graph import PartitionNode, RegionGraph, RegionGraphNode, RegionNode
+from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.utils.algorithms import (
     DiAcyclicGraph,
     RootedDiAcyclicGraph,
@@ -90,7 +81,9 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
     which can be either a sum or product layer.
     """
 
-    def __init__(self, layers: Sequence[Layer], in_layers: dict[Layer, list[Layer]], output: Layer):
+    def __init__(
+        self, layers: Sequence[Layer], in_layers: Mapping[Layer, list[Layer]], output: Layer
+    ):
         """Initializes a circuit block.
 
         Args:
@@ -123,20 +116,20 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
         return self.node_outputs(sl)
 
     @property
-    def layers_inputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_inputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the sequence of inputs to each layer.
 
         Returns:
-            Dict[Layer, Sequence[Layer]]:
+            Mapping[Layer, Sequence[Layer]]:
         """
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_outputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the sequence of outputs of each layer.
 
         Returns:
-            Dict[Layer, Sequence[Layer]]:
+            Mapping[Layer, Sequence[Layer]]:
         """
         return self.nodes_outputs
 
@@ -228,52 +221,6 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
         return CircuitBlock(layers, in_layers, lout)
 
 
-class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
-    """The protocol of a factory that constructs input layers."""
-
-    def __call__(self, scope: Scope, num_units: int, num_channels: int) -> InputLayer:
-        """Constructs an input layer.
-
-        Args:
-            scope: The scope of the layer.
-            num_units: The number of input units composing the layer.
-            num_channels: The number of channel variables.
-
-        Returns:
-            InputLayer: An input layer.
-        """
-
-
-class SumLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
-    """The protocol of a factory that constructs sum layers."""
-
-    def __call__(self, num_input_units: int, num_output_units: int) -> SumLayer:
-        """Constructs a sum layer.
-
-        Args:
-            num_input_units: The number of units in each layer that is an input.
-            num_output_units: The number of sum units in the layer.
-
-        Returns:
-            SumLayer: A sum layer.
-        """
-
-
-class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
-    """The protocol of a factory that constructs product layers."""
-
-    def __call__(self, num_input_units: int, arity: int) -> ProductLayer:
-        """Constructs a product layer.
-
-        Args:
-            num_input_units: The number of units in each layer that is an input.
-            arity: The number of input layers.
-
-        Returns:
-            ProductLayer: A product layer.
-        """
-
-
 class Circuit(DiAcyclicGraph[Layer]):
     """The symbolic circuit representation."""
 
@@ -281,7 +228,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         self,
         num_channels: int,
         layers: Sequence[Layer],
-        in_layers: dict[Layer, Sequence[Layer]],
+        in_layers: Mapping[Layer, Sequence[Layer]],
         outputs: Sequence[Layer],
         *,
         operation: CircuitOperation | None = None,
@@ -368,7 +315,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         return self.node_outputs(sl)
 
     @property
-    def layers_inputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_inputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the list of inputs to each layer.
 
         Returns:
@@ -377,7 +324,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         return self.nodes_inputs
 
     @property
-    def layers_outputs(self) -> dict[Layer, Sequence[Layer]]:
+    def layers_outputs(self) -> Mapping[Layer, Sequence[Layer]]:
         """Retrieves the dictionary containing the list of outputs of each layer.
 
         Returns:
@@ -421,9 +368,17 @@ class Circuit(DiAcyclicGraph[Layer]):
         """
         return (sl for sl in self.layers if isinstance(sl, ProductLayer))
 
-    def subgraph(self, *roots: Layer) -> "Circuit":
-        layers, in_layers = subgraph(roots, self.layer_inputs)
-        return type(self)(self.num_channels, layers, in_layers, outputs=roots)
+    def subgraph(self, *outputs: Layer) -> "Circuit":
+        """Retrieve the sub-circuit having the given layers as outputs.
+
+        Args:
+            *outputs: The output layers.
+
+        Returns:
+            The sub-circuit having the given layers as outputs.
+        """
+        layers, in_layers = subgraph(outputs, self.layer_inputs)
+        return Circuit(self.num_channels, layers, in_layers, outputs=outputs)
 
     ##################################### Structural properties ####################################
 
@@ -543,313 +498,6 @@ class Circuit(DiAcyclicGraph[Layer]):
                 in_layers[sl].extend(b.layer_inputs(sl))
         # Build the circuit and set the operation
         return cls(num_channels, layers, in_layers, outputs, operation=operation)
-
-    @classmethod
-    def from_region_graph(
-        cls,
-        region_graph: RegionGraph,
-        *,
-        input_factory: InputLayerFactory,
-        sum_product: str | None = None,
-        sum_weight_factory: ParameterFactory | None = None,
-        nary_sum_weight_factory: ParameterFactory | None = None,
-        sum_factory: SumLayerFactory | None = None,
-        prod_factory: ProductLayerFactory | None = None,
-        num_channels: int = 1,
-        num_input_units: int = 1,
-        num_sum_units: int = 1,
-        num_classes: int = 1,
-        factorize_multivariate: bool = True,
-    ) -> "Circuit":
-        """Construct a symbolic circuit from a region graph.
-            There are two ways to use this method. The first one is to specify a sum-product layer
-            abstraction, which can be either 'cp' (the CP layer), 'cp-t' (the CP-transposed layer),
-            or 'tucker' (the Tucker layer). The second one is to manually specify the factories to
-            build distinct um and product layers. If the first way is chosen, then one can possibly
-            use a factory that builds the symbolic parameters of the sum-product layer abstractions.
-            The factory that constructs the input factory must always be specified.
-
-        Args:
-            region_graph: The region graph.
-            input_factory: A factory that builds an input layer.
-            sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
-            sum_weight_factory: The factory to construct the weights of the sum layers.
-                It can be None, or a parameter factory, i.e., a map
-                from a shape to a symbolic parameter. If it is None, then the default
-                weight factory of the sum layer is used instead.
-            nary_sum_weight_factory: The factory to construct the weight of sum layers havity arity
-                greater than one. If it is None, then it will have the same value and semantics of
-                the given sum_weight_factory.
-            sum_factory: A factory that builds a sum layer. It can be None.
-            prod_factory: A factory that builds a product layer. It can be None.
-            num_channels: The number of channels for each variable.
-            num_input_units: The number of input units.
-            num_sum_units: The number of sum units per sum layer.
-            num_classes: The number of output classes.
-            factorize_multivariate: Whether to fully factorize input layers, when they depend on
-                more than one variable.
-
-        Returns:
-            Circuit: A symbolic circuit.
-
-        Raises:
-            NotImplementedError: If an unknown 'sum_product' is given.
-            ValueError: If both 'sum_product' and layer factories are specified, or none of them.
-            ValueError: If 'sum_product' is specified, but 'weight_factory' is not.
-            ValueError: The given region graph is malformed.
-        """
-        if (sum_factory is None and prod_factory is not None) or (
-            sum_factory is not None and prod_factory is None
-        ):
-            raise ValueError(
-                "Both 'sum_factory' and 'prod_factory' must be specified or none of them"
-            )
-        if sum_product is None and (sum_factory is None or prod_factory is None):
-            raise ValueError(
-                "If 'sum_product' is not given, then both 'sum_factory' and 'prod_factory'"
-                " must be specified"
-            )
-        if sum_product is not None and (sum_factory is not None or prod_factory is not None):
-            raise ValueError(
-                "At most one between 'sum_product' and the pair 'sum_factory' and 'prod_factory'"
-                " must be specified"
-            )
-        if nary_sum_weight_factory is None:
-            nary_sum_weight_factory = sum_weight_factory
-
-        layers: list[Layer] = []
-        in_layers: dict[Layer, list[Layer]] = {}
-        node_to_layer: dict[RegionGraphNode, Layer] = {}
-
-        def build_cp_(
-            rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
-        ) -> HadamardLayer | SumLayer:
-            layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
-            denses = [
-                SumLayer(
-                    node_to_layer[rgn_in].num_output_units,
-                    num_sum_units,
-                    weight_factory=sum_weight_factory,
-                )
-                for rgn_in in rgn_partitioning
-            ]
-            hadamard = HadamardLayer(num_sum_units, arity=len(rgn_partitioning))
-            layers.extend(denses)
-            layers.append(hadamard)
-            in_layers[hadamard] = denses
-            for d, li in zip(denses, layer_ins):
-                in_layers[d] = [li]
-            # If the region is not a root region of the region graph,
-            # then make Hadamard the last layer
-            if region_graph.region_outputs(rgn):
-                node_to_layer[rgn] = hadamard
-                return hadamard
-            # Otherwise, introduce an additional sum layer to ensure the output layer is a sum
-            output_dense = SumLayer(
-                hadamard.num_output_units, num_classes, weight_factory=sum_weight_factory
-            )
-            layers.append(output_dense)
-            in_layers[output_dense] = [hadamard]
-            node_to_layer[rgn] = output_dense
-            return output_dense
-
-        def build_cp_transposed_(
-            rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
-        ) -> SumLayer:
-            layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
-            num_in_units = list({li.num_output_units for li in layer_ins})
-            if len(num_in_units) > 1:
-                raise ValueError(
-                    "Cannot build a CP transposed layer, as the inputs would have different units"
-                )
-            num_units = num_sum_units if region_graph.region_outputs(rgn) else num_classes
-            hadamard = HadamardLayer(num_in_units[0], arity=len(rgn_partitioning))
-            dense = SumLayer(num_in_units[0], num_units, weight_factory=sum_weight_factory)
-            layers.append(hadamard)
-            layers.append(dense)
-            in_layers[hadamard] = layer_ins
-            in_layers[dense] = [hadamard]
-            node_to_layer[rgn] = dense
-            return dense
-
-        def build_tucker_(rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]) -> SumLayer:
-            layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
-            num_in_units = list({li.num_output_units for li in layer_ins})
-            if len(num_in_units) > 1:
-                raise ValueError(
-                    "Cannot build a Tucker layer, as the inputs would have different units"
-                )
-            num_units = num_sum_units if region_graph.region_outputs(rgn) else num_classes
-            kronecker = KroneckerLayer(num_in_units[0], arity=len(rgn_partitioning))
-            dense = SumLayer(
-                kronecker.num_output_units,
-                num_units,
-                weight_factory=sum_weight_factory,
-            )
-            layers.append(kronecker)
-            layers.append(dense)
-            in_layers[kronecker] = layer_ins
-            in_layers[dense] = [kronecker]
-            node_to_layer[rgn] = dense
-            return dense
-
-        # Set the sum-product layer builder, if necessary
-        sum_prod_builder_: Callable[[RegionNode, Sequence[RegionNode]], Layer] | None
-        if sum_product is None:
-            sum_prod_builder_ = None
-        elif sum_product == "cp":
-            sum_prod_builder_ = build_cp_
-        elif sum_product == "cp-t":
-            sum_prod_builder_ = build_cp_transposed_
-        elif sum_product == "tucker":
-            sum_prod_builder_ = build_tucker_
-        else:
-            raise NotImplementedError(f"Unknown sum-product layer abstraction called {sum_product}")
-
-        # Loop through the region graph nodes, which are already sorted in a topological ordering
-        for node in region_graph.topological_ordering():
-            if isinstance(node, PartitionNode):  # Partition node
-                # If a sum-product layer abstraction has been specified,
-                # then just skip partition nodes
-                if sum_prod_builder_ is not None:
-                    continue
-                assert prod_factory is not None
-                partition_inputs = region_graph.partition_inputs(node)
-                prod_inputs = [node_to_layer[rgn] for rgn in partition_inputs]
-                prod_sl = prod_factory(num_sum_units, len(prod_inputs))
-                layers.append(prod_sl)
-                in_layers[prod_sl] = prod_inputs
-                node_to_layer[node] = prod_sl
-            assert isinstance(
-                node, RegionNode
-            ), "Region graph nodes must be either region or partition nodes"
-            region_inputs = region_graph.region_inputs(node)
-            region_outputs = region_graph.region_outputs(node)
-            if not region_inputs:
-                # Input region node
-                if factorize_multivariate and len(node.scope) > 1:
-                    factorized_input_sls = [
-                        input_factory(Scope([sc]), num_input_units, num_channels)
-                        for sc in node.scope
-                    ]
-                    input_sl = HadamardLayer(num_input_units, arity=len(factorized_input_sls))
-                    layers.extend(factorized_input_sls)
-                    in_layers[input_sl] = factorized_input_sls
-                else:
-                    input_sl = input_factory(node.scope, num_input_units, num_channels)
-                num_units = num_sum_units if region_graph.region_outputs(node) else num_classes
-                if sum_factory is None:
-                    layers.append(input_sl)
-                    node_to_layer[node] = input_sl
-                    continue
-                sum_sl = sum_factory(num_input_units, num_units)
-                layers.append(input_sl)
-                layers.append(sum_sl)
-                in_layers[sum_sl] = [input_sl]
-                node_to_layer[node] = sum_sl
-            elif len(region_inputs) == 1:
-                # Region node that is partitioned into one and only one way
-                (ptn,) = region_inputs
-                if sum_prod_builder_ is not None:
-                    sum_prod_builder_(node, region_graph.partition_inputs(ptn))
-                    continue
-                num_units = num_sum_units if region_outputs else num_classes
-                sum_input = node_to_layer[ptn]
-                sum_sl = sum_factory(sum_input.num_output_units, num_units)
-                layers.append(sum_sl)
-                in_layers[sum_sl] = [sum_input]
-                node_to_layer[node] = sum_sl
-            else:  # len(node_inputs) > 1:
-                # Region node with multiple partitionings
-                num_units = num_sum_units if region_outputs else num_classes
-                if sum_prod_builder_ is None:
-                    sum_ins = [node_to_layer[ptn] for ptn in region_inputs]
-                    mix_ins = [sum_factory(sli.num_output_units, num_units) for sli in sum_ins]
-                    layers.extend(mix_ins)
-                    for mix_sl, sli in zip(mix_ins, sum_ins):
-                        in_layers[mix_sl] = [sli]
-                else:
-                    mix_ins = [
-                        sum_prod_builder_(
-                            node, region_graph.partition_inputs(cast(PartitionNode, ptn))
-                        )
-                        for ptn in region_inputs
-                    ]
-                mix_sl = SumLayer(
-                    num_units,
-                    num_units,
-                    arity=len(mix_ins),
-                    weight_factory=nary_sum_weight_factory,
-                )
-                layers.append(mix_sl)
-                in_layers[mix_sl] = mix_ins
-                node_to_layer[node] = mix_sl
-
-        outputs = [node_to_layer[rgn] for rgn in region_graph.outputs]
-        return cls(num_channels, layers, in_layers, outputs)
-
-    @classmethod
-    def from_hmm(
-        cls,
-        ordering: Sequence[int],
-        input_factory: InputLayerFactory,
-        weight_factory: ParameterFactory | None = None,
-        num_channels: int = 1,
-        num_units: int = 1,
-        num_classes: int = 1,
-    ) -> "Circuit":
-        """Construct a symbolic circuit mimicking a hidden markov model (HMM) of
-          a given variable ordering. Product Layers are of type
-          [HadamardLayer][cirkit.symbolic.layers.HadamardLayer], and sum layers are of type
-          [SumLayer][cirkit.symbolic.layers.SumLayer].
-
-        Args:
-            ordering: The input order of variables of the HMM.
-            input_factory: A factory that builds input layers.
-            weight_factory: The factory to construct the weight of sum layers. It can be None,
-                or a parameter factory, i.e., a map from a shape to a symbolic parameter.
-            num_channels: The number of channels for each variable.
-            num_units: The number of sum units per sum layer.
-            num_classes: The number of output classes.
-
-        Returns:
-            Circuit: A symbolic circuit.
-
-        Raises:
-            ValueError: order must consists of consistent numbers, starting from 0.
-        """
-        if max(ordering) != len(ordering) - 1 or min(ordering):
-            raise ValueError("The 'ordering' of variables is not valid")
-
-        layers: list[Layer] = []
-        in_layers: dict[Layer, list[Layer]] = {}
-
-        input_sl = input_factory(Scope([ordering[0]]), num_units, num_channels)
-        layers.append(input_sl)
-        sum_sl = SumLayer(num_units, num_units, weight_factory=weight_factory)
-        layers.append(sum_sl)
-        in_layers[sum_sl] = [input_sl]
-
-        # Loop over the number of variables
-        for i in range(1, len(ordering)):
-            last_dense = layers[-1]
-
-            input_sl = input_factory(Scope([ordering[i]]), num_units, num_channels)
-            layers.append(input_sl)
-            prod_sl = HadamardLayer(num_units, 2)
-            layers.append(prod_sl)
-            in_layers[prod_sl] = [last_dense, input_sl]
-
-            num_units_out = num_units if i != len(ordering) - 1 else num_classes
-            sum_sl = SumLayer(
-                num_units,
-                num_units_out,
-                weight_factory=weight_factory,
-            )
-            layers.append(sum_sl)
-            in_layers[sum_sl] = [prod_sl]
-
-        return cls(num_channels, layers, in_layers, [layers[-1]])
 
 
 def are_compatible(sc1: Circuit, sc2: Circuit) -> bool:
