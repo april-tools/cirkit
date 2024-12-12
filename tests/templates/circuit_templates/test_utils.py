@@ -1,11 +1,10 @@
-from cirkit.templates import circuit_templates
-from cirkit.templates.circuit_templates.utils import parameterization_to_factory
+from cirkit.templates.utils import Parameterization, parameterization_to_factory
 
 
 def test_param_activation_kwargs():
     min_var = 0.1
     max_var = 1.0
-    stddev_param = circuit_templates.Parameterization(
+    stddev_param = Parameterization(
         initialization="normal",
         activation="positive-clamp",
         activation_kwargs={"vmin": min_var, "vmax": max_var},
