@@ -18,6 +18,8 @@ from tests.symbolic.test_utils import build_monotonic_structured_categorical_cpt
 )
 def test_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
     sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
         return_ground_truth=True
     )
@@ -44,3 +46,198 @@ def test_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, o
     mar_scores2 = mar_query(mar_worlds, integrate_vars=Scope([4]))
     assert mar_scores1.shape == mar_scores2.shape
     assert allclose(mar_scores1, mar_scores2)
+
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,input_tensor",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [False, True]),
+)
+def test_batch_query_marginalize_monotonic_pc_categorical(
+    semiring: str, fold: bool, optimize: bool, input_tensor: bool
+):
+    # Check using a mask with batching works
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
+        return_ground_truth=True
+    )
+
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
+    inputs = torch.tensor([[[1, 0, 1, 1, 1], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+
+    mar_query = IntegrateQuery(tc)
+    if input_tensor:
+        mask = torch.tensor(
+            [[True, True, True, True, True], [False, False, False, False, True]], dtype=torch.bool
+        )
+    else:
+        # Create two masks, one is marginalising out everything
+        # and another is marginalising out only the last variable
+        mask = [Scope([0, 1, 2, 3, 4]), Scope([4])]
+    # The first score should be partition function, as we marginalised out all vars.
+    # The second score, should be our precomputed marginal.
+    mar_scores = mar_query(inputs, integrate_vars=mask)
+
+    if semiring == "sum-product":
+        assert torch.isclose(mar_scores[0], torch.tensor(gt_partition_func))
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+    elif semiring == "lse-sum":
+        mar_scores = torch.exp(mar_scores)
+        assert torch.isclose(mar_scores[0], torch.tensor(gt_partition_func))
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+    else:
+        raise ValueError('Unexpected semiring: "%s"' % semiring)
+
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,input_tensor",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [False, True]),
+)
+def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(
+    semiring: str, fold: bool, optimize: bool, input_tensor: bool
+):
+    # Check that passing a single mask results in broadcasting
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
+        return_ground_truth=True
+    )
+
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
+    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+
+    mar_query = IntegrateQuery(tc)
+    if input_tensor:
+        mask = torch.tensor([False, False, False, False, True], dtype=torch.bool)
+    else:
+        # Create a single mask - this should be broadcast along the batch dim.
+        mask = Scope([4])
+    # The first score should be partition function, as we marginalised out all vars.
+    # The second score, should be our precomputed marginal.
+    mar_scores = mar_query(inputs, integrate_vars=mask)
+
+    if semiring == "sum-product":
+        assert torch.isclose(mar_scores[0], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+    elif semiring == "lse-sum":
+        mar_scores = torch.exp(mar_scores)
+        assert torch.isclose(mar_scores[0], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+        assert torch.isclose(mar_scores[1], torch.tensor(gt_outputs["mar"][(1, 0, 1, 1, None)]))
+    else:
+        raise ValueError('Unexpected semiring: "%s"' % semiring)
+
+
+@pytest.mark.parametrize(
+    "input_tensor",
+    itertools.product([False, True]),
+)
+def test_batch_fails_on_out_of_scope(
+    input_tensor, semiring="sum-product", fold=True, optimize=True
+):
+    # Check that passing a single mask results in broadcasting
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
+        return_ground_truth=True
+    )
+
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
+    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+
+    mar_query = IntegrateQuery(tc)
+    if input_tensor:
+        # Scope 5 does not exist so this should error
+        mask = torch.tensor(
+            [[False, False, False, False, True, True], [False, False, False, False, True, True]],
+            dtype=torch.bool,
+        )
+        # The first score should be partition function, as we marginalised out all vars.
+        # The second score, should be our precomputed marginal.
+        with pytest.raises(ValueError, match="was defined over %d != 5 variables" % mask.shape[1]):
+            mar_scores = mar_query(inputs, integrate_vars=mask)
+    else:
+        # Scope 5 does not exist so this should error
+        mask = [Scope([0]), Scope([5])]
+        # The first score should be partition function, as we marginalised out all vars.
+        # The second score, should be our precomputed marginal.
+        with pytest.raises(ValueError, match="not in scope:.*?5"):
+            mar_scores = mar_query(inputs, integrate_vars=mask)
+
+
+@pytest.mark.parametrize(
+    "input_tensor",
+    itertools.product([False, True]),
+)
+def test_batch_fails_on_wrong_batch_size(
+    input_tensor, semiring="sum-product", fold=True, optimize=True
+):
+    # Check that passing a single mask results in broadcasting
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
+        return_ground_truth=True
+    )
+
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
+    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+
+    mar_query = IntegrateQuery(tc)
+    if input_tensor:
+        # Input batch size is 2, passing 3 masks
+        mask = torch.tensor(
+            [
+                [False, False, False, False, True],
+                [False, False, False, False, True],
+                [False, False, False, False, True],
+            ],
+            dtype=torch.bool,
+        )
+        # The first score should be partition function, as we marginalised out all vars.
+        # The second score, should be our precomputed marginal.
+        with pytest.raises(ValueError, match="Found #inputs = 2 != 3"):
+            mar_scores = mar_query(inputs, integrate_vars=mask)
+    else:
+        # Input batch size is 2, passing 3 masks
+        mask = [Scope([0]), Scope([1]), Scope([2])]
+        # The first score should be partition function, as we marginalised out all vars.
+        # The second score, should be our precomputed marginal.
+        with pytest.raises(ValueError, match="Found #inputs = 2 != 3"):
+            mar_scores = mar_query(inputs, integrate_vars=mask)
+
+
+def test_batch_fails_on_wrong_tensor_dtype(semiring="sum-product", fold=True, optimize=True):
+    # Check that passing a single mask results in broadcasting
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
+        return_ground_truth=True
+    )
+
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
+    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+
+    mar_query = IntegrateQuery(tc)
+
+    # Input batch size is 2, passing 3 masks
+    mask = torch.tensor(
+        [[False, False, False, False, True], [False, False, False, False, True]], dtype=torch.int32
+    )
+    # The first score should be partition function, as we marginalised out all vars.
+    # The second score, should be our precomputed marginal.
+    with pytest.raises(ValueError, match="Expected dtype of tensor to be torch.bool"):
+        mar_scores = mar_query(inputs, integrate_vars=mask)
