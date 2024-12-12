@@ -2,8 +2,14 @@ import itertools
 from abc import ABC
 from collections.abc import Iterator
 from functools import cached_property
-from typing import Sequence, cast, final
+from typing import Sequence, cast
 
+from cirkit.symbolic.circuit import Circuit
+from cirkit.symbolic.initializers import ConstantTensorInitializer
+from cirkit.symbolic.layers import HadamardLayer, Layer, SumLayer
+from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
+from cirkit.templates.logic import default_literal_input_factory
+from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.algorithms import RootedDiAcyclicGraph
 from cirkit.utils.scope import Scope
 
@@ -142,6 +148,8 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
                 scope = Scope([])
                 for i in self.node_inputs(node):
                     scope = scope.union(self.node_scope(i))
+            case _:
+                assert False, f"Unknown node type: {node.__class__}"
 
         return scope
 
@@ -163,7 +171,7 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
         smoothing_map: dict[int, DisjunctionNode] = {}
         disjunctions = filter(lambda x: isinstance(x, DisjunctionNode), self.nodes)
 
-        in_nodes: dict[LogicCircuitNode, list[LogicCircuitNode]] = self._in_nodes.copy()
+        in_nodes: dict[LogicCircuitNode, list[LogicCircuitNode]] = dict(self.nodes_inputs)
 
         for d in disjunctions:
             d_scope = self.node_scope(d)
@@ -200,5 +208,97 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
                         # add to the top so that it does not get checked again
                         in_nodes[d].insert(0, ad_hoc)
 
-        nodes = set(itertools.chain(*in_nodes.values())).union(in_nodes.keys())
+        nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
         return LogicGraph(nodes, in_nodes, self._outputs)
+
+    def build_circuit(
+        self,
+        literal_input_factory: InputLayerFactory = None,
+        negated_literal_input_factory: InputLayerFactory = None,
+        weight_factory: ParameterFactory | None = None,
+        num_channels: int = 1,
+        enforce_smoothness: bool = True,
+    ) -> Circuit:
+        """
+        Construct a symbolic circuit from a logic circuit graph.
+        If input factories for literals and their negation are not provided the it
+        falls back to a categorical input layer with two categories parametrized by
+        the constant vector [0, 1] for a literal and [1, 0] for its negation.
+
+        Args:
+            logic_graph: The logic circuit graph.
+            literal_input_factory: A factory that builds an input layer for literals.
+            negated_literal_input_factory: A factory that builds an input layer for negated literals.
+            weight_factory: The factory to construct the weight of sum layers. It can be None,
+                or a parameter factory, i.e., a map from a shape to a symbolic parameter.
+                If None is used, the default weight factory uses non-trainable unitary parameters,
+                which instantiate a regular boolean logic graph.
+            num_channels: The number of channels for each variable.
+            enforce_smoothness: Enforces smoothness of the circuit to support efficient marginalization.
+
+        Returns:
+            Circuit: A symbolic circuit.
+
+        Raises:
+            ValueError: If only one of literal_input_factory and negated_literal_input_factory is specified.
+        """
+        if enforce_smoothness:
+            simplified_graph = self.smooth().simplify()
+        else:
+            simplified_graph = self.simplify()
+
+        in_layers: dict[Layer, Sequence[Layer]] = {}
+        node_to_layer: dict[LogicCircuitNode, Layer] = {}
+
+        if (literal_input_factory is None) ^ (negated_literal_input_factory is None):
+            raise ValueError(
+                "Either both 'literal_input_factory' and 'negated_literal_input_factory' \
+                    must be provided or none."
+            )
+
+        if literal_input_factory is None and negated_literal_input_factory is None:
+            # default factory is locally imported when needed to avoid circular imports
+            literal_input_factory = default_literal_input_factory(negated=False)
+            negated_literal_input_factory = default_literal_input_factory(negated=True)
+
+        if weight_factory is None:
+            # default to unitary weights
+            def weight_factory(n: tuple[int]) -> Parameter:
+                # locally import numpy to avoid dependency on the whole file
+                initializer = ConstantTensorInitializer(1.0)
+                return Parameter.from_input(TensorParameter(*n, initializer=initializer))
+
+        # map each input literal to a symbolic input layer
+        for i in simplified_graph.inputs:
+            match i:
+                case LiteralNode():
+                    node_to_layer[i] = literal_input_factory(
+                        Scope([i.literal]), num_units=1, num_channels=num_channels
+                    )
+                case NegatedLiteralNode():
+                    node_to_layer[i] = negated_literal_input_factory(
+                        Scope([i.literal]), num_units=1, num_channels=num_channels
+                    )
+
+        for node in simplified_graph.topological_ordering():
+            match node:
+                case ConjunctionNode():
+                    product_node = HadamardLayer(1, arity=len(simplified_graph.node_inputs(node)))
+                    in_layers[product_node] = [
+                        node_to_layer[i] for i in simplified_graph.node_inputs(node)
+                    ]
+                    node_to_layer[node] = product_node
+                case DisjunctionNode():
+                    sum_node = SumLayer(
+                        1,
+                        1,
+                        arity=len(simplified_graph.node_inputs(node)),
+                        weight_factory=weight_factory,
+                    )
+                    in_layers[sum_node] = [
+                        node_to_layer[i] for i in simplified_graph.node_inputs(node)
+                    ]
+                    node_to_layer[node] = sum_node
+
+        layers = list(set(itertools.chain(*in_layers.values())).union(in_layers.keys()))
+        return Circuit(num_channels, layers, in_layers, [node_to_layer[simplified_graph.output]])

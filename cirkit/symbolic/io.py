@@ -5,7 +5,7 @@ from pathlib import Path
 import graphviz
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import SumLayer, ProductLayer, InputLayer, HadamardLayer
+from cirkit.symbolic.layers import HadamardLayer, InputLayer, ProductLayer, SumLayer
 
 
 def plot_circuit(
@@ -103,9 +103,7 @@ def plot_circuit(
                 dot.node(
                     str(id(sl)),
                     product_label if isinstance(product_label, str) else product_label(sl),
-                    color=product_color
-                    if isinstance(product_color, str)
-                    else product_color(sl),
+                    color=product_color if isinstance(product_color, str) else product_color(sl),
                 )
             case SumLayer():
                 dot.node(

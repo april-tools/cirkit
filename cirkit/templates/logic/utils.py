@@ -3,10 +3,11 @@ import numpy as np
 from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.symbolic.layers import CategoricalLayer, InputLayer
 from cirkit.symbolic.parameters import Parameter, TensorParameter
+from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.scope import Scope
 
 
-def default_literal_input_factory(negated: bool = False) -> "InputLayerFactory":
+def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
     """Input factory for a boolean logic circuit input realized using a
     Categorical Layer constantly parametrized by a tensor [x, y] where x is
     the probability of being False and y the probability of being True.

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from cirkit.symbolic.circuit import InputLayerFactory
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.initializers import (
     DirichletInitializer,
@@ -28,6 +27,7 @@ from cirkit.templates.region_graph import (
     RandomBinaryTree,
     RegionGraph,
 )
+from cirkit.templates.utils import InputLayerFactory
 
 
 @dataclass(frozen=True)
