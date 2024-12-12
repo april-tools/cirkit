@@ -219,14 +219,12 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
         num_channels: int = 1,
         enforce_smoothness: bool = True,
     ) -> Circuit:
-        """
-        Construct a symbolic circuit from a logic circuit graph.
+        """Construct a symbolic circuit from a logic circuit graph.
         If input factories for literals and their negation are not provided the it
         falls back to a categorical input layer with two categories parametrized by
         the constant vector [0, 1] for a literal and [1, 0] for its negation.
 
         Args:
-            logic_graph: The logic circuit graph.
             literal_input_factory: A factory that builds an input layer for literals.
             negated_literal_input_factory: A factory that builds an input layer for negated literals.
             weight_factory: The factory to construct the weight of sum layers. It can be None,

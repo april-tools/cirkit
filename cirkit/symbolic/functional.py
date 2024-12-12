@@ -191,8 +191,22 @@ def integrate(
     *,
     registry: OperatorRegistry | None = None,
 ) -> Circuit:
-    """Integrate the function computed by a circuit, and represent it as another circuit.
+    r"""Integrate the function computed by a circuit, and represent it as another circuit.
     This operator requires the given circuit to be both smooth and decomposable.
+
+    For example, integrate can be used to compute the partition function in
+    probabilistic circuits, e.g., in
+    [the Sum-of-Squares notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb).
+
+    Formally, given a symbolic circuit $c$ over a set of variables $\mathbf{X}$, integrate
+    over a scope $\mathbf{Z}\subseteq\mathbf{X}$ returns another symbolic circuit $c'$ such that
+    $$
+    c'(\mathbf{Y}) = \int_{\mathbf{z}\in\mathrm{dom}(\mathbf{Z})} c(\mathbf{Y},\mathbf{z}) \mathrm{d}\mathbf{Z},
+    $$
+    where $\mathbf{Y} = \mathbf{X}\setminus\mathbf{Z}$ is the set of remaining variables.
+
+    If you want to integrate an already-compiled circuit without creating a new symbolic
+    circuit, then have a look at [IntegrateQuery][cirkit.backend.torch.queries].
 
     Args:
         sc: A symbolic circuit.
@@ -271,10 +285,24 @@ def integrate(
 
 
 def multiply(sc1: Circuit, sc2: Circuit, *, registry: OperatorRegistry | None = None) -> Circuit:
-    """Multiply two symbolic circuit and represent it as another circuit.
-    This operator requires the input circuits to be smooth, decomposable and compatible.
-    The resulting circuit will be smooth and decomposable. Moreover, if the input circuits
-    are structured decomposable, then the resulting circuit will also be structured.
+    r"""Multiply two symbolic circuits and represent the result as another circuit.
+    This operator requires the input circuits to be
+    [smooth][cirkit.symbolic.circuit.Circuit.is_smooth],
+    [decomposable][cirkit.symbolic.circuit.Circuit.is_decomposable],
+    and [compatible][cirkit.symbolic.circuit.are_compatible].
+    The resulting circuit will be smooth and decomposable.
+    Moreover, if the input circuits are structured decomposable,
+    then the resulting circuit will also be structured decomposable,
+    and compatible with the inputs.
+
+    The product of circuits can be used to compute expectations (by composing the multiply and
+    [integrate][cirkit.symbolic.functional.integrate] operators), or to build squared probabilistic
+    circuits, as in
+    [the Sum-of-Squares notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb).
+
+    Formally, given two compatible circuits $c_1$, $c_2$ having the same variables scope
+    $\mathbf{X}$, multiply returns another circuit $c'$ such that it encodes
+    $c'(\mathbf{X}) = c_1(\mathbf{X})\cdot c_2(\mathbf{X})$.
 
     Args:
         sc1: The first symbolic circuit.
