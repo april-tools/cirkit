@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.templates.utils import InputLayerFactory
-from cirkit.symbolic.layers import Layer, SumLayer, HadamardLayer
+from cirkit.symbolic.layers import HadamardLayer, Layer, SumLayer
 from cirkit.symbolic.parameters import ParameterFactory
+from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.scope import Scope
 
 

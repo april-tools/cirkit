@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from cirkit.symbolic.layers import InputLayer, SumLayer, ProductLayer
+from cirkit.symbolic.layers import InputLayer, ProductLayer, SumLayer
 from cirkit.utils.scope import Scope
 
 
