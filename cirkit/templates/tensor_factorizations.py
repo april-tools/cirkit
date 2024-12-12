@@ -18,17 +18,21 @@ def cp(
     this method returns a circuit $c$ over $n$ discrete random variables $\{X_j\}_{j=1}^n$,
     each taking value between $0$ and $I_j$ for $1\leq j\leq n$,
     and $c$ computes a rank-$R$ CP factorization, i.e.,
+
     $$
     c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{i=1}^R a^{(1)}_{X_1 i} \ldots a^{(n)}_{X_n i},
     $$
-    where for $1\leq j\leq n$ we have that $\vA^{(j)}\in\bbR^{I_j\times R}$ is the $j$-th factor.
+
+    where for $1\leq j\leq n$ we have that $\mathbf{A}^{(j)}\in\mathbb{R}^{I_j\times R}$ is the $j$-th factor.
 
     Furthermore, this method allows you to return a circuit encoding a CP decomposition
     with additional weights, i.e., a CP factorization of the form
+
     $$
     c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{i=1}^R w_i \: a^{(1)}_{X_1 i} \ldots a^{(n)}_{X_n i},
     $$
-    where $\mathbf{w}\in\bbR^R$ are additional weights.
+
+    where $\mathbf{w}\in\mathbb{R}^R$ are additional weights.
 
     This method allows you to specify different types of parameterizations for the factors and
     possibly the additional weights. For example, if the arguments ```factor_param``` and
@@ -38,9 +42,11 @@ def cp(
     then the returned circuit encodes a probabilistic model that is a mixture of fully-factorized
     models. That is, the returned circuit $c$ encodes the factorization of a non-negative tensor
     $\mathcal{T}\in\mathbb{R}_+^{I_1\times \ldots\times I_n}$ as the distribution
+
     $$
-    p(X_1,\ldots,X_n) = t_{X_1\codts X_n} = \sum_{i=1}^R p(Z=i) \: p(X_1\mid Z=i) \cdots p(X_n\mid Z=i),
+    p(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{i=1}^R p(Z=i) \: p(X_1\mid Z=i) \cdots p(X_n\mid Z=i),
     $$
+
     where $Z$ is a discrete latent variable modelled by $p(Z)$.
 
     Args:
