@@ -1,6 +1,6 @@
 import itertools
 import re
-from collections import defaultdict
+from collections import defaultdict, deque
 from itertools import chain
 
 from cirkit.templates.logic.graph import (
@@ -44,7 +44,7 @@ class SDD(LogicGraph):
 
         Args:
             filename (str): The file name for loading.
-            
+
         Returns:
             LogicGraph: The loaded logic graph.
         """
@@ -89,8 +89,7 @@ class SDD(LogicGraph):
                             in_nodes[conjunct] = [nodes_map[prime], nodes_map[sub]]
                             in_nodes[decomposition_node].append(conjunct)
 
-        nodes = set(chain(*in_nodes.values())).union(in_nodes.keys())
+        nodes = list(set(chain(*in_nodes.values())).union(in_nodes.keys()))
+        graph = SDD(nodes, in_nodes, [nodes_map[0]])
 
-        graph = LogicGraph(nodes=nodes, in_nodes=in_nodes, outputs=[nodes_map[0]])
-        
         return graph

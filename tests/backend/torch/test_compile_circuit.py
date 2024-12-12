@@ -13,7 +13,6 @@ from cirkit.backend.torch.layers import TorchHadamardLayer, TorchSumLayer
 from cirkit.backend.torch.layers.input import TorchCategoricalLayer
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 from cirkit.pipeline import PipelineContext
-from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import DirichletInitializer
 from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, SumLayer
 from cirkit.symbolic.parameters import Parameter, TensorParameter
@@ -136,8 +135,7 @@ def test_compile_monotonic_structured_gaussian_pc():
 
 def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     rg = QuadGraph((3, 3))
-    sc = Circuit.from_region_graph(
-        rg,
+    sc = rg.build_circuit(
         num_input_units=8,
         num_sum_units=8,
         sum_product="cp",
