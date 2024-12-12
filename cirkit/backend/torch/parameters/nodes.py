@@ -87,7 +87,7 @@ class TorchParameterInput(TorchParameterNode, ABC):
 class TorchTensorParameter(TorchParameterInput):
     """A torch tensor parameter is a
     [TorchParameterInput][cirkit.backend.torch.parameters.nodes.TorchParameterInput]
-    that stores a [torch.nn.Parameter][torch.nn.Parameter] object.
+    that stores a [torch.nn.parameter.Parameter][torch.nn.parameter.Parameter] object.
     """
 
     def __init__(

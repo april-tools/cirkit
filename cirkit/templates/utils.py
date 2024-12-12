@@ -1,11 +1,10 @@
 import functools
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 
-from cirkit.symbolic.circuit import InputLayerFactory
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.initializers import (
     DirichletInitializer,
@@ -13,7 +12,15 @@ from cirkit.symbolic.initializers import (
     NormalInitializer,
     UniformInitializer,
 )
-from cirkit.symbolic.layers import BinomialLayer, CategoricalLayer, EmbeddingLayer, GaussianLayer
+from cirkit.symbolic.layers import (
+    BinomialLayer,
+    CategoricalLayer,
+    EmbeddingLayer,
+    GaussianLayer,
+    InputLayer,
+    ProductLayer,
+    SumLayer,
+)
 from cirkit.symbolic.parameters import (
     ClampParameter,
     Parameter,
@@ -23,13 +30,7 @@ from cirkit.symbolic.parameters import (
     TensorParameter,
     UnaryParameterOp,
 )
-from cirkit.templates.region_graph import (
-    PoonDomingos,
-    QuadGraph,
-    QuadTree,
-    RandomBinaryTree,
-    RegionGraph,
-)
+from cirkit.utils.scope import Scope
 
 
 @dataclass(frozen=True)
@@ -49,39 +50,50 @@ class Parameterization:
     """Additional arguments to pass to the activation function."""
 
 
-def build_image_region_graph(
-    name: str,
-    image_shape: tuple[int, int],
-) -> RegionGraph:
-    """Build a region graph that is tailored for image data.
+class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs input layers."""
 
-    Args:
-        name: The name of the region graph. It can be one of the following: 'quad-tree-2',
-            'quad-tree-4', 'quad-graph', 'random-binary-tree', 'poon-domingos'.
-            For the Poon-Domingos region graph, the delta parameter used to split patches is
-            automatically set to max(ceil(H/8), ceil(W/8)) for images of shape (H, W).
-        image_shape: The shape of the image.
+    def __call__(self, scope: Scope, num_units: int, num_channels: int) -> InputLayer:
+        """Constructs an input layer.
 
-    Returns:
-        RegionGraph: A region graph.
+        Args:
+            scope: The scope of the layer.
+            num_units: The number of input units composing the layer.
+            num_channels: The number of channel variables.
 
-    Raises:
-        ValueError: If the given region graph name is not known.
-    """
-    match name:
-        case "quad-tree-2":
-            return QuadTree(image_shape, num_patch_splits=2)
-        case "quad-tree-4":
-            return QuadTree(image_shape, num_patch_splits=4)
-        case "quad-graph":
-            return QuadGraph(image_shape)
-        case "random-binary-tree":
-            return RandomBinaryTree(np.prod(image_shape))
-        case "poon-domingos":
-            delta = max(np.ceil(image_shape[0] / 8), np.ceil(image_shape[1] / 8))
-            return PoonDomingos(image_shape, delta=delta)
-        case _:
-            raise ValueError(f"Unknown region graph called {name}")
+        Returns:
+            InputLayer: An input layer.
+        """
+
+
+class SumLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs sum layers."""
+
+    def __call__(self, num_input_units: int, num_output_units: int) -> SumLayer:
+        """Constructs a sum layer.
+
+        Args:
+            num_input_units: The number of units in each layer that is an input.
+            num_output_units: The number of sum units in the layer.
+
+        Returns:
+            SumLayer: A sum layer.
+        """
+
+
+class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs product layers."""
+
+    def __call__(self, num_input_units: int, arity: int) -> ProductLayer:
+        """Constructs a product layer.
+
+        Args:
+            num_input_units: The number of units in each layer that is an input.
+            arity: The number of input layers.
+
+        Returns:
+            ProductLayer: A product layer.
+        """
 
 
 def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:

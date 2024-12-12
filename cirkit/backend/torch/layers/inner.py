@@ -22,7 +22,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         *,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
+    ):
         """Initialize an inner layer.
 
         Args:
@@ -87,7 +87,7 @@ class TorchHadamardLayer(TorchInnerLayer):
         *,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
+    ):
         """Initialize a Hadamard product layer.
 
         Args:
@@ -138,7 +138,7 @@ class TorchKroneckerLayer(TorchInnerLayer):
         *,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
+    ):
         """Initialize a Kronecker product layer.
 
         Args:
@@ -200,7 +200,7 @@ class TorchSumLayer(TorchInnerLayer):
         weight: TorchParameter,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
+    ):
         r"""Initialize a sum layer.
 
         Args:
@@ -216,20 +216,21 @@ class TorchSumLayer(TorchInnerLayer):
 
         Raises:
             ValueError: If the arity is not a positive integer.
-            ValueError: If the number of input units is not the same as the number of output units.
+            ValueError: If the arity, the number of input and output units are incompatible with the
+                shape of the weight parameter.
         """
         if arity < 1:
             raise ValueError("The arity must be a positive integer")
         super().__init__(
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
-        self.weight = weight
         if not self._valid_weight_shape(weight):
             raise ValueError(
                 f"Expected number of folds {self.num_folds} "
                 f"and shape {self._weight_shape} for 'weight', found"
                 f"{weight.num_folds} and {weight.shape}, respectively"
             )
+        self.weight = weight
 
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
