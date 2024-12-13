@@ -11,6 +11,8 @@ nav:
       - nb3: 'notebooks/sum-of-squares-circuits.ipynb'
       - nb4: 'notebooks/compilation-options.ipynb'
       - nb5: 'notebooks/learning-a-circuit-with-pic.ipynb'
+      - nb6: 'notebooks/logic-circuits.ipynb'
+      - nb7: 'notebooks/compression-cp-factorization.ipynb'
   - API documentation: 'api/'
 plugins:
   - search
