@@ -5,7 +5,7 @@ from pathlib import Path
 import graphviz
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import HadamardLayer, InputLayer, ProductLayer, SumLayer
+from cirkit.symbolic.layers import HadamardLayer, InputLayer, KroneckerLayer, ProductLayer, SumLayer
 
 
 def plot_circuit(
@@ -18,9 +18,9 @@ def plot_circuit(
     label_color: str = "white",
     sum_label: str | Callable[[SumLayer], str] = "+",
     sum_color: str | Callable[[SumLayer], str] = "#607d8b",
-    product_label: str | Callable[[ProductLayer], str] = "⊙",
+    product_label: str | Callable[[ProductLayer], str] | None = None,
     product_color: str | Callable[[ProductLayer], str] = "#24a5af",
-    input_label: str | Callable[[InputLayer], str] = lambda l: " ".join(map(str, l.scope)),
+    input_label: str | Callable[[InputLayer], str] = None,
     input_color: str | Callable[[InputLayer], str] = "#ffbd2a",
 ) -> graphviz.Digraph:
     """Plot the current symbolic circuit using graphviz.
@@ -56,13 +56,14 @@ def plot_circuit(
             that will be used as color for the sum node. Defaults to "#607d8b".
         product_label (str | Callable[[ProductLayer], str], optional): Either a string or a function.
             If a function is provided, then it must take as input a product layer and returns a string
-            that will be used as label. Defaults to "⊙".
+            that will be used as label. If None, it defaults to "⊙" for Hadamard layers and "⊗" for
+            Kronecker layers.
         product_color (str | Callable[[ProductLayer], str], optional): Either a string or a function.
             If a function is provided, then it must take as input a product layer and returns a string
             that will be used as color for the product node. Defaults to "#24a5af".
         input_label (_type_, optional): Either a string or a function.
             If a function is provided, then it must take as input an input layer and returns a string
-            that will be used as label. Defaults to using the scope of the layer.
+            that will be used as label. If None, it defaults to using the scope of the layer.
         input_color (str | Callable[[ProductLayer], str], optional): Either a string or a function.
             If a function is provided, then it must take as input an input layer and returns a string
             that will be used as color for the input layer node. Defaults to "#ffbd2a".
@@ -84,6 +85,25 @@ def plot_circuit(
     if orientation not in ["vertical", "horizontal"]:
         raise ValueError("Supported graph directions are only 'vertical' and 'horizontal'.")
 
+    def _default_product_label(sl: ProductLayer) -> str:
+        match sl:
+            case HadamardLayer():
+                return "⊙"
+            case KroneckerLayer():
+                return "⊗"
+            case _:
+                raise NotImplementedError(
+                    f"No default label for product layer of type {sl.__class__}"
+                )
+
+    def _default_input_label(sl: InputLayer) -> str:
+        return " ".join(map(str, sl.scope))
+
+    if product_label is None:
+        product_label = _default_product_label
+    if input_label is None:
+        input_label = _default_input_label
+
     dot: graphviz.Digraph = graphviz.Digraph(
         format=fmt,
         node_attr={
@@ -99,7 +119,7 @@ def plot_circuit(
 
     for sl in circuit.layers:
         match sl:
-            case HadamardLayer():
+            case ProductLayer():
                 dot.node(
                     str(id(sl)),
                     product_label if isinstance(product_label, str) else product_label(sl),
