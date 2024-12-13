@@ -2,12 +2,22 @@ site_name: cirkit
 site_url: https://example.com
 repo_url: https://github.com/april-tools/cirkit
 nav:
-  - Home: 'README.md'
-  - Notebooks: 'notebooks/README.md'
+  - Getting Started: 'index.md'
+  - Notebooks:
+    - Overview: 'notebooks/README.md'
+    - Overview:
+      - nb1: 'notebooks/learning-a-circuit.ipynb'
+      - nb2: 'notebooks/region-graphs-and-parametrisation.ipynb'
+      - nb3: 'notebooks/sum-of-squares-circuits.ipynb'
+      - nb4: 'notebooks/compilation-options.ipynb'
+      - nb5: 'notebooks/learning-a-circuit-with-pic.ipynb'
+      - nb6: 'notebooks/logic-circuits.ipynb'
+      - nb7: 'notebooks/compression-cp-factorization.ipynb'
   - API documentation: 'api/'
 plugins:
   - search
   - autorefs
+  - mkdocs-jupyter 
   - gen-files:
       scripts:
         - scripts/generate_api_pages.py
@@ -31,6 +41,7 @@ plugins:
             show_if_no_docstring: true
 theme:
   name: "material"
+  logo: "assets/logo.png"
   palette:
     primary: blue
     accent: orange
@@ -53,6 +64,11 @@ theme:
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -65,4 +81,5 @@ extra_javascript:
   - https://unpkg.com/katex@0/dist/katex.min.js
   - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
 extra_css:
-  - https://unpkg.com/katex@0/dist/katex.min.css
+   - css/style.css
+   - https://unpkg.com/katex@0/dist/katex.min.css
