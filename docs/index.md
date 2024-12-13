@@ -8,7 +8,10 @@ hide:
 <div class="grid" markdown>
 
 
+<div markdown>
+# Building efficient and trustworthy AI
 **cirkit** is a framework for building, learning and reasoning about **probabilistic machine learning** models, such as [circuits](https://arxiv.org/abs/2409.07953) and [tensor networks](https://arxiv.org/abs/1708.00006), which are **tractable** and **expressive**.
+</div>
 
 
 * ⚡ **Exact and Efficient Inference** : Automatically compile tractable models to efficient computational graphs that run on the GPU.
