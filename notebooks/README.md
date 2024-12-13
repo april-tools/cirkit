@@ -19,6 +19,7 @@ graph TD;
     A-->D[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb'>Probabilistic Integral Circuits</a>];
     B-->E[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb'>Sum of Squares Circuits</a>];
     C-->E;
-    B-->F[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/compression-cp-factorization.ipynb'>CP Tensor Factorization</a>]
+    B-->F[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/compression-cp-factorization.ipynb'>CP Tensor Factorization</a>];
+    B-->G[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/logic-circuits.ipynb'>Logic Circuits</a>]
 ```
 
