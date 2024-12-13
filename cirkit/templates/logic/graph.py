@@ -91,7 +91,7 @@ class LogicGraph(RootedDiAcyclicGraph[LogicCircuitNode]):
             LogicGraph: The simplified graph, where all bottom and top nodes have
                 been removed through simplification.
         """
-        in_nodes = dict(self.nodes_inputs.copy())
+        in_nodes = dict(self.nodes_inputs)
         root = next(self.outputs)
 
         absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
