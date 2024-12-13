@@ -2,6 +2,7 @@
 hide:
     - toc
     - navigation
+    - title
 ---
 
 <div class="grid" markdown>
