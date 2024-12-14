@@ -49,4 +49,4 @@ class TorchEinsumParameter(TorchParameterOp):
 
     def forward(self, *xs: Tensor) -> Tensor:
         einsum_args = tuple(itertools.chain.from_iterable(zip(xs, self._folded_einsum[:-1])))
-        return torch.einsum(*einsum_args, self.einsum[-1])
+        return torch.einsum(*einsum_args, self._folded_einsum[-1])
