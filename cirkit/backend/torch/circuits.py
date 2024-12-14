@@ -237,12 +237,6 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             for p in l.params.values():
                 p.reset_parameters()
 
-    def _set_device(self, device: str | torch.device | int) -> None:
-        for l in self.layers:
-            for p in l.params.values():
-                p._set_device(device)
-        super()._set_device(device)
-
     def _build_unfold_index_info(self) -> FoldIndexInfo:
         return build_unfold_index_info(
             self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs

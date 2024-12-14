@@ -178,8 +178,8 @@ class IntegrateQuery(Query):
         if invalid_idxs:
             raise ValueError(
                 "The variables to marginalize must be a subset of "
-                " the circuit scope. Invalid variables"
-                " not in scope: %s." % list(invalid_idxs)
+                "the circuit scope. Invalid variables "
+                f"not in scope: {list(invalid_idxs)} "
             )
 
         mask[batch_idxs, rv_idxs] = True

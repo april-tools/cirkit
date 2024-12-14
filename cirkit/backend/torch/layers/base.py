@@ -4,7 +4,6 @@ from functools import cached_property
 from typing import Any
 
 import torch
-from torch import Tensor
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
 from cirkit.backend.torch.parameters.parameter import TorchParameter

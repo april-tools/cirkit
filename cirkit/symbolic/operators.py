@@ -34,7 +34,7 @@ from cirkit.utils.scope import Scope
 
 
 def integrate_embedding_layer(sl: EmbeddingLayer, *, scope: Scope) -> CircuitBlock:
-    if len(sl.scope & scope) == 0:
+    if not len(sl.scope & scope):
         raise ValueError(
             f"The scope of the Embedding layer '{sl.scope}'"
             f" is expected to be a subset of the integration scope '{scope}'"
@@ -47,7 +47,7 @@ def integrate_embedding_layer(sl: EmbeddingLayer, *, scope: Scope) -> CircuitBlo
 
 
 def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> CircuitBlock:
-    if len(sl.scope & scope) == 0:
+    if not len(sl.scope & scope):
         raise ValueError(
             f"The scope of the Categorical layer '{sl.scope}'"
             f" is expected to be a subset of the integration scope '{scope}'"
@@ -63,7 +63,7 @@ def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> Circui
 
 
 def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock:
-    if len(sl.scope & scope) == 0:
+    if not len(sl.scope & scope):
         raise ValueError(
             f"The scope of the Gaussian layer '{sl.scope}'"
             f" is expected to be a subset of the integration scope '{scope}'"

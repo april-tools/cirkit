@@ -2,6 +2,7 @@ import itertools
 from typing import Any
 
 import torch
+from einops import einsum
 from torch import Tensor
 
 from cirkit.backend.torch.parameters.nodes import TorchParameterOp
@@ -34,7 +35,7 @@ class TorchEinsumParameter(TorchParameterOp):
         # Add fold dimension in both inputs and outputs of the einsum
         self.einsum = einsum
         self._folded_einsum = tuple(
-            (0,) + tuple(map(lambda i: i + 1, einsum_idx)) for einsum_idx in einsum
+            (0,) + tuple(i + 1 for i in einsum_idx) for einsum_idx in einsum
         )
 
     @property

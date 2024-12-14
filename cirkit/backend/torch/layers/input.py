@@ -247,17 +247,21 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
         )
         self.num_states = num_states
         if not self._valid_parameter_shape(weight):
-            raise ValueError(f"The number of folds and shape of 'weight' must match the layer's")
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._weight_shape} for 'weight', found"
+                f"{weight.num_folds} and {weight.shape}, respectively"
+            )
         self.weight = weight
 
-    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
+    def _valid_weight_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return p.shape == (
-            self.num_output_units,
-            self.num_channels,
-            self.num_states,
-        )
+        return p.shape == self._weight_shape
+
+    @property
+    def _weight_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels, self.num_states
 
     @property
     def config(self) -> Mapping[str, Any]:
