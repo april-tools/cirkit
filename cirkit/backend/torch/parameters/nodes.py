@@ -744,6 +744,45 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
         return torch.matmul(x1, x2)  # (F, d1, d3)
 
 
+class TorchFlattenParameter(TorchUnaryParameterOp):
+    def __init__(
+        self,
+        in_shape: tuple[int, ...],
+        num_folds: int = 1,
+        start_dim: int = 0,
+        end_dim: int = -1,
+    ):
+        super().__init__(in_shape, num_folds=num_folds)
+        start_dim = start_dim if start_dim >= 0 else start_dim + len(in_shape)
+        assert 0 <= start_dim < len(in_shape)
+        end_dim = end_dim if end_dim >= 0 else end_dim + len(in_shape)
+        assert 0 <= end_dim < len(in_shape)
+        assert start_dim < end_dim
+        self.start_dim = start_dim
+        self.end_dim = end_dim
+
+    @property
+    def config(self) -> dict[str, Any]:
+        config = super().config
+        config["start_dim"] = self.start_dim
+        config["end_dim"] = self.end_dim
+        return config
+
+    @cached_property
+    def shape(self) -> tuple[int, ...]:
+        flattened_dim = np.prod(
+            [self.in_shapes[0][i] for i in range(self.start_dim, self.end_dim + 1)]
+        )
+        return (
+            *self.in_shapes[0][: self.start_dim],
+            flattened_dim,
+            *self.in_shapes[0][self.end_dim + 1 :],
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.flatten(x, start_dim=self.start_dim + 1, end_dim=self.end_dim + 1)
+
+
 class TorchMixingWeightParameter(TorchUnaryParameterOp):
     def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1):
         super().__init__(in_shape, num_folds=num_folds)
