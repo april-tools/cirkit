@@ -42,21 +42,18 @@ hide:
     ---
     [:octicons-arrow-right-24: for distribution estimation :fontawesome-solid-chart-area:{.lg}](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit.ipynb)
 
-	[:octicons-arrow-right-24: for tensor compression :fontawesome-solid-file-zipper:](https://github.com/april-tools/cirkit/blob/main/notebooks/compression-cp-factorization.ipynb)
+   	[:octicons-arrow-right-24: for tensor compression :fontawesome-solid-file-zipper:](https://github.com/april-tools/cirkit/blob/main/notebooks/compression-cp-factorization.ipynb)
 
-    [:octicons-arrow-right-24: ... all of the above, with PICs :fontawesome-solid-camera:](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb)
+    [:octicons-arrow-right-24: as a (generative) multi-class classifier](https://github.com/april-tools/cirkit/blob/main/notebooks/generative-vs-discriminative-circuit.ipynb)
 
-<!--
-
-    [:octicons-arrow-right-24: as a (generative) multi-class classifier](#)
---->
+    [:octicons-arrow-right-24: ... all of the above, with PICs :fontawesome-solid-camera:{.lg}](https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb)
 
 -   :material-scale-balance:{ .lg .middle }__Advanced reasoning...__
 
     ---
     [:octicons-arrow-right-24: with squared circuits $($:fontawesome-solid-plug-circle-minus:{.lg}$)^2$](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb)
 
-    [:octicons-arrow-right-24: with logic circuits :fontawesome-solid-square-binary:{.lg}...](https://github.com/april-tools/cirkit/blob/main/notebooks/logic-circuits.ipynb)
+    [:octicons-arrow-right-24: with logic circuits :fontawesome-solid-square-binary:{.lg}](https://github.com/april-tools/cirkit/blob/main/notebooks/logic-circuits.ipynb)
 
 	</br>
     ...to enforce constraints in neural nets
