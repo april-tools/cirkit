@@ -251,7 +251,7 @@ class TorchPointerParameter(TorchParameterInput):
                 num_folds = len(fold_idx)
         assert not isinstance(parameter, TorchPointerParameter)
         super().__init__(num_folds=num_folds)
-        super(nn.Module, self).__setattr__("_parameter", parameter)
+        self._parameter = parameter
         self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
 
     @property
