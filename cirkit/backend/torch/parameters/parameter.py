@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 import torch
 from torch import Tensor
@@ -27,16 +27,8 @@ class ParameterAddressBook(AddressBook):
     """
 
     def lookup(
-        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
-    ) -> Iterator[tuple[TorchParameterNode | None, tuple[Tensor, ...]]]:
-        # A useful function combining the modules outputs, and then possibly applying an index
-        def _select_index(mids: list[int], idx: Tensor | None) -> Tensor:
-            if len(mids) == 1:
-                t = module_outputs[mids[0]]
-            else:
-                t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
-            return t if idx is None else t[idx]
-
+        self, node_outputs: list[Tensor], *, in_graph: Tensor | None = None
+    ) -> Iterator[tuple[TorchParameterNode | None, tuple]]:
         # Loop through the entries and yield inputs
         for entry in self._entries:
             in_module_ids = entry.in_module_ids
@@ -44,7 +36,7 @@ class ParameterAddressBook(AddressBook):
             # Catch the case there are some inputs coming from other modules
             if in_module_ids:
                 x = tuple(
-                    _select_index(mids, in_idx)
+                    ParameterAddressBook._select_index(node_outputs, mids, in_idx)
                     for mids, in_idx in zip(in_module_ids, entry.in_fold_idx)
                 )
                 yield entry.module, x
@@ -52,6 +44,15 @@ class ParameterAddressBook(AddressBook):
 
             # Catch the case there are no inputs coming from other modules
             yield entry.module, ()
+
+    @staticmethod
+    def _select_index(node_outputs: list[Tensor], mids: list[int], idx: Tensor | None) -> Tensor:
+        # A useful function combining the modules outputs, and then possibly applying an index
+        if len(mids) == 1:
+            t = node_outputs[mids[0]]
+        else:
+            t = torch.cat([node_outputs[mid] for mid in mids], dim=0)
+        return t if idx is None else t[idx]
 
     @classmethod
     def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
@@ -100,6 +101,41 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     torch parameter computes a tensor of shape (F,K_1,\ldots,K_n).
     Note that a torch parameter does not take any tensor as input.
     """
+
+    def __init__(
+        self,
+        modules: Sequence[TorchParameterNode],
+        in_modules: dict[TorchParameterNode, Sequence[TorchParameterNode]],
+        outputs: Sequence[TorchParameterNode],
+        *,
+        fold_idx_info: FoldIndexInfo | None = None,
+    ):
+        """Initialize a torch parameter computational graph.
+
+        Args:
+            modules: The parameter computational nodes.
+            in_modules: A dictionary mapping nodes to their input nodes, if any.
+            outputs: A list of nodes that are the output nodes in the computational graph.
+            fold_idx_info: The folding index information.
+                It can be None if the Torch graph is not folded.
+        """
+        super().__init__(modules, in_modules, outputs, fold_idx_info=fold_idx_info)
+
+    @property
+    def device(self) -> torch.device:
+        """Retrieve the device of the parameter computational graph.
+        Currently, it assumes all [torch.nn.parameter.Parameter][torch.nn.parameter.Parameter]
+        it contains are stored in the same device.
+
+        Returns:
+            torch.device: The device.
+        """
+        # TODO: Obtaining the device in this way is only needed because
+        #  the integrate() method in layers can output constant tensors that
+        #  would be allocated on the CPU by default (e.g., log_partition_function()).
+        #  Since having a device flag in nn.Module is malpractice (tensors are stored
+        #  on devices but NOT modules), is there a better way to do this?
+        return next(self.parameters()).device
 
     @property
     def num_folds(self) -> int:

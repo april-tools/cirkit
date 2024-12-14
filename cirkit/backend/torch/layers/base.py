@@ -103,14 +103,6 @@ class TorchLayer(AbstractTorchModule, ABC):
         """
         return sum(2 * b.numel() if torch.is_complex(b) else b.numel() for b in self.buffers())
 
-    def __call__(self, x: Tensor) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
-        ...
-
     def extra_repr(self) -> str:
         return (
             "  ".join(
