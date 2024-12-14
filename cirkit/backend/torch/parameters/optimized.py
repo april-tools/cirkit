@@ -12,7 +12,7 @@ class TorchEinsumParameter(TorchParameterOp):
         self,
         in_shapes: tuple[tuple[int, ...], ...],
         einsum: tuple[tuple[int, ...], ...],
-        num_folds: int = 1
+        num_folds: int = 1,
     ):
         if len(in_shapes) != len(einsum) - 1:
             raise ValueError("Number of inputs and einsum shapes mismatch")
@@ -30,9 +30,7 @@ class TorchEinsumParameter(TorchParameterOp):
                 continue
         super().__init__(*in_shapes, num_folds=num_folds)
         # Pre-compute the output shape of the einsum
-        self._output_shape = tuple(
-            idx_to_dim[einsum_idx] for einsum_idx in einsum[-1]
-        )
+        self._output_shape = tuple(idx_to_dim[einsum_idx] for einsum_idx in einsum[-1])
         # Add fold dimension in both inputs and outputs of the einsum
         self.einsum = einsum
         self._folded_einsum = tuple(
