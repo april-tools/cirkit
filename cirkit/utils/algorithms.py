@@ -2,6 +2,8 @@ from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Generic, TypeVar
 
+from networkx.classes import nodes
+
 NodeType = TypeVar("NodeType")
 
 
@@ -64,7 +66,7 @@ def topological_ordering(
             num_incomings[n] -= 1
             if num_incomings[n] == 0:
                 to_visit.append(n)
-    if sum(num_incomings.values()) != 0:
+    if sum(num_incomings.values()):
         raise ValueError("The graph has at least one cycle. No topological ordering exists.")
 
 
@@ -110,7 +112,7 @@ def topologically_process_nodes(
         new_n = process_fn(n)
         nodes_map[n] = new_n
         in_nodes[new_n] = [nodes_map[ni] for ni in incomings_fn(n)]
-    nodes = [nodes_map[n] for n in nodes_map.keys()]
+    nodes = list(nodes_map.values())
     outputs = [nodes_map[n] for n in outputs]
     return nodes, in_nodes, outputs
 

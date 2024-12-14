@@ -30,7 +30,7 @@ def copy_from_ndarray_(tensor: Tensor, *, array: np.ndarray) -> Tensor:
 
 def dirichlet_(tensor: Tensor, alpha: float | list[float], *, dim: int = -1) -> Tensor:
     shape = tensor.shape
-    if len(shape) == 0:
+    if not shape:
         raise ValueError(
             "Cannot initialize a tensor with no dimensions by sampling from a Dirichlet"
         )
@@ -40,7 +40,8 @@ def dirichlet_(tensor: Tensor, alpha: float | list[float], *, dim: int = -1) -> 
     else:
         if shape[dim] != len(alpha):
             raise ValueError(
-                "The selected dim of the tensor and the size of concentration parameters do not match"
+                "The selected dim of the tensor and the size of concentration parameters "
+                "do not match"
             )
         concentration = Tensor(alpha)
     dirichlet = torch.distributions.Dirichlet(concentration)

@@ -15,7 +15,6 @@ def zw_quadrature(
     b: float | None = 1,
     return_log_weight: bool | None = False,
     dtype: torch.dtype | None = torch.float32,
-    device: torch.device | None = "cpu",
 ):
     if integration_method == "leggauss":
         z_quad, w_quad = np.polynomial.legendre.leggauss(nip)
@@ -41,8 +40,8 @@ def zw_quadrature(
         z_quad, w_quad = np.polynomial.hermite.hermgauss(nip)
     else:
         raise NotImplementedError("Integration method not implemented.")
-    z_quad = torch.tensor(z_quad, dtype=dtype).to(device)
-    w_quad = torch.tensor(w_quad, dtype=dtype).to(device)
+    z_quad = torch.tensor(z_quad, dtype=dtype)
+    w_quad = torch.tensor(w_quad, dtype=dtype)
     w_quad = w_quad.log() if return_log_weight else w_quad
     return z_quad, w_quad
 
@@ -160,9 +159,6 @@ class PICInputNet(nn.Module):
             param = self.reparam(param)
         return param
 
-    def _set_device(self, device: str | torch.device | int) -> None:
-        self._device = device
-
     def __repr__(self):
         return "\n".join(
             [line for line in super().__repr__().split("\n") if "tensor_parameter" not in line]
@@ -274,9 +270,6 @@ class PICInnerNet(nn.Module):
             param = param.view_as(self.tensor_parameter._ptensor)
             self.tensor_parameter._ptensor = param
         return param
-
-    def _set_device(self, device: str | torch.device | int) -> None:
-        self._device = device
 
     def __repr__(self):
         return "\n".join(

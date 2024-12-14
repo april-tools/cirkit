@@ -27,7 +27,7 @@ class ParameterAddressBook(AddressBook):
     """
 
     def lookup(
-        self, node_outputs: list[Tensor], *, in_graph: Tensor | None = None
+        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchParameterNode | None, tuple]]:
         # Loop through the entries and yield inputs
         for entry in self._entries:
@@ -36,7 +36,7 @@ class ParameterAddressBook(AddressBook):
             # Catch the case there are some inputs coming from other modules
             if in_module_ids:
                 x = tuple(
-                    ParameterAddressBook._select_index(node_outputs, mids, in_idx)
+                    ParameterAddressBook._select_index(module_outputs, mids, in_idx)
                     for mids, in_idx in zip(in_module_ids, entry.in_fold_idx)
                 )
                 yield entry.module, x

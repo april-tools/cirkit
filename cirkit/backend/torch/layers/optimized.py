@@ -255,7 +255,7 @@ class TorchTensorDotLayer(TorchInnerLayer):
             return False
         if len(w.shape) != 2:
             return False
-        if self.num_input_units % w.shape[1] != 0:
+        if self.num_input_units % w.shape[1]:
             return False
         if self.num_output_units != w.shape[0] * (self.num_input_units // w.shape[1]):
             return False
