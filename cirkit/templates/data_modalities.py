@@ -21,6 +21,7 @@ def image_data(
     num_input_units: int,
     sum_product_layer: str,
     num_sum_units: int,
+    num_classes: int = 1,
     input_params: dict[str, Parameterization] | None = None,
     sum_weight_param: Parameterization | None = None,
     use_mixing_weights: bool = True,
@@ -47,6 +48,7 @@ def image_data(
             of a hadamard product layer followed by a single dense layer), 'tucker' (the Tucker
             decomposition layer, consisting of a kronecker product layer followed by a single dense
             layer).
+        num_classes: The number of output classes (default=1).
         num_sum_units: The number of sum units in each sum layer, i.e., either dense or mixing
             layer.
         input_params: A dictionary mapping each name of a parameter of the input layer to
@@ -136,6 +138,6 @@ def image_data(
         num_channels=image_shape[0],
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
-        num_classes=1,
+        num_classes=num_classes,
         factorize_multivariate=True,
     )
