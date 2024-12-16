@@ -13,6 +13,7 @@ nav:
       - nb5: 'notebooks/learning-a-circuit-with-pic.ipynb'
       - nb6: 'notebooks/logic-circuits.ipynb'
       - nb7: 'notebooks/compression-cp-factorization.ipynb'
+      - nb8: 'notebooks/generative-vs-discriminative-circuit.ipynb'
   - API documentation: 'api/'
 plugins:
   - search
