@@ -28,7 +28,6 @@ class TorchEinsumParameter(TorchParameterOp):
                         f"Einsum shape mismatch, found {in_shape[i]} "
                         f"but expected {idx_to_dim[einsum_idx]}"
                     )
-                continue
         super().__init__(*in_shapes, num_folds=num_folds)
         # Pre-compute the output shape of the einsum
         self._output_shape = tuple(idx_to_dim[einsum_idx] for einsum_idx in einsum[-1])
