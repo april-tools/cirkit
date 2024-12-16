@@ -246,7 +246,7 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
             semiring=semiring,
         )
         self.num_states = num_states
-        if not self._valid_parameter_shape(weight):
+        if not self._valid_weight_shape(weight):
             raise ValueError(
                 f"Expected number of folds {self.num_folds} "
                 f"and shape {self._weight_shape} for 'weight', found"
