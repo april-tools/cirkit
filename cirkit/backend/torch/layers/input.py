@@ -281,12 +281,12 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
         x = x.squeeze(dim=3)  # (F, C, B)
         weight = self.weight()
         if self.num_channels == 1:
-            idx_fold = torch.arange(self.num_folds, device=weight.device)
+            idx_fold = torch.arange(self.num_folds)
             x = weight[:, :, 0][idx_fold[:, None], :, x[:, 0]]
             x = self.semiring.map_from(x, SumProductSemiring)
         else:
-            idx_fold = torch.arange(self.num_folds, device=weight.device)[:, None, None]
-            idx_channel = torch.arange(self.num_channels, device=weight.device)[None, :, None]
+            idx_fold = torch.arange(self.num_folds)[:, None, None]
+            idx_channel = torch.arange(self.num_channels)[None, :, None]
             x = weight[idx_fold, :, idx_channel, x]
             x = self.semiring.map_from(x, SumProductSemiring)
             x = self.semiring.prod(x, dim=1)
@@ -434,11 +434,11 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         # logits: (F, K, C, N)
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         if self.num_channels == 1:
-            idx_fold = torch.arange(self.num_folds, device=logits.device)
+            idx_fold = torch.arange(self.num_folds)
             x = logits[:, :, 0][idx_fold[:, None], :, x[:, 0]]
         else:
-            idx_fold = torch.arange(self.num_folds, device=logits.device)[:, None, None]
-            idx_channel = torch.arange(self.num_channels, device=logits.device)[None, :, None]
+            idx_fold = torch.arange(self.num_folds)[:, None, None]
+            idx_channel = torch.arange(self.num_channels)[None, :, None]
             x = torch.sum(logits[idx_fold, :, idx_channel, x], dim=1)
         return x
 
