@@ -225,7 +225,7 @@ class TorchCompiler(AbstractCompiler):
         outputs = [compiled_layers_map[sl] for sl in sc.outputs]
 
         # Construct the tensorized circuit
-        layers = [compiled_layers_map[sl] for sl in compiled_layers_map.keys()]
+        layers = list(compiled_layers_map.values())
         cc = cc_cls(
             sc.scope,
             sc.num_channels,

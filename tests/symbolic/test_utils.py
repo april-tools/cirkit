@@ -11,6 +11,7 @@ from cirkit.symbolic.initializers import (
 )
 from cirkit.symbolic.layers import (
     CategoricalLayer,
+    EmbeddingLayer,
     GaussianLayer,
     HadamardLayer,
     Layer,
@@ -167,6 +168,16 @@ def build_multivariate_monotonic_structured_cpt_pc(
                 num_categories=2,
                 logits_factory=logits_factory,
                 probs_factory=probs_factory,
+            )
+            for vid in range(5)
+        }
+    elif input_layer == "embedding":
+        input_layers = {
+            (vid,): EmbeddingLayer(
+                Scope([vid]),
+                num_output_units=num_units,
+                num_channels=1,
+                num_states=2,
             )
             for vid in range(5)
         }

@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any
 
@@ -42,6 +42,11 @@ class TorchInnerLayer(TorchLayer, ABC):
         pshapes = [(n, p.shape) for n, p in self.params.items()]
         return *self.config.items(), *pshapes
 
+    def __call__(self, x: Tensor) -> Tensor:
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
         """Invoke the forward function.
 

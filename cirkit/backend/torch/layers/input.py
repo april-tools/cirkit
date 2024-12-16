@@ -91,20 +91,6 @@ class TorchInputLayer(TorchLayer, ABC):
         pshapes = [(n, p.shape) for n, p in self.params.items()]
         return self.num_variables, *self.config.items(), *pshapes
 
-    @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Invoke the forward function.
-
-        Args:
-            x: The tensor input to this layer, having shape $(F, C, B, D)$, where $F$
-                is the number of folds, $C$ is the number of channels,
-                $B$ is the batch size, and $D$ is the number of variables.
-
-        Returns:
-            Tensor: The tensor output of this layer, having shape $(F, B, K)$, where $K$
-                is the number of output units.
-        """
-
     def integrate(self) -> Tensor:
         r"""Integrate an input layer over all its variables' domain.
 
@@ -150,9 +136,31 @@ class TorchInputLayer(TorchLayer, ABC):
         )
 
 
+class TorchInputFunctionLayer(TorchInputLayer):
+    """An input layer encoding functions defined over a non-empty set of variables."""
+
+    def __call__(self, x: Tensor) -> Tensor:
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Invoke the forward function.
+
+        Args:
+            x: The tensor input to this layer, having shape $(F, C, B, D)$, where $F$
+                is the number of folds, $C$ is the number of channels,
+                $B$ is the batch size, and $D$ is the number of variables.
+
+        Returns:
+            Tensor: The tensor output of this layer, having shape $(F, B, K)$, where $K$
+                is the number of output units.
+        """
+
+
 class TorchConstantLayer(TorchInputLayer, ABC):
-    """An input layer encoding a constant vector function, i.e., a vector function
-    having empty scope.
+    """An input layer encoding a constant vector or, equivalently, a vector of functions
+    defined over empty variable scopes.
     """
 
     def __init__(
@@ -174,8 +182,24 @@ class TorchConstantLayer(TorchInputLayer, ABC):
             torch.empty(size=(num_folds, 0), dtype=torch.int64), num_output_units, semiring=semiring
         )
 
+    def __call__(self, batch_size: int) -> Tensor:
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(batch_size)  # type: ignore[no-any-return,misc]
 
-class TorchEmbeddingLayer(TorchInputLayer):
+    @abstractmethod
+    def forward(self, batch_size: int) -> Tensor:
+        r"""Invoke the forward function.
+
+        Args:
+            batch_size: The batch size $B$ of the output tensor.
+
+        Returns:
+            Tensor: The tensor output of this layer, having shape $(F, B, K)$, where $K$
+                is the number of output units, and $B$ is the batch size given as input.
+        """
+
+
+class TorchEmbeddingLayer(TorchInputFunctionLayer):
     r"""The embedding input layer, where each input function maps a discrete variable having
     finite support $\{0,\ldots,V-1\}$ to the corresponding entry of a $V$-th dimensional vector.
     """
@@ -222,18 +246,22 @@ class TorchEmbeddingLayer(TorchInputLayer):
             semiring=semiring,
         )
         self.num_states = num_states
-        if not self._valid_parameter_shape(weight):
-            raise ValueError(f"The number of folds and shape of 'weight' must match the layer's")
+        if not self._valid_weight_shape(weight):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._weight_shape} for 'weight', found"
+                f"{weight.num_folds} and {weight.shape}, respectively"
+            )
         self.weight = weight
 
-    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
+    def _valid_weight_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return p.shape == (
-            self.num_output_units,
-            self.num_channels,
-            self.num_states,
-        )
+        return p.shape == self._weight_shape
+
+    @property
+    def _weight_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels, self.num_states
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -253,19 +281,19 @@ class TorchEmbeddingLayer(TorchInputLayer):
         x = x.squeeze(dim=3)  # (F, C, B)
         weight = self.weight()
         if self.num_channels == 1:
-            idx_fold = torch.arange(self.num_folds, device=weight.device)
+            idx_fold = torch.arange(self.num_folds)
             x = weight[:, :, 0][idx_fold[:, None], :, x[:, 0]]
             x = self.semiring.map_from(x, SumProductSemiring)
         else:
-            idx_fold = torch.arange(self.num_folds, device=weight.device)[:, None, None]
-            idx_channel = torch.arange(self.num_channels, device=weight.device)[None, :, None]
+            idx_fold = torch.arange(self.num_folds)[:, None, None]
+            idx_channel = torch.arange(self.num_channels)[None, :, None]
             x = weight[idx_fold, :, idx_channel, x]
             x = self.semiring.map_from(x, SumProductSemiring)
             x = self.semiring.prod(x, dim=1)
         return x  # (F, B, K)
 
 
-class TorchExpFamilyLayer(TorchInputLayer, ABC):
+class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
     """The abstract base class for exponential family distribution layers.
     An input layer that is an exponential family distribution must define two methods.
     The first one is the ```log_unnormalized_likelihood```, used to compute the
@@ -406,11 +434,11 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         # logits: (F, K, C, N)
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         if self.num_channels == 1:
-            idx_fold = torch.arange(self.num_folds, device=logits.device)
+            idx_fold = torch.arange(self.num_folds)
             x = logits[:, :, 0][idx_fold[:, None], :, x[:, 0]]
         else:
-            idx_fold = torch.arange(self.num_folds, device=logits.device)[:, None, None]
-            idx_channel = torch.arange(self.num_channels, device=logits.device)[None, :, None]
+            idx_fold = torch.arange(self.num_folds)[:, None, None]
+            idx_channel = torch.arange(self.num_channels)[None, :, None]
             x = torch.sum(logits[idx_fold, :, idx_channel, x], dim=1)
         return x
 
@@ -729,10 +757,10 @@ class TorchConstantValueLayer(TorchConstantLayer):
     def params(self) -> Mapping[str, TorchParameter]:
         return {"value": self.value}
 
-    def forward(self, x: Tensor) -> Tensor:
-        value = self.value().unsqueeze(dim=1)  # (F, 1, Ko)
-        # (F, Ko) -> (F, B, O)
-        value = value.expand(value.shape[0], x.shape[2], value.shape[2])
+    def forward(self, batch_size: int) -> Tensor:
+        value = self.value()  # (F, Ko)
+        # value: (F, B, Ko)
+        value = value.unsqueeze(dim=1).expand(value.shape[0], batch_size, value.shape[1])
         return self.semiring.map_from(value, self._source_semiring)
 
 
@@ -798,11 +826,11 @@ class TorchEvidenceLayer(TorchConstantLayer):
     def sub_modules(self) -> Mapping[str, TorchInputLayer]:
         return {"layer": self.layer}
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, batch_size: int) -> Tensor:
         obs = self.observation()  # (F, C, D)
         obs = obs.unsqueeze(dim=2)  # (F, C, 1, D)
-        obs = obs.expand(obs.shape[0], obs.shape[1], x.shape[2], obs.shape[3])  # (F, C, B, D)
-        return self.layer(obs)  # (F, B, K)
+        x = self.layer(obs)  # (F, 1, K)
+        return x.expand(x.shape[0], batch_size, x.shape[2])
 
     def sample(self, num_samples: int = 1) -> Tensor:
         if self.num_variables != 1:
@@ -813,7 +841,7 @@ class TorchEvidenceLayer(TorchConstantLayer):
         return obs.expand(size=(-1, -1, self.num_output_units, num_samples))
 
 
-class TorchPolynomialLayer(TorchInputLayer):
+class TorchPolynomialLayer(TorchInputFunctionLayer):
     """The polynomial input layer, evaluating a vector of parameterized polynomials."""
 
     def __init__(
