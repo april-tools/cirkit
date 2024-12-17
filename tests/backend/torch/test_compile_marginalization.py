@@ -63,7 +63,6 @@ def test_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, optimiz
         ), f"Input: {x}"
 
 
-@pytest.mark.slow
 def test_marginalize_monotonic_pc_gaussian():
     compiler = TorchCompiler(fold=True, optimize=True, semiring="lse-sum")
     sc, gt_outputs, gt_partition_func = build_monotonic_bivariate_gaussian_hadamard_dense_pc(
