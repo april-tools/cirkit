@@ -3,8 +3,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-import numpy as np
-
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.initializers import (
     DirichletInitializer,

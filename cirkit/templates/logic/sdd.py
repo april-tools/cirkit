@@ -8,8 +8,8 @@ from cirkit.templates.logic.graph import (
     ConjunctionNode,
     DisjunctionNode,
     LiteralNode,
-    LogicCircuitNode,
-    LogicGraph,
+    LogicalCircuit,
+    LogicalCircuitNode,
     NegatedLiteralNode,
     TopNode,
 )
@@ -27,7 +27,7 @@ def sliding_window(iterable, n):
         yield tuple(window)
 
 
-class SDD(LogicGraph):
+class SDD(LogicalCircuit):
     @staticmethod
     def load(filename: str) -> "SDD":
         """Load the SDD from a file.
@@ -46,14 +46,14 @@ class SDD(LogicGraph):
             filename (str): The file name for loading.
 
         Returns:
-            LogicGraph: The loaded logic graph.
+            LogicalCircuit: The loaded logic graph.
         """
         tag_re = re.compile(r"^(c|sdd|F|T|L|D)")
         line_re = re.compile(r"(-?\d+)")
 
-        nodes_map: dict[int, LogicCircuitNode] = {}
-        literal_map: dict[tuple[int, bool], LogicCircuitNode] = {}
-        in_nodes: dict[LogicCircuitNode, list[LogicCircuitNode]] = defaultdict(list)
+        nodes_map: dict[int, LogicalCircuitNode] = {}
+        literal_map: dict[tuple[int, bool], LogicalCircuitNode] = {}
+        in_nodes: dict[LogicalCircuitNode, list[LogicalCircuitNode]] = defaultdict(list)
 
         with open(filename, encoding="utf-8") as f:
             for line in f.readlines():

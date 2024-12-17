@@ -252,7 +252,7 @@ class TorchCompiler(AbstractCompiler):
         ext_model_evals = self._state.ext_model_evals
 
         # Construct the tensorized circuit
-        layers = [compiled_layers_map[sl] for sl in compiled_layers_map.keys()]
+        layers = list(compiled_layers_map.values())
         cc = cc_cls(
             sc.scope,
             sc.num_channels,

@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeVar, cast
+from typing import Any, Protocol, TypeVar
 
-import torch
 from torch import Tensor, nn
 
 from cirkit.utils.algorithms import DiAcyclicGraph, subgraph
@@ -101,7 +100,7 @@ class AddressBookEntry:
     input tensors, i.e., if the indexing operation would act as an identity function."""
 
 
-class AddressBook(ABC):
+class AddressBook(nn.Module, ABC):
     """The address book data structure, sometimes also known as book-keeping.
     The address book stores a list of
     [AddressBookEntry][cirkit.backend.torch.graph.modules.AddressBookEntry],
@@ -168,31 +167,10 @@ class AddressBook(ABC):
         """
         return self._num_outputs
 
-    def set_device(self, device: str | torch.device | int) -> "AddressBook":
-        """Set the device of the address book. This will move the fold index tensors
-        to the chosen device.
-
-        Args:
-            device: The chosen device.
-
-        Returns:
-            The same address book where the tensors contained in it have moved to the chosen device.
-        """
-
-        def _set_book_entry_device(entry: AddressBookEntry) -> AddressBookEntry:
-            return AddressBookEntry(
-                entry.module,
-                entry.in_module_ids,
-                [idx if idx is None else idx.to(device) for idx in entry.in_fold_idx],
-            )
-
-        self._entries = [_set_book_entry_device(entry) for entry in self._entries]
-        return self
-
     @abstractmethod
     def lookup(
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
-    ) -> Iterator[tuple[TorchModule | None, tuple[Tensor, ...]]]:
+    ) -> Iterator[tuple[TorchModule | None, tuple]]:
         """Retrive an iterator that iteratively returns a torch module and the tensor inputs to it.
 
         Args:
@@ -207,8 +185,8 @@ class AddressBook(ABC):
             An iterator of tuples, where the first element is a torch module if we are
             retriving the inputs to it, and None if we are retrieving the output of the
             whole computational graph (i.e., in the final step of the evaluation).
-            The second element is instead a tuple of tensors that are input to the
-            torch module (if any, as a many as its arity).
+            The second element is instead a tuple of arguments that are input to the
+            torch module (e.g., some input tensors)
         """
 
 
@@ -238,7 +216,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         *,
         fold_idx_info: FoldIndexInfo | None = None,
     ):
-        """Initialize a Torch computational graph.
+        """Initialize a torch computational graph.
 
         Args:
             modules: The module nodes.
@@ -250,20 +228,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         modules: list[TorchModule] = nn.ModuleList(modules)  # type: ignore
         super().__init__()
         super(nn.Module, self).__init__(modules, in_modules, outputs)
-        self._device = None
         self._is_folded = fold_idx_info is not None
         if fold_idx_info is None:
             fold_idx_info = self._build_unfold_index_info()
         self._address_book = self._build_address_book(fold_idx_info)
-
-    @property
-    def device(self) -> str | torch.device | int | None:
-        """Retrieve the device the module is allocated to.
-
-        Returns:
-            A device, which can be a string, and integer or a torch.device object.
-        """
-        return self._device
 
     @property
     def is_folded(self) -> bool:
@@ -301,27 +269,6 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         nodes, in_nodes = subgraph(roots, self.node_inputs)
         return self.__class__(nodes, in_nodes, outputs=roots)
 
-    def to(
-        self,
-        device: str | torch.device | int | None = None,
-        dtype: torch.dtype | None = None,
-        non_blocking: bool = False,
-    ) -> "TorchDiAcyclicGraph":
-        """Specialization of the torch module's to() method. This is used to set the device
-            attribute.
-
-        Args:
-            device: The device.
-            dtype: The dtype.
-            non_blocking: Whether the method should be non-blocking.
-
-        Returns:
-            Itself.
-        """
-        if device is not None:
-            self._set_device(device)
-        return cast(TorchDiAcyclicGraph, super().to(device, dtype, non_blocking))
-
     def evaluate(
         self, x: Tensor | None = None, module_fn: ModuleEvalFunction | None = None
     ) -> Tensor:
@@ -355,10 +302,6 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 y = module_fn(module, *inputs)
             module_outputs.append(y)
         raise RuntimeError("The address book is malformed")
-
-    def _set_device(self, device: str | torch.device | int) -> None:
-        self._address_book.set_device(device)
-        self._device = device
 
     @abstractmethod
     def _build_unfold_index_info(self) -> FoldIndexInfo:

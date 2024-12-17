@@ -4,7 +4,6 @@ from functools import cached_property
 from typing import Any
 
 import torch
-from torch import Tensor
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
 from cirkit.backend.torch.parameters.parameter import TorchParameter
@@ -102,14 +101,6 @@ class TorchLayer(AbstractTorchModule, ABC):
             The number of scalar buffers.
         """
         return sum(2 * b.numel() if torch.is_complex(b) else b.numel() for b in self.buffers())
-
-    def __call__(self, x: Tensor) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
-
-    @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
-        ...
 
     def extra_repr(self) -> str:
         return (

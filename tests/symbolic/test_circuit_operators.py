@@ -5,6 +5,7 @@ from typing import TypeVar
 import pytest
 
 import cirkit.symbolic.functional as SF
+from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.circuit import are_compatible
 from cirkit.symbolic.layers import (
     CategoricalLayer,
@@ -164,7 +165,7 @@ def test_multiply_evidence_circuit(num_units: int, input_layer: str):
 
 @pytest.mark.parametrize(
     "num_units,input_layer",
-    itertools.product([1, 3], ["bernoulli", "gaussian"]),
+    itertools.product([1, 3], ["bernoulli", "embedding", "gaussian"]),
 )
 def test_multiply_integrate_circuits(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
