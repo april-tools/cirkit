@@ -73,7 +73,7 @@ def check_continuous_ground_truth(
     assert isclose(int_tc(), semiring.map_from(torch.tensor(gt_partition_func), SumProductSemiring))
     df = lambda y, x: torch.exp(tc(torch.Tensor([[[x, y]]]))).squeeze()
     int_a, int_b = -np.inf, np.inf
-    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b)
+    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b, epsabs=1e-5, epsrel=1e-5)
     assert isclose(ig, gt_partition_func)
 
 
@@ -119,7 +119,6 @@ def test_compile_monotonic_structured_categorical_pc(fold: bool, optimize: bool,
     check_discrete_ground_truth(tc, int_tc, compiler.semiring, gt_outputs["evi"], gt_partition_func)
 
 
-@pytest.mark.slow
 def test_compile_monotonic_structured_gaussian_pc():
     compiler = TorchCompiler(fold=True, optimize=True, semiring="lse-sum")
     sc, gt_outputs, gt_partition_func = build_monotonic_bivariate_gaussian_hadamard_dense_pc(

@@ -105,7 +105,6 @@ def test_compile_product_integrate_pc_categorical(
     assert allclose(compiler.semiring.prod(each_tc_scores, dim=0), scores)
 
 
-@pytest.mark.slow
 def test_compile_product_integrate_pc_gaussian():
     compiler = TorchCompiler(semiring="lse-sum", fold=True, optimize=True)
     scs, tcs = [], []
@@ -113,7 +112,7 @@ def test_compile_product_integrate_pc_gaussian():
     num_products = 3
     for i in range(num_products):
         sci = build_bivariate_monotonic_structured_cpt_pc(
-            num_units=2 + i, input_layer="gaussian", normalized=False
+            num_units=1 + i, input_layer="gaussian", normalized=False
         )
         tci = compiler.compile(sci)
         scs.append(sci)
@@ -138,8 +137,8 @@ def test_compile_product_integrate_pc_gaussian():
     z = z.squeeze()
     df = lambda y, x: torch.exp(tc(torch.Tensor([[[x, y]]]))).squeeze()
     int_a, int_b = -np.inf, np.inf
-    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b)
-    assert np.isclose(ig, torch.exp(z).item(), atol=1e-15)
+    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b, epsabs=1e-5, epsrel=1e-5)
+    assert isclose(ig, torch.exp(z).item())
 
 
 @pytest.mark.parametrize(

@@ -48,15 +48,19 @@ class LayerAddressBook(AddressBook):
             # That is, we are gathering the inputs of input layers
             layer = entry.module
             assert isinstance(layer, TorchInputLayer)
-            if not layer.num_variables:
-                # Pass the wanted batch dimension to constant layers
-                yield layer, (1 if in_graph is None else in_graph.shape[0],)
-            else:
+            if layer.num_variables:
+                if in_graph is None:
+                    yield layer, ()
+                    continue
                 # in_graph: An input batch (assignments to variables) of shape (B, C, D)
                 # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
                 # x: (B, C, D) -> (B, C, F, D') -> (F, C, B, D')
                 x = in_graph[..., layer.scope_idx].permute(2, 1, 0, 3)
                 yield layer, (x,)
+                continue
+
+            # Pass the wanted batch dimension to constant layers
+            yield layer, (1 if in_graph is None else in_graph.shape[0],)
 
     @classmethod
     def from_index_info(
