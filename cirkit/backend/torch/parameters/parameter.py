@@ -29,30 +29,29 @@ class ParameterAddressBook(AddressBook):
     def lookup(
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchParameterNode | None, tuple]]:
-        # Loop through the entries and yield inputs
-        for entry in self._entries:
-            in_module_ids = entry.in_module_ids
+        def _select_index(mids: list[int], idx: Tensor | tuple[slice | None, ...]) -> Tensor:
+            # A useful function combining the modules outputs, and then possibly applying an index
+            if len(mids) == 1:
+                t = module_outputs[mids[0]]
+            else:
+                t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
+            return t[idx]
 
+        # Loop through the entries and yield inputs
+        for entry in self:
+            node = entry.module
+            in_node_ids = entry.in_module_ids
+            in_fold_idx = entry.in_fold_idx
             # Catch the case there are some inputs coming from other modules
-            if in_module_ids:
+            if in_node_ids:
                 x = tuple(
-                    ParameterAddressBook._select_index(module_outputs, mids, in_idx)
-                    for mids, in_idx in zip(in_module_ids, entry.in_fold_idx)
+                    _select_index(mids, in_idx) for mids, in_idx in zip(in_node_ids, in_fold_idx)
                 )
-                yield entry.module, x
+                yield node, x
                 continue
 
             # Catch the case there are no inputs coming from other modules
-            yield entry.module, ()
-
-    @staticmethod
-    def _select_index(node_outputs: list[Tensor], mids: list[int], idx: Tensor | None) -> Tensor:
-        # A useful function combining the modules outputs, and then possibly applying an index
-        if len(mids) == 1:
-            t = node_outputs[mids[0]]
-        else:
-            t = torch.cat([node_outputs[mid] for mid in mids], dim=0)
-        return t if idx is None else t[idx]
+            yield node, ()
 
     @classmethod
     def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
