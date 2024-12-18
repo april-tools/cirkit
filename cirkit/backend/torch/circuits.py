@@ -31,22 +31,24 @@ class LayerAddressBook(AddressBook):
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchLayer | None, tuple]]:
         # Loop through the entries and yield inputs
-        for entry in self._entries:
+        for entry in self:
+            layer = entry.module
+            in_layer_ids = entry.in_module_ids
+            in_fold_idx = entry.in_fold_idx
             # Catch the case there are some inputs coming from other modules
-            if entry.in_module_ids:
-                (in_fold_idx,) = entry.in_fold_idx
-                (in_module_ids,) = entry.in_module_ids
-                if len(in_module_ids) == 1:
-                    x = module_outputs[in_module_ids[0]]
+            if in_layer_ids:
+                in_fold_idx_h = in_fold_idx[0]
+                in_layer_ids_h = in_layer_ids[0]
+                if len(in_layer_ids_h) == 1:
+                    x = module_outputs[in_layer_ids_h[0]]
                 else:
-                    x = torch.cat([module_outputs[mid] for mid in in_module_ids], dim=0)
-                x = x[in_fold_idx]
-                yield entry.module, (x,)
+                    x = torch.cat([module_outputs[mid] for mid in in_layer_ids_h], dim=0)
+                x = x[in_fold_idx_h]
+                yield layer, (x,)
                 continue
 
             # Catch the case there are no inputs coming from other modules
             # That is, we are gathering the inputs of input layers
-            layer = entry.module
             assert isinstance(layer, TorchInputLayer)
             if layer.num_variables:
                 if in_graph is None:

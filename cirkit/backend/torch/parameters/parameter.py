@@ -30,20 +30,21 @@ class ParameterAddressBook(AddressBook):
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchParameterNode | None, tuple]]:
         # Loop through the entries and yield inputs
-        for entry in self._entries:
-            in_module_ids = entry.in_module_ids
-
+        for entry in self:
+            node = entry.module
+            in_node_ids = entry.in_module_ids
+            in_fold_idx = entry.in_fold_idx
             # Catch the case there are some inputs coming from other modules
-            if in_module_ids:
+            if in_node_ids:
                 x = tuple(
                     ParameterAddressBook._select_index(module_outputs, mids, in_idx)
-                    for mids, in_idx in zip(in_module_ids, entry.in_fold_idx)
+                    for mids, in_idx in zip(in_node_ids, in_fold_idx)
                 )
-                yield entry.module, x
+                yield node, x
                 continue
 
             # Catch the case there are no inputs coming from other modules
-            yield entry.module, ()
+            yield node, ()
 
     @staticmethod
     def _select_index(node_outputs: list[Tensor], mids: list[int], idx: Tensor | None) -> Tensor:
