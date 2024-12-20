@@ -351,6 +351,15 @@ class Circuit(DiAcyclicGraph[Layer]):
         return (sl for sl in self.layers if isinstance(sl, (SumLayer, ProductLayer)))
 
     @property
+    def input_layers(self) -> Iterator[InputLayer]:
+        """Retrieves an iterator over input layers.
+
+        Returns:
+            Iterator[SumLayer]:
+        """
+        return (sl for sl in self.layers if isinstance(sl, InputLayer))
+
+    @property
     def sum_layers(self) -> Iterator[SumLayer]:
         """Retrieves an iterator over sum layers.
 

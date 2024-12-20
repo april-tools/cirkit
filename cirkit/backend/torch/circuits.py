@@ -15,7 +15,7 @@ from cirkit.backend.torch.graph.modules import (
     TorchDiAcyclicGraph,
 )
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
-from cirkit.backend.torch.utils import ExternalModelEval
+from cirkit.backend.torch.utils import CachedGateFunctionEval
 from cirkit.symbolic.circuit import StructuralProperties
 from cirkit.utils.scope import Scope
 
@@ -128,7 +128,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         *,
         properties: StructuralProperties,
         fold_idx_info: FoldIndexInfo | None = None,
-        ext_model_evals: Mapping[str, ExternalModelEval] | None = None,
+        gate_function_evals: Mapping[str, CachedGateFunctionEval] | None = None,
     ) -> None:
         """Initializes a torch circuit.
 
@@ -141,7 +141,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             properties: The structural properties of the circuit.
             fold_idx_info: The folding index information.
                 It can be None if the circuit is not folded.
-            ext_model_evals: A mapping from external model identifiers to a cached evaluator.
+            gate_function_evals: A mapping from gate function identifiers to a cached evaluator.
         """
         super().__init__(
             layers,
@@ -152,8 +152,8 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self._scope = scope
         self._num_channels = num_channels
         self._properties = properties
-        ext_model_evals = {} if ext_model_evals is None else ext_model_evals
-        self._ext_model_evals: Mapping[str, ExternalModelEval] = ext_model_evals
+        gate_function_evals = {} if gate_function_evals is None else gate_function_evals
+        self._gate_function_evals: Mapping[str, CachedGateFunctionEval] = gate_function_evals
 
     @property
     def scope(self) -> Scope:
@@ -192,8 +192,8 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         return self._properties
 
     @property
-    def ext_model_evals(self) -> Mapping[str, ExternalModelEval]:
-        return self._ext_model_evals
+    def gate_function_evals(self) -> Mapping[str, CachedGateFunctionEval]:
+        return self._gate_function_evals
 
     @property
     def layers(self) -> Sequence[TorchLayer]:
@@ -260,15 +260,18 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
 
     def _evaluate_layers(
-        self, x: Tensor | None, *, ext_model_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+        self,
+        x: Tensor | None,
+        *,
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> Tensor:
         # Evaluate the external models and cache their result.
         # This will be called just before the invokation of the
         # [evaluate][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph.evaluate] method.
-        ext_model_kwargs = {} if ext_model_kwargs is None else ext_model_kwargs
-        for ext_model_id, ext_model_eval in self._ext_model_evals.items():
-            kwargs = ext_model_kwargs.get(ext_model_id, {})
-            ext_model_eval.cache_forward(**kwargs)
+        gate_function_kwargs = {} if gate_function_kwargs is None else gate_function_kwargs
+        for gate_function_id, gate_function_eval in self._gate_function_evals.items():
+            kwargs = gate_function_kwargs.get(gate_function_id, {})
+            gate_function_eval.cache_forward(**kwargs)
 
         # Evaluate layers on the given input
         y = self.evaluate(x)  # (O, B, K)
@@ -282,13 +285,13 @@ class TorchCircuit(AbstractTorchCircuit):
     """
 
     def __call__(
-        self, x: Tensor, *, ext_model_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+        self, x: Tensor, *, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
     ) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x, ext_model_kwargs=ext_model_kwargs)  # type: ignore[no-any-return,misc]
+        return super().__call__(x, gate_function_kwargs=gate_function_kwargs)  # type: ignore[no-any-return,misc]
 
     def forward(
-        self, x: Tensor, *, ext_model_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+        self, x: Tensor, *, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
     ) -> Tensor:
         """Evaluate the circuit layers in forward mode, i.e., by evaluating each layer by
         following the topological ordering.
@@ -296,14 +299,14 @@ class TorchCircuit(AbstractTorchCircuit):
         Args:
             x: The tensor input of the circuit, with shape $(B, C, D)$, where B is the batch size,
                 $C$ is the number of channels, and $D$ is the number of variables.
-            ext_model_kwargs: The arguments to pass to each external models.
+            gate_function_kwargs: The arguments to pass to each gate function models.
 
         Returns:
             Tensor: The tensor output of the circuit, with shape $(B, O, K)$,
                 where $O$ is the number of vectorized outputs (i.e., the number of output layers),
                 and $K$ is the number of scalars in each output (e.g., the number of classes).
         """
-        return self._evaluate_layers(x, ext_model_kwargs=ext_model_kwargs)
+        return self._evaluate_layers(x, gate_function_kwargs=gate_function_kwargs)
 
 
 class TorchConstantCircuit(AbstractTorchCircuit):

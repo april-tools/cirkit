@@ -102,16 +102,16 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
     )
 
 
-class ExternalModelEval(nn.Module):
-    def __init__(self, model_id: str, model: nn.Module):
+class CachedGateFunctionEval(nn.Module):
+    def __init__(self, function_id: str, model: nn.Module):
         super().__init__()
-        self._model_id = model_id
+        self._function_id = function_id
         self._model = model
         self._cached_output: dict[str, Tensor] | None = None
 
     @property
-    def model_id(self) -> str:
-        return self._model_id
+    def function_id(self) -> str:
+        return self._function_id
 
     @property
     def model(self) -> nn.Module:

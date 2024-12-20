@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
-from cirkit.backend.torch.utils import ExternalModelEval
+from cirkit.backend.torch.utils import CachedGateFunctionEval
 
 
 class TorchParameterNode(AbstractTorchModule, ABC):
@@ -280,13 +280,17 @@ class TorchPointerParameter(TorchParameterInput):
         return x[self._fold_idx]
 
 
-class TorchModelParameter(TorchParameterInput):
+class TorchGateFunctionParameter(TorchParameterInput):
     def __init__(
-        self, *shape: int, model_eval: ExternalModelEval, name: str, fold_idx: int | list[int]
+        self,
+        *shape: int,
+        gate_function_eval: CachedGateFunctionEval,
+        name: str,
+        fold_idx: int | list[int],
     ):
         fold_idx = fold_idx if isinstance(fold_idx, list) else [fold_idx]
         super().__init__(num_folds=len(fold_idx))
-        super(nn.Module, self).__setattr__("_model_eval", model_eval)
+        super(nn.Module, self).__setattr__("_gate_function_eval", gate_function_eval)
         self._shape = shape
         self._name = name
         self.register_buffer("_fold_idx", torch.tensor(fold_idx))
@@ -296,8 +300,8 @@ class TorchModelParameter(TorchParameterInput):
         return self._shape
 
     @property
-    def model_eval(self) -> ExternalModelEval:
-        return self._model_eval
+    def gate_function_eval(self) -> CachedGateFunctionEval:
+        return self._gate_function_eval
 
     @property
     def name(self) -> str:
@@ -309,11 +313,15 @@ class TorchModelParameter(TorchParameterInput):
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"shape": self._shape, "model_eval": self._model_eval, "name": self._name}
+        return {
+            "shape": self._shape,
+            "gate_function_eval": self._gate_function_eval,
+            "name": self._name,
+        }
 
     def forward(self) -> Tensor:
         # A dictionary from parameter tensor names to their tensor value
-        y = self._model_eval()
+        y = self._gate_function_eval()
         # Select the parameter tensor we want by using the name
         y = y[self._name]  # shape: (group_size, K_1, ..., K_n)
         # Slice the tensor by using the fold index

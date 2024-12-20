@@ -8,7 +8,7 @@ from cirkit.backend.compiler import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
     CompiledCircuit,
-    ExternalModel,
+    GateFunction,
     InitializerCompilationFunc,
     LayerCompilationFunc,
     ParameterCompilationFunc,
@@ -187,7 +187,7 @@ class PipelineContext(AbstractContextManager):
         """
         return self._compiler.get_symbolic_circuit(cc)
 
-    def add_external_model(self, model_id: str, model: ExternalModel):
+    def add_gate_function(self, function_id: str, function: GateFunction):
         """Register an external model implementation to the pipeline context.
 
         Args:
@@ -196,18 +196,18 @@ class PipelineContext(AbstractContextManager):
                 an object of type [torch.nn.Module][torch.nn.Module] whose forward method
                 returns a dictionary mapping parameter tensor names to their value.
         """
-        self._compiler.add_external_model(model_id, model)
+        self._compiler.add_gate_function(function_id, function)
 
-    def get_external_model(self, model_id: str) -> ExternalModel:
-        """Retrieves the external model identifier by a model identifier.
+    def get_gate_function(self, function_id: str) -> GateFunction:
+        """Retrieves the gate function by its identifier.
 
         Args:
-            model_id: The model identifier
+            function_id: The gate function identifier
 
         Returns:
             The external model object.
         """
-        return self._compiler.get_external_model(model_id)
+        return self._compiler.get_external_model(function_id)
 
     def concatenate(self, *cc: CompiledCircuit) -> CompiledCircuit:
         """Circuit concatenation interface for compiled circuits.

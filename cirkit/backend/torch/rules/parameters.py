@@ -7,6 +7,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchClampParameter,
     TorchConjugateParameter,
     TorchExpParameter,
+    TorchGateFunctionParameter,
     TorchGaussianProductLogPartition,
     TorchGaussianProductMean,
     TorchGaussianProductStddev,
@@ -16,7 +17,6 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchLogParameter,
     TorchLogSoftmaxParameter,
     TorchMixingWeightParameter,
-    TorchModelParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
     TorchPointerParameter,
@@ -32,13 +32,14 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchSumParameter,
     TorchTensorParameter,
 )
-from cirkit.backend.torch.utils import ExternalModelEval
+from cirkit.backend.torch.utils import CachedGateFunctionEval
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.parameters import (
     ClampParameter,
     ConjugateParameter,
     ConstantParameter,
     ExpParameter,
+    GateFunctionParameter,
     GaussianProductLogPartition,
     GaussianProductMean,
     GaussianProductStddev,
@@ -48,7 +49,6 @@ from cirkit.symbolic.parameters import (
     LogParameter,
     LogSoftmaxParameter,
     MixingWeightParameter,
-    ModelParameter,
     OuterProductParameter,
     OuterSumParameter,
     PolynomialDifferential,
@@ -110,18 +110,22 @@ def compile_reference_parameter(
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
 
 
-def compile_model_parameter(compiler: "TorchCompiler", p: ModelParameter) -> TorchModelParameter:
+def compile_gate_function_parameter(
+    compiler: "TorchCompiler", p: GateFunctionParameter
+) -> TorchGateFunctionParameter:
     # Register the external model to the running state of the compiler, if needed
-    if compiler.state.has_ext_model_eval(p.model_id):
-        ext_model_eval = compiler.state.retrieve_ext_model_eval(p.model_id)
+    if compiler.state.has_gate_function(p.function_id):
+        gate_function_eval = compiler.state.retrieve_gate_function(p.function_id)
     else:
         # Retrieve the external model, based on the model id
-        ext_model = compiler.get_external_model(p.model_id)
+        gate_function = compiler.get_gate_function(p.function_id)
         # Build the external model evaluator, and register it
-        ext_model_eval = ExternalModelEval(p.model_id, ext_model)
-        compiler.state.register_ext_model_eval(p.model_id, ext_model_eval)
+        gate_function_eval = CachedGateFunctionEval(p.function_id, gate_function)
+        compiler.state.register_gate_function(p.function_id, gate_function_eval)
     # Build the torch model parameter computational node
-    return TorchModelParameter(*p.shape, model_eval=ext_model_eval, name=p.name, fold_idx=p.index)
+    return TorchGateFunctionParameter(
+        *p.shape, gate_function_eval=gate_function_eval, name=p.parameter_name, fold_idx=p.index
+    )
 
 
 def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
@@ -280,7 +284,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCom
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
-    ModelParameter: compile_model_parameter,
+    GateFunctionParameter: compile_gate_function_parameter,
     IndexParameter: compile_index_parameter,
     SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,
