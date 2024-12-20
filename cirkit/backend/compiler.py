@@ -11,7 +11,7 @@ from cirkit.utils.algorithms import BiMap
 SUPPORTED_BACKENDS = ["torch"]
 
 CompiledCircuit = TypeVar("CompiledCircuit")
-ExternalModel = TypeVar("ExternalModel")
+GateFunction = TypeVar("GateFunction")
 
 
 class CompiledCircuitsMap:
@@ -153,7 +153,7 @@ class CompilerInitializerRegistry(
         return cast(InitializerCompilationSign, ann[args[-1]])
 
 
-CompilerModelRegistry = dict[str, ExternalModel]
+CompilerGateFunctionRegistry = dict[str, GateFunction]
 
 
 class AbstractCompiler(ABC):
@@ -162,13 +162,15 @@ class AbstractCompiler(ABC):
         layers_registry: CompilerLayerRegistry,
         parameters_registry: CompilerParameterRegistry,
         initializers_registry: CompilerInitializerRegistry,
-        models_registry: CompilerModelRegistry | None = None,
+        gate_function_registry: CompilerGateFunctionRegistry | None = None,
         **flags,
     ):
         self._layers_registry = layers_registry
         self._parameters_registry = parameters_registry
         self._initializers_registry = initializers_registry
-        self._model_registry = {} if models_registry is None else models_registry
+        self._gate_function_registry = (
+            {} if gate_function_registry is None else gate_function_registry
+        )
         self._flags = flags
         self._compiled_circuits = CompiledCircuitsMap()
 
@@ -209,11 +211,11 @@ class AbstractCompiler(ABC):
     ) -> InitializerCompilationFunc:
         return self._initializers_registry.retrieve_rule(signature)
 
-    def add_external_model(self, model_id: str, model: ExternalModel):
-        self._model_registry[model_id] = model
+    def add_gate_function(self, function_id: str, gate_function: GateFunction):
+        self._gate_function_registry[function_id] = gate_function
 
-    def get_external_model(self, model_id: str) -> ExternalModel:
-        return self._model_registry[model_id]
+    def get_gate_function(self, function_id: str) -> GateFunction:
+        return self._gate_function_registry[function_id]
 
     def compile(self, sc: Circuit) -> CompiledCircuit:
         if self.is_compiled(sc):

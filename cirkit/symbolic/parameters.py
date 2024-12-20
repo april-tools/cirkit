@@ -150,20 +150,20 @@ class ConstantParameter(TensorParameter):
         return {"shape": self.shape, "value": self.value}
 
 
-class ModelParameter(ParameterInput):
+class GateFunctionParameter(ParameterInput):
     """A symbolic parameter whose value is computed by an externally-provided function.
     For example, this function can be the evaluation of a neural network.
     """
 
-    def __init__(self, *shape: int, model_id: str, name: str, index: int):
+    def __init__(self, *shape: int, function_id: str, parameter_name: str, index: int):
         """Initialize a symbolic function parameter.
 
         Args:
             shape: The shape of the parameter tensor, which is specified by the combination
                 of the arguments "function", "name" and "index" below.
-            model_id: The function name. This is a string identifier of the function that
+            function_id: The function name. This is a string identifier of the function that
                 will output a mapping between parameter tensor identifiers and their value.
-            name: The name of the parameter tensor identifier.
+            parameter_name: The name of the parameter tensor identifier.
             index: An index that selects the parameter tensor specified by the name.
                 That is, this index will be used to slice the parameter tensor
                 along the first dimension.
@@ -180,8 +180,8 @@ class ModelParameter(ParameterInput):
             raise ValueError("The index must be a non-negative integer")
         super().__init__()
         self._shape = shape
-        self._model_id = model_id
-        self._name = name
+        self._function_id = function_id
+        self._parameter_name = parameter_name
         self._index = index
 
     @property
@@ -189,12 +189,12 @@ class ModelParameter(ParameterInput):
         return self._shape
 
     @property
-    def model_id(self) -> str:
-        return self._model_id
+    def function_id(self) -> str:
+        return self._function_id
 
     @property
-    def name(self) -> str:
-        return self._name
+    def parameter_name(self) -> str:
+        return self._parameter_name
 
     @property
     def index(self) -> int:
@@ -203,19 +203,19 @@ class ModelParameter(ParameterInput):
     @property
     def config(self) -> dict[str, Any]:
         return {
-            "shape": self._shape,
-            "model_id": self._model_id,
-            "name": self._name,
-            "index": self._index,
+            "shape": self.shape,
+            "function_id": self.function_id,
+            "parameter_name": self.parameter_name,
+            "index": self.index,
         }
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"shape={self._shape}, "
-            f"model_id='{self._model_id}', "
-            f"name='{self._name}', "
-            f"index={self._index}"
+            f"shape={self.shape}, "
+            f"function_id='{self.function_id}', "
+            f"parameter_name='{self.parameter_name}', "
+            f"index={self.index}"
             ")"
         )
 

@@ -24,7 +24,12 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import ConstantParameter, ModelParameter, Parameter, TensorParameter
+from cirkit.symbolic.parameters import (
+    ConstantParameter,
+    GateFunctionParameter,
+    Parameter,
+    TensorParameter,
+)
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
@@ -704,26 +709,28 @@ def conjugate(
     )
 
 
-ModelParameterSpecs = dict[str, tuple[int, ...]]
-"""The model parameter specification. This is a map from a model id (a string) to the shape of
+GateFunctionSpecs = dict[str, list[Layer]]
+"""The gate function specification. It is a map from an id (a string) to the list of layers 
+it should parametrize."""
+
+
+GateFunctionParameterSpecs = dict[str, tuple[int, ...]]
+"""The gate function parameter specification. It is a map from a id (a string) to the shape of
 the tensor it must compute."""
 
 
 def model_parameterize(
-    circuit: Circuit,
-    *,
-    model_id: str,
-    filter_layers: list[type[Layer]],
-) -> tuple[Circuit, ModelParameterSpecs]:
+    circuit: Circuit, *, gate_functions: GateFunctionSpecs
+) -> tuple[Circuit, GateFunctionParameterSpecs]:
     """Parameterize some layers of a symbolic circuit by means of an externally-provided model.
 
     Args:
         circuit: The symbolic circuit.
-        model_id: The model identifier to use.
-        filter_layers: The list of symbolic layer types to parameterize.
+        gate_functions: A mapping from a gate function identifier to the
+            list of layers it will parametrize.
 
     Returns:
-        tuple[Circuit, ModelParameterSpecs]: A pair where the first element is a new symbolic
+        tuple[Circuit, GateFunctionParameterSpecs]: A pair where the first element is a new symbolic
             circuit whose tensor parameters have been substituted by the symbolic information that
             the value of those parameters will come from an externally defined model. The second
             element is a dictionary mapping coalesced tensor parameter names to their shape.
@@ -732,31 +739,18 @@ def model_parameterize(
         ValueError: If the given circuit is the output of a circuit operator.
             That is, this function is designed for circuits that are entry points to a circuit
             pipeline.
+        ValueError: If the provided gate functions are not defined on pairwise mutually disjoint
+            sets of layers.
     """
     if circuit.operation is not None:
         raise ValueError("The circuit to parameterize must not be the output of a circuit operator")
 
-    def _filter_layers(sls: Iterable[Layer]) -> Mapping[Layer, list[str]]:
-        # Retrieve the layers to externally parameterize, together with the list of
-        # identifiers of the parameters to be externally parameterized
-        layer_pnames: dict[Layer, list[str]] = {}
-        for sl in sls:
-            # First, we filter-out those layers that have not been specified
-            if not any(isinstance(sl, sl_cls) for sl_cls in filter_layers):
-                continue
-            # Second, we yield the layers that have at least one parameter computational graph
-            # consisting of a single tensor parameter. E.g., we drop a sum layer having
-            # a softmax re-parameterization, but we retain it if it has no re-parameterization
-            # In addition, we return the parameter name identifiers
-            layer_pnames[sl] = []
-            for pname, pgraph in sl.params.items():
-                if len(pgraph.nodes) > 1:
-                    continue
-                in_node = pgraph.nodes[0]
-                if not isinstance(in_node, TensorParameter):
-                    continue
-                layer_pnames[sl].append(pname)
-        return layer_pnames
+    # the layers specified in the gate function specification should all be mutually disjoint
+    if any(
+        len(set(l1).intersection(l2)) != 0
+        for l1, l2 in itertools.combinations(gate_functions.values(), 2)
+    ):
+        raise ValueError("The gate functions must parametrize mutually disjoint set of layers.")
 
     def _coalesce_layers(
         lps: Mapping[Layer, list[str]], group_id: int
@@ -782,7 +776,7 @@ def model_parameterize(
 
         # Iterate all layer groups and initialize the metadata
         next_group_id = group_id
-        pname_model_specs: dict[str, tuple[str, tuple[int, ...]]] = {}
+        pname_model_specs: dict[str, tuple[int, ...]] = {}
         for (sl_class, pnames, pshapes), group in groups.items():
             # Retrieve the layer class name
             sl_class_name = sl_class.__name__
@@ -793,73 +787,69 @@ def model_parameterize(
             for pname, pshape in zip(pnames, pshapes):
                 # E.g., "g151.SumLayer.weight"
                 group_pname = f"g{next_group_id}.{sl_class_name}.{pname}"
-                pname_model_specs[pname] = (group_pname, (len(group), *pshape))
+                pname_model_specs[group_pname] = (len(group), *pshape)
 
-            # For each layer in the group, we store (i) the identifier of the
-            # tensor parameter to be externally computed, and (ii) an index to
-            # such tensor parameter
-            for i, sl in enumerate(group):
+                # For each layer in the group, we store (i) the identifier of the
+                # tensor parameter to be externally computed, and (ii) an index to
+                # such tensor parameter
                 sl_pinfos: dict[str, tuple[tuple[int, ...], str, int]] = {}
-                for pname, pshape in zip(pnames, pshapes):
-                    # E.g., "g151.SumLayer.weight"
-                    group_name, _ = pname_model_specs[pname]
-                    sl_pinfos[pname] = (pshape, group_name, i)
-                coalesced_layer_pinfos[sl] = sl_pinfos
+                for i, sl in enumerate(group):
+                    sl_pinfos[pname] = (pshape, group_pname, i)
+                    coalesced_layer_pinfos[sl] = sl_pinfos
 
             # Increment the group id
             next_group_id += 1
 
         # Construct the model specifications to return to the user (w.r.t. to each group here)
-        coalesced_model_specs: ModelParameterSpecs = {
-            group_name: group_pshape
-            for pname, (group_name, group_pshape) in pname_model_specs.items()
+        coalesced_model_specs: GateFunctionParameterSpecs = {
+            group_name: group_pshape for group_name, group_pshape in pname_model_specs.items()
         }
         return coalesced_layer_pinfos, coalesced_model_specs, next_group_id
 
     # A map from symbolic layers in the input circuit to the symbolic layers in the output circuit
-    layers_map: dict[Layer, Layer] = {}
+    # initialized using shallow copies of the current circuit
+    layers_map: dict[Layer, Layer] = {l: l.copy() for l in circuit.layers}
 
     # A dictionary mapping each introduced parameter tensor name to the corresponding tensor shape
-    model_specs: ModelParameterSpecs = {}
+    gate_function_specs: GateFunctionParameterSpecs = {}
 
     # Loop through each layer frontier obtained by the layerwise topological ordering
     group_id = 0
-    for frontier in circuit.layerwise_topological_ordering():
-        # Filter-out the layers in the frontier that do not have to be externally parameterize
-        layer_pnames = _filter_layers(frontier)
+    for gf_id, layers in gate_functions.items():
+        # extract metadata from the layers
+        layers_metadata = {
+            layer: [
+                pname
+                for pname, pgraph in layer.params.items()
+                if isinstance(pgraph.nodes[0], TensorParameter)
+            ]
+            for layer in layers
+        }
 
         # Coalesce the layers based on (i) the layer class and (ii) the shape of their parameters
-        coalesced_layer_pinfos, coalesced_model_specs, group_id = _coalesce_layers(
-            layer_pnames, group_id
+        coalesced_layer_pinfos, coalesced_gfs_specs, group_id = _coalesce_layers(
+            layers_metadata, group_id
         )
-        model_specs.update(coalesced_model_specs)
+        gate_function_specs.update(coalesced_gfs_specs)
 
-        # Do a shallow copy the layers in the frontier,
-        # and update the symbolic parameter computational graph of the layer
-        # parameters that need to be externally parameterized
-        for sl in frontier:
-            # Shallow copy the layers that do not need to be re-parameterized
-            pnames: list[str] | None = layer_pnames.get(sl, None)
-            if pnames is None:
-                layers_map[sl] = sl.copy()
-                continue
-
+        for layer in layers:
             # Replace the parameter tensor to be externally parameterized
             sl_params = {
                 pname: Parameter.from_input(
-                    ModelParameter(
+                    GateFunctionParameter(
                         *pshape,
-                        model_id=model_id,
-                        name=name,
+                        function_id=gf_id,
+                        parameter_name=name,
                         index=index,
                     )
                 )
-                for pname, (pshape, name, index) in coalesced_layer_pinfos[sl].items()
+                for pname, (pshape, name, index) in coalesced_layer_pinfos[layer].items()
             }
-            layers_map[sl] = sl.copy(params=sl_params)
+            layers_map[layer] = layer.copy(params=sl_params)
 
     # Construct the resulting circuit
-    layers = list(layers_map.values())
+    # use a shallow copy of the parameters that have not been changed
+    layers = [layers_map[l] for l in circuit.layers]
     in_layers = {
         sl: [layers_map[prev_sli] for prev_sli in circuit.layer_inputs(prev_sl)]
         for prev_sl, sl in layers_map.items()
@@ -868,4 +858,4 @@ def model_parameterize(
     circuit = Circuit(circuit.num_channels, layers, in_layers=in_layers, outputs=output_layers)
 
     # Return both the resulting circuit and the model parameter specifications
-    return circuit, model_specs
+    return circuit, gate_function_specs
