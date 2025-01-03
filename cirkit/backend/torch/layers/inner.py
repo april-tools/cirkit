@@ -155,12 +155,8 @@ class TorchKroneckerLayer(TorchInnerLayer):
             num_folds: The number of channels.
 
         Raises:
-            NotImplementedError: If the arity is not 2.
             ValueError: If the number of input units is not the same as the number of output units.
         """
-        # TODO: generalize kronecker layer as to support a greater arity
-        if arity != 2:
-            raise NotImplementedError("Kronecker only implemented for binary product units.")
         super().__init__(
             num_input_units,
             num_input_units**arity,
@@ -177,18 +173,25 @@ class TorchKroneckerLayer(TorchInnerLayer):
         }
 
     def forward(self, x: Tensor) -> Tensor:
-        x0 = x[:, 0].unsqueeze(dim=-1)  # shape (F, B, Ki, 1).
-        x1 = x[:, 1].unsqueeze(dim=-2)  # shape (F, B, 1, Ki).
-        # shape (F, B, Ki, Ki) -> (F, B, Ko=Ki**2).
-        return self.semiring.mul(x0, x1).flatten(start_dim=-2)
+        # x: (F, H, B, Ki)
+        y0 = x[:, 0]
+        for i in range(1, x.shape[1]):
+            y0 = y0.unsqueeze(dim=-1)  # (F, B, K, 1).
+            y1 = x[:, i].unsqueeze(dim=-2)  # (F, B, 1, Ki).
+            # y0: (F, B, K=K * Ki).
+            y0 = torch.flatten(self.semiring.mul(y0, y1), start_dim=-2)
+        # y0: (F, B, Ko=Ki ** arity)
+        return y0
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
         # x: (F, H, C, K, num_samples, D)
-        x0 = x[:, 0].unsqueeze(dim=3)  # (F, C, Ki, 1, num_samples, D)
-        x1 = x[:, 1].unsqueeze(dim=2)  # (F, C, 1, Ki, num_samples, D)
-        # shape (F, C, Ki, Ki, num_samples, D) -> (F, C, Ko=Ki**2, num_samples, D)
-        x = x0 + x1
-        return torch.flatten(x, start_dim=2, end_dim=3), None
+        y0 = x[:, 0]
+        for i in range(1, x.shape[1]):
+            y0 = y0.unsqueeze(dim=3)  # (F, C, K, 1, num_samples, D)
+            y1 = x[:, i].unsqueeze(dim=2)  # (F, C, 1, Ki, num_samples, D)
+            y0 = torch.flatten(y0 + y1, start_dim=2, end_dim=3)
+        # y0: (F, C, Ko=Ki ** arity, num_samples, D)
+        return y0, None
 
 
 class TorchSumLayer(TorchInnerLayer):
