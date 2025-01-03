@@ -2,6 +2,7 @@ import itertools
 
 import pytest
 
+from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.layers import EmbeddingLayer, HadamardLayer, KroneckerLayer, SumLayer
 from cirkit.symbolic.parameters import ConstantParameter
 from cirkit.templates import tensor_factorizations
@@ -85,3 +86,29 @@ def test_tucker(
         assert len(sum_layers[0].weight.nodes) == 1
     else:
         assert len(sum_layers[0].weight.nodes) == 2
+
+
+@pytest.mark.parametrize(
+    "rank,factor_param",
+    itertools.product([1, 5], [None, Parameterization(dtype="complex")]),
+)
+def test_tensor_train(rank: int, factor_param: Parameterization | None):
+    shape = (128, 16, 16)
+    circuit = tensor_factorizations.tensor_train(shape, rank=rank, factor_param=factor_param)
+    assert circuit.scope == Scope(range(len(shape)))
+    input_layers = list(circuit.inputs)
+    product_layers = list(circuit.product_layers)
+    sum_layers = list(circuit.sum_layers)
+    assert len([sl for sl in input_layers if circuit.layer_scope(sl) == Scope([0])]) == 1
+    assert (
+        len([sl for sl in input_layers if circuit.layer_scope(sl) == Scope([len(shape) - 1])]) == 1
+    )
+    for i in range(1, len(shape) - 1, 1):
+        assert len([sl for sl in input_layers if circuit.layer_scope(sl) == Scope([i])]) == rank
+    assert all(isinstance(sl, HadamardLayer) for sl in product_layers)
+    assert len(product_layers) == (len(shape) - 2) * rank + 1
+    assert len(sum_layers) == len(shape) - 1
+    if factor_param is not None:
+        for sl in input_layers:
+            assert len(sl.weight.nodes) == 1
+            assert sl.weight.nodes[0].dtype == DataType.COMPLEX
