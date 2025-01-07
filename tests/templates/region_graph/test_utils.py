@@ -29,7 +29,7 @@ def check_equivalent_region_graphs(rg1: RegionGraph, rg2: RegionGraph) -> None:
     print(rg2_scope_factorizations)
     assert (
         rg1_scope_factorizations == rg2_scope_factorizations
-    ), f"Region graphs have different scope factorizations"
+    ), "Region graphs have different scope factorizations"
 
 
 def check_region_graph_save_load(rg: RegionGraph) -> None:

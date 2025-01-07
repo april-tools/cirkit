@@ -114,15 +114,11 @@ def compile_polynomial_layer(
 
 
 def compile_hadamard_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchHadamardLayer:
-    return TorchHadamardLayer(
-        sl.num_input_units, sl.num_output_units, arity=sl.arity, semiring=compiler.semiring
-    )
+    return TorchHadamardLayer(sl.num_input_units, arity=sl.arity, semiring=compiler.semiring)
 
 
 def compile_kronecker_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchKroneckerLayer:
-    return TorchKroneckerLayer(
-        sl.num_input_units, sl.num_output_units, arity=sl.arity, semiring=compiler.semiring
-    )
+    return TorchKroneckerLayer(sl.num_input_units, arity=sl.arity, semiring=compiler.semiring)
 
 
 def compile_sum_layer(compiler: "TorchCompiler", sl: SumLayer) -> TorchSumLayer:

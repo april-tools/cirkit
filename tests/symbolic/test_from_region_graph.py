@@ -1,4 +1,3 @@
-from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import DirichletInitializer
 from cirkit.symbolic.layers import CategoricalLayer, SumLayer
 from cirkit.symbolic.parameters import Parameter, TensorParameter
@@ -24,8 +23,7 @@ def categorical_layer_factory(
 
 def test_build_circuit_qg_3x3_cp():
     rg = QuadGraph((3, 3))
-    sc = Circuit.from_region_graph(
-        rg,
+    sc = rg.build_circuit(
         num_input_units=3,
         num_sum_units=2,
         sum_product="cp",
@@ -52,8 +50,7 @@ def test_build_circuit_qg_3x3_cp():
 
 def test_build_circuit_qt4_3x3_cp():
     rg = QuadTree((3, 3), num_patch_splits=4)
-    sc = Circuit.from_region_graph(
-        rg,
+    sc = rg.build_circuit(
         num_input_units=3,
         num_sum_units=2,
         sum_product="cp",

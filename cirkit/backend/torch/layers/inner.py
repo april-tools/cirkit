@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any
 
@@ -12,10 +12,8 @@ from cirkit.backend.torch.semiring import Semiring
 
 
 class TorchInnerLayer(TorchLayer, ABC):
-    """The abstract base class for inner layers."""
+    """The abstract base class for inner layers, i.e., either sum or product layers."""
 
-    # __init__ is overriden here to change the default value of arity, as arity=2 is the most common
-    # case for all inner layers.
     def __init__(
         self,
         num_input_units: int,
@@ -24,14 +22,16 @@ class TorchInnerLayer(TorchLayer, ABC):
         *,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
-        """Init class.
+    ):
+        """Initialize an inner layer.
 
         Args:
-            num_input_units (int): The number of input units.
-            num_output_units (int): The number of output units.
-            arity (int, optional): The arity of the layer. Defaults to 2.
-            num_folds (int): The number of channels. Defaults to 1.
+            num_input_units: The number of input units.
+            num_output_units: The number of output units.
+            arity: The arity of the layer.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+            num_folds: The number of channels.
         """
         super().__init__(
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
@@ -42,57 +42,85 @@ class TorchInnerLayer(TorchLayer, ABC):
         pshapes = [(n, p.shape) for n, p in self.params.items()]
         return *self.config.items(), *pshapes
 
+    def __call__(self, x: Tensor) -> Tensor:
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x)  # type: ignore[no-any-return,misc]
+
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        """Invoke the forward function.
+
+        Args:
+            x: The tensor input to this layer, having shape $(F, H, B, K_i)$, where $F$
+                is the number of folds, $H$ is the arity, $B$ is the batch size, and
+                $K_i$ is the number of input units.
+
+        Returns:
+            Tensor: The tensor output of this layer, having shape $(F, B, K_o)$, where $K_o$
+                is the number of output units.
+        """
+
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+        """Perform a forward sampling step.
+
+        Args:
+            x: A tensor representing the input variable assignments, having shape
+                $(F, H, C, K, N, D)$, where $F$ is the number of folds, $H$ is the arity,
+                $C$ is the number of channels, $K$ is the numbe rof input units, $N$ is the number
+                of samples, $D$ is the number of variables.
+
+        Returns:
+            Tensor: A new tensor representing the new variable assignements the layers gives
+                as output.
+
+        Raises:
+            TypeError: If sampling is not supported by the layer.
+        """
         raise TypeError(f"Sampling not implemented for {type(self)}")
 
 
 class TorchHadamardLayer(TorchInnerLayer):
-    """The Hadamard product layer."""
+    """The Hadamard product layer, which computes an element-wise (or Hadamard) product of
+    the input vectors it receives as inputs.
+    See the symbolic [HadamardLayer][cirkit.symbolic.layers.HadamardLayer] for more details.
+    """
 
     def __init__(
         self,
         num_input_units: int,
-        num_output_units: int,
         arity: int = 2,
         *,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
-        """Init class.
+    ):
+        """Initialize a Hadamard product layer.
 
         Args:
-            num_input_units (int): The number of input units.
-            num_output_units (int): The number of output units, must be the same as input.
-            num_folds (int): The number of channels. Defaults to 1.
-            arity (int, optional): The arity of the layer. Defaults to 2.
+            num_input_units: The number of input units, which is equal to the number of
+                output units.
+            arity: The arity of the layer.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+            num_folds: The number of channels.
+
+        Raises:
+            ValueError: If the arity is not at least 2.
+            ValueError: If the number of input units is not the same as the number of output units.
         """
         if arity < 2:
             raise ValueError("The arity should be at least 2")
-        if num_output_units != num_input_units:
-            raise ValueError(
-                "The number of input and output units must be the same for Hadamard product"
-            )
         super().__init__(
-            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
+            num_input_units, num_input_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
 
     @property
     def config(self) -> Mapping[str, Any]:
         return {
             "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
             "arity": self.arity,
         }
 
     def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
     def sample(self, x: Tensor) -> tuple[Tensor, None]:
@@ -103,52 +131,52 @@ class TorchHadamardLayer(TorchInnerLayer):
 
 
 class TorchKroneckerLayer(TorchInnerLayer):
-    """The Kronecker product layer."""
+    """The Kronecker product layer, which computes the Kronecker product of the input vectors
+    it receives as input.
+    See the symbolic [KroneckerLayer][cirkit.symbolic.layers.KroneckerLayer] for more details.
+    """
 
     def __init__(
         self,
         num_input_units: int,
-        num_output_units: int,
         arity: int = 2,
         *,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
-        """Init class.
+    ):
+        """Initialize a Kronecker product layer.
 
         Args:
-            num_input_units (int): The number of input units.
-            num_output_units (int): The number of output units, must be input**arity.
-            arity (int, optional): The arity of the layer, must be 2. Defaults to 2.
-            num_folds (int): The number of channels. Defaults to 1.
+            num_input_units: The number of input units. The number of output units is the power of
+                the number of input units to the arity.
+            arity: The arity of the layer. Defaults to 2 (which is the only supported arity).
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+            num_folds: The number of channels.
+
+        Raises:
+            NotImplementedError: If the arity is not 2.
+            ValueError: If the number of input units is not the same as the number of output units.
         """
-        assert num_output_units == num_input_units**arity, (
-            "The number of output units must be the number of input units raised to the power of "
-            "arity for Kronecker product."
-        )
+        # TODO: generalize kronecker layer as to support a greater arity
         if arity != 2:
             raise NotImplementedError("Kronecker only implemented for binary product units.")
         super().__init__(
-            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
+            num_input_units,
+            num_input_units**arity,
+            arity=arity,
+            semiring=semiring,
+            num_folds=num_folds,
         )
 
     @property
     def config(self) -> Mapping[str, Any]:
         return {
             "num_input_units": self.num_input_units,
-            "num_output_units": self.num_output_units,
             "arity": self.arity,
         }
 
     def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
         x0 = x[:, 0].unsqueeze(dim=-1)  # shape (F, B, Ki, 1).
         x1 = x[:, 1].unsqueeze(dim=-2)  # shape (F, B, 1, Ki).
         # shape (F, B, Ki, Ki) -> (F, B, Ko=Ki**2).
@@ -164,7 +192,8 @@ class TorchKroneckerLayer(TorchInnerLayer):
 
 
 class TorchSumLayer(TorchInnerLayer):
-    """The sum layer."""
+    """The sum layer torch implementation.
+    See the symbolic [SumLayer][cirkit.symbolic.layers.SumLayer] for more details."""
 
     def __init__(
         self,
@@ -175,21 +204,46 @@ class TorchSumLayer(TorchInnerLayer):
         weight: TorchParameter,
         semiring: Semiring | None = None,
         num_folds: int = 1,
-    ) -> None:
-        """Init class.
+    ):
+        r"""Initialize a sum layer.
 
         Args:
-            num_input_units (int): The number of input units.
-            num_output_units (int): The number of output units.
-            weight (TorchParameter): The reparameterization for layer parameters.
-            num_folds (int): The number of channels. Defaults to 1.
+            num_input_units: The number of input units.
+            num_output_units: The number of output units.
+            arity: The arity of the layer.
+            weight: The weight parameter, which must have shape $(F, K_o, K_i\cdot H)$,
+                where $F$ is the number of folds, $K_o$ is the number of output units,
+                   $K_i$ is the number of input units, and $H$ is the arity.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+            num_folds: The number of channels.
+
+        Raises:
+            ValueError: If the arity is not a positive integer.
+            ValueError: If the arity, the number of input and output units are incompatible with the
+                shape of the weight parameter.
         """
-        assert weight.num_folds == num_folds
-        assert weight.shape == (num_output_units, arity * num_input_units)
+        if arity < 1:
+            raise ValueError("The arity must be a positive integer")
         super().__init__(
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
+        if not self._valid_weight_shape(weight):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._weight_shape} for 'weight', found"
+                f"{weight.num_folds} and {weight.shape}, respectively"
+            )
         self.weight = weight
+
+    def _valid_weight_shape(self, w: TorchParameter) -> bool:
+        if w.num_folds != self.num_folds:
+            return False
+        return w.shape == self._weight_shape
+
+    @property
+    def _weight_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_input_units * self.arity
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -204,30 +258,20 @@ class TorchSumLayer(TorchInnerLayer):
         return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
-        """Run forward pass.
-
-        Args:
-            x (Tensor): The input to this layer, shape (F, H, B, Ki).
-
-        Returns:
-            Tensor: The output of this layer, shape (F, B, Ko).
-        """
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
         # weight: (F, Ko, H * Ki)
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
         weight = self.weight()
         return self.semiring.einsum(
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-        )  # shape (F, B, Ko).
+        )  # shape (F, B, K_o).
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()
         negative = torch.any(weight < 0.0)
-        if negative:
-            raise ValueError("Sampling only works with positive weights")
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
-        if not normalized:
-            raise ValueError("Sampling only works with a normalized parametrization")
+        if negative or not normalized:
+            raise TypeError("Sampling in sum layers only works with positive weights summing to 1")
 
         # x: (F, H, C, Ki, num_samples, D) -> (F, C, H * Ki, num_samples, D)
         x = x.permute(0, 2, 1, 3, 4, 5).flatten(2, 3)

@@ -15,7 +15,6 @@ def zw_quadrature(
     b: float | None = 1,
     return_log_weight: bool | None = False,
     dtype: torch.dtype | None = torch.float32,
-    device: torch.device | None = "cpu",
 ):
     if integration_method == "leggauss":
         z_quad, w_quad = np.polynomial.legendre.leggauss(nip)
@@ -41,8 +40,8 @@ def zw_quadrature(
         z_quad, w_quad = np.polynomial.hermite.hermgauss(nip)
     else:
         raise NotImplementedError("Integration method not implemented.")
-    z_quad = torch.tensor(z_quad, dtype=dtype).to(device)
-    w_quad = torch.tensor(w_quad, dtype=dtype).to(device)
+    z_quad = torch.tensor(z_quad, dtype=dtype)
+    w_quad = torch.tensor(w_quad, dtype=dtype)
     w_quad = w_quad.log() if return_log_weight else w_quad
     return z_quad, w_quad
 
@@ -160,9 +159,6 @@ class PICInputNet(nn.Module):
             param = self.reparam(param)
         return param
 
-    def _set_device(self, device: str | torch.device | int) -> None:
-        self._device = device
-
     def __repr__(self):
         return "\n".join(
             [line for line in super().__repr__().split("\n") if "tensor_parameter" not in line]
@@ -275,9 +271,6 @@ class PICInnerNet(nn.Module):
             self.tensor_parameter._ptensor = param
         return param
 
-    def _set_device(self, device: str | torch.device | int) -> None:
-        self._device = device
-
     def __repr__(self):
         return "\n".join(
             [line for line in super().__repr__().split("\n") if "tensor_parameter" not in line]
@@ -295,6 +288,7 @@ def pc2qpc(
     ff_dim: int | None = None,
     ff_sigma: float | None = 1.0,
     learn_ff: bool | None = False,
+    freeze_mixing_layers: bool = True,
 ):
     def param_to_buffer(model: torch.nn.Module):
         """Turns all parameters of a module into buffers."""
@@ -372,16 +366,23 @@ def pc2qpc(
                 reparam=None if len(node.stddev.nodes) == 1 else node.stddev.nodes[0],
             )
         elif isinstance(node, (TorchSumLayer, TorchTuckerLayer, TorchCPTLayer)):
-            # Ignore the parameterization of sum layers having arity > 1
-            # TODO: (LL) do we really want to freeze them? what do we gain?
-            #       Freezing them here has become complicated, as we are now deprecating
-            #       the idea of mixing layer as a different kind of sum layer.
             if isinstance(node, TorchSumLayer) and node.arity > 1:
-                continue
-            assert (
-                len(node.weight.nodes) == 1
-            ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
-            weight_shape = list(node.weight.nodes[0]._ptensor.shape)
+                weight_nodes = list(node.weight.topological_ordering())
+                assert len(weight_nodes) <= 2, (
+                    "Sum layers with arity greater than one must have parameters "
+                    "with at most 2 computational nodes"
+                )
+                tensor_parameter = node.weight.nodes[0]
+                if freeze_mixing_layers:
+                    tensor_parameter._ptensor.fill_(1 / node.arity)
+                    tensor_parameter._ptensor.requires_grad = False
+                    continue
+            else:
+                assert (
+                    len(node.weight.nodes) == 1
+                ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
+                tensor_parameter = node.weight.nodes[0]
+            weight_shape = list(tensor_parameter._ptensor.shape)
             squeezed_weight_shape = [weight_shape[0]] + [
                 dim_size for dim_size in weight_shape[1:] if dim_size != 1
             ]
@@ -413,7 +414,7 @@ def pc2qpc(
                 learn_ff=learn_ff,
                 z_quad=z_quad,
                 w_quad=w_quad,
-                tensor_parameter=node.weight.nodes[0],
+                tensor_parameter=tensor_parameter,
             )
         elif isinstance(node, (TorchHadamardLayer, TorchKroneckerLayer)):
             pass

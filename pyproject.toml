@@ -7,7 +7,7 @@ include = ["cirkit*"]
 
 [project]
 name = "libcirkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "a python framework to build, learn and reason about probabilistic circuits and tensor networks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,10 +35,12 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "torch~=2.3.0",
-  "numpy>=1.23.0,<2.0.0",
+  "torch>=2.3.0",
+  "numpy>=2.1.0",
+  "opt_einsum>=3.4.0",
   "einops~=0.8.0",
-  "scipy~=1.14.0"
+  "scipy~=1.14.0",
+  "graphviz~=0.20.3"
 ]
 
 [project.urls]
@@ -64,6 +66,7 @@ docs = [
   "mkdocs-gen-files",
   "mkdocs-literate-nav",
   "mkdocs-section-index",
+  "mkdocs-jupyter",
 ]
 notebooks = [
   "notebook",

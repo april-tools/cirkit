@@ -13,7 +13,6 @@ from cirkit.backend.torch.layers import TorchHadamardLayer, TorchSumLayer
 from cirkit.backend.torch.layers.input import TorchCategoricalLayer
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 from cirkit.pipeline import PipelineContext
-from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import DirichletInitializer
 from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, SumLayer
 from cirkit.symbolic.parameters import Parameter, TensorParameter
@@ -74,7 +73,7 @@ def check_continuous_ground_truth(
     assert isclose(int_tc(), semiring.map_from(torch.tensor(gt_partition_func), SumProductSemiring))
     df = lambda y, x: torch.exp(tc(torch.Tensor([[[x, y]]]))).squeeze()
     int_a, int_b = -np.inf, np.inf
-    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b)
+    ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b, epsabs=1e-5, epsrel=1e-5)
     assert isclose(ig, gt_partition_func)
 
 
@@ -120,7 +119,6 @@ def test_compile_monotonic_structured_categorical_pc(fold: bool, optimize: bool,
     check_discrete_ground_truth(tc, int_tc, compiler.semiring, gt_outputs["evi"], gt_partition_func)
 
 
-@pytest.mark.slow
 def test_compile_monotonic_structured_gaussian_pc():
     compiler = TorchCompiler(fold=True, optimize=True, semiring="lse-sum")
     sc, gt_outputs, gt_partition_func = build_monotonic_bivariate_gaussian_hadamard_dense_pc(
@@ -136,8 +134,7 @@ def test_compile_monotonic_structured_gaussian_pc():
 
 def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     rg = QuadGraph((3, 3))
-    sc = Circuit.from_region_graph(
-        rg,
+    sc = rg.build_circuit(
         num_input_units=8,
         num_sum_units=8,
         sum_product="cp",

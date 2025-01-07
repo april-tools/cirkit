@@ -1,6 +1,8 @@
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Generic, TypeVar
+
+from networkx.classes import nodes
 
 NodeType = TypeVar("NodeType")
 
@@ -64,7 +66,7 @@ def topological_ordering(
             num_incomings[n] -= 1
             if num_incomings[n] == 0:
                 to_visit.append(n)
-    if sum(num_incomings.values()) != 0:
+    if sum(num_incomings.values()):
         raise ValueError("The graph has at least one cycle. No topological ordering exists.")
 
 
@@ -110,7 +112,7 @@ def topologically_process_nodes(
         new_n = process_fn(n)
         nodes_map[n] = new_n
         in_nodes[new_n] = [nodes_map[ni] for ni in incomings_fn(n)]
-    nodes = [nodes_map[n] for n in nodes_map.keys()]
+    nodes = list(nodes_map.values())
     outputs = [nodes_map[n] for n in outputs]
     return nodes, in_nodes, outputs
 
@@ -119,7 +121,7 @@ class Graph(Generic[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: dict[NodeType, Sequence[NodeType]],
+        in_nodes: Mapping[NodeType, Sequence[NodeType]],
     ):
         self._nodes = nodes
         self._in_nodes = in_nodes
@@ -136,11 +138,11 @@ class Graph(Generic[NodeType]):
         return self._nodes
 
     @property
-    def nodes_inputs(self) -> dict[NodeType, Sequence[NodeType]]:
+    def nodes_inputs(self) -> Mapping[NodeType, Sequence[NodeType]]:
         return self._in_nodes
 
     @property
-    def nodes_outputs(self) -> dict[NodeType, Sequence[NodeType]]:
+    def nodes_outputs(self) -> Mapping[NodeType, Sequence[NodeType]]:
         return self._out_nodes
 
     @property
@@ -152,7 +154,7 @@ class DiAcyclicGraph(Graph[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: dict[NodeType, Sequence[NodeType]],
+        in_nodes: Mapping[NodeType, Sequence[NodeType]],
         outputs: Sequence[NodeType],
     ):
         super().__init__(nodes, in_nodes)
@@ -177,7 +179,7 @@ class RootedDiAcyclicGraph(DiAcyclicGraph[NodeType]):
     def __init__(
         self,
         nodes: Sequence[NodeType],
-        in_nodes: dict[NodeType, Sequence[NodeType]],
+        in_nodes: Mapping[NodeType, Sequence[NodeType]],
         outputs: Sequence[NodeType],
     ):
         if len(outputs) != 1:

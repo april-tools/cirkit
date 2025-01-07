@@ -6,25 +6,44 @@ from typing import Any, final
 import numpy as np
 import torch
 from torch import Tensor, nn
-from triton.language import tensor
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
 
 
 class TorchParameterNode(AbstractTorchModule, ABC):
-    """The abstract base class for all reparameterizations."""
+    """The abstract parameter node class. A parameter node is a node in the computational
+    graph that computes parameters.
+    See [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter]
+    for more details."""
 
-    def __init__(self, *, num_folds: int = 1, **kwargs) -> None:
-        """Init class."""
+    def __init__(self, *, num_folds: int = 1):
+        """Initialize a torch parameter node.
+
+        Args:
+            num_folds: The number of folds computed by the node.
+        """
         super().__init__(num_folds=num_folds)
 
     @property
     @abstractmethod
     def shape(self) -> tuple[int, ...]:
-        ...
+        r"""The shape of the tensor folds that the node outputs.
+        If the shape is $(K_1,\ldots,K_n)$ and the number of folds is $F$, then the node outputs a
+        tensor having overall shape $(F,K_1,\ldots,K_n)$.
+
+        Returns:
+            The shape of the thensor folds that the node outputs.
+        """
 
     @property
     def config(self) -> dict[str, Any]:
+        """Retrieves the configuration of the parameter node, i.e., a dictionary mapping
+        hyperparameters of the parameter node to their values. The hyperparameter names must
+        match the argument names in the ```__init__``` method.
+
+        Returns:
+            Dict[str, Any]: A dictionary from hyperparameter names to their value.
+        """
         return {}
 
     @property
@@ -37,17 +56,17 @@ class TorchParameterNode(AbstractTorchModule, ABC):
         return {}
 
     @torch.no_grad()
-    def reset_parameters(self) -> None:
+    def reset_parameters(self):
         ...
 
 
 class TorchParameterInput(TorchParameterNode, ABC):
-    def __call__(self) -> Tensor:
-        """Get the reparameterized parameters.
+    """The torch parameter input node. A parameter input is a parameter node in the
+    computational graph that comptues parameter that does __not__ have inputs. See
+    [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter] for more details.
+    """
 
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
+    def __call__(self) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__()  # type: ignore[no-any-return,misc]
 
@@ -56,11 +75,19 @@ class TorchParameterInput(TorchParameterNode, ABC):
 
     @abstractmethod
     def forward(self) -> Tensor:
-        ...
+        r"""Evaluate a torch parameter input node.
+
+        Returns:
+            Tensor: A tensor of shape $(F,K_1,\ldots,K_n)$, where $F$ is the number of folds, and
+            $(K_1,\ldots,K_n)$ is the shape of the tensors within each fold.
+        """
 
 
 class TorchTensorParameter(TorchParameterInput):
-    """The leaf in reparameterizations that holds the parameter Tensor."""
+    """A torch tensor parameter is a
+    [TorchParameterInput][cirkit.backend.torch.parameters.nodes.TorchParameterInput]
+    that stores a [torch.nn.parameter.Parameter][torch.nn.parameter.Parameter] object.
+    """
 
     def __init__(
         self,
@@ -69,8 +96,22 @@ class TorchTensorParameter(TorchParameterInput):
         dtype: torch.dtype | None = None,
         initializer_: Callable[[Tensor], Tensor] | None = None,
         num_folds: int = 1,
-    ) -> None:
-        """Init class."""
+    ):
+        r"""Initializes a torch tensor parameter. Given a shape $(K_1,\ldots,K_n)$ and a number of
+        folds $F$, it eventually materializes a torch parameter of shape $(F,K_1,\ldots,K_n)$.
+
+        Args:
+            *shape: The shape of the tensor parameter folds $(K_1,\ldots,K_n)$.
+            requires_grad: Whether the parameter requires the computation of gradients.
+            dtype: The data type of the parameter.
+                If it is None, then it defaults to the current default torch data type, i.e.,
+                it is given by [torch.get_default_dtype][torch.get_default_dtype].
+            initializer_: The in-place initializer used to initialize the tensor parameter.
+                It is a callable with only a tensor as input. If it is None, then it defaults to
+                sampling from a standard normal distribution, i.e.,
+                [torch.nn.init.normal_][torch.nn.init.normal_].
+            num_folds: The number of folds $F$.
+        """
         if dtype is None:
             dtype = torch.get_default_dtype()
         super().__init__(num_folds=num_folds)
@@ -86,31 +127,62 @@ class TorchTensorParameter(TorchParameterInput):
 
     @property
     def dtype(self) -> torch.dtype:
-        """The dtype of the output parameter."""
+        """Retrieve the data type of the parameter.
+
+        Returns:
+            torch.dtype: The parameter data type.
+        """
         return self._dtype
 
     @property
     def device(self) -> torch.device:
-        assert self._ptensor is not None
+        """Retrieve the device of the parameter.
+
+        Returns:
+            torch.device: The parameter device.
+
+        Raises:
+            ValueError: If the parameter has not been initialized.
+                See the [reset_parameters][cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
+                method.
+        """
+        if self._ptensor is None:
+            raise ValueError(
+                "The tensor parameter has not been initialized. " "Use reset_parameters() first"
+            )
         return self._ptensor.device
 
     @property
     def requires_grad(self) -> bool:
+        """Retrieve whether the torch parameter requires gradients.
+
+        Returns:
+            bool: True if it requires gradients, False otherwise.
+        """
         return self._requires_grad
 
     @requires_grad.setter
-    def requires_grad(self, value: bool) -> None:
+    def requires_grad(self, value: bool):
+        """Set whether the torch parameter requires gradients.
+
+        Args:
+            value: The value to set.
+        """
         self._requires_grad = value
         if self._ptensor is not None:
             self._ptensor.requires_grad = value
 
     @property
     def initializer(self) -> Callable[[Tensor], Tensor]:
+        """Retrieve the initializer of the torch tensor parameter.
+
+        Returns:
+            Callable[[Tensor], Tensor]: The in-place tensor initializer.
+        """
         return self._initializer_
 
     @property
     def config(self) -> dict[str, Any]:
-        """Configuration flags for the parameter."""
         return {
             "shape": self._shape,
             "requires_grad": self._requires_grad,
@@ -124,7 +196,9 @@ class TorchTensorParameter(TorchParameterInput):
 
     @torch.no_grad()
     def reset_parameters(self) -> None:
-        """Initialize the internal parameter tensor with the given initializer."""
+        """Allocate and initialize the torch tensor parameter. If the tensor has already been
+        allocated, then this function simply call the initializer to reset the parameter values.
+        """
         if self._ptensor is None:
             shape = (self.num_folds, *self._shape)
             self._ptensor = nn.Parameter(
@@ -135,12 +209,21 @@ class TorchTensorParameter(TorchParameterInput):
         self._initializer_(self._ptensor.data)
 
     def forward(self) -> Tensor:
-        """Get the reparameterized parameters.
+        r"""Evaluate a torch parameter input node.
 
         Returns:
-            Tensor: The parameters after reparameterization.
+            Tensor: A tensor of shape $(F,K_1,\ldots,K_n)$, where $F$ is the number of folds, and
+            $(K_1,\ldots,K_n)$ is the shape of the tensors within each fold.
+
+        Raises:
+            ValueError: If the parameter has not been initialized.
+                See the [reset_parameters][cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
+                method.
         """
-        assert self._ptensor is not None
+        if self._ptensor is None:
+            raise ValueError(
+                "The tensor parameter has not been initialized. " "Use reset_parameters() first"
+            )
         return self._ptensor
 
 
@@ -168,7 +251,7 @@ class TorchPointerParameter(TorchParameterInput):
                 num_folds = len(fold_idx)
         assert not isinstance(parameter, TorchPointerParameter)
         super().__init__(num_folds=num_folds)
-        super(nn.Module, self).__setattr__("_parameter", parameter)
+        self._parameter = parameter
         self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
 
     @property
@@ -659,6 +742,45 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
         # x1: (F, d1, d2)
         # x2: (F, d2, d3)
         return torch.matmul(x1, x2)  # (F, d1, d3)
+
+
+class TorchFlattenParameter(TorchUnaryParameterOp):
+    def __init__(
+        self,
+        in_shape: tuple[int, ...],
+        num_folds: int = 1,
+        start_dim: int = 0,
+        end_dim: int = -1,
+    ):
+        super().__init__(in_shape, num_folds=num_folds)
+        start_dim = start_dim if start_dim >= 0 else start_dim + len(in_shape)
+        assert 0 <= start_dim < len(in_shape)
+        end_dim = end_dim if end_dim >= 0 else end_dim + len(in_shape)
+        assert 0 <= end_dim < len(in_shape)
+        assert start_dim < end_dim
+        self.start_dim = start_dim
+        self.end_dim = end_dim
+
+    @property
+    def config(self) -> dict[str, Any]:
+        config = super().config
+        config["start_dim"] = self.start_dim
+        config["end_dim"] = self.end_dim
+        return config
+
+    @cached_property
+    def shape(self) -> tuple[int, ...]:
+        flattened_dim = np.prod(
+            [self.in_shapes[0][i] for i in range(self.start_dim, self.end_dim + 1)]
+        )
+        return (
+            *self.in_shapes[0][: self.start_dim],
+            flattened_dim,
+            *self.in_shapes[0][self.end_dim + 1 :],
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.flatten(x, start_dim=self.start_dim + 1, end_dim=self.end_dim + 1)
 
 
 class TorchMixingWeightParameter(TorchUnaryParameterOp):

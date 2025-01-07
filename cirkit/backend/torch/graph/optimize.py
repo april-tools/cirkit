@@ -137,7 +137,7 @@ def optimize_graph(
             opt_modules = match_opt_modules[match]
             modules.extend(opt_modules)
             for i, om in enumerate(opt_modules):
-                if i == 0:
+                if not i:
                     in_modules[om] = [
                         match_exit_points[module_matches[mi]] if mi in module_matches else mi
                         for mi in incomings_fn(match_entry_points[match])

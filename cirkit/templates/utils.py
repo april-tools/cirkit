@@ -1,10 +1,8 @@
 import functools
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
-import numpy as np
-
-from cirkit.symbolic.circuit import InputLayerFactory
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.initializers import (
     DirichletInitializer,
@@ -12,22 +10,25 @@ from cirkit.symbolic.initializers import (
     NormalInitializer,
     UniformInitializer,
 )
-from cirkit.symbolic.layers import BinomialLayer, CategoricalLayer, EmbeddingLayer, GaussianLayer
+from cirkit.symbolic.layers import (
+    BinomialLayer,
+    CategoricalLayer,
+    EmbeddingLayer,
+    GaussianLayer,
+    InputLayer,
+    ProductLayer,
+    SumLayer,
+)
 from cirkit.symbolic.parameters import (
     ClampParameter,
     Parameter,
     ParameterFactory,
+    SigmoidParameter,
     SoftmaxParameter,
     TensorParameter,
     UnaryParameterOp,
 )
-from cirkit.templates.region_graph import (
-    PoonDomingos,
-    QuadGraph,
-    QuadTree,
-    RandomBinaryTree,
-    RegionGraph,
-)
+from cirkit.utils.scope import Scope
 
 
 @dataclass(frozen=True)
@@ -41,41 +42,56 @@ class Parameterization:
     """The activation function. Defaults to 'none', i.e., no activation."""
     dtype: str = "real"
     """The data type. Defaults to 'real', i.e., real numbers."""
+    initialization_kwargs: dict[str, Any] = field(default_factory=dict)
+    """Additional arguments to pass to the initializatiot method."""
+    activation_kwargs: dict[str, Any] = field(default_factory=dict)
+    """Additional arguments to pass to the activation function."""
 
 
-def build_image_region_graph(
-    name: str,
-    image_shape: tuple[int, int],
-) -> RegionGraph:
-    """Build a region graph that is tailored for image data.
+class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs input layers."""
 
-    Args:
-        name: The name of the region graph. It can be one of the following: 'quad-tree-2',
-            'quad-tree-4', 'quad-graph', 'random-binary-tree', 'poon-domingos'.
-            For the Poon-Domingos region graph, the delta parameter used to split patches is
-            automatically set to max(ceil(H/8), ceil(W/8)) for images of shape (H, W).
-        image_shape: The shape of the image.
+    def __call__(self, scope: Scope, num_units: int, num_channels: int) -> InputLayer:
+        """Constructs an input layer.
 
-    Returns:
-        RegionGraph: A region graph.
+        Args:
+            scope: The scope of the layer.
+            num_units: The number of input units composing the layer.
+            num_channels: The number of channel variables.
 
-    Raises:
-        ValueError: If the given region graph name is not known.
-    """
-    match name:
-        case "quad-tree-2":
-            return QuadTree(image_shape, num_patch_splits=2)
-        case "quad-tree-4":
-            return QuadTree(image_shape, num_patch_splits=4)
-        case "quad-graph":
-            return QuadGraph(image_shape)
-        case "random-binary-tree":
-            return RandomBinaryTree(np.prod(image_shape))
-        case "poon-domingos":
-            delta = max(np.ceil(image_shape[0] / 8), np.ceil(image_shape[1] / 8))
-            return PoonDomingos(image_shape, delta=delta)
-        case _:
-            raise ValueError(f"Unknown region graph called {name}")
+        Returns:
+            InputLayer: An input layer.
+        """
+
+
+class SumLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs sum layers."""
+
+    def __call__(self, num_input_units: int, num_output_units: int) -> SumLayer:
+        """Constructs a sum layer.
+
+        Args:
+            num_input_units: The number of units in each layer that is an input.
+            num_output_units: The number of sum units in the layer.
+
+        Returns:
+            SumLayer: A sum layer.
+        """
+
+
+class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
+    """The protocol of a factory that constructs product layers."""
+
+    def __call__(self, num_input_units: int, arity: int) -> ProductLayer:
+        """Constructs a product layer.
+
+        Args:
+            num_input_units: The number of units in each layer that is an input.
+            arity: The number of input layers.
+
+        Returns:
+            ProductLayer: A product layer.
+        """
 
 
 def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
@@ -118,9 +134,9 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
     Raises:
         ValueError: If one of the settings in the given parameterization is unknown.
     """
-    unary_op_factory = name_to_parameter_activation(param.activation)
+    unary_op_factory = name_to_parameter_activation(param.activation, **param.activation_kwargs)
     dtype = name_to_dtype(param.dtype)
-    initializer = name_to_initializer(param.initialization)
+    initializer = name_to_initializer(param.initialization, **param.initialization_kwargs)
     return functools.partial(
         _build_tensor_parameter,
         unary_op_factory=unary_op_factory,
@@ -136,7 +152,7 @@ def name_to_parameter_activation(
 
     Args:
         name: The name of the parameter activation. It can be either 'none',
-            'softmax', or 'positive-clamp'.
+            'softmax', 'sigmoid', or 'positive-clamp'.
         **kwargs: Optional arguments to pass to symbolic unary parameter.
 
     Returns:
@@ -152,6 +168,8 @@ def name_to_parameter_activation(
             return None
         case "softmax":
             return functools.partial(SoftmaxParameter, **kwargs)
+        case "sigmoid":
+            return functools.partial(SigmoidParameter)
         case "positive-clamp":
             if "vmin" not in kwargs:
                 kwargs["vmin"] = 1e-18
@@ -198,13 +216,24 @@ def name_to_initializer(name: str, **kwargs) -> Initializer:
     Raises:
         ValueError: If the given initialization name is not known.
     """
+    kwargs = kwargs.copy()
     match name:
         case "uniform":
-            return UniformInitializer(0.0, 1.0)
+            if "a" not in kwargs:
+                kwargs["a"] = 0.0
+            if "b" not in kwargs:
+                kwargs["b"] = 1.0
+            return UniformInitializer(**kwargs)
         case "normal":
-            return NormalInitializer(0.0, 1.0)
+            if "mean" not in kwargs:
+                kwargs["mean"] = 0.0
+            if "stddev" not in kwargs:
+                kwargs["stddev"] = 1.0
+            return NormalInitializer(**kwargs)
         case "dirichlet":
-            return DirichletInitializer(1.0, **kwargs)
+            if "alpha" not in kwargs:
+                kwargs["alpha"] = 1.0
+            return DirichletInitializer(**kwargs)
         case _:
             raise ValueError(f"Unknown initializer called {name}")
 

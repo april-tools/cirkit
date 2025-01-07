@@ -1,11 +1,13 @@
 import functools
 from typing import Any
 
+import numpy as np
+
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.parameters import mixing_weight_factory
-from cirkit.templates.circuit_templates.utils import (
+from cirkit.templates.region_graph import PoonDomingos, QuadGraph, QuadTree, RandomBinaryTree
+from cirkit.templates.utils import (
     Parameterization,
-    build_image_region_graph,
     name_to_input_layer_factory,
     parameterization_to_factory,
 )
@@ -19,6 +21,7 @@ def image_data(
     num_input_units: int,
     sum_product_layer: str,
     num_sum_units: int,
+    num_classes: int = 1,
     input_params: dict[str, Parameterization] | None = None,
     sum_weight_param: Parameterization | None = None,
     use_mixing_weights: bool = True,
@@ -45,6 +48,7 @@ def image_data(
             of a hadamard product layer followed by a single dense layer), 'tucker' (the Tucker
             decomposition layer, consisting of a kronecker product layer followed by a single dense
             layer).
+        num_classes: The number of output classes (default=1).
         num_sum_units: The number of sum units in each sum layer, i.e., either dense or mixing
             layer.
         input_params: A dictionary mapping each name of a parameter of the input layer to
@@ -76,7 +80,21 @@ def image_data(
         raise ValueError(f"Unknown input layer called {input_layer}")
 
     # Construct the image-tailored region graph
-    rg = build_image_region_graph(region_graph, (image_shape[1], image_shape[2]))
+    image_hw = (image_shape[1], image_shape[2])
+    match region_graph:
+        case "quad-tree-2":
+            rg = QuadTree(image_hw, num_patch_splits=2)
+        case "quad-tree-4":
+            rg = QuadTree(image_hw, num_patch_splits=4)
+        case "quad-graph":
+            rg = QuadGraph(image_hw)
+        case "random-binary-tree":
+            rg = RandomBinaryTree(np.prod(image_hw))
+        case "poon-domingos":
+            delta = max(np.ceil(image_hw[0] / 8), np.ceil(image_hw[1] / 8))
+            rg = PoonDomingos(image_hw, delta=delta)
+        case _:
+            raise ValueError(f"Unknown region graph called {region_graph}")
 
     # Get the input layer factory
     input_kwargs: dict[str, Any]
@@ -112,8 +130,7 @@ def image_data(
         nary_sum_weight_factory = sum_weight_factory
 
     # Build and return the symbolic circuit
-    return Circuit.from_region_graph(
-        rg,
+    return rg.build_circuit(
         input_factory=input_factory,
         sum_product=sum_product_layer,
         sum_weight_factory=sum_weight_factory,
@@ -121,6 +138,6 @@ def image_data(
         num_channels=image_shape[0],
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
-        num_classes=1,
+        num_classes=num_classes,
         factorize_multivariate=True,
     )
