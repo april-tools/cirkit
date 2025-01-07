@@ -13,6 +13,7 @@ from cirkit.symbolic.parameters import (
     TensorParameter,
 )
 from cirkit.utils.scope import Scope
+from cirkit.utils.label import LayerLabel
 
 
 class LayerOperator(IntEnum):
@@ -26,20 +27,6 @@ class LayerOperator(IntEnum):
     """The multiplication (Kronecker product) operator defined over layers."""
     CONJUGATION = auto()
     """The conjugation opereator defined over sum and input layers."""
-
-
-class LayerLabel(ABC):
-    """The label associated with a symbolic layer class. It can be as simple as a string
-    or a more complex structured object that describes a layer.
-    """
-    
-    @abstractmethod
-    def __repr__(self) -> str:
-        """A string representation of the layer label.
-
-        Returns:
-            str: Label of the layer.
-        """
 
 
 class Layer(ABC):
