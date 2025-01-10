@@ -3,28 +3,23 @@ import itertools
 import pytest
 
 from cirkit.symbolic.dtypes import DataType
-from cirkit.symbolic.layers import EmbeddingLayer, HadamardLayer, KroneckerLayer, SumLayer
-from cirkit.symbolic.parameters import ConstantParameter
+from cirkit.symbolic.layers import (
+    CategoricalLayer,
+    EmbeddingLayer,
+    HadamardLayer,
+    KroneckerLayer,
+    SumLayer,
+)
+from cirkit.symbolic.parameters import ConstantParameter, SoftmaxParameter, TensorParameter
 from cirkit.templates import tensor_factorizations
 from cirkit.templates.utils import Parameterization
 from cirkit.utils.scope import Scope
 
 
-@pytest.mark.parametrize(
-    "rank,factor_param,weight_param",
-    itertools.product(
-        [1, 5],
-        [None, Parameterization(activation="softmax", initialization="normal")],
-        [None, Parameterization(activation="softmax", initialization="normal")],
-    ),
-)
-def test_cp(
-    rank: int, factor_param: Parameterization | None, weight_param: Parameterization | None
-):
-    shape = (256, 32, 32)
-    circuit = tensor_factorizations.cp(
-        shape, rank, factor_param=factor_param, weight_param=weight_param
-    )
+@pytest.mark.parametrize("rank", [1, 5])
+def test_factorization_cp(rank: int):
+    shape = (48, 16, 32)
+    circuit = tensor_factorizations.cp(shape, rank, input_layer="embedding")
     assert circuit.scope == Scope(range(len(shape)))
     input_layers = list(circuit.inputs)
     product_layers = list(circuit.product_layers)
@@ -37,32 +32,43 @@ def test_cp(
     assert len(sum_layers) == 1 and isinstance(sum_layers[0], SumLayer)
     assert sum_layers[0].num_input_units == rank and sum_layers[0].num_output_units == 1
     assert sum_layers[0].arity == 1
-    if factor_param is None:
-        assert all(len(sl.weight.nodes) == 1 for sl in input_layers)
-    else:
-        assert all(len(sl.weight.nodes) == 2 for sl in input_layers)
-    if weight_param is not None:
-        assert len(sum_layers[0].weight.nodes) == 2
-    else:
-        assert len(sum_layers[0].weight.nodes) == 1
-        assert isinstance(sum_layers[0].weight.nodes[0], ConstantParameter)
+    assert all(len(sl.weight.nodes) == 1 for sl in input_layers)
+    assert len(sum_layers[0].weight.nodes) == 1
+    assert isinstance(sum_layers[0].weight.nodes[0], ConstantParameter)
 
 
-@pytest.mark.parametrize(
-    "rank,factor_param,core_param",
-    itertools.product(
-        [1, 5],
-        [None, Parameterization(activation="softmax", initialization="normal")],
-        [None, Parameterization(activation="softmax", initialization="normal")],
-    ),
-)
-def test_tucker(
-    rank: int, factor_param: Parameterization | None, core_param: Parameterization | None
-):
-    shape = (128, 16, 16)
-    circuit = tensor_factorizations.tucker(
-        shape, rank, factor_param=factor_param, core_param=core_param
+@pytest.mark.parametrize("rank", [1, 5])
+def test_factorization_cp_probabilistic(rank: int):
+    shape = (48, 16, 32)
+    circuit = tensor_factorizations.cp(
+        shape,
+        rank,
+        input_layer="categorical",
+        input_params={"probs": Parameterization(activation="softmax")},
+        weight_param=Parameterization(activation="softmax"),
     )
+    assert circuit.scope == Scope(range(len(shape)))
+    input_layers = list(circuit.inputs)
+    product_layers = list(circuit.product_layers)
+    sum_layers = list(circuit.sum_layers)
+    assert len(input_layers) == len(shape)
+    assert all(isinstance(sl, CategoricalLayer) for sl in input_layers)
+    assert len(product_layers) == 1 and isinstance(product_layers[0], HadamardLayer)
+    assert product_layers[0].num_input_units == rank
+    assert product_layers[0].arity == len(input_layers)
+    assert len(sum_layers) == 1 and isinstance(sum_layers[0], SumLayer)
+    assert sum_layers[0].num_input_units == rank and sum_layers[0].num_output_units == 1
+    assert sum_layers[0].arity == 1
+    assert all(len(sl.probs.nodes) == 2 for sl in input_layers)
+    assert all(SoftmaxParameter in map(type, sl.probs.nodes) for sl in input_layers)
+    assert len(sum_layers[0].weight.nodes) == 2
+    assert SoftmaxParameter in map(type, sum_layers[0].weight.nodes)
+
+
+@pytest.mark.parametrize("rank", [1, 5])
+def test_factorization_tucker(rank: int):
+    shape = (48, 16, 32)
+    circuit = tensor_factorizations.tucker(shape, rank, input_layer="embedding")
     assert circuit.scope == Scope(range(len(shape)))
     input_layers = list(circuit.inputs)
     product_layers = list(circuit.product_layers)
@@ -73,32 +79,55 @@ def test_tucker(
     assert product_layers[0].num_input_units == rank
     assert product_layers[0].arity == len(input_layers)
     assert len(sum_layers) == 1 and isinstance(sum_layers[0], SumLayer)
-    assert (
-        sum_layers[0].num_input_units == rank ** len(input_layers)
-        and sum_layers[0].num_output_units == 1
-    )
+    assert sum_layers[0].num_input_units == rank ** len(input_layers)
+    assert sum_layers[0].num_output_units == 1
     assert sum_layers[0].arity == 1
-    if factor_param is None:
-        assert all(len(sl.weight.nodes) == 1 for sl in input_layers)
-    else:
-        assert all(len(sl.weight.nodes) == 2 for sl in input_layers)
-    if core_param is None:
-        assert len(sum_layers[0].weight.nodes) == 1
-    else:
-        assert len(sum_layers[0].weight.nodes) == 2
+    assert all(len(sl.weight.nodes) == 1 for sl in input_layers)
+    assert len(sum_layers[0].weight.nodes) == 1
+    assert isinstance(sum_layers[0].weight.nodes[0], TensorParameter)
+
+
+@pytest.mark.parametrize("rank", [1, 5])
+def test_factorization_tucker_probabilistic(rank: int):
+    shape = (48, 16, 32)
+    circuit = tensor_factorizations.tucker(
+        shape,
+        rank,
+        input_layer="categorical",
+        input_params={"probs": Parameterization(activation="softmax")},
+        core_param=Parameterization(activation="softmax"),
+    )
+    assert circuit.scope == Scope(range(len(shape)))
+    input_layers = list(circuit.inputs)
+    product_layers = list(circuit.product_layers)
+    sum_layers = list(circuit.sum_layers)
+    assert len(input_layers) == len(shape)
+    assert all(isinstance(sl, CategoricalLayer) for sl in input_layers)
+    assert len(product_layers) == 1 and isinstance(product_layers[0], KroneckerLayer)
+    assert product_layers[0].num_input_units == rank
+    assert product_layers[0].arity == len(input_layers)
+    assert len(sum_layers) == 1 and isinstance(sum_layers[0], SumLayer)
+    assert sum_layers[0].num_input_units == rank ** len(input_layers)
+    assert sum_layers[0].num_output_units == 1
+    assert sum_layers[0].arity == 1
+    assert all(len(sl.probs.nodes) == 2 for sl in input_layers)
+    assert all(SoftmaxParameter in map(type, sl.probs.nodes) for sl in input_layers)
+    assert len(sum_layers[0].weight.nodes) == 2
+    assert SoftmaxParameter in map(type, sum_layers[0].weight.nodes)
 
 
 @pytest.mark.parametrize(
     "rank,factor_param",
     itertools.product([1, 5], [None, Parameterization(dtype="complex")]),
 )
-def test_tensor_train(rank: int, factor_param: Parameterization | None):
-    shape = (128, 16, 16)
+def test_factorization_tensor_train(rank: int, factor_param: Parameterization | None):
+    shape = (48, 16, 32)
     circuit = tensor_factorizations.tensor_train(shape, rank=rank, factor_param=factor_param)
     assert circuit.scope == Scope(range(len(shape)))
     input_layers = list(circuit.inputs)
     product_layers = list(circuit.product_layers)
     sum_layers = list(circuit.sum_layers)
+    assert set([sl.num_output_units for sl in input_layers]) == {rank}
     assert len([sl for sl in input_layers if circuit.layer_scope(sl) == Scope([0])]) == 1
     assert (
         len([sl for sl in input_layers if circuit.layer_scope(sl) == Scope([len(shape) - 1])]) == 1

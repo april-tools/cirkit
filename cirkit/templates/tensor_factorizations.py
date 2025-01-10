@@ -6,16 +6,46 @@ from scipy import linalg
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import EmbeddingLayer, HadamardLayer, KroneckerLayer, Layer, SumLayer
-from cirkit.symbolic.parameters import ConstantParameter, Parameter
-from cirkit.templates.utils import Parameterization, parameterization_to_factory
+from cirkit.symbolic.parameters import ConstantParameter, Parameter, ParameterFactory
+from cirkit.templates.utils import (
+    InputLayerFactory,
+    Parameterization,
+    name_to_input_layer_factory,
+    parameterization_to_factory,
+)
 from cirkit.utils.scope import Scope
+
+
+def _input_layer_factory_builder(
+    input_layer: str, dim: int, factor_param_kwargs: dict[str, ParameterFactory]
+) -> InputLayerFactory:
+    match input_layer:
+        case "categorical":
+            factor_dim_kwargs = {"num_categories": dim}
+        case "binomial":
+            factor_dim_kwargs = {"total_count": dim}
+        case "embedding":
+            factor_dim_kwargs = {"num_states": dim}
+        case _:
+            assert False
+    return name_to_input_layer_factory(input_layer, **factor_dim_kwargs, **factor_param_kwargs)
+
+
+def _input_param_factories(
+    input_params: dict[str, Parameterization]
+) -> dict[str, ParameterFactory]:
+    return {
+        name + "_factory": parameterization_to_factory(param)
+        for name, param in input_params.items()
+    }
 
 
 def cp(
     shape: tuple[int, ...],
     rank: int,
     *,
-    factor_param: Parameterization | None = None,
+    input_layer: str = "embedding",
+    input_params: dict[str, Parameterization] | None = None,
     weight_param: Parameterization | None = None,
 ) -> Circuit:
     r"""Constructs a circuit encoding a CP factorization of an $n$-dimensional tensor.
@@ -58,8 +88,12 @@ def cp(
     Args:
         shape: The shape of the tensor to encode the CP factorization of.
         rank: The rank of the CP factorization. Defaults to 1.
-        factor_param: The parameterization to use for the factor matrices.
-            If None, then it defaults to no activation and uses an initialization based on
+        input_layer: The input layer to use for the factors. It can be 'embedding', 'categorical'
+            or 'binomial'. Defaults to 'embedding'. If it is 'embedding' then it corresponds to the
+            CP factorization described above where the factors are matrices.
+        input_params: A dictionary mapping each name of a parameter of the input layer to
+            its parameterization. If it is None and ```input_layer``` is 'embedding', then
+            it defaults to no activation and uses an initialization based on
             independently sampling from a standard Gaussian distribution.
         weight_param: The parameterization to use for the weight coefficients.
             If None, then it defaults to fixed weights set all to one.
@@ -70,16 +104,14 @@ def cp(
     Raises:
         ValueError: If the given tensor shape is not valid.
         ValueError: If the rank is not a positive number.
+        ValueError: If the input layer is not valid.
     """
     if len(shape) < 1 or any(dim < 1 for dim in shape):
         raise ValueError("The tensor shape is not valid")
     if rank < 1:
         raise ValueError("The factorization rank should be a positive number")
-
-    # Retrieve the factory to parameterize the embeddings
-    if factor_param is None:
-        factor_param = Parameterization(activation="none", initialization="normal")
-    embedding_factory = parameterization_to_factory(factor_param)
+    if input_layer not in ["categorical", "binomial", "embedding"]:
+        raise ValueError(f"The input layer {input_layer} is not valid for CP")
 
     # Retrieve the sum layer weight, depending on whether we the CP factorization is weighted
     if weight_param is None:
@@ -89,10 +121,13 @@ def cp(
         weight_factory = parameterization_to_factory(weight_param)
         weight = None
 
-    # Construct the embedding, hadamard and sum layers
+    # Construct the factor, hadamard and sum layers
+    factor_param_kwargs = {} if input_params is None else _input_param_factories(input_params)
+    embedding_layer_factories: list[InputLayerFactory] = [
+        _input_layer_factory_builder(input_layer, dim, factor_param_kwargs) for dim in shape
+    ]
     embedding_layers = [
-        EmbeddingLayer(Scope([i]), rank, 1, num_states=dim, weight_factory=embedding_factory)
-        for i, dim in enumerate(shape)
+        f(Scope([i]), rank, num_channels=1) for i, f in enumerate(embedding_layer_factories)
     ]
     hadamard_layer = HadamardLayer(rank, arity=len(shape))
     sum_layer = SumLayer(rank, 1, arity=1, weight=weight, weight_factory=weight_factory)
@@ -109,7 +144,8 @@ def tucker(
     shape: tuple[int, ...],
     rank: int,
     *,
-    factor_param: Parameterization | None = None,
+    input_layer: str = "embedding",
+    input_params: dict[str, Parameterization] | None = None,
     core_param: Parameterization | None = None,
 ) -> Circuit:
     r"""Constructs a circuit encoding a Tucker factorization of an $n$-dimensional tensor.
@@ -146,8 +182,12 @@ def tucker(
     Args:
         shape: The shape of the tensor to encode the Tucker factorization of.
         rank: The rank of the Tucker factorization. Defaults to 1.
-        factor_param: The parameterization to use for the factor matrices.
-            If None, then it defaults to no activation and uses an initialization based on
+        input_layer: The input layer to use for the factors. It can be 'embedding', 'categorical'
+            or 'binomial'. Defaults to 'embedding'. If it is 'embedding' then it corresponds to the
+            CP factorization described above where the factors are matrices.
+        input_params: A dictionary mapping each name of a parameter of the input layer to
+            its parameterization. If it is None and ```input_layer``` is 'embedding', then
+            it defaults to no activation and uses an initialization based on
             independently sampling from a standard Gaussian distribution.
         core_param: The parameterization to use for the core tensor.
             If None, then it defaults to no activation and uses an initialization based on
@@ -159,24 +199,27 @@ def tucker(
     Raises:
         ValueError: If the given tensor shape is not valid.
         ValueError: If the rank is not a positive number.
+        ValueError: If the input layer is not valid.
     """
     if len(shape) < 1 or any(dim < 1 for dim in shape):
         raise ValueError("The tensor shape is not valid")
     if rank < 1:
         raise ValueError("The factorization rank should be a positive number")
+    if input_layer not in ["categorical", "binomial", "embedding"]:
+        raise ValueError(f"The input layer {input_layer} is not valid for Tucker")
 
-    # Retrieve the factory to parameterize the embeddings and the core tensor
-    if factor_param is None:
-        factor_param = Parameterization(activation="none", initialization="normal")
+    # Retrieve the factory to parameterize the core tensor
     if core_param is None:
         core_param = Parameterization(activation="none", initialization="normal")
-    embedding_factory = parameterization_to_factory(factor_param)
     weight_factory = parameterization_to_factory(core_param)
 
     # Construct the embedding, kronecker and sum layers
+    factor_param_kwargs = {} if input_params is None else _input_param_factories(input_params)
+    embedding_layer_factories: list[InputLayerFactory] = [
+        _input_layer_factory_builder(input_layer, dim, factor_param_kwargs) for dim in shape
+    ]
     embedding_layers = [
-        EmbeddingLayer(Scope([i]), rank, 1, num_states=dim, weight_factory=embedding_factory)
-        for i, dim in enumerate(shape)
+        f(Scope([i]), rank, num_channels=1) for i, f in enumerate(embedding_layer_factories)
     ]
     kronecker_layer = KroneckerLayer(rank, arity=len(shape))
     sum_layer = SumLayer(cast(int, rank ** len(shape)), 1, arity=1, weight_factory=weight_factory)
