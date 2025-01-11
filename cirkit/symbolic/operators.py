@@ -39,9 +39,8 @@ def integrate_embedding_layer(sl: EmbeddingLayer, *, scope: Scope) -> CircuitBlo
             f"The scope of the Embedding layer '{sl.scope}'"
             f" is expected to be a subset of the integration scope '{scope}'"
         )
-    reduce_sum = ReduceSumParameter(sl.weight.shape, axis=2)
-    reduce_prod = ReduceProductParameter(reduce_sum.shape, axis=1)
-    value = Parameter.from_sequence(sl.weight.ref(), reduce_sum, reduce_prod)
+    reduce_sum = ReduceSumParameter(sl.weight.shape, axis=1)
+    value = Parameter.from_unary(reduce_sum, sl.weight.ref())
     sl = ConstantValueLayer(sl.num_output_units, log_space=False, value=value)
     return CircuitBlock.from_layer(sl)
 
