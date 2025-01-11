@@ -2,7 +2,6 @@ import itertools
 from typing import Any
 
 import torch
-from einops import einsum
 from torch import Tensor
 
 from cirkit.backend.torch.parameters.nodes import TorchParameterOp

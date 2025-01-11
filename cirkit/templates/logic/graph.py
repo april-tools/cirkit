@@ -236,7 +236,6 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         literal_input_factory: InputLayerFactory = None,
         negated_literal_input_factory: InputLayerFactory = None,
         weight_factory: ParameterFactory | None = None,
-        num_channels: int = 1,
         enforce_smoothness: bool = True,
     ) -> Circuit:
         """Construct a symbolic circuit from a logic circuit graph.
@@ -253,7 +252,6 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                 a symbolic parameter.
                 If None is used, the default weight factory uses non-trainable unitary
                 parameters, which instantiate a regular boolean logic graph.
-            num_channels: The number of channels for each variable.
             enforce_smoothness:
                 Enforces smoothness of the circuit to support efficient marginalization.
 
@@ -293,12 +291,10 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         for i in self.inputs:
             match i:
                 case LiteralNode():
-                    node_to_layer[i] = literal_input_factory(
-                        Scope([i.literal]), num_units=1, num_channels=num_channels
-                    )
+                    node_to_layer[i] = literal_input_factory(Scope([i.literal]), num_units=1)
                 case NegatedLiteralNode():
                     node_to_layer[i] = negated_literal_input_factory(
-                        Scope([i.literal]), num_units=1, num_channels=num_channels
+                        Scope([i.literal]), num_units=1
                     )
 
         for node in self.topological_ordering():
@@ -318,4 +314,4 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                     node_to_layer[node] = sum_node
 
         layers = list(set(itertools.chain(*in_layers.values())).union(in_layers.keys()))
-        return Circuit(num_channels, layers, in_layers, [node_to_layer[self.output]])
+        return Circuit(layers, in_layers, [node_to_layer[self.output]])

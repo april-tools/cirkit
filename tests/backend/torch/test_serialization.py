@@ -14,14 +14,12 @@ from tests.symbolic.test_utils import build_monotonic_structured_categorical_cpt
     "semiring,fold,optimize",
     itertools.product(["sum-product", "lse-sum"], [False, True], [False, True]),
 )
-def test_save_load_statedict(semiring: str, fold: bool, optimize: bool):
+def test_serialization_save_load_statedict(semiring: str, fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     sc = build_monotonic_structured_categorical_cpt_pc(return_ground_truth=False)
     tc: TorchCircuit = compiler.compile(sc)
 
-    worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables))).unsqueeze(
-        dim=-2
-    )
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables)))
     scores = tc(worlds)
     assert scores.shape == (len(worlds), 1, 1)
 

@@ -5,7 +5,6 @@ from typing import TypeVar
 import pytest
 
 import cirkit.symbolic.functional as SF
-from cirkit.pipeline import PipelineContext
 from cirkit.symbolic.circuit import are_compatible
 from cirkit.symbolic.layers import (
     CategoricalLayer,
@@ -31,7 +30,7 @@ from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cp
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "gaussian"]),
 )
-def test_evidence_circuit(num_units: int, input_layer: str):
+def test_symop_evidence_circuit(num_units: int, input_layer: str):
     sc = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer=input_layer
     )
@@ -50,7 +49,7 @@ def test_evidence_circuit(num_units: int, input_layer: str):
     assert isinstance(
         evi_layer.layer, CategoricalLayer if input_layer == "bernoulli" else GaussianLayer
     )
-    assert evi_layer.observation.shape == (1, 1)
+    assert evi_layer.observation.shape == (1,)
     assert len(list(evi_sc.inner_layers)) == len(list(sc.inner_layers))
 
 
@@ -58,7 +57,7 @@ def test_evidence_circuit(num_units: int, input_layer: str):
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "gaussian"]),
 )
-def test_integrate_circuit(num_units: int, input_layer: str):
+def test_symop_integrate_circuit(num_units: int, input_layer: str):
     sc = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer=input_layer
     )
@@ -76,7 +75,7 @@ def test_integrate_circuit(num_units: int, input_layer: str):
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "gaussian", "polynomial"]),
 )
-def test_multiply_circuits(num_units: int, input_layer: str):
+def test_symop_multiply_circuits(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer=input_layer
     )
@@ -116,7 +115,7 @@ def test_multiply_circuits(num_units: int, input_layer: str):
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "gaussian"]),
 )
-def test_multiply_evidence_circuit(num_units: int, input_layer: str):
+def test_symop_multiply_evidence_circuit(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer=input_layer
     )
@@ -167,7 +166,7 @@ def test_multiply_evidence_circuit(num_units: int, input_layer: str):
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "embedding", "gaussian"]),
 )
-def test_multiply_integrate_circuits(num_units: int, input_layer: str):
+def test_symop_multiply_integrate_circuits(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer=input_layer
     )
@@ -198,7 +197,7 @@ def test_multiply_integrate_circuits(num_units: int, input_layer: str):
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "gaussian", "polynomial"]),
 )
-def test_conjugate_circuit(num_units: int, input_layer: str):
+def test_symop_conjugate_circuit(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer=input_layer
     )
@@ -230,7 +229,7 @@ def _batched(iterable: Iterable[_T_co], n: int) -> Iterable[tuple[_T_co, ...]]:
 
 
 @pytest.mark.parametrize("num_units", [1, 3])
-def test_differentiate_circuit(num_units: int) -> None:
+def test_symop_differentiate_circuit(num_units: int) -> None:
     sc = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer="polynomial"
     )

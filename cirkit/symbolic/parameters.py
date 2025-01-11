@@ -695,16 +695,11 @@ class GaussianProductMean(ParameterOp):
         """
         assert in_mean1_shape == in_stddev1_shape
         assert in_mean2_shape == in_stddev2_shape
-        assert in_mean1_shape[1] == in_mean2_shape[1]
-        assert in_stddev1_shape[1] == in_stddev2_shape[1]
         super().__init__(in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (
-            self.in_shapes[0][0] * self.in_shapes[2][0],
-            self.in_shapes[0][1],
-        )
+        return (self.in_shapes[0][0] * self.in_shapes[2][0],)
 
     @property
     def config(self) -> dict[str, Any]:
@@ -731,15 +726,11 @@ class GaussianProductStddev(BinaryParameterOp):
             in_stddev2_shape: The shape of the standard deviations of the second
                 univariate Gaussians.
         """
-        assert in_stddev1_shape[1] == in_stddev2_shape[1]
         super().__init__(in_stddev1_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
-            self.in_shapes[0][1],
-        )
+        return (self.in_shapes[0][0] * self.in_shapes[1][0],)
 
     @property
     def config(self) -> dict[str, Any]:
@@ -771,16 +762,11 @@ class GaussianProductLogPartition(ParameterOp):
         """
         assert in_mean1_shape == in_stddev1_shape
         assert in_mean2_shape == in_stddev2_shape
-        assert in_mean1_shape[1] == in_mean2_shape[1]
-        assert in_stddev1_shape[1] == in_stddev2_shape[1]
         super().__init__(in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape)
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (
-            self.in_shapes[0][0] * self.in_shapes[2][0],
-            self.in_shapes[0][1],
-        )
+        return (self.in_shapes[0][0] * self.in_shapes[2][0],)
 
     @property
     def config(self) -> dict[str, Any]:

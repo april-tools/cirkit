@@ -6,23 +6,20 @@ from cirkit.utils.scope import Scope
 
 
 def categorical_layer_factory(
-    scope: Scope, num_units: int, num_channels: int, *, num_categories: int = 2
+    scope: Scope, num_units: int, *, num_categories: int = 2
 ) -> CategoricalLayer:
     return CategoricalLayer(
         scope,
         num_units,
-        num_channels,
         num_categories=num_categories,
         probs=Parameter.from_input(
-            TensorParameter(
-                num_units, num_channels, num_categories, initializer=DirichletInitializer()
-            )
+            TensorParameter(num_units, num_categories, initializer=DirichletInitializer())
         ),
     )
 
 
 def test_build_circuit_qg_3x3_cp():
-    rg = QuadGraph((3, 3))
+    rg = QuadGraph((1, 3, 3))
     sc = rg.build_circuit(
         num_input_units=3,
         num_sum_units=2,
@@ -49,7 +46,7 @@ def test_build_circuit_qg_3x3_cp():
 
 
 def test_build_circuit_qt4_3x3_cp():
-    rg = QuadTree((3, 3), num_patch_splits=4)
+    rg = QuadTree((1, 3, 3), num_patch_splits=4)
     sc = rg.build_circuit(
         num_input_units=3,
         num_sum_units=2,

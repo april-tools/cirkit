@@ -276,11 +276,11 @@ class TorchSumLayer(TorchInnerLayer):
         if negative or not normalized:
             raise TypeError("Sampling in sum layers only works with positive weights summing to 1")
 
-        # x: (F, H, C, Ki, num_samples, D) -> (F, C, H * Ki, num_samples, D)
-        x = x.permute(0, 2, 1, 3, 4, 5).flatten(2, 3)
-        c = x.shape[1]
-        num_samples = x.shape[3]
-        d = x.shape[4]
+        # x: (F, H, Ki, num_samples, D) -> (F, H * Ki, num_samples, D)
+        x = x.flatten(1, 2)
+
+        num_samples = x.shape[2]
+        d = x.shape[3]
 
         # mixing_distribution: (F, Ko, H * Ki)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
@@ -289,9 +289,9 @@ class TorchSumLayer(TorchInnerLayer):
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
 
-        # mixing_indices: (F, C, Ko, num_samples, D)
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f c k n d", c=c, d=d)
+        # mixing_indices: (F, Ko, num_samples, D)
+        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
 
-        # x: (F, C, Ko, num_samples, D)
-        x = torch.gather(x, dim=2, index=mixing_indices)
+        # x: (F, Ko, num_samples, D)
+        x = torch.gather(x, dim=1, index=mixing_indices)
         return x, mixing_samples

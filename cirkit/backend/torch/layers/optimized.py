@@ -180,22 +180,20 @@ class TorchCPTLayer(TorchInnerLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
-        # x: (F, H, C, K, num_samples, D)
-        x = torch.sum(x, dim=1, keepdim=True)  # (F, H=1, C, K, num_samples, D)
+        # x: (F, H, K, num_samples, D)
+        x = torch.sum(x, dim=1)  # (F, K, num_samples, D)
 
-        c = x.shape[2]
-        d = x.shape[-1]
-        num_samples = x.shape[-2]
+        num_samples = x.shape[2]
+        d = x.shape[3]
 
         # mixing_distribution: (F, O, K)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
-        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=1, c=c, d=d)
+        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
+        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
 
-        x = torch.gather(x, dim=-3, index=mixing_indices)
-        x = x[:, 0]
+        x = torch.gather(x, dim=1, index=mixing_indices)
         return x, mixing_samples
 
 
