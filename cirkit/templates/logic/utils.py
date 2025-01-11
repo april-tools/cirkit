@@ -27,7 +27,7 @@ def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
             scope,
             num_categories=2,
             num_output_units=num_units,
-            probs=Parameter.from_input(TensorParameter(1, 1, 2, initializer=initializer)),
+            probs=Parameter.from_input(TensorParameter(1, 2, initializer=initializer)),
         )
 
     return input_factory
