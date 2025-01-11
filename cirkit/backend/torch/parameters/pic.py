@@ -286,7 +286,8 @@ def pc2qpc(
         """Turns all parameters of a module into buffers."""
         modules = model.modules()
         module = next(modules)
-        for name, param in module.named_parameters(recurse=False):
+        named_parameters = list(module.named_parameters(recurse=False))
+        for name, param in named_parameters:
             delattr(module, name)  # Unregister parameter
             module.register_buffer(name, param.data)
         for module in modules:
