@@ -162,7 +162,7 @@ class TorchCPTLayer(TorchInnerLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor, conditional: bool = False) -> tuple[Tensor, Tensor]:
         weight = self.weight()
         negative = torch.any(weight < 0.0)
         if negative:

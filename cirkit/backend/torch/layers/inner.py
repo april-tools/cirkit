@@ -60,7 +60,7 @@ class TorchInnerLayer(TorchLayer, ABC):
                 is the number of output units.
         """
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+    def sample(self, x: Tensor, conditional: bool = False) -> tuple[Tensor, Tensor | None]:
         """Perform a forward sampling step.
 
         Args:
@@ -68,6 +68,7 @@ class TorchInnerLayer(TorchLayer, ABC):
                 $(F, H, C, K, N, D)$, where $F$ is the number of folds, $H$ is the arity,
                 $C$ is the number of channels, $K$ is the numbe rof input units, $N$ is the number
                 of samples, $D$ is the number of variables.
+            conditional: whether the sample is drawn conditionally; conditioned on input specified in the sample query..
 
         Returns:
             Tensor: A new tensor representing the new variable assignements the layers gives
@@ -123,7 +124,7 @@ class TorchHadamardLayer(TorchInnerLayer):
     def forward(self, x: Tensor) -> Tensor:
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
-    def sample(self, x: Tensor) -> tuple[Tensor, None]:
+    def sample(self, x: Tensor, conditional: bool = False) -> tuple[Tensor, None]:
         # Concatenate samples over disjoint variables through a sum
         # x: (F, H, C, K, num_samples, D)
         x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
@@ -182,7 +183,7 @@ class TorchKroneckerLayer(TorchInnerLayer):
         # shape (F, B, Ki, Ki) -> (F, B, Ko=Ki**2).
         return self.semiring.mul(x0, x1).flatten(start_dim=-2)
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+    def sample(self, x: Tensor, conditional: bool = False) -> tuple[Tensor, Tensor | None]:
         # x: (F, H, C, K, num_samples, D)
         x0 = x[:, 0].unsqueeze(dim=3)  # (F, C, Ki, 1, num_samples, D)
         x1 = x[:, 1].unsqueeze(dim=2)  # (F, C, 1, Ki, num_samples, D)
@@ -234,6 +235,7 @@ class TorchSumLayer(TorchInnerLayer):
                 f"and shape {self._weight_shape} for 'weight', found"
                 f"{weight.num_folds} and {weight.shape}, respectively"
             )
+        self.input = None
         self.weight = weight
 
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
@@ -261,12 +263,13 @@ class TorchSumLayer(TorchInnerLayer):
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
         # weight: (F, Ko, H * Ki)
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
+        self.input = x
         weight = self.weight()
         return self.semiring.einsum(
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, K_o).
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor, conditional: bool = False) -> tuple[Tensor, Tensor]:
         weight = self.weight()
         negative = torch.any(weight < 0.0)
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
@@ -280,7 +283,15 @@ class TorchSumLayer(TorchInnerLayer):
         d = x.shape[4]
 
         # mixing_distribution: (F, Ko, H * Ki)
-        mixing_distribution = torch.distributions.Categorical(probs=weight)
+        if conditional:
+            prior = torch.log(torch.clamp(weight, min=1e-10))
+            posterior = prior + self.input
+            normalized_posterior = torch.exp(
+                posterior - torch.logsumexp(posterior, 2, keepdim=True)
+            )
+            mixing_distribution = torch.distributions.Categorical(probs=normalized_posterior)
+        else:
+            mixing_distribution = torch.distributions.Categorical(probs=weight)
 
         # mixing_samples: (num_samples, F, Ko) -> (F, Ko, num_samples)
         mixing_samples = mixing_distribution.sample((num_samples,))

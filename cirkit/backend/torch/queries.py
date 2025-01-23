@@ -193,8 +193,7 @@ class SamplingQuery(Query):
     def __init__(self, circuit: TorchCircuit) -> None:
         """Initialize a sampling query object. Currently, only sampling from the joint distribution
             is supported, i.e., sampling won't work in the case of circuits obtained by
-            marginalization, or by observing evidence. Conditional sampling is currently not
-            implemented.
+            marginalization, or by observing evidence.
 
         Args:
             circuit: The circuit to sample from.
@@ -211,11 +210,22 @@ class SamplingQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, num_samples: int = 1) -> tuple[Tensor, list[Tensor]]:
+    def __call__(
+        self, num_samples: int = 1, x: Tensor = None, integrate_vars: Scope = None
+    ) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points.
 
         Args:
             num_samples: The number of samples to return.
+            x: An input batch of shape $(B, C, D)$, where $B$ is the batch size, $C$ is the number
+                of channels per variable, and $D$ is the number of variables.
+            integrate_vars: The variables to integrate. It must be a subset of the variables on
+                which the circuit given in the constructor is defined on.
+                The format can be one of the following three:
+                    1. Tensor of shape (B, D) where B is the batch size and D is the number of
+                        variables in the scope of the circuit. Its dtype should be torch.bool
+                        and have True in the positions of random variables that should be
+                        marginalised out and False elsewhere.
 
         Return:
             A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
@@ -224,10 +234,27 @@ class SamplingQuery(Query):
             tensor of shape (num_samples, num_channels, num_variables).
 
         Raises:
-            ValueError: if the number of samples is not a positive number.
+            ValueError: if the number of samples is not a positive number or only integrate_vars is specified without x.
         """
         if num_samples <= 0:
             raise ValueError("The number of samples must be a positive number")
+        if bool(integrate_vars is None) ^ bool(x is None):
+            raise ValueError(
+                "For conditional samples, both input to condition and scope to integrate out must be specified"
+            )
+
+        conditional_sampling = False
+        if (x is not None) and (integrate_vars is not None):
+            conditional_sampling = True
+
+        if conditional_sampling:
+            # the cct could be in the eval mode; therefore set it to training, perform cond. sampling,
+            # and then reset to current state
+            is_training = self._circuit.training
+            self._circuit.train()
+            int_query = IntegrateQuery(self._circuit)
+            int_query(x, integrate_vars=integrate_vars)
+            self._circuit.train(is_training)
 
         mixture_samples: list[Tensor] = []
         # samples: (O, C, K, num_samples, D)
@@ -236,16 +263,29 @@ class SamplingQuery(Query):
                 self._layer_fn,
                 num_samples=num_samples,
                 mixture_samples=mixture_samples,
+                conditional=conditional_sampling,
             ),
         )
         # samples: (num_samples, O, K, C, D)
         samples = samples.permute(3, 0, 2, 1, 4)
         # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
         samples = samples[:, 0, 0]  # (num_samples, C, D)
+        # if integration scopes are given, combine the conditioned input with drawn samples
+        if conditional_sampling:
+            marginalized_scope_ids = [i for i in range(x.shape[2]) if i in integrate_vars]
+            non_marginalized_scope_ids = [i for i in range(x.shape[2]) if i not in integrate_vars]
+            x[..., marginalized_scope_ids] = 0.0
+            samples[..., non_marginalized_scope_ids] = 0.0
+            samples = samples + x
         return samples, mixture_samples
 
     def _layer_fn(
-        self, layer: TorchLayer, *inputs: Tensor, num_samples: int, mixture_samples: list[Tensor]
+        self,
+        layer: TorchLayer,
+        *inputs: Tensor,
+        num_samples: int,
+        mixture_samples: list[Tensor],
+        conditional: bool = False,
     ) -> Tensor:
         # Sample from an input layer
         if not inputs:
@@ -257,7 +297,7 @@ class SamplingQuery(Query):
 
         # Sample through an inner layer
         assert isinstance(layer, TorchInnerLayer)
-        samples, mix_samples = layer.sample(*inputs)
+        samples, mix_samples = layer.sample(*inputs, conditional=conditional)
         if mix_samples is not None:
             mixture_samples.append(mix_samples)
         return samples
