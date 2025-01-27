@@ -40,7 +40,8 @@ def image_data(
         input_layer: The name of the input layer. It can be one of the following:
             'categorical' (encoding a Categorical distribution over pixel channel values),
             'binomial' (encoding a Binomial distribution over pixel channel values),
-            'embedding' (encoding an Embedding vector over pixel channel values).
+            'embedding' (encoding an Embedding vector over pixel channel values),
+            'gaussian' (encoding a Gaussian distribution over pixel channel values).
         num_input_units: The number of input units per input layer.
         sum_product_layer: The name of the sum-product inner layer. It can be one of the following:
             'cp' (the canonical decomposition layer, consisting of dense layers followed by a
