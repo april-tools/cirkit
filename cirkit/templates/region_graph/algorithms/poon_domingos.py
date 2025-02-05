@@ -12,17 +12,15 @@ from cirkit.templates.region_graph.graph import (
 from cirkit.utils.scope import Scope
 
 
-# TODO: too-complex,too-many-locals. how to solve?
 # DISABLE: We use function name with upper case to mimic a class constructor.
 # pylint: disable-next=invalid-name,too-complex,too-many-locals
 def PoonDomingos(
-    shape: Sequence[int],
+    shape: tuple[int, int, int],
     *,
     delta: float | list[float] | list[list[float]],
-    axes: Sequence[int] | None = None,
     max_depth: int | None = None,
 ) -> RegionGraph:
-    """Constructs a region graph with the Poon-Domingos structure.
+    r"""Constructs a region graph with the Poon-Domingos structure.
 
     See:
         Sum-Product Networks: A New Deep Architecture.
@@ -30,20 +28,18 @@ def PoonDomingos(
         UAI 2011.
 
     Args:
-        shape (Sequence[int]): The shape of the hypercube for the variables.
-        delta (Union[float, List[float], List[List[float]]]): The deltas to cut the hypercube, can \
-            be: a single cut delta for all axes, a list for all axes, a list of list for each \
+        shape: The image shape $(C, H, W)$, where $H$ is the height, $W$ is the width,
+            and $C$ is the number of channels.
+        delta: The deltas to cut the hypercube, can
+            be: a single cut delta for all axes, a list for all axes, a list of list for each
             axis. If the last case, all inner lists must have the same length as axes.
-        axes (Optional[Sequence[int]], optional): The axes to cut. Default means all axes. \
-            Defaults to None.
-        max_depth (Optional[int], optional): The max depth for cutting, omit for unconstrained. \
+        max_depth: The max depth for cutting, omit for unconstrained.
             Defaults to None.
 
     Returns:
         RegionGraph: The Poon-Domingos region grpah.
     """
-    if axes is None:
-        axes = tuple(range(len(shape)))
+    axes = (1, 2)  # The axes to cut, i.e., the height and width axes.
     cut_points = _parse_poon_domingos_delta(delta, shape, axes)
 
     if max_depth is None:
@@ -65,7 +61,7 @@ def PoonDomingos(
     queue: deque[HyperCube] = deque()
     depth_dict: dict[HyperCube, int] = {}  # Also serve as a "visited" set.
 
-    cur_hypercube = ((0,) * len(shape), tuple(shape))
+    cur_hypercube = ((0,) * len(shape), shape)
     root_scope = hypercube_to_scope[cur_hypercube]
     root = RegionNode(root_scope)
     nodes.append(root)

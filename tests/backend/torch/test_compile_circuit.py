@@ -13,12 +13,10 @@ from cirkit.backend.torch.layers import TorchHadamardLayer, TorchSumLayer
 from cirkit.backend.torch.layers.input import TorchCategoricalLayer
 from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 from cirkit.pipeline import PipelineContext
-from cirkit.symbolic.initializers import DirichletInitializer
 from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, SumLayer
-from cirkit.symbolic.parameters import Parameter, TensorParameter
 from cirkit.templates.region_graph import QuadGraph
-from cirkit.utils.scope import Scope
 from tests.floats import isclose
+from tests.symbolic.test_from_region_graph import categorical_layer_factory
 from tests.symbolic.test_utils import (
     build_monotonic_bivariate_gaussian_hadamard_dense_pc,
     build_monotonic_structured_categorical_cpt_pc,
@@ -33,10 +31,8 @@ def check_discrete_ground_truth(
     gt_outputs: dict[tuple[int, ...], float],
     gt_partition_func: float,
 ):
-    worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables))).unsqueeze(
-        dim=-2
-    )
-    assert worlds.shape == (2**tc.num_variables, 1, tc.num_variables)
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables)))
+    assert worlds.shape == (2**tc.num_variables, tc.num_variables)
     tc_outputs = tc(worlds)
 
     assert tc_outputs.shape == (worlds.shape[0], 1, 1)
@@ -63,7 +59,7 @@ def check_continuous_ground_truth(
     gt_partition_func: float,
 ):
     for x, y in gt_outputs.items():
-        sample = torch.Tensor(x).unsqueeze(dim=0).unsqueeze(dim=-2)
+        sample = torch.Tensor(x).unsqueeze(dim=0)
         tc_output = tc(sample)
         assert isclose(
             tc_output, semiring.map_from(torch.tensor(y), SumProductSemiring)
@@ -71,30 +67,14 @@ def check_continuous_ground_truth(
 
     # Test the integral of the circuit (using a quadrature rule)
     assert isclose(int_tc(), semiring.map_from(torch.tensor(gt_partition_func), SumProductSemiring))
-    df = lambda y, x: torch.exp(tc(torch.Tensor([[[x, y]]]))).squeeze()
+    df = lambda y, x: torch.exp(tc(torch.Tensor([[x, y]]))).squeeze()
     int_a, int_b = -np.inf, np.inf
     ig, err = integrate.dblquad(df, int_a, int_b, int_a, int_b, epsabs=1e-5, epsrel=1e-5)
     assert isclose(ig, gt_partition_func)
 
 
-def categorical_layer_factory(
-    scope: Scope, num_units: int, num_channels: int, *, num_categories: int = 2
-) -> CategoricalLayer:
-    return CategoricalLayer(
-        scope,
-        num_units,
-        num_channels,
-        num_categories=num_categories,
-        probs=Parameter.from_input(
-            TensorParameter(
-                num_units, num_channels, num_categories, initializer=DirichletInitializer()
-            )
-        ),
-    )
-
-
 @pytest.mark.parametrize("fold,optimize", itertools.product([False, True], [False, True]))
-def test_circuit_parameters(fold: bool, optimize: bool):
+def test_compile_circuit_parameters(fold: bool, optimize: bool):
     compiler = TorchCompiler(fold=fold)
     sc = build_multivariate_monotonic_structured_cpt_pc()
     tc: TorchCircuit = compiler.compile(sc)
@@ -133,7 +113,7 @@ def test_compile_monotonic_structured_gaussian_pc():
 
 
 def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
-    rg = QuadGraph((3, 3))
+    rg = QuadGraph((1, 3, 3))
     sc = rg.build_circuit(
         num_input_units=8,
         num_sum_units=8,
@@ -188,7 +168,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     scopes = set()
     for n1, n2 in zip(nodes_sc[:9], nodes_c[:9]):
         assert isinstance(n1, CategoricalLayer)
-        assert isinstance(n2, TorchCategoricalLayer) and n2.probs._nodes[0].shape == (8, 1, 2)
+        assert isinstance(n2, TorchCategoricalLayer) and n2.probs._nodes[0].shape == (8, 2)
         scopes.add(tuple(sc.layer_scope(n1)))
     assert input_scopes == scopes
 

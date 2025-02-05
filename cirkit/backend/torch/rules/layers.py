@@ -36,7 +36,6 @@ def compile_embedding_layer(compiler: "TorchCompiler", sl: EmbeddingLayer) -> To
     return TorchEmbeddingLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
-        num_channels=sl.num_channels,
         num_states=sl.num_states,
         weight=weight,
         semiring=compiler.semiring,
@@ -55,7 +54,6 @@ def compile_categorical_layer(
     return TorchCategoricalLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
-        num_channels=sl.num_channels,
         num_categories=sl.num_categories,
         probs=probs,
         logits=logits,
@@ -73,7 +71,6 @@ def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> Torc
     return TorchBinomialLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
-        num_channels=sl.num_channels,
         total_count=sl.total_count,
         probs=probs,
         logits=logits,
@@ -91,7 +88,6 @@ def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> Torc
     return TorchGaussianLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
-        num_channels=sl.num_channels,
         mean=mean,
         stddev=stddev,
         log_partition=log_partition,
@@ -106,7 +102,6 @@ def compile_polynomial_layer(
     return TorchPolynomialLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
-        num_channels=sl.num_channels,
         degree=sl.degree,
         coeff=coeff,
         semiring=compiler.semiring,

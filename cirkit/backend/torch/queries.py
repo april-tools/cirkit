@@ -50,8 +50,8 @@ class IntegrateQuery(Query):
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
-            x: An input batch of shape $(B, C, D)$, where $B$ is the batch size, $C$ is the number
-                of channels per variable, and $D$ is the number of variables.
+            x: An input batch of shape $(B, D)$, where $B$ is the batch size,
+                and $D$ is the number of variables.
             integrate_vars: The variables to integrate. It must be a subset of the variables on
                 which the circuit given in the constructor is defined on.
                 The format can be one of the following three:
@@ -221,7 +221,7 @@ class SamplingQuery(Query):
             A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
             variables the circuit is defined on, and (ii) the samples of the finitely-discrete
             latent variables associated to the sum units. The samples (i) are returned as a
-            tensor of shape (num_samples, num_channels, num_variables).
+            tensor of shape (num_samples, num_variables).
 
         Raises:
             ValueError: if the number of samples is not a positive number.
@@ -230,7 +230,7 @@ class SamplingQuery(Query):
             raise ValueError("The number of samples must be a positive number")
 
         mixture_samples: list[Tensor] = []
-        # samples: (O, C, K, num_samples, D)
+        # samples: (O, K, num_samples, D)
         samples = self._circuit.evaluate(
             module_fn=functools.partial(
                 self._layer_fn,
@@ -238,10 +238,10 @@ class SamplingQuery(Query):
                 mixture_samples=mixture_samples,
             ),
         )
-        # samples: (num_samples, O, K, C, D)
-        samples = samples.permute(3, 0, 2, 1, 4)
+        # samples: (num_samples, O, K, D)
+        samples = samples.permute(2, 0, 1, 3)
         # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
-        samples = samples[:, 0, 0]  # (num_samples, C, D)
+        samples = samples[:, 0, 0]  # (num_samples, D)
         return samples, mixture_samples
 
     def _layer_fn(
@@ -269,10 +269,10 @@ class SamplingQuery(Query):
         if scope_idx.shape[1] != 1:
             raise NotImplementedError("Padding is only implemented for univariate samples")
 
-        # padded_samples: (F, C, K, num_samples, D)
+        # padded_samples: (F, K, num_samples, D)
         padded_samples = torch.zeros(
             (*samples.shape, len(self._circuit.scope)), device=samples.device, dtype=samples.dtype
         )
         fold_idx = torch.arange(samples.shape[0], device=samples.device)
-        padded_samples[fold_idx, :, :, :, scope_idx.squeeze(dim=1)] = samples
+        padded_samples[fold_idx, :, :, scope_idx.squeeze(dim=1)] = samples
         return padded_samples

@@ -80,19 +80,18 @@ def image_data(
         raise ValueError(f"Unknown input layer called {input_layer}")
 
     # Construct the image-tailored region graph
-    image_hw = (image_shape[1], image_shape[2])
     match region_graph:
         case "quad-tree-2":
-            rg = QuadTree(image_hw, num_patch_splits=2)
+            rg = QuadTree(image_shape, num_patch_splits=2)
         case "quad-tree-4":
-            rg = QuadTree(image_hw, num_patch_splits=4)
+            rg = QuadTree(image_shape, num_patch_splits=4)
         case "quad-graph":
-            rg = QuadGraph(image_hw)
+            rg = QuadGraph(image_shape)
         case "random-binary-tree":
-            rg = RandomBinaryTree(np.prod(image_hw))
+            rg = RandomBinaryTree(np.prod(image_shape))
         case "poon-domingos":
-            delta = max(np.ceil(image_hw[0] / 8), np.ceil(image_hw[1] / 8))
-            rg = PoonDomingos(image_hw, delta=delta)
+            delta = max(np.ceil(image_shape[1] / 8), np.ceil(image_shape[2] / 8))
+            rg = PoonDomingos(image_shape, delta=delta)
         case _:
             raise ValueError(f"Unknown region graph called {region_graph}")
 
@@ -135,7 +134,6 @@ def image_data(
         sum_product=sum_product_layer,
         sum_weight_factory=sum_weight_factory,
         nary_sum_weight_factory=nary_sum_weight_factory,
-        num_channels=image_shape[0],
         num_input_units=num_input_units,
         num_sum_units=num_sum_units,
         num_classes=num_classes,

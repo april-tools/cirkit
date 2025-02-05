@@ -40,20 +40,7 @@ def concatenate(scs: Sequence[Circuit], *, registry: OperatorRegistry | None = N
 
     Returns:
         A circuit obtained by concatenating circuits.
-
-    Raises:
-        ValueError: If the given circuits to concatenate have different number of channels per
-            variable.
     """
-    # Retrieve the number of channels
-    num_channels_s = {sc.num_channels for sc in scs}
-    if len(num_channels_s) != 1:
-        raise ValueError(
-            f"Only circuits with the same number of channels can be concatenated, "
-            f"but found a set of number of channels {num_channels_s}"
-        )
-    num_channels = scs[0].num_channels
-
     # Mapping the symbolic circuit layers with blocks of circuit layers
     layers_to_block: dict[Layer, CircuitBlock] = {}
 
@@ -74,7 +61,6 @@ def concatenate(scs: Sequence[Circuit], *, registry: OperatorRegistry | None = N
 
     # Construct the symbolic circuit obtained by merging multiple circuits
     return Circuit.from_operation(
-        num_channels,
         blocks,
         in_blocks,
         output_blocks,
@@ -94,9 +80,7 @@ def evidence(
     Args:
         sc: The symbolic circuit where some variables have to be observed.
         obs: The observation data, stored as a dictionary mapping variable integer identifiers
-            to numbers, i.e., either integer, float or complex values. In the case the
-            circuit defines multiple channels per variable, then this is a dictionary mapping
-            variable integer identifiers to tuples of as many numbers as the number of channels.
+            to numbers, i.e., either integer, float or complex values.
         registry: A registry of symbolic layer operators. If it is None, then the one in
             the current context will be used. See the
             [OPERATOR_REGISTRY][cirkit.symbolic.registry.OPERATOR_REGISTRY] context variable
@@ -109,16 +93,6 @@ def evidence(
         ValueError: If the observation contains variables not defined in the scope of the circuit.
         NotImplementedError: If the evidence of a multivariate input layer needs to be constructed.
     """
-    if not all(
-        (isinstance(value, Number) or len(value) == 1)
-        if sc.num_channels == 1
-        else len(value) == sc.num_channels
-        for (var, value) in obs.items()
-    ):
-        raise ValueError(
-            "The observation of each variable should contain as many "
-            "values as the number of channels"
-        )
     # Check the variables to observe
     scope = Scope(obs.keys())
     if not scope:
@@ -144,15 +118,11 @@ def evidence(
 
             # Build the observation parameter, as a constant tensor that
             # contains assignments to the variables being observed
-            # The shape of the observation parameter is (C, D), where C is the
-            # number of channels and D is the number of variables the layer
-            # depends on
-            obs_shape = sc.num_channels, len(sl.scope)
-            # obs_ndarray: An array of shape either (D,) or (D, C)
+            # The shape of the observation parameter is (D,), where D
+            # is the number of variables the layer depends on
             obs_ndarray = np.array([obs[var] for var in sorted(sl.scope)])
-            obs_ndarray = obs_ndarray[None, :] if len(obs_ndarray.shape) == 1 else obs_ndarray.T
-            # A constant parameter of shape (C, D), where C can be 1.
-            obs_parameter = ConstantParameter(*obs_shape, value=obs_ndarray)
+            # A constant parameter of shape (D,)
+            obs_parameter = ConstantParameter(len(sl.scope), value=obs_ndarray)
 
             # Build the evidence layer, with a reference to the input layer
             evi_sl = EvidenceLayer(sl.copyref(), observation=Parameter.from_input(obs_parameter))
@@ -173,7 +143,6 @@ def evidence(
 
     # Construct the evidence symbolic circuit and set the evidence operation metadata
     return Circuit.from_operation(
-        sc.num_channels,
         blocks,
         in_blocks,
         output_blocks,
@@ -272,7 +241,6 @@ def integrate(
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit.from_operation(
-        sc.num_channels,
         blocks,
         in_blocks,
         output_blocks,
@@ -433,7 +401,6 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: OperatorRegistry | None = 
 
     # Construct the product symbolic circuit
     return Circuit.from_operation(
-        sc1.num_channels,
         blocks,
         in_blocks,
         output_blocks,
@@ -450,26 +417,6 @@ class _ScopeVarAndBlockAndInputs(NamedTuple):
     scope_var: int  # The id of a variable in the scope of THE ProductLayer.
     diff_block: CircuitBlock  # The partial diff of THE ProductLayer w.r.t. the var.
     diff_in_blocks: list[CircuitBlock]  # The inputs to the layer of diff_block.
-
-
-_T = TypeVar("_T")  # TODO: for _repeat. move together
-
-
-# TODO: this can be made public and moved to utils, might be used elsewhere.
-def _repeat(iterable: Iterable[_T], /, *, times: int) -> Iterable[_T]:
-    """Repeat each element of the given iterable by given times.
-
-    The elements are generated lazily. The iterable passed in will be iterated once.
-    This function differs from itertools in that it repeats an interable instead of only one elem.
-
-    Args:
-        iterable (Iterable[_T]): The iterable to generate the original elements.
-        times (int): The times to repeat each element.
-
-    Returns:
-        Iterable[_T]: The iterable with repeated elements.
-    """
-    return itertools.chain.from_iterable(itertools.repeat(elem, times=times) for elem in iterable)
 
 
 def differentiate(
@@ -515,17 +462,14 @@ def differentiate(
     in_blocks: dict[CircuitBlock, Sequence[CircuitBlock]] = {}
 
     for sl in sc.topological_ordering():
-        # "diff_blocks: List[CircuitBlock]" is the diff of sl wrt each variable and channel in order
+        # "diff_blocks: List[CircuitBlock]" is the diff of sl wrt each variable in order
         #                                   and then at the end we append a copy of sl
 
         if isinstance(sl, InputLayer):
             # TODO: no type hint for func, also cannot quick jump in static analysis
             func = registry.retrieve_rule(LayerOperator.DIFFERENTIATION, type(sl))
             diff_blocks = [
-                func(sl, var_idx=var_idx, ch_idx=ch_idx, order=order)
-                for var_idx, ch_idx in itertools.product(
-                    range(len(sl.scope)), range(sc.num_channels)
-                )
+                func(sl, var_idx=var_idx, order=order) for var_idx in range(len(sl.scope))
             ]
 
         elif isinstance(sl, SumLayer):
@@ -558,11 +502,11 @@ def differentiate(
             # Each item is a list of length (num_vars * num_chs) of that input, corresponding to the
             #   diff wrt each var and ch of that input.
             all_scope_var_diff_block = (
-                # Each list is all the diffs of sl wrt each var and each channel in the scope of
+                # Each list is all the diffs of sl wrt each var in the scope of
                 #   the cur_layer in the input of sl.
                 [
                     # Each named-tuple is a diff of sl and its inputs, where the diff is wrt the
-                    #   current variable and channel as in the double loop.
+                    #   current variable as in the double loop.
                     _ScopeVarAndBlockAndInputs(
                         # Label the named-tuple as the var id in the whole scope, for sorting.
                         scope_var=scope_var,
@@ -577,10 +521,9 @@ def differentiate(
                     )
                     # Loop over the (num_vars * num_chs) diffs of cur_layer, while also providing
                     #   the corresponding scope_var which the current diff is wrt.
-                    # We need the scope_var to label and sort the diff layers of sl. We do nnt need
-                    #   channel ids because they are always saved densely in order.
+                    # We need the scope_var to label and sort the diff layers of sl.
                     for scope_var, diff_cur_layer in zip(
-                        _repeat(sc.layer_scope(cur_layer), times=sc.num_channels),
+                        sc.layer_scope(cur_layer),
                         layers_to_blocks[cur_layer][:-1],
                     )
                 ]
@@ -630,7 +573,6 @@ def differentiate(
 
     # Construct the integral symbolic circuit and set the integration operation metadata
     return Circuit.from_operation(
-        sc.num_channels,
         sum(layers_to_blocks.values(), []),
         in_blocks,
         sum((layers_to_blocks[sl] for sl in sc.outputs), []),
@@ -695,7 +637,6 @@ def conjugate(
 
     # Construct the conjugate symbolic circuit
     return Circuit.from_operation(
-        sc.num_channels,
         blocks,
         in_blocks,
         output_blocks,

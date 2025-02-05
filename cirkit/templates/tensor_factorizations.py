@@ -126,14 +126,11 @@ def cp(
     embedding_layer_factories: list[InputLayerFactory] = [
         _input_layer_factory_builder(input_layer, dim, factor_param_kwargs) for dim in shape
     ]
-    embedding_layers = [
-        f(Scope([i]), rank, num_channels=1) for i, f in enumerate(embedding_layer_factories)
-    ]
+    embedding_layers = [f(Scope([i]), rank) for i, f in enumerate(embedding_layer_factories)]
     hadamard_layer = HadamardLayer(rank, arity=len(shape))
     sum_layer = SumLayer(rank, 1, arity=1, weight=weight, weight_factory=weight_factory)
 
     return Circuit(
-        1,
         layers=embedding_layers + [hadamard_layer, sum_layer],
         in_layers={sum_layer: [hadamard_layer], hadamard_layer: embedding_layers},
         outputs=[sum_layer],
@@ -218,14 +215,11 @@ def tucker(
     embedding_layer_factories: list[InputLayerFactory] = [
         _input_layer_factory_builder(input_layer, dim, factor_param_kwargs) for dim in shape
     ]
-    embedding_layers = [
-        f(Scope([i]), rank, num_channels=1) for i, f in enumerate(embedding_layer_factories)
-    ]
+    embedding_layers = [f(Scope([i]), rank) for i, f in enumerate(embedding_layer_factories)]
     kronecker_layer = KroneckerLayer(rank, arity=len(shape))
     sum_layer = SumLayer(cast(int, rank ** len(shape)), 1, arity=1, weight_factory=weight_factory)
 
     return Circuit(
-        1,
         layers=embedding_layers + [kronecker_layer, sum_layer],
         in_layers={sum_layer: [kronecker_layer], kronecker_layer: embedding_layers},
         outputs=[sum_layer],
@@ -291,14 +285,14 @@ def tensor_train(
 
     # Construct the first, last, and inner embedding layers
     first_embedding = EmbeddingLayer(
-        Scope([0]), rank, 1, num_states=shape[0], weight_factory=embedding_factory
+        Scope([0]), rank, num_states=shape[0], weight_factory=embedding_factory
     )
     last_embedding = EmbeddingLayer(
-        Scope([len(shape) - 1]), rank, 1, num_states=shape[-1], weight_factory=embedding_factory
+        Scope([len(shape) - 1]), rank, num_states=shape[-1], weight_factory=embedding_factory
     )
     inner_embeddings = [
         [
-            EmbeddingLayer(Scope([i]), rank, 1, num_states=dim, weight_factory=embedding_factory)
+            EmbeddingLayer(Scope([i]), rank, num_states=dim, weight_factory=embedding_factory)
             for _ in range(rank)
         ]
         for i, dim in enumerate(shape[1:-1], start=1)
@@ -351,7 +345,6 @@ def tensor_train(
 
     # Instantiate and return the circuit
     return Circuit(
-        1,
         layers=layers,
         in_layers=in_layers,
         outputs=[cur_sl],

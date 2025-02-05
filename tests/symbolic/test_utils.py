@@ -58,7 +58,6 @@ def build_bivariate_monotonic_structured_cpt_pc(
             (vid,): CategoricalLayer(
                 Scope([vid]),
                 num_output_units=num_units,
-                num_channels=1,
                 num_categories=2,
                 logits_factory=logits_factory,
                 probs_factory=probs_factory,
@@ -76,7 +75,6 @@ def build_bivariate_monotonic_structured_cpt_pc(
             (vid,): GaussianLayer(
                 Scope([vid]),
                 num_output_units=num_units,
-                num_channels=1,
                 stddev_factory=stddev_factory,
             )
             for vid in range(2)
@@ -121,7 +119,6 @@ def build_bivariate_monotonic_structured_cpt_pc(
 
     # Build the symbolic circuit
     circuit = Circuit(
-        num_channels=1,
         layers=list(itertools.chain(input_layers.values(), [product_layer], dense_layers.values())),
         in_layers=in_layers,
         outputs=[dense_layers[(0, 1)]],
@@ -164,7 +161,6 @@ def build_multivariate_monotonic_structured_cpt_pc(
             (vid,): CategoricalLayer(
                 Scope([vid]),
                 num_output_units=num_units,
-                num_channels=1,
                 num_categories=2,
                 logits_factory=logits_factory,
                 probs_factory=probs_factory,
@@ -176,7 +172,6 @@ def build_multivariate_monotonic_structured_cpt_pc(
             (vid,): EmbeddingLayer(
                 Scope([vid]),
                 num_output_units=num_units,
-                num_channels=1,
                 num_states=2,
             )
             for vid in range(5)
@@ -192,7 +187,6 @@ def build_multivariate_monotonic_structured_cpt_pc(
             (vid,): GaussianLayer(
                 Scope([vid]),
                 num_output_units=num_units,
-                num_channels=1,
                 stddev_factory=stddev_factory,
             )
             for vid in range(5)
@@ -208,7 +202,6 @@ def build_multivariate_monotonic_structured_cpt_pc(
             (vid,): PolynomialLayer(
                 Scope([vid]),
                 num_output_units=num_units,
-                num_channels=1,
                 degree=2,  # TODO: currently hard-coded
                 coeff_factory=coeff_factory,
             )
@@ -261,7 +254,6 @@ def build_multivariate_monotonic_structured_cpt_pc(
 
     # Build the symbolic circuit
     circuit = Circuit(
-        num_channels=1,
         layers=list(
             itertools.chain(input_layers.values(), product_layers.values(), dense_layers.values())
         ),
@@ -281,11 +273,11 @@ def build_monotonic_structured_categorical_cpt_pc(
 ) -> Circuit | tuple[Circuit, dict[str, dict[tuple[int, ...], float]], float]:
     # The probabilities of Bernoulli layers
     bernoulli_probs: dict[tuple[int, ...], np.ndarray] = {
-        (0,): np.array([[[0.5, 0.5]], [[0.4, 0.6]]]),
-        (1,): np.array([[[0.2, 0.8]], [[0.3, 0.7]]]),
-        (2,): np.array([[[0.3, 0.7]], [[0.1, 0.9]]]),
-        (3,): np.array([[[0.5, 0.5]], [[0.5, 0.5]]]),
-        (4,): np.array([[[0.1, 0.9]], [[0.8, 0.2]]]),
+        (0,): np.array([[0.5, 0.5], [0.4, 0.6]]),
+        (1,): np.array([[0.2, 0.8], [0.3, 0.7]]),
+        (2,): np.array([[0.3, 0.7], [0.1, 0.9]]),
+        (3,): np.array([[0.5, 0.5], [0.5, 0.5]]),
+        (4,): np.array([[0.1, 0.9], [0.8, 0.2]]),
     }
 
     # The parameters of dense weights
@@ -405,8 +397,8 @@ def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
 ) -> Circuit | tuple[Circuit, dict[str, dict[tuple[int, ...], float]], float]:
     # The mean and standard deviations of Gaussian layers
     gaussian_mean_stddev: dict[tuple[int, ...], tuple[np.ndarray, np.ndarray]] = {
-        (0,): (np.array([[0.0], [0.5]]), np.array([[1.0], [0.5]])),
-        (1,): (np.array([[2.0], [-1.0]]), np.array([[1.5], [2.0]])),
+        (0,): (np.array([0.0, 0.5]), np.array([1.0, 0.5])),
+        (1,): (np.array([2.0, -1.0]), np.array([1.5, 2.0])),
     }
 
     # The parameters of dense weights

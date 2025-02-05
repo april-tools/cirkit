@@ -79,7 +79,6 @@ class PICInputNet(nn.Module):
         self,
         num_variables: int,
         num_param: int,
-        num_channels: bool | None = 1,
         net_dim: int | None = 64,
         bias: bool | None = False,
         sharing: str | None = "none",
@@ -94,7 +93,6 @@ class PICInputNet(nn.Module):
         assert sharing in ["none", "f", "c"]
         self.num_variables = num_variables
         self.num_param = num_param
-        self.num_channels = num_channels
         self.sharing = sharing
         self.tensor_parameter = tensor_parameter
         self.reparam = reparam
@@ -102,8 +100,8 @@ class PICInputNet(nn.Module):
             self.register_buffer("z_quad", z_quad)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
-        inner_conv_groups = num_channels * (1 if sharing in ["f", "c"] else num_variables)
-        last_conv_groups = num_channels * (1 if sharing == "f" else num_variables)
+        inner_conv_groups = 1 if sharing in ["f", "c"] else num_variables
+        last_conv_groups = 1 if sharing == "f" else num_variables
         self.net = nn.Sequential(
             FourierLayer(1, ff_dim, sigma=ff_sigma, learnable=learn_ff),
             nn.Conv1d(
@@ -126,12 +124,10 @@ class PICInputNet(nn.Module):
         # initialize all heads to be equal when using composite sharing
         if sharing == "c":
             self.net[-1].weight.data = (
-                self.net[-1].weight.data[: num_param * num_channels].repeat(num_variables, 1, 1)
+                self.net[-1].weight.data[:num_param].repeat(num_variables, 1, 1)
             )
             if self.net[-1].bias is not None:
-                self.net[-1].bias.data = (
-                    self.net[-1].bias.data[: num_param * num_channels].repeat(num_variables)
-                )
+                self.net[-1].bias.data = self.net[-1].bias.data[:num_param].repeat(num_variables)
 
         if tensor_parameter is not None and z_quad is not None:
             with torch.no_grad():
@@ -141,17 +137,13 @@ class PICInputNet(nn.Module):
         z_quad = self.z_quad if z_quad is None else z_quad
         assert z_quad.ndim == 1
         self.net[1].groups = 1
-        self.net[-1].groups = self.num_channels * (
-            1 if self.sharing in ["f", "c"] else self.num_variables
-        )
+        self.net[-1].groups = 1 if self.sharing in ["f", "c"] else self.num_variables
         param = torch.cat(
             [self.net(chunk.unsqueeze(1)) for chunk in z_quad.chunk(n_chunks, dim=0)], dim=1
         )
         if self.sharing == "f":
             param = param.unsqueeze(0).expand(self.num_variables, -1, -1)
-        param = param.view(
-            self.num_variables, self.num_param * self.num_channels, len(z_quad)
-        ).transpose(1, 2)
+        param = param.view(self.num_variables, self.num_param, len(z_quad)).transpose(1, 2)
         if self.tensor_parameter is not None:
             param = param.view_as(self.tensor_parameter._ptensor)
             self.tensor_parameter._ptensor = param
@@ -294,7 +286,8 @@ def pc2qpc(
         """Turns all parameters of a module into buffers."""
         modules = model.modules()
         module = next(modules)
-        for name, param in module.named_parameters(recurse=False):
+        named_parameters = list(module.named_parameters(recurse=False))
+        for name, param in named_parameters:
             delattr(module, name)  # Unregister parameter
             module.register_buffer(name, param.data)
         for module in modules:
@@ -317,7 +310,6 @@ def pc2qpc(
             input_net = PICInputNet(
                 num_variables=node.num_variables * node.num_folds,
                 num_param=node.num_categories,
-                num_channels=node.num_channels,
                 net_dim=net_dim,
                 bias=bias,
                 sharing=input_sharing,
@@ -340,7 +332,6 @@ def pc2qpc(
             node.mean = PICInputNet(
                 num_variables=node.num_variables * node.num_folds,
                 num_param=1,
-                num_channels=node.num_channels,
                 net_dim=net_dim,
                 bias=bias,
                 sharing=input_sharing,
@@ -354,7 +345,6 @@ def pc2qpc(
             node.stddev = PICInputNet(
                 num_variables=node.num_variables * node.num_folds,
                 num_param=1,
-                num_channels=node.num_channels,
                 net_dim=net_dim,
                 bias=bias,
                 sharing=input_sharing,

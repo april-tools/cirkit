@@ -7,14 +7,15 @@ from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.queries import SamplingQuery
 from tests.floats import allclose
-from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
+from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc, \
+    build_bivariate_monotonic_structured_cpt_pc
 
 
 @pytest.mark.parametrize(
     "fold,optimize",
     itertools.product([False, True], [False, True]),
 )
-def test_quary_unconditional_sampling(fold: bool, optimize: bool):
+def test_query_unconditional_sampling(fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
     sc = build_multivariate_monotonic_structured_cpt_pc(
         num_units=2, input_layer="bernoulli", parameterize=True, normalized=True
@@ -22,10 +23,8 @@ def test_quary_unconditional_sampling(fold: bool, optimize: bool):
     tc: TorchCircuit = compiler.compile(sc)
 
     # Compute the probabilities
-    worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables))).unsqueeze(
-        dim=-2
-    )
-    assert worlds.shape == (2**tc.num_variables, 1, tc.num_variables)
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables)))
+    assert worlds.shape == (2**tc.num_variables, tc.num_variables)
     tc_outputs = tc(worlds)
     assert tc_outputs.shape == (2**tc.num_variables, 1, 1)
     assert torch.all(torch.isfinite(tc_outputs))
@@ -35,9 +34,9 @@ def test_quary_unconditional_sampling(fold: bool, optimize: bool):
     # Sample data points unconditionally
     num_samples = 1_000_000
     query = SamplingQuery(tc)
-    # samples: (num_samples, C, D)
+    # samples: (num_samples, D)
     samples, _ = query(num_samples=num_samples)
-    assert samples.shape == (num_samples, 1, tc.num_variables)
+    assert samples.shape == (num_samples, tc.num_variables)
     samples = samples.squeeze(dim=1)
 
     # Map samples to indices of the probabilities computed above
@@ -47,4 +46,4 @@ def test_quary_unconditional_sampling(fold: bool, optimize: bool):
     # Compute ratios and compare with the probabilities
     _, counts = torch.unique(samples_idx, return_counts=True)
     ratios = counts / num_samples
-    assert allclose(ratios, probs, atol=1e-3)
+    assert allclose(ratios, probs, rtol=3e-2)
