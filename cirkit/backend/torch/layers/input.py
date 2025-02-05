@@ -262,7 +262,7 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
             x = x.long()  # The input to Embedding should be discrete
         x = x.squeeze(dim=2)  # (F, B)
         weight = self.weight()
-        idx_fold = torch.arange(self.num_folds)
+        idx_fold = torch.arange(self.num_folds, device=weight.device)
         x = weight[idx_fold[:, None], :, x]
         x = self.semiring.map_from(x, SumProductSemiring)
         return x  # (F, B, K)
@@ -404,7 +404,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         x = x.squeeze(dim=2)
         # logits: (F, K, N)
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        idx_fold = torch.arange(self.num_folds)
+        idx_fold = torch.arange(self.num_folds, device=logits.device)
         x = logits[idx_fold[:, None], :, x]
         return x
 
