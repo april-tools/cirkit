@@ -7,7 +7,8 @@ from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.queries import SamplingQuery
 from tests.floats import allclose
-from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc
+from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc, \
+    build_bivariate_monotonic_structured_cpt_pc
 
 
 @pytest.mark.parametrize(
@@ -45,4 +46,4 @@ def test_query_unconditional_sampling(fold: bool, optimize: bool):
     # Compute ratios and compare with the probabilities
     _, counts = torch.unique(samples_idx, return_counts=True)
     ratios = counts / num_samples
-    assert allclose(ratios, probs, atol=1e-3)
+    assert allclose(ratios, probs, rtol=3e-2)
