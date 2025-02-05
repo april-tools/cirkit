@@ -228,7 +228,6 @@ class TorchCompiler(AbstractCompiler):
         layers = list(compiled_layers_map.values())
         cc = cc_cls(
             sc.scope,
-            sc.num_channels,
             layers=layers,
             in_layers=in_layers,
             outputs=outputs,
@@ -275,7 +274,6 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
     # Instantiate a folded circuit
     return type(cc)(
         cc.scope,
-        cc.num_channels,
         layers,
         in_layers,
         outputs,
@@ -507,7 +505,7 @@ def _optimize_layers(
     if optimize_result is None:
         return cc, False
     layers, in_layers, outputs = optimize_result
-    cc = type(cc)(cc.scope, cc.num_channels, layers, in_layers, outputs, properties=cc.properties)
+    cc = type(cc)(cc.scope, layers, in_layers, outputs, properties=cc.properties)
     return cc, True
 
 

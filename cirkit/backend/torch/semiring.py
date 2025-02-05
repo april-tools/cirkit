@@ -1,4 +1,5 @@
 import functools
+import itertools
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from typing import ClassVar, TypeVar, cast
@@ -153,19 +154,40 @@ class SemiringImpl(ABC):
     @classmethod
     def einsum(
         cls,
-        equation: str,
+        equation: str | Sequence[Sequence[int, ...], ...],
         *,
-        inputs: tuple[Tensor, ...],
-        operands: tuple[Tensor, ...],
+        inputs: tuple[Tensor, ...] | None = None,
+        operands: tuple[Tensor, ...] | None = None,
         dim: int,
         keepdim: bool,
     ) -> Tensor:
-        operands = tuple(cls.cast(opd) for opd in operands)
+        # TODO (LL): We need to remove this super general yet extremely complicated and hard
+        #  to maintain einsum definition, which depends on the semiring. A future version of the
+        #  compiler in cirkit will be able to emit pytorch code for every layer at compile time
+        match equation:
+            case str():
 
-        def _einsum_func(*xs: Tensor) -> Tensor:
-            return torch.einsum(equation, *xs, *operands)
+                def _einsum_str_func(*xs: Tensor) -> Tensor:
+                    opds = tuple(cls.cast(opd) for opd in operands)
+                    return torch.einsum(equation, *xs, *opds)
 
-        return cls.apply_reduce(_einsum_func, *inputs, dim=dim, keepdim=keepdim)
+                einsum_func = _einsum_str_func
+            case Sequence():
+
+                def _einsum_seq_func(*xs: Tensor) -> Tensor:
+                    opds = tuple(cls.cast(opd) for opd in operands)
+                    einsum_args = tuple(
+                        itertools.chain.from_iterable(zip(xs + opds, equation[:-1]))
+                    )
+                    return torch.einsum(*einsum_args, equation[-1])
+
+                einsum_func = _einsum_seq_func
+            case _:
+                raise ValueError(
+                    "The einsum expression must be either a string or a sequence of int sequences"
+                )
+
+        return cls.apply_reduce(einsum_func, *inputs, dim=dim, keepdim=keepdim)
 
     # NOTE: Subclasses should not touch any of the above final static methods but should implement
     #       all the following abstract class methods, and subclasses should be @final.

@@ -20,15 +20,14 @@ def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
         InputLayerFactory: The input layer factory.
     """
 
-    def input_factory(scope: Scope, num_units: int, num_channels: int) -> InputLayer:
+    def input_factory(scope: Scope, num_units: int) -> InputLayer:
         param = np.array([1.0, 0.0]) if negated else np.array([0.0, 1.0])
         initializer = ConstantTensorInitializer(param)
         return CategoricalLayer(
             scope,
             num_categories=2,
             num_output_units=num_units,
-            num_channels=num_channels,
-            probs=Parameter.from_input(TensorParameter(1, 1, 2, initializer=initializer)),
+            probs=Parameter.from_input(TensorParameter(1, 2, initializer=initializer)),
         )
 
     return input_factory

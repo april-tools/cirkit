@@ -32,14 +32,10 @@ def test_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, o
 
     mar_worlds = torch.cat(
         [
-            torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables - 1))).unsqueeze(
-                dim=-2
-            ),
-            torch.zeros(2 ** (tc.num_variables - 1), dtype=torch.int64)
-            .unsqueeze(dim=-1)
-            .unsqueeze(dim=-1),
+            torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables - 1))),
+            torch.zeros(2 ** (tc.num_variables - 1), dtype=torch.int64).unsqueeze(dim=-1),
         ],
-        dim=2,
+        dim=1,
     )
     mar_scores1 = mar_tc(mar_worlds)
     mar_query = IntegrateQuery(tc)
@@ -52,7 +48,7 @@ def test_query_marginalize_monotonic_pc_categorical(semiring: str, fold: bool, o
     "semiring,fold,optimize,input_tensor",
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [False, True]),
 )
-def test_batch_query_marginalize_monotonic_pc_categorical(
+def test_query_marginalize_match_monotonic_pc_categorical(
     semiring: str, fold: bool, optimize: bool, input_tensor: bool
 ):
     # Check using a mask with batching works
@@ -66,7 +62,7 @@ def test_batch_query_marginalize_monotonic_pc_categorical(
     tc: TorchCircuit = compiler.compile(sc)
 
     # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
-    inputs = torch.tensor([[[1, 0, 1, 1, 1], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+    inputs = torch.tensor([[1, 0, 1, 1, 1], [1, 0, 1, 1, 1]], dtype=torch.int64)
 
     mar_query = IntegrateQuery(tc)
     if input_tensor:
@@ -96,7 +92,7 @@ def test_batch_query_marginalize_monotonic_pc_categorical(
     "semiring,fold,optimize,input_tensor",
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [False, True]),
 )
-def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(
+def test_query_marginalize_batch_broadcast_monotonic_pc_categorical(
     semiring: str, fold: bool, optimize: bool, input_tensor: bool
 ):
     # Check that passing a single mask results in broadcasting
@@ -110,7 +106,7 @@ def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(
     tc: TorchCircuit = compiler.compile(sc)
 
     # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
-    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+    inputs = torch.tensor([[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]], dtype=torch.int64)
 
     mar_query = IntegrateQuery(tc)
     if input_tensor:
@@ -137,7 +133,7 @@ def test_batch_broadcast_query_marginalize_monotonic_pc_categorical(
     "input_tensor",
     itertools.product([False, True]),
 )
-def test_batch_fails_on_out_of_scope(
+def test_query_marginalize_batch_fails_on_out_of_scope(
     input_tensor, semiring="sum-product", fold=True, optimize=True
 ):
     # Check that passing a single mask results in broadcasting
@@ -151,7 +147,7 @@ def test_batch_fails_on_out_of_scope(
     tc: TorchCircuit = compiler.compile(sc)
 
     # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
-    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+    inputs = torch.tensor([[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]], dtype=torch.int64)
 
     mar_query = IntegrateQuery(tc)
     if input_tensor:
@@ -177,7 +173,7 @@ def test_batch_fails_on_out_of_scope(
     "input_tensor",
     itertools.product([False, True]),
 )
-def test_batch_fails_on_wrong_batch_size(
+def test_marginalize_batch_fails_on_wrong_batch_size(
     input_tensor, semiring="sum-product", fold=True, optimize=True
 ):
     # Check that passing a single mask results in broadcasting
@@ -191,7 +187,7 @@ def test_batch_fails_on_wrong_batch_size(
     tc: TorchCircuit = compiler.compile(sc)
 
     # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
-    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+    inputs = torch.tensor([[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]], dtype=torch.int64)
 
     mar_query = IntegrateQuery(tc)
     if input_tensor:
@@ -217,7 +213,9 @@ def test_batch_fails_on_wrong_batch_size(
             mar_scores = mar_query(inputs, integrate_vars=mask)
 
 
-def test_batch_fails_on_wrong_tensor_dtype(semiring="sum-product", fold=True, optimize=True):
+def test_marginalize_batch_fails_on_wrong_tensor_dtype(
+    semiring="sum-product", fold=True, optimize=True
+):
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
@@ -229,7 +227,7 @@ def test_batch_fails_on_wrong_tensor_dtype(semiring="sum-product", fold=True, op
     tc: TorchCircuit = compiler.compile(sc)
 
     # The marginal has been computed for (1, 0, 1, 1, None) -- so marginalising var 4.
-    inputs = torch.tensor([[[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]]], dtype=torch.int64).view(2, 1, 5)
+    inputs = torch.tensor([[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]], dtype=torch.int64)
 
     mar_query = IntegrateQuery(tc)
 

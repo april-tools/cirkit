@@ -70,11 +70,12 @@ docs = [
 ]
 notebooks = [
   "notebook",
-  "torchvision~=0.18.0",
+  "torchvision",
   "matplotlib",
   "scikit-learn",
   "pandas",
-  "h5py"
+  "h5py",
+  "PySDD",
 ]
 
 ################################################################################

@@ -31,31 +31,39 @@ class LayerAddressBook(AddressBook):
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchLayer | None, tuple]]:
         # Loop through the entries and yield inputs
-        for entry in self._entries:
+        for entry in self:
+            layer = entry.module
+            in_layer_ids = entry.in_module_ids
+            in_fold_idx = entry.in_fold_idx
             # Catch the case there are some inputs coming from other modules
-            if entry.in_module_ids:
-                (in_fold_idx,) = entry.in_fold_idx
-                (in_module_ids,) = entry.in_module_ids
-                if len(in_module_ids) == 1:
-                    x = module_outputs[in_module_ids[0]]
+            if in_layer_ids:
+                in_fold_idx_h = in_fold_idx[0]
+                in_layer_ids_h = in_layer_ids[0]
+                if len(in_layer_ids_h) == 1:
+                    x = module_outputs[in_layer_ids_h[0]]
                 else:
-                    x = torch.cat([module_outputs[mid] for mid in in_module_ids], dim=0)
-                x = x[in_fold_idx]
-                yield entry.module, (x,)
+                    x = torch.cat([module_outputs[mid] for mid in in_layer_ids_h], dim=0)
+                x = x[in_fold_idx_h]
+                yield layer, (x,)
                 continue
 
             # Catch the case there are no inputs coming from other modules
             # That is, we are gathering the inputs of input layers
-            layer = entry.module
             assert isinstance(layer, TorchInputLayer)
             if layer.num_variables:
                 if in_graph is None:
                     yield layer, ()
                     continue
-                # in_graph: An input batch (assignments to variables) of shape (B, C, D)
+                # in_graph: An input batch (assignments to variables) of shape (B, D)
                 # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
-                # x: (B, C, D) -> (B, C, F, D') -> (F, C, B, D')
-                x = in_graph[..., layer.scope_idx].permute(2, 1, 0, 3)
+                # x: (B, D) -> (B, F, D') -> (F, B, D')
+                if len(in_graph.shape) != 2:
+                    raise ValueError(
+                        "The input to the circuit should have shape (B, D), "
+                        "where B is the batch size and D is the number of variables "
+                        "the circuit is defined on"
+                    )
+                x = in_graph[..., layer.scope_idx].permute(1, 0, 2)
                 yield layer, (x,)
                 continue
 
@@ -119,7 +127,6 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def __init__(
         self,
         scope: Scope,
-        num_channels: int,
         layers: Sequence[TorchLayer],
         in_layers: dict[TorchLayer, Sequence[TorchLayer]],
         outputs: Sequence[TorchLayer],
@@ -131,7 +138,6 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 
         Args:
             scope: The variables scope.
-            num_channels: The number of channels per variable.
             layers: The sequence of layers.
             in_layers: A dictionary mapping layers to their inputs, if any.
             outputs: A list of output layers.
@@ -146,7 +152,6 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             fold_idx_info=fold_idx_info,
         )
         self._scope = scope
-        self._num_channels = num_channels
         self._properties = properties
 
     @property
@@ -166,15 +171,6 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             The number of variables.
         """
         return len(self.scope)
-
-    @property
-    def num_channels(self) -> int:
-        """Retrieve the number of channels of each variable.
-
-        Returns:
-            The number of variables.
-        """
-        return self._num_channels
 
     @property
     def properties(self) -> StructuralProperties:
@@ -270,8 +266,8 @@ class TorchCircuit(AbstractTorchCircuit):
         following the topological ordering.
 
         Args:
-            x: The tensor input of the circuit, with shape $(B, C, D)$, where B is the batch size,
-                $C$ is the number of channels, and $D$ is the number of variables.
+            x: The tensor input of the circuit, with shape $(B, D)$, where B is the batch size,
+                and $D$ is the number of variables.
 
         Returns:
             Tensor: The tensor output of the circuit, with shape $(B, O, K)$,

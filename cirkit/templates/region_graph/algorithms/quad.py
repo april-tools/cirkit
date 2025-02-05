@@ -12,11 +12,12 @@ from cirkit.utils.scope import Scope
 
 
 # pylint: disable-next=invalid-name
-def QuadTree(shape: tuple[int, int], *, num_patch_splits: int = 2) -> RegionGraph:
-    """Constructs a Quad Tree region graph.
+def QuadTree(shape: tuple[int, int, int], *, num_patch_splits: int = 2) -> RegionGraph:
+    r"""Constructs a Quad Tree region graph.
 
     Args:
-        shape: The image shape (H, W), where H is the height and W is the width.
+        shape: The image shape $(C, H, W)$, where $H$ is the height, $W$ is the width,
+            and $C$ is the number of channels.
         num_patch_splits: The number of splits per patitioning, it can be either 2 or 4.
 
     Returns:
@@ -30,11 +31,12 @@ def QuadTree(shape: tuple[int, int], *, num_patch_splits: int = 2) -> RegionGrap
 
 
 # pylint: disable-next=invalid-name
-def QuadGraph(shape: tuple[int, int]) -> RegionGraph:
-    """Constructs a Quad Graph region graph.
+def QuadGraph(shape: tuple[int, int, int]) -> RegionGraph:
+    r"""Constructs a Quad Graph region graph.
 
     Args:
-        shape: The image shape (H, W), where H is the height and W is the width.
+        shape: The image shape $(C, H, W)$, where $H$ is the height, $W$ is the width,
+            and $C$ is the number of channels.
 
     Returns:
         RegionGraph: A Quad Graph region graph.
@@ -47,34 +49,32 @@ def QuadGraph(shape: tuple[int, int]) -> RegionGraph:
 
 # pylint: disable-next=invalid-name
 def _QuadBuilder(
-    shape: tuple[int, int], *, is_tree: bool = False, num_patch_splits: int = 2
+    shape: tuple[int, int, int], *, is_tree: bool = False, num_patch_splits: int = 2
 ) -> RegionGraph:
-    """Construct a RG with a quad tree.
+    r"""Construct a RG with a quad tree.
 
     Args:
-        shape (Tuple[int, int]): The shape of the image, in (H, W).
-        is_tree (bool, optional): Whether the RG needs to be \
+        shape: The image shape $(C, H, W)$, where $H$ is the height, $W$ is the width,
+            and $C$ is the number of channels.
+        is_tree: Whether the RG needs to be \
             structured-decomposable. Defaults to False.
-        num_patch_splits (int): The number of patches to split. It can be either 2 or 4.
+        num_patch_splits: The number of patches to split. It can be either 2 or 4.
             This is used only when is_tree is True.
 
     Returns:
-        RegionGraph: The QT RG.
+        RegionGraph: A region graph.
 
     Raises:
         ValueError: The image shape is not valid.
         ValueError: The number of patches to split is not valid.
     """
-    if len(shape) != 2:
-        raise ValueError("Quad Tree and Quad Graph region graphs only works for 2D images")
-    height, width = shape
-    if height <= 0 or width <= 0:
-        raise ValueError("Height and width must be positive integers")
+    if len(shape) != 3:
+        raise ValueError("Quad Tree and Quad Graph region graphs only works for images")
+    num_channels, height, width = shape
+    if num_channels <= 0 or height <= 0 or width <= 0:
+        raise ValueError("The number of channels, the height and the width must be positive")
     if is_tree and num_patch_splits not in [2, 4]:
         raise ValueError("The number of patches to split must be either 2 or 4")
-
-    # An object mapping rectangles of coordinates into variable scopes
-    hypercube_to_scope = HypercubeToScope(shape)
 
     # Padding using Scope({num_var}) which is one larger than range(num_var).
     # DISABLE: This is considered a constant here, although RegionNode is mutable.
@@ -88,9 +88,12 @@ def _QuadBuilder(
     # A map to each region/partition node to its children
     in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
 
-    # Add univariate input region nodes
+    # Add input region nodes
+    # An object mapping rectangles of coordinates into variable scopes
+    hypercube_to_scope = HypercubeToScope(shape)
     for i, j in itertools.product(range(height), range(width)):
-        rgn = RegionNode(hypercube_to_scope[((i, j), (i + 1, j + 1))])
+        scope = hypercube_to_scope[((0, i, j), (num_channels, i + 1, j + 1))]
+        rgn = RegionNode(scope)
         grid[i][j] = rgn
         nodes.append(rgn)
 
