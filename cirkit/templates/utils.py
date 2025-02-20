@@ -28,8 +28,8 @@ from cirkit.symbolic.parameters import (
     TensorParameter,
     UnaryParameterOp,
 )
-from cirkit.utils.scope import Scope
 from cirkit.utils.label import LayerLabel
+from cirkit.utils.scope import Scope
 
 
 @dataclass(frozen=True)

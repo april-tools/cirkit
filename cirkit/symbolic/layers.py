@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import IntEnum, auto
-from typing import Any, cast, Callable
+from typing import Any, Callable, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
@@ -12,8 +12,8 @@ from cirkit.symbolic.parameters import (
     SoftmaxParameter,
     TensorParameter,
 )
-from cirkit.utils.scope import Scope
 from cirkit.utils.label import LayerLabel
+from cirkit.utils.scope import Scope
 
 
 class LayerOperator(IntEnum):
@@ -45,7 +45,7 @@ class Layer(ABC):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        label: LayerLabel | None = None
+        label: LayerLabel | None = None,
     ):
         """Initializes a symbolic layer.
 
@@ -277,7 +277,7 @@ class EmbeddingLayer(InputLayer):
             "scope": self.scope,
             "num_output_units": self.num_output_units,
             "num_states": self.num_states,
-            "label": self.label
+            "label": self.label,
         }
 
     @property
@@ -447,7 +447,7 @@ class BinomialLayer(InputLayer):
             "scope": self.scope,
             "num_output_units": self.num_output_units,
             "total_count": self.total_count,
-            "label": self.label
+            "label": self.label,
         }
 
     @property
@@ -600,7 +600,7 @@ class PolynomialLayer(InputLayer):
             "scope": self.scope,
             "num_output_units": self.num_output_units,
             "degree": self.degree,
-            "label": self.label
+            "label": self.label,
         }
 
     @property
@@ -612,12 +612,13 @@ class ConstantValueLayer(ConstantLayer):
     """A symbolic layer computing a constant function encoded by a parameter."""
 
     def __init__(
-        self, 
-        num_output_units: int, 
-        *, 
-        log_space: bool = False, 
-        value: Parameter, 
-        label: LayerLabel | None = None):
+        self,
+        num_output_units: int,
+        *,
+        log_space: bool = False,
+        value: Parameter,
+        label: LayerLabel | None = None,
+    ):
         """Initializes a constant value layer.
 
         Args:
@@ -642,9 +643,9 @@ class ConstantValueLayer(ConstantLayer):
     @property
     def config(self) -> Mapping[str, Any]:
         return {
-            "num_output_units": self.num_output_units, 
+            "num_output_units": self.num_output_units,
             "log_space": self.log_space,
-            "label": self.label
+            "label": self.label,
         }
 
     @property
@@ -656,12 +657,13 @@ class ProductLayer(Layer, ABC):
     """The abstract base class for symbolic product layers."""
 
     def __init__(
-        self, 
-        num_input_units: int, 
-        num_output_units: int, 
+        self,
+        num_input_units: int,
+        num_output_units: int,
         arity: int = 2,
         *,
-        label: LayerLabel | None = None):
+        label: LayerLabel | None = None,
+    ):
         """Initializes a product layer.
 
         Args:
@@ -721,10 +723,7 @@ class KroneckerLayer(ProductLayer):
         if arity < 2:
             raise ValueError("The arity should be at least 2")
         super().__init__(
-            num_input_units,
-            cast(int, num_input_units**arity),
-            arity=arity,
-            label=label
+            num_input_units, cast(int, num_input_units**arity), arity=arity, label=label
         )
 
     @property
@@ -756,7 +755,7 @@ class SumLayer(Layer):
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
         *,
-        label: LayerLabel | None = None
+        label: LayerLabel | None = None,
     ):
         r"""Initializes a dense layer.
 
@@ -795,7 +794,7 @@ class SumLayer(Layer):
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
             "arity": self.arity,
-            "label": self.label
+            "label": self.label,
         }
 
     @property

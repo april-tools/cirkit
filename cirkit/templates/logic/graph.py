@@ -4,15 +4,23 @@ from collections.abc import Iterator, Sequence
 from functools import cached_property
 from typing import cast
 
+import numpy as np
+
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import ConstantTensorInitializer
-from cirkit.symbolic.layers import HadamardLayer, Layer, SumLayer, CategoricalLayer, InputLayer, LayerLabel
+from cirkit.symbolic.layers import (
+    CategoricalLayer,
+    HadamardLayer,
+    InputLayer,
+    Layer,
+    LayerLabel,
+    SumLayer,
+)
 from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
 from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
 from cirkit.utils.scope import Scope
 
-import numpy as np
 
 class LogicalCircuitNode(ABC):
     """The abstract base class for nodes in logic circuits."""
@@ -80,8 +88,11 @@ def default_literal_input_factory() -> InputLayerFactory:
     Returns:
         InputLayerFactory: The input layer factory.
     """
+
     def input_factory(scope: Scope, num_units: int, label: LayerLabel) -> InputLayer:
-        param = np.array([1.0, 0.0]) if isinstance(label, NegatedLiteralNode) else np.array([0.0, 1.0])
+        param = (
+            np.array([1.0, 0.0]) if isinstance(label, NegatedLiteralNode) else np.array([0.0, 1.0])
+        )
         initializer = ConstantTensorInitializer(param)
         return CategoricalLayer(
             scope,
@@ -285,7 +296,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
         if literal_input_factory is None:
             literal_input_factory = default_literal_input_factory()
-            
+
         if weight_factory is None:
             # default to unitary weights
             def weight_factory(n: tuple[int]) -> Parameter:
@@ -296,7 +307,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         # map each input literal to a symbolic input layer
         for i in self.inputs:
             node_to_layer[i] = literal_input_factory(Scope([i.literal]), num_units=1, label=i)
-            
+
         for node in self.topological_ordering():
             match node:
                 case ConjunctionNode():
@@ -309,7 +320,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                         1,
                         arity=len(self.node_inputs(node)),
                         weight_factory=weight_factory,
-                        label=node
+                        label=node,
                     )
                     in_layers[sum_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = sum_node
