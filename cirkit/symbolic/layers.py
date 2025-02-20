@@ -54,6 +54,7 @@ class Layer(ABC):
             num_output_units: The number of output units, i.e., the number of computational units
                 in this layer.
             arity: The arity of the layer, i.e., the number of input layers to this layer.
+            label: The label of this layer.
 
         Raises:
             ValueError: If the number of input units, output units or the arity are not positvie.
@@ -129,19 +130,20 @@ class Layer(ABC):
 class InputLayer(Layer, ABC):
     """The symbolic input layer class."""
 
-    def __init__(self, scope: Scope, num_output_units: int):
+    def __init__(self, scope: Scope, num_output_units: int, label: LayerLabel | None = None):
         """Initializes a symbolic input layer.
 
         Args:
             scope: The variables scope of the layer.
             num_output_units: The number of input units in the layer.
+            label: The label of this layer.
 
         Raises:
             ValueError: If the number of outputs is not positive.
         """
         if num_output_units <= 0:
             raise ValueError("The number of output units should be positive")
-        super().__init__(len(scope), num_output_units)
+        super().__init__(len(scope), num_output_units, label=label)
         self.scope = scope
 
     @property
@@ -327,7 +329,7 @@ class CategoricalLayer(InputLayer):
             )
         if num_categories < 2:
             raise ValueError("At least two categories must be specified")
-        super().__init__(scope, num_output_units)
+        super().__init__(scope, num_output_units, label=label)
         self.num_categories = num_categories
         if logits is None and probs is None:
             if logits_factory is not None:
