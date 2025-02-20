@@ -1,7 +1,7 @@
 import itertools
 from abc import ABC
 from collections.abc import Iterator, Sequence
-from functools import cached_property
+from functools import cache, cached_property
 from typing import cast
 
 import numpy as np
@@ -99,6 +99,7 @@ def default_literal_input_factory() -> InputLayerFactory:
             num_categories=2,
             num_output_units=num_units,
             probs=Parameter.from_input(TensorParameter(1, 2, initializer=initializer)),
+            label=("¬" if isinstance(label, NegatedLiteralNode) else "") + str(label.literal),
         )
 
     return input_factory
@@ -135,6 +136,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
         null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
 
+        @cache
         def absorb_node(node):
             if isinstance(node, (ConjunctionNode, DisjunctionNode)):
                 children = [absorb_node(c) for c in self.node_inputs(node)]
@@ -171,6 +173,28 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         # re initialize the graph
         self.__init__(nodes, in_nodes, list(self.outputs))
 
+    def simplify(self):
+        """Promote nodes that only have one child"""
+
+        in_nodes = self._in_nodes
+        output = self.output
+        for node in self.topological_ordering():
+            if len(self.node_inputs(node)) == 1:
+                # replace all occurrences of this node with child
+                in_nodes = {
+                    n: [self.node_inputs(node)[0] if c == node else c for c in children]
+                    for n, children in in_nodes.items()
+                    if n != node
+                }
+
+                if node == output:
+                    output = self.node_inputs(node)[0]
+
+        nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
+
+        # re initialize the graph
+        self.__init__(nodes, in_nodes, [output])
+
     @property
     def inputs(self) -> Iterator[LogicalCircuitNode]:
         return (cast(LogicalCircuitNode, node) for node in super().inputs)
@@ -183,6 +207,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
     def num_variables(self) -> int:
         return len({i.literal for i in self.inputs if isinstance(i, LogicalInputNode)})
 
+    @cache
     def node_scope(self, node: LogicalCircuitNode) -> Scope:
         """Compute the scope of a node.
 
@@ -290,6 +315,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         if enforce_smoothness:
             self.smooth()
         self.prune()
+        self.simplify()
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicalCircuitNode, Layer] = {}
