@@ -796,7 +796,7 @@ def model_parameterize(
         for prev_sl, sl in layers_map.items()
     }
     output_layers = [layers_map[prev_sli] for prev_sli in circuit.outputs]
-    circuit = Circuit(circuit.num_channels, layers, in_layers=in_layers, outputs=output_layers)
+    circuit = Circuit(layers, in_layers=in_layers, outputs=output_layers)
 
     # Return both the resulting circuit and the model parameter specifications
     return circuit, gate_function_specs
