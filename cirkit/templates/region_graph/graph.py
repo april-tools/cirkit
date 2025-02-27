@@ -347,7 +347,6 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
         nary_sum_weight_factory: ParameterFactory | None = None,
         sum_factory: SumLayerFactory | None = None,
         prod_factory: ProductLayerFactory | None = None,
-        num_channels: int = 1,
         num_input_units: int = 1,
         num_sum_units: int = 1,
         num_classes: int = 1,
@@ -373,7 +372,6 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                 the given sum_weight_factory.
             sum_factory: A factory that builds a sum layer. It can be None.
             prod_factory: A factory that builds a product layer. It can be None.
-            num_channels: The number of channels for each variable.
             num_input_units: The number of input units.
             num_sum_units: The number of sum units per sum layer.
             num_classes: The number of output classes.
@@ -520,14 +518,13 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                 # Input region node
                 if factorize_multivariate and len(node.scope) > 1:
                     factorized_input_sls = [
-                        input_factory(Scope([sc]), num_input_units, num_channels)
-                        for sc in node.scope
+                        input_factory(Scope([sc]), num_input_units) for sc in node.scope
                     ]
                     input_sl = HadamardLayer(num_input_units, arity=len(factorized_input_sls))
                     layers.extend(factorized_input_sls)
                     in_layers[input_sl] = factorized_input_sls
                 else:
-                    input_sl = input_factory(node.scope, num_input_units, num_channels)
+                    input_sl = input_factory(node.scope, num_input_units)
                 num_units = num_sum_units if self.region_outputs(node) else num_classes
                 if sum_factory is None:
                     layers.append(input_sl)
@@ -575,4 +572,4 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                 node_to_layer[node] = mix_sl
 
         outputs = [node_to_layer[rgn] for rgn in self.outputs]
-        return Circuit(num_channels, layers, in_layers, outputs)
+        return Circuit(layers, in_layers, outputs)

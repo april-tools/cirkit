@@ -862,18 +862,13 @@ class TorchGaussianProductMean(TorchParameterOp):
     ) -> None:
         assert in_mean1_shape == in_stddev1_shape
         assert in_mean2_shape == in_stddev2_shape
-        assert in_mean1_shape[1] == in_mean2_shape[1]
-        assert in_stddev1_shape[1] == in_stddev2_shape[1]
         super().__init__(
             in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape, num_folds=num_folds
         )
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (
-            self.in_shapes[0][0] * self.in_shapes[2][0],
-            self.in_shapes[0][1],
-        )
+        return (self.in_shapes[0][0] * self.in_shapes[2][0],)
 
     @property
     def config(self) -> dict[str, Any]:
@@ -904,15 +899,11 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
         *,
         num_folds: int = 1,
     ) -> None:
-        assert in_stddev1_shape[1] == in_stddev2_shape[1]
         super().__init__(in_stddev1_shape, in_stddev2_shape, num_folds=num_folds)
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (
-            self.in_shapes[0][0] * self.in_shapes[1][0],
-            self.in_shapes[0][1],
-        )
+        return (self.in_shapes[0][0] * self.in_shapes[1][0],)
 
     @property
     def config(self) -> dict[str, Any]:
@@ -939,8 +930,6 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
     ) -> None:
         assert in_mean1_shape == in_stddev1_shape
         assert in_mean2_shape == in_stddev2_shape
-        assert in_mean1_shape[1] == in_mean2_shape[1]
-        assert in_stddev1_shape[1] == in_stddev2_shape[1]
         super().__init__(
             in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape, num_folds=num_folds
         )
@@ -948,10 +937,7 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (
-            self.in_shapes[0][0] * self.in_shapes[2][0],
-            self.in_shapes[0][1],
-        )
+        return (self.in_shapes[0][0] * self.in_shapes[2][0],)
 
     @property
     def config(self) -> dict[str, Any]:

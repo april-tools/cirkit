@@ -226,7 +226,6 @@ class Circuit(DiAcyclicGraph[Layer]):
 
     def __init__(
         self,
-        num_channels: int,
         layers: Sequence[Layer],
         in_layers: Mapping[Layer, Sequence[Layer]],
         outputs: Sequence[Layer],
@@ -236,14 +235,12 @@ class Circuit(DiAcyclicGraph[Layer]):
         """Initializes a symbolic circuit.
 
         Args:
-            num_channels: The number of channels for each variable.
             layers: The list of symbolic layers.
             in_layers: A dictionary containing the list of inputs to each layer.
             outputs: The output layers of the circuit.
             operation: The optional operation the circuit has been obtained through.
         """
         super().__init__(layers, in_layers, outputs)
-        self.num_channels = num_channels
         self.operation = operation
 
         # Build scopes bottom-up, and check the consistency of the layers, w.r.t.
@@ -279,7 +276,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         Returns:
             int:
         """
-        return len(self.scope) * self.num_channels
+        return len(self.scope)
 
     def layer_scope(self, sl: Layer) -> Scope:
         """Retrieves the scope of a layer.
@@ -387,7 +384,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             The sub-circuit having the given layers as outputs.
         """
         layers, in_layers = subgraph(outputs, self.layer_inputs)
-        return Circuit(self.num_channels, layers, in_layers, outputs=outputs)
+        return Circuit(layers, in_layers, outputs=outputs)
 
     ##################################### Structural properties ####################################
 
@@ -464,7 +461,6 @@ class Circuit(DiAcyclicGraph[Layer]):
     @classmethod
     def from_operation(
         cls,
-        num_channels: int,
         blocks: list[CircuitBlock],
         in_blocks: dict[CircuitBlock, Sequence[CircuitBlock]],
         output_blocks: list[CircuitBlock],
@@ -474,7 +470,6 @@ class Circuit(DiAcyclicGraph[Layer]):
         """Constructs a circuit that resulted from an operation over other circuits.
 
         Args:
-            num_channels: The number of channels per variable.
             blocks: The list of circuit blocks.
             in_blocks: A dictionary containing the list of block inputs to each circuit block.
             output_blocks: The outputs blocks of the circuit.
@@ -506,7 +501,7 @@ class Circuit(DiAcyclicGraph[Layer]):
             for sl in b.layers:
                 in_layers[sl].extend(b.layer_inputs(sl))
         # Build the circuit and set the operation
-        return cls(num_channels, layers, in_layers, outputs, operation=operation)
+        return cls(layers, in_layers, outputs, operation=operation)
 
 
 def are_compatible(sc1: Circuit, sc2: Circuit) -> bool:

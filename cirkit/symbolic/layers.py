@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import IntEnum, auto
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
@@ -12,6 +12,7 @@ from cirkit.symbolic.parameters import (
     SoftmaxParameter,
     TensorParameter,
 )
+from cirkit.utils.label import LayerLabel
 from cirkit.utils.scope import Scope
 
 
@@ -44,6 +45,7 @@ class Layer(ABC):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
+        label: LayerLabel | None = None,
     ):
         """Initializes a symbolic layer.
 
@@ -52,6 +54,7 @@ class Layer(ABC):
             num_output_units: The number of output units, i.e., the number of computational units
                 in this layer.
             arity: The arity of the layer, i.e., the number of input layers to this layer.
+            label: The label of this layer.
 
         Raises:
             ValueError: If the number of input units, output units or the arity are not positvie.
@@ -65,6 +68,16 @@ class Layer(ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
+        self._label = label
+
+    @property
+    def label(self) -> LayerLabel | None:
+        """Retrieves the label of the layer.
+
+        Returns:
+            LayerLabel | None: The label of the layer or None, if it is not set.
+        """
+        return self._label
 
     @property
     @abstractmethod
@@ -128,6 +141,7 @@ class Layer(ABC):
             f"num_input_units={self.num_input_units}, "
             f"num_output_units={self.num_output_units}, "
             f"arity={self.arity}, "
+            f"label={self._label},"
             f"config=({config_repr}), "
             f"params=({params_repr})"
             ")"
@@ -137,22 +151,20 @@ class Layer(ABC):
 class InputLayer(Layer, ABC):
     """The symbolic input layer class."""
 
-    def __init__(self, scope: Scope, num_output_units: int, num_channels: int = 1):
+    def __init__(self, scope: Scope, num_output_units: int, label: LayerLabel | None = None):
         """Initializes a symbolic input layer.
 
         Args:
             scope: The variables scope of the layer.
             num_output_units: The number of input units in the layer.
-            num_channels: The number of channels for each variable in the scope.
+            label: The label of this layer.
 
         Raises:
-            ValueError: If the number of outputs or the number of channels are not positive.
+            ValueError: If the number of outputs is not positive.
         """
         if num_output_units <= 0:
             raise ValueError("The number of output units should be positive")
-        if num_channels <= 0:
-            raise ValueError("The number of channels should be positive")
-        super().__init__(len(scope), num_output_units, num_channels)
+        super().__init__(len(scope), num_output_units, label=label)
         self.scope = scope
 
     @property
@@ -164,22 +176,12 @@ class InputLayer(Layer, ABC):
         """
         return self.num_input_units
 
-    @property
-    def num_channels(self) -> int:
-        """The number of channels per variable modelled by the input layer.
-
-        Returns:
-            int: The number of channels per variable.
-        """
-        return self.arity
-
     def __repr__(self) -> str:
         config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
         params_repr = ", ".join(f"{k}={v}" for k, v in self.params.items())
         return (
             f"{self.__class__.__name__}("
             f"scope={self.scope}, "
-            f"num_channels={self.arity}, "
             f"num_output_units={self.num_output_units}, "
             f"config=({config_repr}), "
             f"params=({params_repr})"
@@ -190,13 +192,14 @@ class InputLayer(Layer, ABC):
 class ConstantLayer(InputLayer, ABC):
     """The symbolic layer computing a constant vector, i.e., it does not depend on any variable."""
 
-    def __init__(self, num_output_units: int):
+    def __init__(self, num_output_units: int, label: LayerLabel | None = None):
         """Initializes a symbolic constant layer.
 
         Args:
             num_output_units: The number of input units in the layer.
+            label: The label of this input layer.
         """
-        super().__init__(Scope([]), num_output_units)
+        super().__init__(Scope([]), num_output_units, label=label)
 
 
 class EvidenceLayer(ConstantLayer):
@@ -209,29 +212,20 @@ class EvidenceLayer(ConstantLayer):
         Args:
             layer: The symbolic input layer to condition, i.e., to evaluate on the observation.
             observation: The observation stored as a parameter that outputs a constant (i.e.,
-                non-learnable) tensor of shape $(C, D)$, where $D$ is the number of variable the
-                symbolic input layer is defined on, and $C$ is the number of channels per variable.
+                non-learnable) tensor of shape $(D,)$, where $D$ is the number of variable the
+                symbolic input layer is defined on.
 
         Raises:
-            ValueError: If the observation parameter shape has not two dimensions, or if the
-                number of its channels (resp. variables) does not match the number of channels
-                (resp. variables) of the symbolic input layer.
+            ValueError: If the observation parameter shape has not two dimensions.
         """
-        if len(observation.shape) != 2:
+        if len(observation.shape) != 1:
             raise ValueError(
-                f"Expected observation of shape (num_channels, num_variables), "
-                f"but found {observation.shape}"
+                f"Expected observation of shape (num_variables,), " f"but found {observation.shape}"
             )
-        num_channels, num_variables = observation.shape
-        if num_channels != layer.num_channels:
-            raise ValueError(
-                f"Expected an observation with number of channels {layer.num_channels}, "
-                f"but found {num_channels}"
-            )
-        if num_variables != layer.num_variables:
+        if observation.shape[0] != layer.num_variables:
             raise ValueError(
                 f"Expected an observation with number of variables {layer.num_variables}, "
-                f"but found {num_variables}"
+                f"but found {observation.shape[0]}"
             )
         super().__init__(layer.num_output_units)
         self.layer = layer
@@ -256,8 +250,8 @@ class EmbeddingLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int,
         *,
+        label: LayerLabel | None = None,
         num_states: int = 2,
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
@@ -267,12 +261,10 @@ class EmbeddingLayer(InputLayer):
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Categorical units in the layer.
-            num_channels: The number of channels per variable.
-            num_states: The number of categories for each variable and channel.
-            weight: The weight parameter of shape $(K, C, N)$, where $K$ is the number of output
-                units, $C$ is the number of channels, and $N$ is the number of states. If it is
-                None, then either the weight factory is used (if it is not None) or a
-                weight parameter is initialized.
+            num_states: The number of categories for each variable.
+            weight: The weight parameter of shape $(K, N)$, where $K$ is the number of output
+                units, and $N$ is the number of states. If it is None, then either the weight
+                factory is used (if it is not None) or a weight parameter is initialized.
             weight_factory: A factory used to construct the weight parameter,
                 if it is not given
         """
@@ -280,7 +272,7 @@ class EmbeddingLayer(InputLayer):
             raise ValueError("The Embedding layer encodes univariate functions")
         if num_states <= 1:
             raise ValueError("The number of states must be at least 2")
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(scope, num_output_units)
         self.num_states = num_states
         if weight is None:
             if weight_factory is None:
@@ -297,7 +289,6 @@ class EmbeddingLayer(InputLayer):
     def _weight_shape(self) -> tuple[int, ...]:
         return (
             self.num_output_units,
-            self.num_channels,
             self.num_states,
         )
 
@@ -306,8 +297,8 @@ class EmbeddingLayer(InputLayer):
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
             "num_states": self.num_states,
+            "label": self.label,
         }
 
     @property
@@ -324,8 +315,8 @@ class CategoricalLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int = 1,
         *,
+        label: LayerLabel | None = None,
         num_categories: int,
         logits: Parameter | None = None,
         probs: Parameter | None = None,
@@ -337,14 +328,12 @@ class CategoricalLayer(InputLayer):
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Categorical units in the layer.
-            num_channels: The number of channels per variable.
-            num_categories: The number of categories for each variable and channel.
-            logits: The logits parameter of shape $(K, C, N)$, where $K$ is the number of output
-                units, $C$ is the number of channels, and $N$ is the number of categories. If it is
-                None, then either the probabilities parameter is used (if it is not None) or a
-                probabilities parameter parameterized by a
-                [SoftmaxParameter][cirkit.symbolic.parameters.SoftmaxParameter].
-            probs: The probabilities parameter of shape $(K, C, N)$ (see logits parameter
+            num_categories: The number of categories for each variable.
+            logits: The logits parameter of shape $(K, N)$, where $K$ is the number of output
+                units, and $N$ is the number of categories. If it is None, then either the
+                probabilities parameter is used (if it is not None) or a probabilities parameter
+                parameterized by a [SoftmaxParameter][cirkit.symbolic.parameters.SoftmaxParameter].
+            probs: The probabilities parameter of shape $(K, N)$ (see logits parameter
                 description). If it is None, then the logits parameter must be specified.
             logits_factory: A factory used to construct the logits parameter, if neither logits nor
                 probabilities are given.
@@ -361,7 +350,7 @@ class CategoricalLayer(InputLayer):
             )
         if num_categories < 2:
             raise ValueError("At least two categories must be specified")
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(scope, num_output_units, label=label)
         self.num_categories = num_categories
         if logits is None and probs is None:
             if logits_factory is not None:
@@ -386,15 +375,15 @@ class CategoricalLayer(InputLayer):
 
     @property
     def _probs_logits_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_channels, self.num_categories
+        return self.num_output_units, self.num_categories
 
     @property
     def config(self) -> Mapping[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
             "num_categories": self.num_categories,
+            "label": self.label,
         }
 
     @property
@@ -413,8 +402,8 @@ class BinomialLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int = 1,
         *,
+        label: LayerLabel | None = None,
         total_count: int = 2,
         logits: Parameter | None = None,
         probs: Parameter | None = None,
@@ -426,14 +415,12 @@ class BinomialLayer(InputLayer):
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Categorical units in the layer.
-            num_channels: The number of channels per variable.
-            total_count: The number of total counts for each variable and channel.
-            logits: The logits parameter of shape $(K, C)$, where $K$ is the number of output
-                units, $C$ is the number of channels. If it is None,
-                then either the probabilities parameter is used (if it is not None) or a
-                probabilities parameter parameterized by a
+            total_count: The number of total counts for each variable.
+            logits: The logits parameter of shape $(K,)$, where $K$ is the number of output
+                units. If it is None, then either the probabilities parameter is used
+                (if it is not None) or a probabilities parameter parameterized by a
                 [SigmoidParameter][cirkit.symbolic.parameters.SigmoidParameter].
-            probs: The probabilities parameter of shape $(K, C)$ (see logits parameter
+            probs: The probabilities parameter of shape $(K,)$ (see logits parameter
                 description). If it is None, then the logits parameter must be specified.
             logits_factory: A factory used to construct the logits parameter, if neither logits nor
                 probabilities are given.
@@ -448,7 +435,7 @@ class BinomialLayer(InputLayer):
             )
         if total_count < 0:
             raise ValueError("The number of trials should be non-negative")
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(scope, num_output_units)
         self.total_count = total_count
         if logits is None and probs is None:
             if logits_factory is not None:
@@ -473,15 +460,15 @@ class BinomialLayer(InputLayer):
 
     @property
     def _probs_logits_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_channels
+        return (self.num_output_units,)
 
     @property
     def config(self) -> dict:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
             "total_count": self.total_count,
+            "label": self.label,
         }
 
     @property
@@ -500,8 +487,8 @@ class GaussianLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int,
         *,
+        label: LayerLabel | None = None,
         mean: Parameter | None = None,
         stddev: Parameter | None = None,
         log_partition: Parameter | None = None,
@@ -513,25 +500,24 @@ class GaussianLayer(InputLayer):
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of Gaussian units in the layer.
-            num_channels: The number of channels per variable.
-            mean: The mean parameter of shape $(K, C)$, where $K$ is the number of output units, and
-                $C$ is the number of channels. If it is None, then a default symbolic parameter will
-                be instantiated with a
+            mean: The mean parameter of shape $(K)$, where $K$ is the number of output units.
+                If it is None, then a default symbolic parameter will be instantiated with a
                 [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
                 symbolic initializer.
-            stddev: The standard deviation parameter of shape $(K, C)$, where $K$ is the number of
-                output units, and $C$ is the number of channels. If it is None, then a default
-                symbolic parameter will be instantiated with a
-                [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
+            stddev: The standard deviation parameter of shape $(K)$, where $K$ is the number of
+                output units. If it is None, then a default symbolic parameter will be instantiated
+                with a [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
                 symbolic initializer, which is then re-parameterized to be positve using a
                 [ScaledSigmoidParameter][cirkit.symbolic.parameters.ScaledSigmoidParameter].
-            mean: A factory used to construct the mean parameter, if it is not specified.
-            stddev: A factory used to construct the standard deviation parameter, if it is not
-                specified.
+            log_partition: The log-partition parameter of the Gaussian, of shape $(K,)$.
+                If the Gaussian is a normalized Gaussian, then this should be None.
+            mean_factory: A factory used to construct the mean parameter, if it is not specified.
+            stddev_factory: A factory used to construct the standard deviation parameter, if it is
+                not specified.
         """
         if len(scope) != 1:
             raise ValueError("The Gaussian layer encodes a univariate distribution")
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(scope, num_output_units)
         if mean is None:
             if mean_factory is None:
                 mean = Parameter.from_input(
@@ -565,19 +551,15 @@ class GaussianLayer(InputLayer):
 
     @property
     def _mean_stddev_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_channels
+        return (self.num_output_units,)
 
     @property
     def _log_partition_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_channels
+        return (self.num_output_units,)
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {
-            "scope": self.scope,
-            "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
-        }
+        return {"scope": self.scope, "num_output_units": self.num_output_units}
 
     @property
     def params(self) -> Mapping[str, Parameter]:
@@ -594,8 +576,8 @@ class PolynomialLayer(InputLayer):
         self,
         scope: Scope,
         num_output_units: int,
-        num_channels: int,
         *,
+        label: LayerLabel | None = None,
         degree: int,
         coeff: Parameter | None = None,
         coeff_factory: ParameterFactory | None = None,
@@ -605,7 +587,6 @@ class PolynomialLayer(InputLayer):
         Args:
             scope: The variables scope the layer depends on.
             num_output_units: The number of units each encoding a polynomial in the layer.
-            num_channels: The number of channels per variable.
             degree: The degree of the polynomials.
             coeff: The coefficient parameter of shape $(K, \mathsf{degree} + 1)$, where $K$ is the
                 number of output units. If it is None, then either the coefficient factory
@@ -617,7 +598,7 @@ class PolynomialLayer(InputLayer):
         """
         if len(scope) != 1:
             raise ValueError("The Polynomial layer encodes univariate functions")
-        super().__init__(scope, num_output_units, num_channels)
+        super().__init__(scope, num_output_units)
         self.degree = degree
         if coeff is None:
             if coeff_factory is None:
@@ -639,8 +620,8 @@ class PolynomialLayer(InputLayer):
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
-            "num_channels": self.num_channels,
             "degree": self.degree,
+            "label": self.label,
         }
 
     @property
@@ -651,13 +632,21 @@ class PolynomialLayer(InputLayer):
 class ConstantValueLayer(ConstantLayer):
     """A symbolic layer computing a constant function encoded by a parameter."""
 
-    def __init__(self, num_output_units: int, *, log_space: bool = False, value: Parameter):
+    def __init__(
+        self,
+        num_output_units: int,
+        *,
+        log_space: bool = False,
+        value: Parameter,
+        label: LayerLabel | None = None,
+    ):
         """Initializes a constant value layer.
 
         Args:
             num_output_units: The number of output log partition functions.
             log_space: Whether the given value is in the log-space, i.e., this constant
                 layer should encode ```exp(value)``` rather than ```value```.
+            label: The label of this input layer.
             value: The symbolic parameter representing the encoded value.
                 This symbolic paramater should have shape (K,), where K is the number of
                 output units.
@@ -674,7 +663,11 @@ class ConstantValueLayer(ConstantLayer):
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_output_units": self.num_output_units, "log_space": self.log_space}
+        return {
+            "num_output_units": self.num_output_units,
+            "log_space": self.log_space,
+            "label": self.label,
+        }
 
     @property
     def params(self) -> Mapping[str, Parameter]:
@@ -684,20 +677,28 @@ class ConstantValueLayer(ConstantLayer):
 class ProductLayer(Layer, ABC):
     """The abstract base class for symbolic product layers."""
 
-    def __init__(self, num_input_units: int, num_output_units: int, arity: int = 2):
+    def __init__(
+        self,
+        num_input_units: int,
+        num_output_units: int,
+        arity: int = 2,
+        *,
+        label: LayerLabel | None = None,
+    ):
         """Initializes a product layer.
 
         Args:
             num_input_units: The number of units in each input layer.
             num_output_units: The number of product units in the product layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
+            label: The label of this input layer.
 
         Raises:
             ValueError: If the arity is less than two.
         """
         if arity < 2:
             raise ValueError("The arity should be at least 2")
-        super().__init__(num_input_units, num_output_units, arity)
+        super().__init__(num_input_units, num_output_units, arity, label=label)
 
 
 class HadamardLayer(ProductLayer):
@@ -705,21 +706,22 @@ class HadamardLayer(ProductLayer):
     product of the vectors given in output by some input layers. Therefore, the number of product
     units in the layer is equal to the number of units in each input layer."""
 
-    def __init__(self, num_input_units: int, arity: int = 2):
+    def __init__(self, num_input_units: int, arity: int = 2, *, label: LayerLabel | None = None):
         """Initializes a Hadamard product layer.
 
         Args:
             num_input_units: The number of units in each input layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
+            label: The label of this input layer.
 
         Raises:
             ValueError: If the arity is less than two.
         """
-        super().__init__(num_input_units, num_input_units, arity=arity)
+        super().__init__(num_input_units, num_input_units, arity=arity, label=label)
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_input_units": self.num_input_units, "arity": self.arity}
+        return {"num_input_units": self.num_input_units, "arity": self.arity, "label": self.label}
 
 
 class KroneckerLayer(ProductLayer):
@@ -728,12 +730,13 @@ class KroneckerLayer(ProductLayer):
     units in the layer is equal to the product of the number of units in each input layer.
     Note that the output of a Kronecker layer is a vector."""
 
-    def __init__(self, num_input_units: int, arity: int = 2):
+    def __init__(self, num_input_units: int, arity: int = 2, *, label: LayerLabel | None = None):
         """Initializes a Kronecker product layer.
 
         Args:
             num_input_units: The number of units in each input layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
+            label: The label of this input layer.
 
         Raises:
             ValueError: If the arity is less than two.
@@ -741,14 +744,12 @@ class KroneckerLayer(ProductLayer):
         if arity < 2:
             raise ValueError("The arity should be at least 2")
         super().__init__(
-            num_input_units,
-            cast(int, num_input_units**arity),
-            arity=arity,
+            num_input_units, cast(int, num_input_units**arity), arity=arity, label=label
         )
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_input_units": self.num_input_units, "arity": self.arity}
+        return {"num_input_units": self.num_input_units, "arity": self.arity, "label": self.label}
 
 
 class SumLayer(Layer):
@@ -774,6 +775,8 @@ class SumLayer(Layer):
         arity: int = 1,
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
+        *,
+        label: LayerLabel | None = None,
     ):
         r"""Initializes a dense layer.
 
@@ -788,8 +791,9 @@ class SumLayer(Layer):
                 if the given weight is None. If this factory is also None, then a weight
                 parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
                 as initializer will be instantiated.
+            label: The label of this input layer.
         """
-        super().__init__(num_input_units, num_output_units, arity=arity)
+        super().__init__(num_input_units, num_output_units, arity=arity, label=label)
         if weight is None:
             if weight_factory is None:
                 weight = Parameter.from_input(
@@ -811,6 +815,7 @@ class SumLayer(Layer):
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
             "arity": self.arity,
+            "label": self.label,
         }
 
     @property

@@ -94,10 +94,11 @@ class AddressBookEntry:
     compute the output of the whole computational graph."""
     in_module_ids: list[list[int]]
     """For each input module, it stores the list of other module indices."""
-    in_fold_idx: list[Tensor | None]
+    in_fold_idx: list[Tensor | tuple[slice | None, ...]]
     """For each input module, it stores the fold index tensor used to gather the
-    input tensors to each fold. It is None whether there is no need of gathering the
-    input tensors, i.e., if the indexing operation would act as an identity function."""
+    input tensors to each fold. It is a tuple of optional slices whether there is no need of
+    gathering the input tensors, i.e., if the indexing operation would act as an unsqueezing
+    operation that can be much more efficient."""
 
 
 class AddressBook(nn.Module, ABC):
@@ -133,11 +134,28 @@ class AddressBook(nn.Module, ABC):
                 "The last entry of the address book must have only one fold index tensor"
             )
         (out_fold_idx,) = last_entry.in_fold_idx
-        if len(out_fold_idx.shape) != 1:
+        if not isinstance(out_fold_idx, Tensor) or len(out_fold_idx.shape) != 1:
             raise ValueError("The output fold index tensor should be a 1-dimensional tensor")
         super().__init__()
-        self._entries = entries
         self._num_outputs = out_fold_idx.shape[0]
+        self._entry_modules: list[TorchModule | None] = [e.module for e in entries]
+        self._entry_in_module_ids: list[list[list[int]]] = [e.in_module_ids for e in entries]
+        # We register the book-keeping tensor indices as buffers.
+        # By doing so they are automatically transferred to the device
+        # This reduces CPU-device communications required to transfer these indices
+        #
+        # TODO: Perhaps this can be made more elegant in the future, if someone
+        #  decides to introduce a nn.BufferList container in torch
+        self._entry_in_fold_idx_targets: list[list[str]] = []
+        for i, e in enumerate(entries):
+            self._entry_in_fold_idx_targets.append([])
+            for j, fi in enumerate(e.in_fold_idx):
+                in_fold_idx_target = f"_in_fold_idx_{i}_{j}"
+                if isinstance(fi, Tensor):
+                    self.register_buffer(in_fold_idx_target, fi)
+                else:
+                    setattr(self, in_fold_idx_target, fi)
+                self._entry_in_fold_idx_targets[-1].append(in_fold_idx_target)
 
     def __len__(self) -> int:
         """Retrieve the length of the address book.
@@ -145,15 +163,28 @@ class AddressBook(nn.Module, ABC):
         Returns:
             The number of address book entries.
         """
-        return len(self._entries)
+        return len(self._entry_modules)
 
     def __iter__(self) -> Iterator[AddressBookEntry]:
-        """Retrieve an iterator over address book entries.
+        """Retrieve an iterator over address book entries, i.e., a tuple consisting of
+        three objects: (i) the torch module to evaluate (it can be None if the entry
+        is needed to return the output of the computational graph); (ii) for each input
+        to the module (i.e., depending on the arity) we have the list of ids to the
+        outputs of other modules (it can be empty if the module is an input module); and
+        (iii) for each input to the module we have the fold indexing, which
+        is used to retrieve the inputs to a module, even if they are folded modules.
 
         Returns:
             An iterator over address book entries.
         """
-        return iter(self._entries)
+        for module, in_module_ids_hs, in_fold_idx_targets in zip(
+            self._entry_modules, self._entry_in_module_ids, self._entry_in_fold_idx_targets
+        ):
+            yield AddressBookEntry(
+                module,
+                in_module_ids_hs,
+                [getattr(self, target) for target in in_fold_idx_targets],
+            )
 
     @property
     def num_outputs(self) -> int:

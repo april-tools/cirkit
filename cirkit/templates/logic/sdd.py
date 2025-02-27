@@ -1,6 +1,5 @@
-import itertools
 import re
-from collections import defaultdict, deque
+from collections import defaultdict
 from itertools import chain
 
 from cirkit.templates.logic.graph import (
@@ -13,18 +12,6 @@ from cirkit.templates.logic.graph import (
     NegatedLiteralNode,
     TopNode,
 )
-
-
-def sliding_window(iterable, n):
-    """Collect data into overlapping fixed-length chunks or blocks.
-    taken from https://docs.python.org/3/library/itertools.html
-    """
-    # sliding_window('ABCDEFG', 4) → ABCD BCDE CDEF DEFG
-    iterator = iter(iterable)
-    window = deque(itertools.islice(iterator, n - 1), maxlen=n)
-    for x in iterator:
-        window.append(x)
-        yield tuple(window)
 
 
 class SDD(LogicalCircuit):
