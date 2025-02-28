@@ -1,5 +1,5 @@
 site_name: cirkit
-site_url: https://example.com
+site_url: https://cirkit-docs.readthedocs.io
 repo_url: https://github.com/april-tools/cirkit
 nav:
   - Getting Started: 'index.md'
