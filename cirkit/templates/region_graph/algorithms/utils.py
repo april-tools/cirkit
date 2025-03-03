@@ -76,21 +76,20 @@ def tree2rg(tree: np.ndarray) -> RegionGraph:
     Returns:
         A region graph.
     """
+    # TODO: check the input encodes a rooted tree
     num_variables = len(tree)
-    root_region = RegionNode(range(num_variables))
     nodes: list[RegionGraphNode] = []
     in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
     partitions: list[PartitionNode | None] = [None] * num_variables
 
     for v in range(num_variables):
-        cur_v, prev_v = v, tree[v]
+        cur_v, prev_v = v, int(tree[v])
         while prev_v != -1:
             if partitions[prev_v] is None:
                 p_scope = {v, prev_v}
                 partitions[prev_v] = PartitionNode(p_scope)
             else:
-                p_scope = set(partitions[prev_v].scope)
-                p_scope = {v} | p_scope
+                p_scope = {v} | partitions[prev_v].scope
                 partitions[prev_v] = PartitionNode(p_scope)
             cur_v, prev_v = prev_v, tree[cur_v]
 
@@ -111,10 +110,11 @@ def tree2rg(tree: np.ndarray) -> RegionGraph:
             in_nodes[partitions[cur_v]].append(leaf_region)
             p_scope = partitions[cur_v].scope
             if regions[cur_v] is None:
-                regions[cur_v] = RegionNode(set(p_scope))
+                regions[cur_v] = RegionNode(p_scope)
                 nodes.append(regions[cur_v])
             in_nodes[regions[cur_v]].append(partitions[cur_v])
             if prev_v != -1:
                 in_nodes[partitions[prev_v]].append(regions[cur_v])
 
-    return RegionGraph(nodes, in_nodes, [root_region])
+    outputs = [regions[cur_v] for cur_v, prev_v in enumerate(tree) if prev_v == -1]
+    return RegionGraph(nodes, in_nodes, outputs=outputs)
