@@ -67,9 +67,25 @@ class LogicalInputNode(LogicalCircuitNode):
 class LiteralNode(LogicalInputNode):
     """A literal in the logical circuit."""
 
+    def __repr__(self) -> str:
+        """Generate the repr string of the literal.
+
+        Returns:
+            str: The str representation of the node.
+        """
+        return str(self.literal)
+
 
 class NegatedLiteralNode(LogicalInputNode):
     """A negated literal in the logical circuit."""
+
+    def __repr__(self) -> str:
+        """Generate the repr string of the literal.
+
+        Returns:
+            str: The str representation of the node.
+        """
+        return f"¬ {self.literal}"
 
 
 class ConjunctionNode(LogicalCircuitNode):
@@ -99,7 +115,7 @@ def default_literal_input_factory() -> InputLayerFactory:
             num_categories=2,
             num_output_units=num_units,
             probs=Parameter.from_input(TensorParameter(1, 2, initializer=initializer)),
-            label=("¬" if isinstance(label, NegatedLiteralNode) else "") + str(label.literal),
+            label=label,
         )
 
     return input_factory
@@ -202,6 +218,18 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
     @property
     def outputs(self) -> Iterator[LogicalCircuitNode]:
         return (cast(LogicalCircuitNode, node) for node in super().outputs)
+
+    @property
+    def literals(self):
+        return (cast(LogicalCircuitNode, node) for node in self.inputs if isinstance(node, LiteralNode))
+
+    @property
+    def positive_literals(self):
+        return (cast(LogicalCircuitNode, node) for node in self.literals if isinstance(node, LiteralNode))
+
+    @property
+    def negated_literals(self):
+        return (cast(LogicalCircuitNode, node) for node in self.literals if isinstance(node, NegatedLiteralNode))
 
     @cached_property
     def num_variables(self) -> int:
