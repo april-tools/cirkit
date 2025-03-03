@@ -267,7 +267,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         gate_function_kwargs = {} if gate_function_kwargs is None else gate_function_kwargs
         for gate_function_id, gate_function_eval in self._gate_function_evals.items():
             kwargs = gate_function_kwargs.get(gate_function_id, {})
-            gate_function_eval.cache_forward(**kwargs)
+            gate_function_eval.memoize(**kwargs)
 
         # Evaluate layers on the given input
         y = self.evaluate(x)  # (O, B, K)

@@ -1,6 +1,6 @@
 import itertools
 from collections.abc import Sequence
-from typing import Any, Mapping, cast
+from typing import Any, Mapping, cast, Callable
 
 import torch
 from torch import Tensor, autograd, nn
@@ -102,11 +102,11 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
     )
 
 
-class CachedGateFunctionEval(nn.Module):
-    def __init__(self, function_id: str, model: nn.Module):
+class CachedGateFunctionEval(object):
+    def __init__(self, function_id: str, gate_function: Callable[Mapping[str, Tensor], Mapping[str, Tensor]]):
         super().__init__()
         self._function_id = function_id
-        self._model = model
+        self._gate_function = gate_function
         self._cached_output: dict[str, Tensor] | None = None
 
     @property
@@ -114,16 +114,16 @@ class CachedGateFunctionEval(nn.Module):
         return self._function_id
 
     @property
-    def model(self) -> nn.Module:
-        return self._model
+    def gate_function(self) -> Callable[Mapping[str, Tensor], Mapping[str, Tensor]]:
+        return self._gate_function
 
     def reset_cache(self):
         self._cached_output = None
 
-    def cache_forward(self, **kwargs):
-        self._cached_output = cast(Mapping[str, Tensor], self._model(**kwargs))
+    def memoize(self, **kwargs):
+        self._cached_output = cast(Mapping[str, Tensor], self.gate_function(**kwargs))
 
-    def forward(self) -> Mapping[str, Tensor]:
+    def __call__(self) -> Mapping[str, Tensor]:
         if self._cached_output is None:
-            raise ValueError("No output mapping is stored. Call cached_forward() method first")
+            raise ValueError("No output mapping is stored. Call memoize() method first")
         return self._cached_output
