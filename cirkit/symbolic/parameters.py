@@ -155,15 +155,14 @@ class GateFunctionParameter(ParameterInput):
     For example, this function can be the evaluation of a neural network.
     """
 
-    def __init__(self, *shape: int, function_id: str, parameter_name: str, index: int):
+    def __init__(self, *shape: int, name: str, index: int):
         """Initialize a symbolic function parameter.
 
         Args:
             shape: The shape of the parameter tensor, which is specified by the combination
                 of the arguments "function", "name" and "index" below.
-            function_id: The function name. This is a string identifier of the function that
+            name: The gate function name. This is a string identifier of the function that
                 will output a mapping between parameter tensor identifiers and their value.
-            parameter_name: The name of the parameter tensor identifier.
             index: An index that selects the parameter tensor specified by the name.
                 That is, this index will be used to slice the parameter tensor
                 along the first dimension.
@@ -180,8 +179,7 @@ class GateFunctionParameter(ParameterInput):
             raise ValueError("The index must be a non-negative integer")
         super().__init__()
         self._shape = shape
-        self._function_id = function_id
-        self._parameter_name = parameter_name
+        self._name = name
         self._index = index
 
     @property
@@ -189,12 +187,8 @@ class GateFunctionParameter(ParameterInput):
         return self._shape
 
     @property
-    def function_id(self) -> str:
-        return self._function_id
-
-    @property
-    def parameter_name(self) -> str:
-        return self._parameter_name
+    def name(self) -> str:
+        return self._name
 
     @property
     def index(self) -> int:
@@ -204,8 +198,7 @@ class GateFunctionParameter(ParameterInput):
     def config(self) -> dict[str, Any]:
         return {
             "shape": self.shape,
-            "function_id": self.function_id,
-            "parameter_name": self.parameter_name,
+            "name": self.name,
             "index": self.index,
         }
 
@@ -213,8 +206,7 @@ class GateFunctionParameter(ParameterInput):
         return (
             f"{self.__class__.__name__}("
             f"shape={self.shape}, "
-            f"function_id='{self.function_id}', "
-            f"parameter_name='{self.parameter_name}', "
+            f"name='{self.name}', "
             f"index={self.index}"
             ")"
         )

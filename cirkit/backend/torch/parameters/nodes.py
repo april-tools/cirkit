@@ -290,7 +290,7 @@ class TorchGateFunctionParameter(TorchParameterInput):
     ):
         fold_idx = fold_idx if isinstance(fold_idx, list) else [fold_idx]
         super().__init__(num_folds=len(fold_idx))
-        super(nn.Module, self).__setattr__("_gate_function_eval", gate_function_eval)
+        self._gate_function_eval = gate_function_eval
         self._shape = shape
         self._name = name
         self.register_buffer("_fold_idx", torch.tensor(fold_idx))
@@ -320,10 +320,8 @@ class TorchGateFunctionParameter(TorchParameterInput):
         }
 
     def forward(self) -> Tensor:
-        # A dictionary from parameter tensor names to their tensor value
-        y = self._gate_function_eval()
-        # Select the parameter tensor we want by using the name
-        y = y[self._name]  # shape: (group_size, K_1, ..., K_n)
+        # A dictionary from gate functions to their tensor value
+        y = self._gate_function_eval()  # shape: (group_size, K_1, ..., K_n)
         # Slice the tensor by using the fold index
         return y[self._fold_idx]  # shape: (F, K_1, ..., K_n)
 

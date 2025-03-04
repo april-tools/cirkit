@@ -114,17 +114,17 @@ def compile_gate_function_parameter(
     compiler: "TorchCompiler", p: GateFunctionParameter
 ) -> TorchGateFunctionParameter:
     # Register the external model to the running state of the compiler, if needed
-    if compiler.state.has_gate_function(p.function_id):
-        gate_function_eval = compiler.state.retrieve_gate_function(p.function_id)
+    if compiler.state.has_gate_function(p.name):
+        gate_function_eval = compiler.state.retrieve_gate_function(p.name)
     else:
         # Retrieve the external model, based on the model id
-        gate_function = compiler.get_gate_function(p.function_id)
+        gate_function = compiler.get_gate_function(p.name)
         # Build the external model evaluator, and register it
-        gate_function_eval = CachedGateFunctionEval(p.function_id, gate_function)
-        compiler.state.register_gate_function(p.function_id, gate_function_eval)
+        gate_function_eval = CachedGateFunctionEval(p.name, gate_function)
+        compiler.state.register_gate_function(p.name, gate_function_eval)
     # Build the torch model parameter computational node
     return TorchGateFunctionParameter(
-        *p.shape, gate_function_eval=gate_function_eval, name=p.parameter_name, fold_idx=p.index
+        *p.shape, gate_function_eval=gate_function_eval, name=p.name, fold_idx=p.index
     )
 
 

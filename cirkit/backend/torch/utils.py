@@ -1,6 +1,6 @@
 import itertools
 from collections.abc import Sequence
-from typing import Any, Mapping, cast, Callable
+from typing import Any, Callable, Mapping, cast
 
 import torch
 from torch import Tensor, autograd, nn
@@ -103,7 +103,9 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
 
 
 class CachedGateFunctionEval(object):
-    def __init__(self, function_id: str, gate_function: Callable[Mapping[str, Tensor], Mapping[str, Tensor]]):
+    def __init__(
+        self, function_id: str, gate_function: Callable[Mapping[str, Tensor], Mapping[str, Tensor]]
+    ):
         super().__init__()
         self._function_id = function_id
         self._gate_function = gate_function
@@ -120,8 +122,8 @@ class CachedGateFunctionEval(object):
     def reset_cache(self):
         self._cached_output = None
 
-    def memoize(self, **kwargs):
-        self._cached_output = cast(Mapping[str, Tensor], self.gate_function(**kwargs))
+    def memoize(self, *args, **kwargs):
+        self._cached_output = cast(Mapping[str, Tensor], self.gate_function(*args, **kwargs))
 
     def __call__(self) -> Mapping[str, Tensor]:
         if self._cached_output is None:

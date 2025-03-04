@@ -656,8 +656,10 @@ it should parametrize."""
 
 
 GateFunctionParameterSpecs = dict[str, tuple[int, ...]]
-"""The gate function parameter specification. It is a map from a id (a string) to the shape of
-the tensor it must compute."""
+"""The gate function parameter specification.
+It is a map from a gate function name to a parameter group specification.
+The parameter group specification is the shapes that must be computed for that parameter.
+Groups are constructed by collating together parameters with the same shape."""
 
 
 def model_parameterize(
@@ -674,7 +676,9 @@ def model_parameterize(
         tuple[Circuit, GateFunctionParameterSpecs]: A pair where the first element is a new symbolic
             circuit whose tensor parameters have been substituted by the symbolic information that
             the value of those parameters will come from an externally defined model. The second
-            element is a dictionary mapping coalesced tensor parameter names to their shape.
+            element is a map from a gate function name to a parameter group specification.
+            The parameter group specification is the shapes that must be computed for that parameter.
+            Groups are constructed by collating together parameters with the same shape..
 
     Raises:
         ValueError: If the given circuit is the output of a circuit operator.
@@ -686,107 +690,41 @@ def model_parameterize(
     if circuit.operation is not None:
         raise ValueError("The circuit to parameterize must not be the output of a circuit operator")
 
-    # the layers specified in the gate function specification should all be mutually disjoint
+    # the layers specified in the gate function specification all be mutually disjoint
     if any(
         len(set(l1).intersection(l2)) != 0
         for l1, l2 in itertools.combinations(gate_functions.values(), 2)
     ):
         raise ValueError("The gate functions must parametrize mutually disjoint set of layers.")
 
-    def _coalesce_layers(
-        lps: Mapping[Layer, list[str]], group_id: int
-    ) -> tuple[
-        Mapping[Layer, dict[str, tuple[tuple[int, ...], str, int]]],
-        Mapping[str, tuple[int, ...]],
-        int,
-    ]:
-        # A mapping from a layer to a dictionary, which maps each name of the parameters
-        # to be externally parameterized to a tuple (i,ii), where (i) is the identifier of
-        # the tensor parameter to be externally computed, and (ii) is an index to such
-        # tensor parameter
-        coalesced_layer_pinfos: dict[Layer, dict[str, tuple[tuple[int, ...], str, int]]] = {}
-
-        # Group layers having the same layer type, parameters to parameterize externally,
-        # and shape for each of the parameters
-        groups: dict[
-            tuple[type[Layer], tuple[str, ...], tuple[tuple[int, ...], ...]], list[Layer]
-        ] = defaultdict(list)
-        for sl, pnames in lps.items():
-            sl_settings = (type(sl), tuple(pnames), tuple(sl.params[p].shape for p in pnames))
-            groups[sl_settings].append(sl)
-
-        # Iterate all layer groups and initialize the metadata
-        next_group_id = group_id
-        pname_model_specs: dict[str, tuple[int, ...]] = {}
-        for (sl_class, pnames, pshapes), group in groups.items():
-            # Retrieve the layer class name
-            sl_class_name = sl_class.__name__
-
-            # Set the parameter group metadata, for each parmeter name
-            # This metadata includes the group tensor parameter name, and
-            # the shape of the group tensor parameter
-            for pname, pshape in zip(pnames, pshapes):
-                # E.g., "g151.SumLayer.weight"
-                group_pname = f"g{next_group_id}.{sl_class_name}.{pname}"
-                pname_model_specs[group_pname] = (len(group), *pshape)
-
-                # For each layer in the group, we store (i) the identifier of the
-                # tensor parameter to be externally computed, and (ii) an index to
-                # such tensor parameter
-                sl_pinfos: dict[str, tuple[tuple[int, ...], str, int]] = {}
-                for i, sl in enumerate(group):
-                    sl_pinfos[pname] = (pshape, group_pname, i)
-                    coalesced_layer_pinfos[sl] = sl_pinfos
-
-            # Increment the group id
-            next_group_id += 1
-
-        # Construct the model specifications to return to the user (w.r.t. to each group here)
-        coalesced_model_specs: GateFunctionParameterSpecs = {
-            group_name: group_pshape for group_name, group_pshape in pname_model_specs.items()
-        }
-        return coalesced_layer_pinfos, coalesced_model_specs, next_group_id
-
-    # A map from symbolic layers in the input circuit to the symbolic layers in the output circuit
-    # initialized using shallow copies of the current circuit
+    # group all parameters from the same gate function together so that they can be computed
+    # in folded fashion and upacked later
+    # make sure that all elements within a group are compatible (same parameter type and shape)
+    gate_function_specs: GateFunctionParameterSpecs = {}
     layers_map: dict[Layer, Layer] = {l: l.copy() for l in circuit.layers}
 
-    # A dictionary mapping each introduced parameter tensor name to the corresponding tensor shape
-    gate_function_specs: GateFunctionParameterSpecs = {}
+    for gf_group, gf_layers in gate_functions.items():
+        # group layers together based on metadata
+        layers_metadata = defaultdict(list)
+        for l in gf_layers:
+            for p_k, p in l.params.items():
+                layers_metadata[(p_k, p.shape)].append(l)
 
-    # Loop through each layer frontier obtained by the layerwise topological ordering
-    group_id = 0
-    for gf_id, layers in gate_functions.items():
-        # extract metadata from the layers
-        layers_metadata = {
-            layer: [
-                pname
-                for pname, pgraph in layer.params.items()
-                if isinstance(pgraph.nodes[0], TensorParameter)
-            ]
-            for layer in layers
-        }
+        # construct the gate function spec for each group
+        # since parameters with same name from same group might have different
+        # shapes we group all the ones with same shape under a common name
+        for g_i, ((p_name, p_shape), g_layers) in enumerate(layers_metadata.items()):
+            gf_name = f"{gf_group}.{p_name}.{g_i}"
 
-        # Coalesce the layers based on (i) the layer class and (ii) the shape of their parameters
-        coalesced_layer_pinfos, coalesced_gfs_specs, group_id = _coalesce_layers(
-            layers_metadata, group_id
-        )
-        gate_function_specs.update(coalesced_gfs_specs)
+            # the gate function can compute |g_elements| parameters at once
+            # all of shape g_shape
+            gate_function_specs[gf_name] = (len(g_layers), *p_shape)
 
-        for layer in layers:
-            # Replace the parameter tensor to be externally parameterized
-            sl_params = {
-                pname: Parameter.from_input(
-                    GateFunctionParameter(
-                        *pshape,
-                        function_id=gf_id,
-                        parameter_name=name,
-                        index=index,
-                    )
-                )
-                for pname, (pshape, name, index) in coalesced_layer_pinfos[layer].items()
-            }
-            layers_map[layer] = layer.copy(params=sl_params)
+            # Replace the parameter tensor to be externally parameterized by a gate function
+            for i_sl, sl in enumerate(g_layers):
+                # replace layer parameter with gate function
+                gf = GateFunctionParameter(*p_shape, name=gf_name, index=i_sl)
+                layers_map[sl] = sl.copy(params={p_name: Parameter.from_input(gf)})
 
     # Construct the resulting circuit
     # use a shallow copy of the parameters that have not been changed
