@@ -221,15 +221,25 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
     @property
     def literals(self):
-        return (cast(LogicalCircuitNode, node) for node in self.inputs if isinstance(node, LiteralNode))
+        return (
+            cast(LogicalCircuitNode, node) for node in self.inputs if isinstance(node, LiteralNode)
+        )
 
     @property
     def positive_literals(self):
-        return (cast(LogicalCircuitNode, node) for node in self.literals if isinstance(node, LiteralNode))
+        return (
+            cast(LogicalCircuitNode, node)
+            for node in self.literals
+            if isinstance(node, LiteralNode)
+        )
 
     @property
     def negated_literals(self):
-        return (cast(LogicalCircuitNode, node) for node in self.literals if isinstance(node, NegatedLiteralNode))
+        return (
+            cast(LogicalCircuitNode, node)
+            for node in self.literals
+            if isinstance(node, NegatedLiteralNode)
+        )
 
     @cached_property
     def num_variables(self) -> int:
