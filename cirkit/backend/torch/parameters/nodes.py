@@ -315,15 +315,17 @@ class TorchGateFunctionParameter(TorchParameterInput):
     def config(self) -> dict[str, Any]:
         return {
             "shape": self._shape,
-            "gate_function_eval": self._gate_function_eval,
+            "gate_function_eval": self.gate_function_eval,
             "name": self._name,
         }
 
     def forward(self) -> Tensor:
         # A dictionary from gate functions to their tensor value
-        y = self._gate_function_eval()  # shape: (group_size, K_1, ..., K_n)
+        y = self.gate_function_eval()  # shape: (B, group_size, K_1, ..., K_n)
         # Slice the tensor by using the fold index
-        return y[self._fold_idx]  # shape: (F, K_1, ..., K_n)
+        y = y[:, self._fold_idx]  # (B, F, K_1, ..., K_n)
+        # flat the batch dimension as if they were foldings
+        return y.permute(1, 0, *tuple(range(2, len(y.size())))) # (F, K_1, ..., K_n)
 
 
 class TorchParameterOp(TorchParameterNode, ABC):

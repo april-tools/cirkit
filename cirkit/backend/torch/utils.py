@@ -1,6 +1,6 @@
 import itertools
 from collections.abc import Sequence
-from typing import Any, Callable, Mapping, cast
+from typing import Any, Callable, Mapping, Protocol, cast
 
 import torch
 from torch import Tensor, autograd, nn
@@ -102,10 +102,28 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
     )
 
 
+class GateFunction(Protocol):
+    def __call__(
+        self, shape: tuple[int, ...], *args: list[Any], **kwargs: Mapping[str, Any]
+    ) -> Tensor:
+        """
+        The interface that a gate function must implement.
+        It takes a shape as input, which is the shape of the expected
+        output from the function.
+
+        Args:
+            shape (tuple[int, ...]): The shape expected as input.
+            *args (list[Any]): The positional arguments for the function.
+            **kwargs (Mapping[str, Any]): The keyword arguments for the function.
+
+        Returns:
+            Tensor: The tensor of shape `shape` that will be used as parameter.
+        """
+        ...
+
+
 class CachedGateFunctionEval(object):
-    def __init__(
-        self, function_id: str, gate_function: Callable[Mapping[str, Tensor], Mapping[str, Tensor]]
-    ):
+    def __init__(self, function_id: str, gate_function: GateFunction):
         super().__init__()
         self._function_id = function_id
         self._gate_function = gate_function
@@ -116,16 +134,16 @@ class CachedGateFunctionEval(object):
         return self._function_id
 
     @property
-    def gate_function(self) -> Callable[Mapping[str, Tensor], Mapping[str, Tensor]]:
+    def gate_function(self) -> GateFunction:
         return self._gate_function
 
     def reset_cache(self):
         self._cached_output = None
 
-    def memoize(self, *args, **kwargs):
-        self._cached_output = cast(Mapping[str, Tensor], self.gate_function(*args, **kwargs))
+    def memoize(self, shape: tuple[int, ...], *args, **kwargs):
+        self._cached_output = self.gate_function(shape, *args, **kwargs)
 
-    def __call__(self) -> Mapping[str, Tensor]:
+    def __call__(self) -> Tensor:
         if self._cached_output is None:
             raise ValueError("No output mapping is stored. Call memoize() method first")
         return self._cached_output

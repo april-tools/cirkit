@@ -1,6 +1,7 @@
 import functools
 from abc import ABC
 from collections.abc import Iterable
+from typing import Any, Mapping
 
 import torch
 from torch import Tensor
@@ -46,7 +47,13 @@ class IntegrateQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, x: Tensor, *, integrate_vars: Tensor | Scope | Iterable[Scope]) -> Tensor:
+    def __call__(
+        self,
+        x: Tensor,
+        *,
+        integrate_vars: Tensor | Scope | Iterable[Scope],
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Tensor:
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
@@ -100,6 +107,11 @@ class IntegrateQuery(Query):
                 "want to broadcast. Found #inputs = "
                 f"{x.shape[0]} != {integrate_vars_mask.shape[0]} = len(integrate_vars)"
             )
+
+        gate_function_kwargs = {} if gate_function_kwargs is None else gate_function_kwargs
+        for gate_function_id, gate_function_eval in self._circuit._gate_function_evals.items():
+            kwargs = gate_function_kwargs.get(gate_function_id, {})
+            gate_function_eval.memoize(**kwargs)
 
         output = self._circuit.evaluate(
             x,
