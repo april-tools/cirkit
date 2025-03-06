@@ -7,8 +7,10 @@ from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.queries import SamplingQuery
 from tests.floats import allclose
-from tests.symbolic.test_utils import build_multivariate_monotonic_structured_cpt_pc, \
-    build_bivariate_monotonic_structured_cpt_pc
+from tests.symbolic.test_utils import (
+    build_bivariate_monotonic_structured_cpt_pc,
+    build_multivariate_monotonic_structured_cpt_pc,
+)
 
 
 @pytest.mark.parametrize(
