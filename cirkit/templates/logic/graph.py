@@ -102,6 +102,17 @@ def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
     """
 
     def input_factory(scope: Scope, num_units: int) -> InputLayer:
+        """The default input factory maps literals to categorical distributions.
+        Literals are parametrized by the probabilities [0.0, 1.0] while negated
+        literals are parametrized by the probabilities [1.0, 0.0].
+
+        Args:
+            scope (Scope): Scope of the input corresponding to the literal id.
+            num_units (int): Number of units in the input layer.
+
+        Returns:
+            InputLayer: Symbolic input layer.
+        """
         param = np.array([1.0, 0.0]) if negated else np.array([0.0, 1.0])
         initializer = ConstantTensorInitializer(param)
         return CategoricalLayer(
@@ -206,36 +217,71 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
     @property
     def inputs(self) -> Iterator[LogicalCircuitNode]:
+        """Returns the inputs of the circuit.
+
+        Returns:
+            Iterator[LogicalCircuitNode]: Input of the circuit.
+        """
         return (cast(LogicalCircuitNode, node) for node in super().inputs)
 
     @property
     def outputs(self) -> Iterator[LogicalCircuitNode]:
+        """Returns the outputs of the circuit.
+
+        Returns:
+            Iterator[LogicalCircuitNode]: Output of the circuit.
+        """
         return (cast(LogicalCircuitNode, node) for node in super().outputs)
 
     @property
-    def literals(self):
+    def literals(self) -> Iterator[LogicalInputNode]:
+        """Returns the literals in the graph.
+
+        Returns:
+            Iterator[LogicalInputNode]: An iterator over all the literals in the graph.
+        """
         return (
-            cast(LogicalCircuitNode, node) for node in self.inputs if isinstance(node, LiteralNode)
+            cast(LogicalCircuitNode, node) 
+            for node in self.inputs 
+            if isinstance(node, LogicalInputNode)
         )
 
     @property
-    def positive_literals(self):
+    def positive_literals(self) -> Iterator[LiteralNode]:
+        """Returns the literals in the graph excluding negated literals.
+
+        Returns:
+            Iterator[NegatedLiteralNode]: An iterator over the
+                literals in the graph that are not negated.
+        """
         return (
-            cast(LogicalCircuitNode, node)
+            node
             for node in self.literals
             if isinstance(node, LiteralNode)
         )
 
     @property
-    def negated_literals(self):
+    def negated_literals(self) -> Iterator[NegatedLiteralNode]:
+        """Returns the negated literals in the graph.
+
+        Returns:
+            Iterator[NegatedLiteralNode]: An iterator over the negated 
+                literals in the graph.
+        """
         return (
-            cast(LogicalCircuitNode, node)
+            node
             for node in self.literals
             if isinstance(node, NegatedLiteralNode)
         )
 
     @cached_property
     def num_variables(self) -> int:
+        """
+        Returns the number of literals in the graph.
+
+        Returns:
+            int: The number of literals.
+        """
         return len({i.literal for i in self.inputs if isinstance(i, LogicalInputNode)})
 
     @cache

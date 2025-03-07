@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import MutableMapping
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterator, Sequence
 
 
 class LayerMetadata(MutableMapping):
@@ -13,7 +13,7 @@ class LayerMetadata(MutableMapping):
         """Initialize the layer metadata as an empty dictionary."""
         self._map = {}
 
-    def items(self) -> Iterable[tuple[str, Any]]:
+    def items(self) -> Iterator[tuple[str, Any]]:
         """
         Returns the items of the layer metadata.
 
@@ -23,7 +23,7 @@ class LayerMetadata(MutableMapping):
         """
         return self._map.items()
 
-    def __iter__(self) -> Iterable[str]:
+    def __iter__(self) -> Iterator[str]:
         """
         Returns the iterable over the keys in the metadata.
 
