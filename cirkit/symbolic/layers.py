@@ -4,6 +4,7 @@ from enum import IntEnum, auto
 from typing import Any, Callable, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
+from cirkit.symbolic.metadata import LayerMetadata
 from cirkit.symbolic.parameters import (
     Parameter,
     ParameterFactory,
@@ -12,7 +13,6 @@ from cirkit.symbolic.parameters import (
     SoftmaxParameter,
     TensorParameter,
 )
-from cirkit.utils.label import LayerLabel
 from cirkit.utils.scope import Scope
 
 
@@ -45,7 +45,7 @@ class Layer(ABC):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        label: LayerLabel | None = None,
+        metadata: LayerMetadata = None,
     ):
         """Initializes a symbolic layer.
 
@@ -54,7 +54,7 @@ class Layer(ABC):
             num_output_units: The number of output units, i.e., the number of computational units
                 in this layer.
             arity: The arity of the layer, i.e., the number of input layers to this layer.
-            label: The label of this layer.
+            metadata: A dictionary encoding relevant metadata for this symbolic layer.
 
         Raises:
             ValueError: If the number of input units, output units or the arity are not positvie.
@@ -68,16 +68,7 @@ class Layer(ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
-        self._label = label
-
-    @property
-    def label(self) -> LayerLabel | None:
-        """Retrieves the label of the layer.
-
-        Returns:
-            LayerLabel | None: The label of the layer or None, if it is not set.
-        """
-        return self._label
+        self.metadata = metadata if metadata is not None else LayerMetadata()
 
     @property
     @abstractmethod
@@ -111,7 +102,7 @@ class Layer(ABC):
             A shallow copy of the layer, with reference to the parameters.
         """
         ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
-        return type(self)(**self.config, **ref_params)
+        return type(self)(**self.config, **ref_params, metadata=self.metadata)
 
     def __repr__(self) -> str:
         config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
@@ -121,7 +112,6 @@ class Layer(ABC):
             f"num_input_units={self.num_input_units}, "
             f"num_output_units={self.num_output_units}, "
             f"arity={self.arity}, "
-            f"label={self._label},"
             f"config=({config_repr}), "
             f"params=({params_repr})"
         )
@@ -130,20 +120,19 @@ class Layer(ABC):
 class InputLayer(Layer, ABC):
     """The symbolic input layer class."""
 
-    def __init__(self, scope: Scope, num_output_units: int, label: LayerLabel | None = None):
+    def __init__(self, scope: Scope, num_output_units: int):
         """Initializes a symbolic input layer.
 
         Args:
             scope: The variables scope of the layer.
             num_output_units: The number of input units in the layer.
-            label: The label of this layer.
 
         Raises:
             ValueError: If the number of outputs is not positive.
         """
         if num_output_units <= 0:
             raise ValueError("The number of output units should be positive")
-        super().__init__(len(scope), num_output_units, label=label)
+        super().__init__(len(scope), num_output_units)
         self.scope = scope
 
     @property
@@ -171,14 +160,13 @@ class InputLayer(Layer, ABC):
 class ConstantLayer(InputLayer, ABC):
     """The symbolic layer computing a constant vector, i.e., it does not depend on any variable."""
 
-    def __init__(self, num_output_units: int, label: LayerLabel | None = None):
+    def __init__(self, num_output_units: int):
         """Initializes a symbolic constant layer.
 
         Args:
             num_output_units: The number of input units in the layer.
-            label: The label of this input layer.
         """
-        super().__init__(Scope([]), num_output_units, label=label)
+        super().__init__(Scope([]), num_output_units)
 
 
 class EvidenceLayer(ConstantLayer):
@@ -230,7 +218,6 @@ class EmbeddingLayer(InputLayer):
         scope: Scope,
         num_output_units: int,
         *,
-        label: LayerLabel | None = None,
         num_states: int = 2,
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
@@ -277,7 +264,6 @@ class EmbeddingLayer(InputLayer):
             "scope": self.scope,
             "num_output_units": self.num_output_units,
             "num_states": self.num_states,
-            "label": self.label,
         }
 
     @property
@@ -295,7 +281,6 @@ class CategoricalLayer(InputLayer):
         scope: Scope,
         num_output_units: int,
         *,
-        label: LayerLabel | None = None,
         num_categories: int,
         logits: Parameter | None = None,
         probs: Parameter | None = None,
@@ -329,7 +314,7 @@ class CategoricalLayer(InputLayer):
             )
         if num_categories < 2:
             raise ValueError("At least two categories must be specified")
-        super().__init__(scope, num_output_units, label=label)
+        super().__init__(scope, num_output_units)
         self.num_categories = num_categories
         if logits is None and probs is None:
             if logits_factory is not None:
@@ -362,7 +347,6 @@ class CategoricalLayer(InputLayer):
             "scope": self.scope,
             "num_output_units": self.num_output_units,
             "num_categories": self.num_categories,
-            "label": self.label,
         }
 
     @property
@@ -382,7 +366,6 @@ class BinomialLayer(InputLayer):
         scope: Scope,
         num_output_units: int,
         *,
-        label: LayerLabel | None = None,
         total_count: int = 2,
         logits: Parameter | None = None,
         probs: Parameter | None = None,
@@ -447,7 +430,6 @@ class BinomialLayer(InputLayer):
             "scope": self.scope,
             "num_output_units": self.num_output_units,
             "total_count": self.total_count,
-            "label": self.label,
         }
 
     @property
@@ -467,7 +449,6 @@ class GaussianLayer(InputLayer):
         scope: Scope,
         num_output_units: int,
         *,
-        label: LayerLabel | None = None,
         mean: Parameter | None = None,
         stddev: Parameter | None = None,
         log_partition: Parameter | None = None,
@@ -556,7 +537,6 @@ class PolynomialLayer(InputLayer):
         scope: Scope,
         num_output_units: int,
         *,
-        label: LayerLabel | None = None,
         degree: int,
         coeff: Parameter | None = None,
         coeff_factory: ParameterFactory | None = None,
@@ -600,7 +580,6 @@ class PolynomialLayer(InputLayer):
             "scope": self.scope,
             "num_output_units": self.num_output_units,
             "degree": self.degree,
-            "label": self.label,
         }
 
     @property
@@ -617,7 +596,6 @@ class ConstantValueLayer(ConstantLayer):
         *,
         log_space: bool = False,
         value: Parameter,
-        label: LayerLabel | None = None,
     ):
         """Initializes a constant value layer.
 
@@ -625,7 +603,6 @@ class ConstantValueLayer(ConstantLayer):
             num_output_units: The number of output log partition functions.
             log_space: Whether the given value is in the log-space, i.e., this constant
                 layer should encode ```exp(value)``` rather than ```value```.
-            label: The label of this input layer.
             value: The symbolic parameter representing the encoded value.
                 This symbolic paramater should have shape (K,), where K is the number of
                 output units.
@@ -645,7 +622,6 @@ class ConstantValueLayer(ConstantLayer):
         return {
             "num_output_units": self.num_output_units,
             "log_space": self.log_space,
-            "label": self.label,
         }
 
     @property
@@ -656,28 +632,20 @@ class ConstantValueLayer(ConstantLayer):
 class ProductLayer(Layer, ABC):
     """The abstract base class for symbolic product layers."""
 
-    def __init__(
-        self,
-        num_input_units: int,
-        num_output_units: int,
-        arity: int = 2,
-        *,
-        label: LayerLabel | None = None,
-    ):
+    def __init__(self, num_input_units: int, num_output_units: int, arity: int = 2):
         """Initializes a product layer.
 
         Args:
             num_input_units: The number of units in each input layer.
             num_output_units: The number of product units in the product layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
-            label: The label of this input layer.
 
         Raises:
             ValueError: If the arity is less than two.
         """
         if arity < 2:
             raise ValueError("The arity should be at least 2")
-        super().__init__(num_input_units, num_output_units, arity, label=label)
+        super().__init__(num_input_units, num_output_units, arity)
 
 
 class HadamardLayer(ProductLayer):
@@ -685,22 +653,21 @@ class HadamardLayer(ProductLayer):
     product of the vectors given in output by some input layers. Therefore, the number of product
     units in the layer is equal to the number of units in each input layer."""
 
-    def __init__(self, num_input_units: int, arity: int = 2, *, label: LayerLabel | None = None):
+    def __init__(self, num_input_units: int, arity: int = 2):
         """Initializes a Hadamard product layer.
 
         Args:
             num_input_units: The number of units in each input layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
-            label: The label of this input layer.
 
         Raises:
             ValueError: If the arity is less than two.
         """
-        super().__init__(num_input_units, num_input_units, arity=arity, label=label)
+        super().__init__(num_input_units, num_input_units, arity=arity)
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_input_units": self.num_input_units, "arity": self.arity, "label": self.label}
+        return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
 class KroneckerLayer(ProductLayer):
@@ -709,26 +676,23 @@ class KroneckerLayer(ProductLayer):
     units in the layer is equal to the product of the number of units in each input layer.
     Note that the output of a Kronecker layer is a vector."""
 
-    def __init__(self, num_input_units: int, arity: int = 2, *, label: LayerLabel | None = None):
+    def __init__(self, num_input_units: int, arity: int = 2):
         """Initializes a Kronecker product layer.
 
         Args:
             num_input_units: The number of units in each input layer.
             arity: The arity of the layer, i.e., the number of input layers to the product layer.
-            label: The label of this input layer.
 
         Raises:
             ValueError: If the arity is less than two.
         """
         if arity < 2:
             raise ValueError("The arity should be at least 2")
-        super().__init__(
-            num_input_units, cast(int, num_input_units**arity), arity=arity, label=label
-        )
+        super().__init__(num_input_units, cast(int, num_input_units**arity), arity=arity)
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_input_units": self.num_input_units, "arity": self.arity, "label": self.label}
+        return {"num_input_units": self.num_input_units, "arity": self.arity}
 
 
 class SumLayer(Layer):
@@ -754,8 +718,6 @@ class SumLayer(Layer):
         arity: int = 1,
         weight: Parameter | None = None,
         weight_factory: ParameterFactory | None = None,
-        *,
-        label: LayerLabel | None = None,
     ):
         r"""Initializes a dense layer.
 
@@ -770,9 +732,8 @@ class SumLayer(Layer):
                 if the given weight is None. If this factory is also None, then a weight
                 parameter with [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer]
                 as initializer will be instantiated.
-            label: The label of this input layer.
         """
-        super().__init__(num_input_units, num_output_units, arity=arity, label=label)
+        super().__init__(num_input_units, num_output_units, arity=arity)
         if weight is None:
             if weight_factory is None:
                 weight = Parameter.from_input(
@@ -794,7 +755,6 @@ class SumLayer(Layer):
             "num_input_units": self.num_input_units,
             "num_output_units": self.num_output_units,
             "arity": self.arity,
-            "label": self.label,
         }
 
     @property

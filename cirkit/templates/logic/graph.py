@@ -8,14 +8,7 @@ import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import ConstantTensorInitializer
-from cirkit.symbolic.layers import (
-    CategoricalLayer,
-    HadamardLayer,
-    InputLayer,
-    Layer,
-    LayerLabel,
-    SumLayer,
-)
+from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, InputLayer, Layer, SumLayer
 from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
 from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
@@ -96,26 +89,26 @@ class DisjunctionNode(LogicalCircuitNode):
     """A conjunction in the logical circuit."""
 
 
-def default_literal_input_factory() -> InputLayerFactory:
+def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
     """Input factory for a boolean logic circuit input realized using a
     Categorical Layer constantly parametrized by a tensor [x, y] where x is
     the probability of being False and y the probability of being True.
+
+    Args:
+        negated (bool, optional): _description_. Defaults to False.
 
     Returns:
         InputLayerFactory: The input layer factory.
     """
 
-    def input_factory(scope: Scope, num_units: int, label: LayerLabel) -> InputLayer:
-        param = (
-            np.array([1.0, 0.0]) if isinstance(label, NegatedLiteralNode) else np.array([0.0, 1.0])
-        )
+    def input_factory(scope: Scope, num_units: int) -> InputLayer:
+        param = np.array([1.0, 0.0]) if negated else np.array([0.0, 1.0])
         initializer = ConstantTensorInitializer(param)
         return CategoricalLayer(
             scope,
             num_categories=2,
             num_output_units=num_units,
             probs=Parameter.from_input(TensorParameter(1, 2, initializer=initializer)),
-            label=label,
         )
 
     return input_factory
@@ -329,6 +322,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
     def build_circuit(
         self,
         literal_input_factory: InputLayerFactory = None,
+        negated_literal_input_factory: InputLayerFactory = None,
         weight_factory: ParameterFactory | None = None,
         enforce_smoothness: bool = True,
     ) -> Circuit:
@@ -338,7 +332,9 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         the constant vector [0, 1] for a literal and [1, 0] for its negation.
 
         Args:
-            literal_input_factory: A factory that builds an input layer for literals.
+            literal_input_factory: A factory that builds an input layer for a literal.
+            negated_literal_input_factory: A factory that builds an input layer for a
+                negated literal.
             weight_factory: The factory to construct the weight of sum layers.
                 It can be None, or a parameter factory, i.e., a map from a shape to
                 a symbolic parameter.
@@ -350,6 +346,12 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         Returns:
             Circuit: A symbolic circuit.
         """
+        if (literal_input_factory == None) ^ (negated_literal_input_factory == None):
+            raise ValueError(
+                "Both literal_input_factory and negated_literal_input_factory should"
+                "be specified at the same time or be none."
+            )
+
         if enforce_smoothness:
             self.smooth()
         self.prune()
@@ -358,8 +360,9 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicalCircuitNode, Layer] = {}
 
-        if literal_input_factory is None:
-            literal_input_factory = default_literal_input_factory()
+        if (literal_input_factory is None) and (negated_literal_input_factory is None):
+            literal_input_factory = default_literal_input_factory(negated=False)
+            negated_literal_input_factory = default_literal_input_factory(negated=True)
 
         if weight_factory is None:
             # default to unitary weights
@@ -370,12 +373,21 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
         # map each input literal to a symbolic input layer
         for i in self.inputs:
-            node_to_layer[i] = literal_input_factory(Scope([i.literal]), num_units=1, label=i)
+            match i:
+                case LiteralNode():
+                    i_input = literal_input_factory(Scope([i.literal]), num_units=1)
+                case NegatedLiteralNode():
+                    i_input = negated_literal_input_factory(Scope([i.literal]), num_units=1)
+
+            i_input.metadata["logic"]["source"] = i
+            node_to_layer[i] = i_input
 
         for node in self.topological_ordering():
             match node:
                 case ConjunctionNode():
-                    product_node = HadamardLayer(1, arity=len(self.node_inputs(node)), label=node)
+                    product_node = HadamardLayer(1, arity=len(self.node_inputs(node)))
+                    product_node.metadata["logic"]["source"] = node
+
                     in_layers[product_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = product_node
                 case DisjunctionNode():
@@ -384,8 +396,9 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                         1,
                         arity=len(self.node_inputs(node)),
                         weight_factory=weight_factory,
-                        label=node,
                     )
+                    sum_node.metadata["logic"]["source"] = node
+
                     in_layers[sum_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = sum_node
 
