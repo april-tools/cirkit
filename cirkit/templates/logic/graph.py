@@ -241,8 +241,8 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             Iterator[LogicalInputNode]: An iterator over all the literals in the graph.
         """
         return (
-            cast(LogicalCircuitNode, node) 
-            for node in self.inputs 
+            cast(LogicalCircuitNode, node)
+            for node in self.inputs
             if isinstance(node, LogicalInputNode)
         )
 
@@ -254,25 +254,17 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             Iterator[NegatedLiteralNode]: An iterator over the
                 literals in the graph that are not negated.
         """
-        return (
-            node
-            for node in self.literals
-            if isinstance(node, LiteralNode)
-        )
+        return (node for node in self.literals if isinstance(node, LiteralNode))
 
     @property
     def negated_literals(self) -> Iterator[NegatedLiteralNode]:
         """Returns the negated literals in the graph.
 
         Returns:
-            Iterator[NegatedLiteralNode]: An iterator over the negated 
+            Iterator[NegatedLiteralNode]: An iterator over the negated
                 literals in the graph.
         """
-        return (
-            node
-            for node in self.literals
-            if isinstance(node, NegatedLiteralNode)
-        )
+        return (node for node in self.literals if isinstance(node, NegatedLiteralNode))
 
     @cached_property
     def num_variables(self) -> int:
