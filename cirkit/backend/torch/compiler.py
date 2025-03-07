@@ -74,11 +74,12 @@ class TorchCompilerState:
         # Since this is useful only for folding, it will be cleared after each circuit compilation.
         self._symbolic_parameters: dict[TorchTensorParameter, TensorParameter] = {}
 
-        # A map from external fate functions identifiers to the corresponding object used to evaluate them
-        self._gate_functions_evals: dict[str, CachedGateFunctionEval] = {}
+        # A map from external gate functions identifiers to a tuple containing the object used to evaluate them
+        # and the shape expected from it
+        self._gate_functions_evals: dict[str, tuple[tuple[int, ...], CachedGateFunctionEval]] = {}
 
     @property
-    def gate_functions(self) -> Mapping[str, CachedGateFunctionEval]:
+    def gate_functions(self) -> Mapping[str, tuple[tuple[int, ...], CachedGateFunctionEval]]:
         return self._gate_functions_evals
 
     def finish_compilation(self):
@@ -92,9 +93,9 @@ class TorchCompilerState:
         # Retrieve whether a tensor parameter has already been compiled
         return p in self._compiled_parameters
 
-    def has_gate_function(self, gate_function_id: str) -> bool:
+    def has_gate_function(self, gate_function_name: str) -> bool:
         # Retrieve whether a gate function has already been compiled
-        return gate_function_id in self._gate_functions_evals
+        return gate_function_name in self._gate_functions_evals
 
     def retrieve_compiled_parameter(self, p: TensorParameter) -> tuple[TorchTensorParameter, int]:
         # Retrieve the compiled parameter: we return the fold index as well.
@@ -104,9 +105,11 @@ class TorchCompilerState:
         # Retrieve the symbolic parameter tensor associated to the compiled one (which is unfolded)
         return self._symbolic_parameters[p]
 
-    def retrieve_gate_function(self, gate_function_id: str) -> CachedGateFunctionEval:
+    def retrieve_gate_function(
+        self, gate_function_name: str
+    ) -> tuple[tuple[int, ...], CachedGateFunctionEval]:
         # Retrieve the external gate function evaluator
-        return self._gate_functions_evals[gate_function_id]
+        return self._gate_functions_evals[gate_function_name]
 
     def register_compiled_parameter(
         self, sp: TensorParameter, cp: TorchTensorParameter, *, fold_idx: int | None = None
@@ -123,9 +126,9 @@ class TorchCompilerState:
         # folded compiled parameter tensor, which is specified by the 'fold_idx'.
         self._compiled_parameters[sp] = (cp, fold_idx)
 
-    def register_gate_function(self, function_id: str, gate_function_eval: CachedGateFunctionEval):
+    def register_gate_function(self, name: str, gate_function_eval: CachedGateFunctionEval):
         # Register the gate function evaluator to the running state of the compiler
-        self._gate_functions_evals[function_id] = gate_function_eval
+        self._gate_functions_evals[name] = gate_function_eval
 
 
 class TorchCompiler(AbstractCompiler):

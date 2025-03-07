@@ -1,6 +1,6 @@
 import itertools
 from collections.abc import Sequence
-from typing import Any, Callable, Mapping, cast
+from typing import Any, Callable, Mapping, Protocol, cast
 
 import torch
 from torch import Tensor, autograd, nn
@@ -102,30 +102,87 @@ def unflatten_dims(x: Tensor, /, *, dims: Sequence[int], shape: Sequence[int]) -
     )
 
 
+class GateFunction(Protocol):
+    def __call__(
+        self, shape: tuple[int, ...], *args: list[Any], **kwargs: Mapping[str, Any]
+    ) -> Tensor:
+        """
+        The interface that a gate function must implement.
+        It takes a shape as input, which is the shape of the expected
+        output from the function.
+
+        Args:
+            shape (tuple[int, ...]): The shape expected as input.
+            *args (list[Any]): The positional arguments for the function.
+            **kwargs (Mapping[str, Any]): The keyword arguments for the function.
+
+        Returns:
+            Tensor: The tensor of shape `shape` that will be used as parameter.
+        """
+        ...
+
+
 class CachedGateFunctionEval(object):
-    def __init__(
-        self, function_id: str, gate_function: Callable[Mapping[str, Tensor], Mapping[str, Tensor]]
-    ):
+    """A cached gate function is a gate function that must be memoized.
+    Upon invocation, it will always compute the same result.
+    """
+
+    def __init__(self, name: str, gate_function: GateFunction):
+        """
+        Initizlize the gate function.
+
+        Args:
+            name (str): The name of the gate function.
+            gate_function (GateFunction): The callable gate function.
+        """
         super().__init__()
-        self._function_id = function_id
+        self._name = __name__
         self._gate_function = gate_function
-        self._cached_output: dict[str, Tensor] | None = None
+        self._cached_output: Tensor | None = None
 
     @property
-    def function_id(self) -> str:
-        return self._function_id
+    def name(self) -> str:
+        """Retrieves the name of the gate function being cached.
+
+        Returns:
+            str: The name of the gate function.
+        """
+        return self._name
 
     @property
-    def gate_function(self) -> Callable[Mapping[str, Tensor], Mapping[str, Tensor]]:
+    def gate_function(self) -> GateFunction:
+        """Retrieves the callable gate function being cached.
+
+        Returns:
+            GateFunction: The gate function.
+        """
         return self._gate_function
 
     def reset_cache(self):
+        """Resets the cache."""
         self._cached_output = None
 
-    def memoize(self, *args, **kwargs):
-        self._cached_output = cast(Mapping[str, Tensor], self.gate_function(*args, **kwargs))
+    def memoize(self, *args: Sequence[Any], **kwargs: Mapping[str, Any]):
+        """Memoize the execution of this gate function. The method takes as input the
+        shape that should be computed by the gate function and positional and keyword arguments.
+        All the arguments are used to compute the value of the gate function which is then cached.
 
-    def __call__(self) -> Mapping[str, Tensor]:
+        Args:
+            shape (tuple[int, ...]): The shape of the output of the gate function.
+            *args (Sequence[Any]): The positional arguments passed to the gate function.
+            **kwargs (Mapping[str, Any]): The keyword arguments passed to the gate function.
+        """
+        self._cached_output = self.gate_function(*args, **kwargs)
+
+    def __call__(self) -> Tensor:
+        """Execute the gate function. This retrieves the memoized value.
+
+        Raises:
+            ValueError: The gate function has not been memoized yet.
+
+        Returns:
+            Tensor: The output of the gate function.
+        """
         if self._cached_output is None:
             raise ValueError("No output mapping is stored. Call memoize() method first")
         return self._cached_output
