@@ -122,7 +122,9 @@ class Layer(ABC):
             A reference copy of the layer, with reference to the parameters.
         """
         ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
-        return type(self)(**self.config, **ref_params, metadata=self.metadata)
+        copy = type(self)(**self.config, **ref_params)
+        copy.metadata = self.metadata
+        return copy
 
     def __repr__(self) -> str:
         config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
