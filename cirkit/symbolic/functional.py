@@ -31,6 +31,7 @@ from cirkit.symbolic.parameters import (
     TensorParameter,
 )
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
+from cirkit.utils.conditional import GateFunctionSpecs, GateFunctionParameterSpecs
 from cirkit.utils.scope import Scope
 
 
@@ -650,22 +651,12 @@ def conjugate(
     )
 
 
-GateFunctionSpecs = dict[str, list[Layer]]
-"""The gate function specification. It is a map from an id (a string) to the list of layers 
-it should parametrize."""
-
-
-GateFunctionParameterSpecs = dict[str, tuple[int, ...]]
-"""The gate function parameter specification.
-It is a map from a gate function name to a parameter group specification.
-The parameter group specification is the shapes that must be computed for that parameter.
-Groups are constructed by collating together parameters with the same shape."""
-
-
-def model_parameterize(
-    circuit: Circuit, *, gate_functions: GateFunctionSpecs
-) -> tuple[Circuit, GateFunctionParameterSpecs]:
-    """Parameterize some layers of a symbolic circuit by means of an externally-provided model.
+def condition_circuit(
+        circuit: Circuit, 
+        *, 
+        gate_functions: GateFunctionSpecs
+    ) -> tuple[Circuit, GateFunctionParameterSpecs]:
+    """Parameterize some layers of a symbolic circuit by means of externally-provided gate functions.
 
     Args:
         circuit: The symbolic circuit.
@@ -678,7 +669,7 @@ def model_parameterize(
             the value of those parameters will come from an externally defined model. The second
             element is a map from a gate function name to a parameter group specification.
             The parameter group specification is the shapes that must be computed for that parameter.
-            Groups are constructed by collating together parameters with the same shape..
+            Groups are constructed by collating together parameters with the same shape.
 
     Raises:
         ValueError: If the given circuit is the output of a circuit operator.
@@ -736,5 +727,4 @@ def model_parameterize(
     output_layers = [layers_map[prev_sli] for prev_sli in circuit.outputs]
     circuit = Circuit(layers, in_layers=in_layers, outputs=output_layers)
 
-    # Return both the resulting circuit and the model parameter specifications
     return circuit, gate_function_specs

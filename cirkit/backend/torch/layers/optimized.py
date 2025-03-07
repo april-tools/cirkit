@@ -167,9 +167,15 @@ class TorchCPTLayer(TorchInnerLayer):
         x = self.semiring.prod(x, dim=1, keepdim=False)
         # weight: (F, Ko, Ki)
         weight = self.weight()
-        return self.semiring.einsum(
-            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-        )
+
+        if len(weight.size()) == 3:
+            return self.semiring.einsum(
+                "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            )
+        else:
+            return self.semiring.einsum(
+                "fbi,fboi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            )
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
         weight = self.weight()

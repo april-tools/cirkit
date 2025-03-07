@@ -187,27 +187,26 @@ class PipelineContext(AbstractContextManager):
         """
         return self._compiler.get_symbolic_circuit(cc)
 
-    def add_gate_function(self, function_id: str, function: GateFunction):
+    def add_gate_function(self, name: str, function: GateFunction):
         """Register an external model implementation to the pipeline context.
 
         Args:
-            model_id: The model identifier.
-            model: The external model object. For example, if using the torch backend, this can be
-                an object of type [torch.nn.Module][torch.nn.Module] whose forward method
-                returns a dictionary mapping parameter tensor names to their value.
+            name: The gate function name.
+            function: The gate function object. For example, if using the torch backend, this can be
+                an object of type [torch.nn.Module][torch.nn.Module].
         """
-        self._compiler.add_gate_function(function_id, function)
+        self._compiler.add_gate_function(name, function)
 
-    def get_gate_function(self, function_id: str) -> GateFunction:
-        """Retrieves the gate function by its identifier.
+    def get_gate_function(self, name: str) -> GateFunction:
+        """Retrieves the gate function by its name.
 
         Args:
-            function_id: The gate function identifier
+            name: The gate function name
 
         Returns:
             The external model object.
         """
-        return self._compiler.get_external_model(function_id)
+        return self._compiler.get_gate_function(name)
 
     def concatenate(self, *cc: CompiledCircuit) -> CompiledCircuit:
         """Circuit concatenation interface for compiled circuits.

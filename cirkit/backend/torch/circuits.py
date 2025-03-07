@@ -17,6 +17,7 @@ from cirkit.backend.torch.graph.modules import (
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.backend.torch.utils import CachedGateFunctionEval
 from cirkit.symbolic.circuit import StructuralProperties
+from cirkit.utils.conditional import GateFunctionParameterSpecs
 from cirkit.utils.scope import Scope
 
 
@@ -188,10 +189,6 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         return self._properties
 
     @property
-    def gate_function_evals(self) -> Mapping[str, CachedGateFunctionEval]:
-        return self._gate_function_evals
-
-    @property
     def layers(self) -> Sequence[TorchLayer]:
         """Retrieve the layers.
 
@@ -240,6 +237,16 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         """
         return self.nodes_outputs
 
+    @property
+    def gate_function_evals(self) -> Mapping[str, CachedGateFunctionEval]:
+        """Return the mapping between a gate function and its evaluation.
+
+        Returns:
+            Mapping[str, CachedGateFunctionEval]: The mapping between a gate
+                function and its evaluation. 
+        """
+        return self._gate_function_evals
+
     def reset_parameters(self) -> None:
         """Reset the parameters of the circuit in-place."""
         # For each layer, initialize its parameters, if any
@@ -255,20 +262,22 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
     def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> LayerAddressBook:
         return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
 
+    def _memoize_gate_functions(self, gate_function_kwargs: Mapping[str, Mapping[str, Any]]):
+        for gate_function_id, gate_function_eval in self._gate_function_evals.items():
+            kwargs = gate_function_kwargs.get(gate_function_id, {})
+            # memoize the gate function execution
+            gate_function_eval.memoize(**kwargs)
+
     def _evaluate_layers(
         self,
         x: Tensor | None,
         *,
         gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> Tensor:
-        # Evaluate the external models and cache their result.
-        # This will be called just before the invokation of the
+        # Memoize the gate functions.This will be called just before the invocation of the
         # [evaluate][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph.evaluate] method.
-        gate_function_kwargs = {} if gate_function_kwargs is None else gate_function_kwargs
-        for gate_function_id, gate_function_eval in self._gate_function_evals.items():
-            kwargs = gate_function_kwargs.get(gate_function_id, {})
-            gate_function_eval.memoize(**kwargs)
-
+        self._memoize_gate_functions({} if gate_function_kwargs is None else gate_function_kwargs)
+        
         # Evaluate layers on the given input
         y = self.evaluate(x)  # (O, B, K)
         return y.transpose(0, 1)  # (B, O, K)
@@ -295,7 +304,7 @@ class TorchCircuit(AbstractTorchCircuit):
         Args:
             x: The tensor input of the circuit, with shape $(B, C, D)$, where B is the batch size,
                 $C$ is the number of channels, and $D$ is the number of variables.
-            gate_function_kwargs: The arguments to pass to each gate function models.
+            gate_function_kwargs: The arguments to pass to each gate function.
 
         Returns:
             Tensor: The tensor output of the circuit, with shape $(B, O, K)$,

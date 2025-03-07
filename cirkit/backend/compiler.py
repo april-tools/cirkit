@@ -211,11 +211,11 @@ class AbstractCompiler(ABC):
     ) -> InitializerCompilationFunc:
         return self._initializers_registry.retrieve_rule(signature)
 
-    def add_gate_function(self, function_id: str, gate_function: GateFunction):
-        self._gate_function_registry[function_id] = gate_function
+    def add_gate_function(self, name: str, gate_function: GateFunction):
+        self._gate_function_registry[name] = gate_function
 
-    def get_gate_function(self, function_id: str) -> GateFunction:
-        return self._gate_function_registry[function_id]
+    def get_gate_function(self, name: str) -> GateFunction:
+        return self._gate_function_registry[name]
 
     def compile(self, sc: Circuit) -> CompiledCircuit:
         if self.is_compiled(sc):
