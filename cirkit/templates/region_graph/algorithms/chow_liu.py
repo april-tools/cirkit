@@ -15,7 +15,7 @@ def ChowLiuTree(
     chunk_size: int | None = None,
     num_categories: int | None = None,
     num_bins: int | None = None,
-    as_region_graph: int | None = False,
+    as_region_graph: bool = True,
 ) -> np.ndarray | RegionGraph:
     """Learns a Chow-Liu Tree and returns it either as a
     list of predecessors (Bayesian net) or as region graph (HCLT).
@@ -34,7 +34,7 @@ def ChowLiuTree(
             categories in bins for ordinal features, e.g. [0, 255] -> [0, 7],
             which is useful for images.
         as_region_graph (Optional[bool]): True to returns a region graph,
-            False to return a list of predecessors.
+            False to return a list of predecessors. Defaults to True.
 
     Returns:
         A Chow-Liu Tree, either a list of predecessors or as a region graph.
