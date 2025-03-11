@@ -12,6 +12,7 @@ from cirkit.symbolic.circuit import (
     CircuitBlock,
     CircuitOperation,
     CircuitOperator,
+    ConditionalCircuit,
     StructuralPropertyError,
     are_compatible,
 )
@@ -725,6 +726,8 @@ def condition_circuit(
         for prev_sl, sl in layers_map.items()
     }
     output_layers = [layers_map[prev_sli] for prev_sli in circuit.outputs]
-    circuit = Circuit(layers, in_layers=in_layers, outputs=output_layers)
+    circuit = ConditionalCircuit(
+        layers, in_layers=in_layers, outputs=output_layers, gate_function_specs=gate_function_specs
+    )
 
     return circuit, gate_function_specs

@@ -14,6 +14,7 @@ from cirkit.utils.algorithms import (
     subgraph,
     topological_ordering,
 )
+from cirkit.utils.conditional import GateFunctionParameterSpecs
 from cirkit.utils.scope import Scope
 
 
@@ -386,6 +387,15 @@ class Circuit(DiAcyclicGraph[Layer]):
         layers, in_layers = subgraph(outputs, self.layer_inputs)
         return Circuit(layers, in_layers, outputs=outputs)
 
+    @property
+    def gate_function_specs(self) -> GateFunctionParameterSpecs | None:
+        """Retrieve the gate function specifications, if any.
+
+        Returns:
+            The gate function specifications or None if the circuit is not a conditional circuit.
+        """
+        return self._gate_function_specs
+
     ##################################### Structural properties ####################################
 
     @cached_property
@@ -502,6 +512,45 @@ class Circuit(DiAcyclicGraph[Layer]):
                 in_layers[sl].extend(b.layer_inputs(sl))
         # Build the circuit and set the operation
         return cls(layers, in_layers, outputs, operation=operation)
+
+
+class ConditionalCircuit(Circuit):
+    """The symbolic conditional circuit representation where
+    some layers are parametrized by external gate functions."""
+
+    def __init__(
+        self,
+        layers: Sequence[Layer],
+        in_layers: Mapping[Layer, Sequence[Layer]],
+        outputs: Sequence[Layer],
+        *,
+        operation: CircuitOperation | None = None,
+        gate_function_specs: GateFunctionParameterSpecs,
+    ) -> None:
+        """Initializes a symbolic circuit.
+
+        Args:
+            layers: The list of symbolic layers.
+            in_layers: A dictionary containing the list of inputs to each layer.
+            outputs: The output layers of the circuit.
+            operation: The optional operation the circuit has been obtained through.
+            gate_function_specs: The specification that the gate functions must
+                follow.
+        """
+        super().__init__(layers, in_layers, outputs, operation=operation)
+        self._gate_function_specs = gate_function_specs
+
+    @property
+    def gate_function_specs(self) -> GateFunctionParameterSpecs:
+        """Retrieve the specifications of this circuit.
+
+        Args:
+            sl: The layer.
+
+        Returns:
+            The gate function specifications..
+        """
+        return self._gate_function_specs
 
 
 def are_compatible(sc1: Circuit, sc2: Circuit) -> bool:
