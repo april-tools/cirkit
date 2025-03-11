@@ -266,15 +266,10 @@ class TorchSumLayer(TorchInnerLayer):
         
         weight = self.weight()
         
-        if len(weight.size()) == 3:
-            # weight: (F, Ko, H * Ki)
-            out = self.semiring.einsum(
-                "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-            )
-        else:
-            out = self.semiring.einsum(
-                "fbi,fboi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-            )
+        # einsum is performed to account for optional weight batch
+        out = self.semiring.einsum(
+            "fbi,f...oi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+        )
 
         return out # shape (F, B, K_o).
 

@@ -405,7 +405,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         # logits: (F, K, N)
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         idx_fold = torch.arange(self.num_folds, device=logits.device)
-        x = logits[idx_fold[:, None], :, x]
+        idx_batch = torch.arange(x.size(1), device=logits.device)
+        x = logits[idx_fold[:, None], idx_batch, :, x]
         return x
 
     def log_partition_function(self) -> Tensor:
