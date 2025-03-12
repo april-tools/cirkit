@@ -222,9 +222,7 @@ class SamplingQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(
-            self, num_samples: int = 1, x: Tensor = None
-    ) -> tuple[Tensor, list[Tensor]]:
+    def __call__(self, num_samples: int = 1, x: Tensor = None) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points.
 
         Args:
@@ -248,9 +246,8 @@ class SamplingQuery(Query):
         # samples: (O, C, K, num_samples, D)
         samples = self._circuit.evaluate(
             module_fn=functools.partial(
-                self._layer_fn,
-                num_samples=num_samples,
-                mixture_samples=mixture_samples),
+                self._layer_fn, num_samples=num_samples, mixture_samples=mixture_samples
+            ),
         )[-1]
         # samples: (num_samples, O, K, D)
         samples = samples.permute(2, 0, 1, 3)
@@ -259,11 +256,11 @@ class SamplingQuery(Query):
         return samples, mixture_samples
 
     def _layer_fn(
-            self,
-            layer: TorchLayer,
-            *inputs: Tensor,
-            num_samples: int,
-            mixture_samples: list[Tensor],
+        self,
+        layer: TorchLayer,
+        *inputs: Tensor,
+        num_samples: int,
+        mixture_samples: list[Tensor],
     ) -> Tensor:
         # Sample from an input layer
         if not inputs:
@@ -323,7 +320,7 @@ class ConditionalSamplingQuery(SamplingQuery):
         self._layerwise_evidence = None
 
     def __call__(
-            self, num_samples: int = 1, x: Tensor = None, integrate_vars: Scope = None
+        self, num_samples: int = 1, x: Tensor = None, integrate_vars: Scope = None
     ) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points based on the provided evidence.
 
@@ -367,9 +364,8 @@ class ConditionalSamplingQuery(SamplingQuery):
         # samples: (O, C, K, num_samples, D)
         samples = self._circuit.evaluate(
             module_fn=functools.partial(
-                self._layer_fn,
-                num_samples=num_samples,
-                mixture_samples=mixture_samples),
+                self._layer_fn, num_samples=num_samples, mixture_samples=mixture_samples
+            ),
         )[-1]
 
         samples = samples.permute(3, 0, 2, 1, 4)
@@ -388,11 +384,11 @@ class ConditionalSamplingQuery(SamplingQuery):
             yield evidence
 
     def _layer_fn(
-            self,
-            layer: TorchLayer,
-            *inputs: Tensor,
-            num_samples: int,
-            mixture_samples: list[Tensor],
+        self,
+        layer: TorchLayer,
+        *inputs: Tensor,
+        num_samples: int,
+        mixture_samples: list[Tensor],
     ) -> Tensor:
         # Sample from an input layer
         if not inputs:

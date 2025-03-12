@@ -142,7 +142,9 @@ def test_factorization_tensor_train(rank: int, factor_param: Parameterization | 
         assert len(sl.weight.nodes) == 1
         weight = sl.weight.nodes[0]
         assert isinstance(weight, ConstantParameter)
-        value = np.reshape(weight.value, newshape=(sl.num_output_units, sl.arity, sl.num_input_units))
+        value = np.reshape(
+            weight.value, newshape=(sl.num_output_units, sl.arity, sl.num_input_units)
+        )
         ones = np.ones(sl.num_input_units)
         zeros = np.zeros(sl.num_input_units)
         for i in range(sl.num_output_units):
