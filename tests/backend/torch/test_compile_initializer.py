@@ -5,7 +5,7 @@ from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.symbolic.initializers import ConstantTensorInitializer
 
 
-def test_constant_tensor_initializer():
+def test_compile_initializer_constant_tensor():
     compiler = TorchCompiler()
     array = np.arange(10)
     symbolic_initializer = ConstantTensorInitializer(array)

@@ -28,20 +28,18 @@ class TorchTuckerLayer(TorchInnerLayer):
         Args:
             num_input_units: The number of input units.
             num_output_units: The number of output units.
-            arity: The arity of the layer, must be 2. Defaults to 2.
+            arity: The arity of the layer. Defaults to 2.
             weight: The weight parameter, which must have shape $(F, K_o, K_i^2)$,
                 where $F$ is the number of folds, $K_o$ is the number output units,
                 and $K_i$ is the number of input units.
 
         Raises:
-            NotImplementedError: If the arity is not equal to 2. Future versions of cirkit
-                will support Tucker layers having arity greter than 2.
+            ValueError: If the arity is less than two.
             ValueError: If the number of input and output units are incompatible with the
                 shape of the weight parameter.
         """
-        # TODO: Generalize Tucker layer to have any arity greater or equal 2
-        if arity != 2:
-            raise NotImplementedError("The Tucker layer is only implemented with arity=2")
+        if arity < 2:
+            raise ValueError("The arity should be at least 2")
         super().__init__(
             num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
         )
@@ -52,6 +50,16 @@ class TorchTuckerLayer(TorchInnerLayer):
                 f"{weight.num_folds} and {weight.shape}, respectively"
             )
         self.weight = weight
+        # Construct the einsum expression that the Tucker layer computes
+        # For instance, if arity == 2 then we have that
+        # self._einsum = ((0, 1, 2), (0, 1, 3), (0, 1, 4, 2, 3), (0, 1, 4))
+        # Also, if arity == 3 then we have that
+        # self._einsum = ((0, 1, 2), (0, 1, 3), (0, 1, 4), (0, 5, 2, 3, 4), (0, 1, 5))
+        self._einsum = (
+            tuple((0, 1, i + 2) for i in range(arity))
+            + ((0, arity + 2, *tuple(i + 2 for i in range(arity))),)
+            + ((0, 1, arity + 2),)
+        )
 
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
@@ -60,7 +68,7 @@ class TorchTuckerLayer(TorchInnerLayer):
 
     @property
     def _weight_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_input_units * self.num_input_units
+        return self.num_output_units, self.num_input_units**self.arity
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -75,14 +83,15 @@ class TorchTuckerLayer(TorchInnerLayer):
         return {"weight": self.weight}
 
     def forward(self, x: Tensor) -> Tensor:
-        # weight: (F, Ko, Ki * Ki) -> (F, Ko, Ki, Ki)
+        # x: (F, H, B, Ki)
+        # weight: (F, Ko, Ki ** arity) -> (F, Ko, Ki, ..., Ki)
         weight = self.weight().view(
-            -1, self.num_output_units, self.num_input_units, self.num_input_units
+            -1, self.num_output_units, *(self.num_input_units for _ in range(self.arity))
         )
         return self.semiring.einsum(
-            "fbi,fbj,foij->fbo",
+            self._einsum,
+            inputs=x.unbind(dim=1),
             operands=(weight,),
-            inputs=(x[:, 0], x[:, 1]),
             dim=-1,
             keepdim=True,
         )
@@ -162,7 +171,7 @@ class TorchCPTLayer(TorchInnerLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
-    def sample(self, x: Tensor, conditional: bool = False) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor, evidence: Tensor = None) -> tuple[Tensor, Tensor]:
         weight = self.weight()
         negative = torch.any(weight < 0.0)
         if negative:
@@ -171,22 +180,20 @@ class TorchCPTLayer(TorchInnerLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
-        # x: (F, H, C, K, num_samples, D)
-        x = torch.sum(x, dim=1, keepdim=True)  # (F, H=1, C, K, num_samples, D)
+        # x: (F, H, K, num_samples, D)
+        x = torch.sum(x, dim=1)  # (F, K, num_samples, D)
 
-        c = x.shape[2]
-        d = x.shape[-1]
-        num_samples = x.shape[-2]
+        num_samples = x.shape[2]
+        d = x.shape[3]
 
         # mixing_distribution: (F, O, K)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f o -> f o n")
-        mixing_indices = E.repeat(mixing_samples, "f o n -> f a c o n d", a=1, c=c, d=d)
+        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
+        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
 
-        x = torch.gather(x, dim=-3, index=mixing_indices)
-        x = x[:, 0]
+        x = torch.gather(x, dim=1, index=mixing_indices)
         return x, mixing_samples
 
 

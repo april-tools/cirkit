@@ -36,8 +36,8 @@ class Parameterization:
     """The settings for a parameterization: the initialization method, the activation
     function to use, and the data type of the parameter tensor."""
 
-    initialization: str
-    """The initialization method."""
+    initialization: str = "normal"
+    """The initialization method. Defaults to 'normal', i.e., sampling from a standard Gaussian."""
     activation: str = "none"
     """The activation function. Defaults to 'none', i.e., no activation."""
     dtype: str = "real"
@@ -51,13 +51,12 @@ class Parameterization:
 class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
     """The protocol of a factory that constructs input layers."""
 
-    def __call__(self, scope: Scope, num_units: int, num_channels: int) -> InputLayer:
+    def __call__(self, scope: Scope, num_units: int) -> InputLayer:
         """Constructs an input layer.
 
         Args:
             scope: The scope of the layer.
             num_units: The number of input units composing the layer.
-            num_channels: The number of channel variables.
 
         Returns:
             InputLayer: An input layer.

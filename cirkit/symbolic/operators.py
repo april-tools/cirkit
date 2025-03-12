@@ -39,9 +39,8 @@ def integrate_embedding_layer(sl: EmbeddingLayer, *, scope: Scope) -> CircuitBlo
             f"The scope of the Embedding layer '{sl.scope}'"
             f" is expected to be a subset of the integration scope '{scope}'"
         )
-    reduce_sum = ReduceSumParameter(sl.weight.shape, axis=2)
-    reduce_prod = ReduceProductParameter(reduce_sum.shape, axis=1)
-    value = Parameter.from_sequence(sl.weight.ref(), reduce_sum, reduce_prod)
+    reduce_sum = ReduceSumParameter(sl.weight.shape, axis=1)
+    value = Parameter.from_unary(reduce_sum, sl.weight.ref())
     sl = ConstantValueLayer(sl.num_output_units, log_space=False, value=value)
     return CircuitBlock.from_layer(sl)
 
@@ -55,9 +54,8 @@ def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> Circui
     if sl.logits is None:
         log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
-        reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=2)
-        reduce_channels = ReduceSumParameter(reduce_lse.shape, axis=1)
-        log_partition = Parameter.from_sequence(sl.logits.ref(), reduce_lse, reduce_channels)
+        reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=1)
+        log_partition = Parameter.from_unary(reduce_lse, sl.logits.ref())
     sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
@@ -71,8 +69,7 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock
     if sl.log_partition is None:
         log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
-        reduce_channels = ReduceSumParameter(sl.log_partition.shape, axis=1)
-        log_partition = Parameter.from_unary(reduce_channels, sl.log_partition.ref())
+        log_partition = sl.log_partition.ref()
     sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
     return CircuitBlock.from_layer(sl)
 
@@ -82,11 +79,6 @@ def multiply_embedding_layers(sl1: EmbeddingLayer, sl2: EmbeddingLayer) -> Circu
         raise ValueError(
             f"Expected Embedding layers to have the same scope,"
             f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
-    if sl1.num_channels != sl2.num_channels:
-        raise ValueError(
-            f"Expected Embedding layers to have the number of channels,"
-            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
         )
     if sl1.num_states != sl2.num_states:
         raise ValueError(
@@ -102,7 +94,6 @@ def multiply_embedding_layers(sl1: EmbeddingLayer, sl2: EmbeddingLayer) -> Circu
     sl = EmbeddingLayer(
         sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
-        num_channels=sl1.num_channels,
         num_states=sl1.num_states,
         weight=weight,
     )
@@ -114,11 +105,6 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
         raise ValueError(
             f"Expected Categorical layers to have the same scope,"
             f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
-    if sl1.num_channels != sl2.num_channels:
-        raise ValueError(
-            f"Expected Categorical layers to have the number of channels,"
-            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
         )
     if sl1.num_categories != sl2.num_categories:
         raise ValueError(
@@ -142,7 +128,6 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
     sl = CategoricalLayer(
         sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
-        num_channels=sl1.num_channels,
         num_categories=sl1.num_categories,
         logits=sl_logits,
     )
@@ -154,11 +139,6 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
         raise ValueError(
             f"Expected Gaussian layers to have the same scope,"
             f" but found '{sl1.scope}' and '{sl2.scope}'"
-        )
-    if sl1.num_channels != sl2.num_channels:
-        raise ValueError(
-            f"Expected Gaussian layers to have the number of channels,"
-            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
         )
 
     mean = Parameter.from_nary(
@@ -185,11 +165,11 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
 
     if sl1.log_partition is not None or sl2.log_partition is not None:
         if sl1.log_partition is None:
-            log_partition1 = ConstantParameter(sl1.num_output_units, sl1.num_channels, value=0.0)
+            log_partition1 = ConstantParameter(sl1.num_output_units, value=0.0)
         else:
             log_partition1 = sl1.log_partition.ref()
         if sl2.log_partition is None:
-            log_partition2 = ConstantParameter(sl2.num_output_units, sl2.num_channels, value=0.0)
+            log_partition2 = ConstantParameter(sl2.num_output_units, value=0.0)
         else:
             log_partition2 = sl2.log_partition.ref()
         log_partition = Parameter.from_binary(
@@ -205,7 +185,6 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
     sl = GaussianLayer(
         sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
-        num_channels=sl1.num_channels,
         mean=mean,
         stddev=stddev,
         log_partition=log_partition,
@@ -219,11 +198,6 @@ def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> Ci
             f"Expected Polynomial layers to have the same scope,"
             f" but found '{sl1.scope}' and '{sl2.scope}'"
         )
-    if sl1.num_channels != sl2.num_channels:
-        raise ValueError(
-            f"Expected Polynomial layers to have the number of channels,"
-            f"but found '{sl1.num_channels}' and '{sl2.num_channels}'"
-        )
 
     shape1, shape2 = sl1.coeff.shape, sl2.coeff.shape
     coeff = Parameter.from_binary(
@@ -235,7 +209,6 @@ def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> Ci
     sl = PolynomialLayer(
         sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
-        num_channels=sl1.num_channels,
         degree=sl1.degree + sl2.degree,
         coeff=coeff,
     )
@@ -264,26 +237,22 @@ def multiply_sum_layers(sl1: SumLayer, sl2: SumLayer) -> CircuitBlock:
 
 
 def differentiate_polynomial_layer(
-    sl: PolynomialLayer, *, var_idx: int, ch_idx: int, order: int = 1
+    sl: PolynomialLayer, *, var_idx: int, order: int = 1
 ) -> CircuitBlock:
     # PolynomialLayer is constructed univariate, but we still take the 2 idx for unified interface
-    assert (var_idx, ch_idx) == (0, 0), "This should not happen"
+    assert var_idx == 0, "This should not happen"
     if order <= 0:
         raise ValueError("The order of differentiation must be positive.")
     coeff = Parameter.from_unary(
         PolynomialDifferential(sl.coeff.shape, order=order), sl.coeff.ref()
     )
-    sl = PolynomialLayer(
-        sl.scope, sl.num_output_units, sl.num_channels, degree=coeff.shape[-1] - 1, coeff=coeff
-    )
+    sl = PolynomialLayer(sl.scope, sl.num_output_units, degree=coeff.shape[-1] - 1, coeff=coeff)
     return CircuitBlock.from_layer(sl)
 
 
 def conjugate_embedding_layer(sl: EmbeddingLayer) -> CircuitBlock:
     weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
-    sl = EmbeddingLayer(
-        sl.scope, sl.num_output_units, sl.num_channels, num_states=sl.num_states, weight=weight
-    )
+    sl = EmbeddingLayer(sl.scope, sl.num_output_units, num_states=sl.num_states, weight=weight)
     return CircuitBlock.from_layer(sl)
 
 
@@ -293,7 +262,6 @@ def conjugate_categorical_layer(sl: CategoricalLayer) -> CircuitBlock:
     sl = CategoricalLayer(
         sl.scope,
         sl.num_output_units,
-        sl.num_channels,
         num_categories=sl.num_categories,
         logits=logits,
         probs=probs,
@@ -304,15 +272,13 @@ def conjugate_categorical_layer(sl: CategoricalLayer) -> CircuitBlock:
 def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
     mean = sl.mean.ref() if sl.mean is not None else None
     stddev = sl.stddev.ref() if sl.stddev is not None else None
-    sl = GaussianLayer(sl.scope, sl.num_output_units, sl.num_channels, mean=mean, stddev=stddev)
+    sl = GaussianLayer(sl.scope, sl.num_output_units, mean=mean, stddev=stddev)
     return CircuitBlock.from_layer(sl)
 
 
 def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
     coeff = Parameter.from_unary(ConjugateParameter(sl.coeff.shape), sl.coeff.ref())
-    sl = PolynomialLayer(
-        sl.scope, sl.num_output_units, sl.num_channels, degree=sl.degree, coeff=coeff
-    )
+    sl = PolynomialLayer(sl.scope, sl.num_output_units, degree=sl.degree, coeff=coeff)
     return CircuitBlock.from_layer(sl)
 
 

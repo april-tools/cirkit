@@ -7,7 +7,7 @@ include = ["cirkit*"]
 
 [project]
 name = "libcirkit"
-version = "0.2.0"
+version = "0.2.1"
 description = "a python framework to build, learn and reason about probabilistic circuits and tensor networks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -70,11 +70,12 @@ docs = [
 ]
 notebooks = [
   "notebook",
-  "torchvision~=0.18.0",
+  "torchvision",
   "matplotlib",
   "scikit-learn",
   "pandas",
-  "h5py"
+  "h5py",
+  "PySDD",
 ]
 
 ################################################################################

@@ -50,8 +50,8 @@ class IntegrateQuery(Query):
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
-            x: An input batch of shape $(B, C, D)$, where $B$ is the batch size, $C$ is the number
-                of channels per variable, and $D$ is the number of variables.
+            x: An input batch of shape $(B, D)$, where $B$ is the batch size,
+                and $D$ is the number of variables.
             integrate_vars: The variables to integrate. It must be a subset of the variables on
                 which the circuit given in the constructor is defined on.
                 The format can be one of the following three:
@@ -87,12 +87,32 @@ class IntegrateQuery(Query):
                     f"was defined over {integrate_vars.shape[1]} != {num_vars} variables"
                 )
         else:
-            # Convert list of scopes to a boolean mask of dimension (B, N) where
-            # N is the number of variables in the circuit's scope.
-            integrate_vars_mask = IntegrateQuery.scopes_to_mask(self._circuit, integrate_vars)
-            integrate_vars_mask = integrate_vars_mask.to(x.device)
+            integrate_vars_mask = self.convert_scopes_to_boolean_mask(integrate_vars, x)
 
         # Check batch sizes of input x and mask are compatible
+        self.check_batch_size_compatibility(integrate_vars_mask, x)
+
+        output = self.retrieve_layerwise_outputs(integrate_vars_mask, x)[-1]
+        # output has shape (O, B, K)
+        return output.transpose(0, 1)  # (B, O, K)
+
+    def convert_scopes_to_boolean_mask(self, integrate_vars, x):
+        # Convert list of scopes to a boolean mask of dimension (B, N) where
+        # N is the number of variables in the circuit's scope.
+        integrate_vars_mask = IntegrateQuery.scopes_to_mask(self._circuit, integrate_vars)
+        integrate_vars_mask = integrate_vars_mask.to(x.device)
+        return integrate_vars_mask
+
+    def retrieve_layerwise_outputs(self, integrate_vars_mask, x) -> list[Tensor]:
+        return self._circuit.evaluate(
+            x,
+            module_fn=functools.partial(
+                IntegrateQuery._layer_fn, integrate_vars_mask=integrate_vars_mask
+            ),
+        )  # (O, B, K)
+
+    @staticmethod
+    def check_batch_size_compatibility(integrate_vars_mask, x):
         if integrate_vars_mask.shape[0] not in (1, x.shape[0]):
             raise ValueError(
                 "The number of scopes to integrate over must "
@@ -100,14 +120,6 @@ class IntegrateQuery(Query):
                 "want to broadcast. Found #inputs = "
                 f"{x.shape[0]} != {integrate_vars_mask.shape[0]} = len(integrate_vars)"
             )
-
-        output = self._circuit.evaluate(
-            x,
-            module_fn=functools.partial(
-                IntegrateQuery._layer_fn, integrate_vars_mask=integrate_vars_mask
-            ),
-        )  # (O, B, K)
-        return output.transpose(0, 1)  # (B, O, K)
 
     @staticmethod
     def _layer_fn(layer: TorchLayer, x: Tensor, *, integrate_vars_mask: Tensor) -> Tensor:
@@ -211,9 +223,109 @@ class SamplingQuery(Query):
         self._circuit = circuit
 
     def __call__(
-        self, num_samples: int = 1, x: Tensor = None, integrate_vars: Scope = None
+            self, num_samples: int = 1, x: Tensor = None
     ) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points.
+
+        Args:
+            num_samples: The number of samples to return.
+            x: An input batch of shape $(B, C, D)$, where $B$ is the batch size, $C$ is the number
+                of channels per variable, and $D$ is the number of variables.
+
+        Return:
+            A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
+            variables the circuit is defined on, and (ii) the samples of the finitely-discrete
+            latent variables associated to the sum units. The samples (i) are returned as a
+            tensor of shape (num_samples, num_variables).
+
+        Raises:
+            ValueError: if the number of samples is not a positive number or only integrate_vars is specified without x.
+        """
+        if num_samples <= 0:
+            raise ValueError("The number of samples must be a positive number")
+
+        mixture_samples: list[Tensor] = []
+        # samples: (O, C, K, num_samples, D)
+        samples = self._circuit.evaluate(
+            module_fn=functools.partial(
+                self._layer_fn,
+                num_samples=num_samples,
+                mixture_samples=mixture_samples),
+        )[-1]
+        # samples: (num_samples, O, K, D)
+        samples = samples.permute(2, 0, 1, 3)
+        # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
+        samples = samples[:, 0, 0]  # (num_samples, D)
+        return samples, mixture_samples
+
+    def _layer_fn(
+            self,
+            layer: TorchLayer,
+            *inputs: Tensor,
+            num_samples: int,
+            mixture_samples: list[Tensor],
+    ) -> Tensor:
+        # Sample from an input layer
+        if not inputs:
+            return self.sample_from_input_layer(layer, mixture_samples, num_samples)
+
+        # Sample through an inner layer
+        assert isinstance(layer, TorchInnerLayer)
+        samples, mix_samples = layer.sample(*inputs)
+        if mix_samples is not None:
+            mixture_samples.append(mix_samples)
+        return samples
+
+    def sample_from_input_layer(self, layer, mixture_samples, num_samples):
+        assert isinstance(layer, TorchInputLayer)
+        samples = layer.sample(num_samples)
+        samples = self._pad_samples(samples, layer.scope_idx)
+        mixture_samples.append(samples)
+        return samples
+
+    def _pad_samples(self, samples: Tensor, scope_idx: Tensor) -> Tensor:
+        """Pads univariate samples to the size of the scope of the circuit (output dimension)
+        according to scope for compatibility in downstream inner nodes.
+        """
+        if scope_idx.shape[1] != 1:
+            raise NotImplementedError("Padding is only implemented for univariate samples")
+
+        # padded_samples: (F, K, num_samples, D)
+        padded_samples = torch.zeros(
+            (*samples.shape, len(self._circuit.scope)), device=samples.device, dtype=samples.dtype
+        )
+        fold_idx = torch.arange(samples.shape[0], device=samples.device)
+        padded_samples[fold_idx, :, :, scope_idx.squeeze(dim=1)] = samples
+        return padded_samples
+
+
+class ConditionalSamplingQuery(SamplingQuery):
+    """The conditional sampling query object."""
+
+    def __init__(self, circuit: TorchCircuit) -> None:
+        """Initialize a conditional sampling query object. Currently, only sampling from the joint distribution
+            is supported, i.e., sampling won't work in the case of circuits obtained by
+            marginalization, or by observing evidence.
+
+        Args:
+            circuit: The circuit to sample from.
+
+        Raises:
+            ValueError: If the circuit to sample from is not normalised.
+        """
+        if not circuit.properties.smooth or not circuit.properties.decomposable:
+            raise ValueError(
+                f"The circuit to sample from must be smooth and decomposable, "
+                f"but found {circuit.properties}"
+            )
+        # TODO: add a check to verify the circuit is monotonic and normalized?
+        super().__init__(circuit=circuit)
+        self._layerwise_evidence = None
+
+    def __call__(
+            self, num_samples: int = 1, x: Tensor = None, integrate_vars: Scope = None
+    ) -> tuple[Tensor, list[Tensor]]:
+        """Sample a number of data points based on the provided evidence.
 
         Args:
             num_samples: The number of samples to return.
@@ -243,18 +355,13 @@ class SamplingQuery(Query):
                 "For conditional samples, both input to condition and scope to integrate out must be specified"
             )
 
-        conditional_sampling = False
-        if (x is not None) and (integrate_vars is not None):
-            conditional_sampling = True
+        intgrateQuery = IntegrateQuery(self._circuit)
+        integrate_vars_mask = intgrateQuery.convert_scopes_to_boolean_mask(integrate_vars, x)
 
-        if conditional_sampling:
-            # the cct could be in the eval mode; therefore set it to training, perform cond. sampling,
-            # and then reset to current state
-            is_training = self._circuit.training
-            self._circuit.train()
-            int_query = IntegrateQuery(self._circuit)
-            int_query(x, integrate_vars=integrate_vars)
-            self._circuit.train(is_training)
+        # Check batch sizes of input x and mask are compatible
+        intgrateQuery.check_batch_size_compatibility(integrate_vars_mask, x)
+
+        self._layerwise_evidence = intgrateQuery.retrieve_layerwise_outputs(integrate_vars_mask, x)
 
         mixture_samples: list[Tensor] = []
         # samples: (O, C, K, num_samples, D)
@@ -262,57 +369,41 @@ class SamplingQuery(Query):
             module_fn=functools.partial(
                 self._layer_fn,
                 num_samples=num_samples,
-                mixture_samples=mixture_samples,
-                conditional=conditional_sampling,
-            ),
-        )
-        # samples: (num_samples, O, K, C, D)
+                mixture_samples=mixture_samples),
+        )[-1]
+
         samples = samples.permute(3, 0, 2, 1, 4)
         # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
         samples = samples[:, 0, 0]  # (num_samples, C, D)
-        # if integration scopes are given, combine the conditioned input with drawn samples
-        if conditional_sampling:
-            marginalized_scope_ids = [i for i in range(x.shape[2]) if i in integrate_vars]
-            non_marginalized_scope_ids = [i for i in range(x.shape[2]) if i not in integrate_vars]
-            x[..., marginalized_scope_ids] = 0.0
-            samples[..., non_marginalized_scope_ids] = 0.0
-            samples = samples + x
+        # combine the conditioned scopes and the observed scopes
+        marginalized_scope_ids = [i for i in range(x.shape[2]) if i in integrate_vars]
+        non_marginalized_scope_ids = [i for i in range(x.shape[2]) if i not in integrate_vars]
+        x[..., marginalized_scope_ids] = 0.0
+        samples[..., non_marginalized_scope_ids] = 0.0
+        samples = samples + x
         return samples, mixture_samples
 
+    def _layerwise_evidence_generator(self):
+        for evidence in self._layerwise_evidence:
+            yield evidence
+
     def _layer_fn(
-        self,
-        layer: TorchLayer,
-        *inputs: Tensor,
-        num_samples: int,
-        mixture_samples: list[Tensor],
-        conditional: bool = False,
+            self,
+            layer: TorchLayer,
+            *inputs: Tensor,
+            num_samples: int,
+            mixture_samples: list[Tensor],
     ) -> Tensor:
         # Sample from an input layer
         if not inputs:
-            assert isinstance(layer, TorchInputLayer)
-            samples = layer.sample(num_samples)
-            samples = self._pad_samples(samples, layer.scope_idx)
-            mixture_samples.append(samples)
-            return samples
+            return self.sample_from_input_layer(layer, mixture_samples, num_samples)
+
+        inner_layer_evidence_generator = self._layerwise_evidence_generator()
+        inner_layer_evidence = next(inner_layer_evidence_generator)
 
         # Sample through an inner layer
         assert isinstance(layer, TorchInnerLayer)
-        samples, mix_samples = layer.sample(*inputs, conditional=conditional)
+        samples, mix_samples = layer.sample(*inputs, evidence=inner_layer_evidence)
         if mix_samples is not None:
             mixture_samples.append(mix_samples)
         return samples
-
-    def _pad_samples(self, samples: Tensor, scope_idx: Tensor) -> Tensor:
-        """Pads univariate samples to the size of the scope of the circuit (output dimension)
-        according to scope for compatibility in downstream inner nodes.
-        """
-        if scope_idx.shape[1] != 1:
-            raise NotImplementedError("Padding is only implemented for univariate samples")
-
-        # padded_samples: (F, C, K, num_samples, D)
-        padded_samples = torch.zeros(
-            (*samples.shape, len(self._circuit.scope)), device=samples.device, dtype=samples.dtype
-        )
-        fold_idx = torch.arange(samples.shape[0], device=samples.device)
-        padded_samples[fold_idx, :, :, :, scope_idx.squeeze(dim=1)] = samples
-        return padded_samples
