@@ -222,13 +222,11 @@ class SamplingQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, num_samples: int = 1, x: Tensor = None) -> tuple[Tensor, list[Tensor]]:
+    def __call__(self, num_samples: int = 1) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points.
 
         Args:
             num_samples: The number of samples to return.
-            x: An input batch of shape $(B, C, D)$, where $B$ is the batch size, $C$ is the number
-                of channels per variable, and $D$ is the number of variables.
 
         Return:
             A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
@@ -237,13 +235,13 @@ class SamplingQuery(Query):
             tensor of shape (num_samples, num_variables).
 
         Raises:
-            ValueError: if the number of samples is not a positive number or only integrate_vars is specified without x.
+            ValueError: if the number of samples is not a positive number.
         """
         if num_samples <= 0:
             raise ValueError("The number of samples must be a positive number")
 
         mixture_samples: list[Tensor] = []
-        # samples: (O, C, K, num_samples, D)
+        # samples: (O, K, num_samples, D)
         samples = self._circuit.evaluate(
             module_fn=functools.partial(
                 self._layer_fn, num_samples=num_samples, mixture_samples=mixture_samples
@@ -308,7 +306,7 @@ class ConditionalSamplingQuery(SamplingQuery):
             circuit: The circuit to sample from.
 
         Raises:
-            ValueError: If the circuit to sample from is not normalised.
+            ValueError: If the circuit to sample from is not smooth and decomposable.
         """
         if not circuit.properties.smooth or not circuit.properties.decomposable:
             raise ValueError(
@@ -326,21 +324,16 @@ class ConditionalSamplingQuery(SamplingQuery):
 
         Args:
             num_samples: The number of samples to return.
-            x: An input batch of shape $(B, C, D)$, where $B$ is the batch size, $C$ is the number
-                of channels per variable, and $D$ is the number of variables.
+            x: An input batch of shape $(B, D)$, where $B$ is the batch size and $D$ is the number of variables.
             integrate_vars: The variables to integrate. It must be a subset of the variables on
-                which the circuit given in the constructor is defined on.
-                The format can be one of the following three:
-                    1. Tensor of shape (B, D) where B is the batch size and D is the number of
-                        variables in the scope of the circuit. Its dtype should be torch.bool
-                        and have True in the positions of random variables that should be
-                        marginalised out and False elsewhere.
+                which the circuit given in the constructor is defined on. At the moment, only Scope type is supported
+                and the same integration mask is applied for all entries of the batch.
 
         Return:
             A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
             variables the circuit is defined on, and (ii) the samples of the finitely-discrete
             latent variables associated to the sum units. The samples (i) are returned as a
-            tensor of shape (num_samples, num_channels, num_variables).
+            tensor of shape (num_samples, num_variables).
 
         Raises:
             ValueError: if the number of samples is not a positive number or only integrate_vars is specified without x.
@@ -361,19 +354,20 @@ class ConditionalSamplingQuery(SamplingQuery):
         self._layerwise_evidence = intgrateQuery.retrieve_layerwise_outputs(integrate_vars_mask, x)
 
         mixture_samples: list[Tensor] = []
-        # samples: (O, C, K, num_samples, D)
+        # samples: (O, K, num_samples, D)
         samples = self._circuit.evaluate(
             module_fn=functools.partial(
                 self._layer_fn, num_samples=num_samples, mixture_samples=mixture_samples
             ),
         )[-1]
 
-        samples = samples.permute(3, 0, 2, 1, 4)
+        # samples: (num_samples, O, K, D)
+        samples = samples.permute(2, 0, 1, 3)
         # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
-        samples = samples[:, 0, 0]  # (num_samples, C, D)
+        samples = samples[:, 0, 0]  # (num_samples, D)
         # combine the conditioned scopes and the observed scopes
-        marginalized_scope_ids = [i for i in range(x.shape[2]) if i in integrate_vars]
-        non_marginalized_scope_ids = [i for i in range(x.shape[2]) if i not in integrate_vars]
+        marginalized_scope_ids = [i for i in range(x.shape[1]) if i in integrate_vars]
+        non_marginalized_scope_ids = [i for i in range(x.shape[1]) if i not in integrate_vars]
         x[..., marginalized_scope_ids] = 0.0
         samples[..., non_marginalized_scope_ids] = 0.0
         samples = samples + x

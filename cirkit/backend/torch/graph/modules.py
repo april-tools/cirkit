@@ -313,8 +313,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 the module itself is used.
 
         Returns:
-            A tuple, where the first element is the output tensor of the complete Torch graph,
-            and the second is a list of Tensors corresponding to the outputs of each layer from input to output.
+            A list of Tensors corresponding to the outputs of each layer from input to output.
             If the Torch graph has multiple outputs, then output of the last layer will be stacked.
 
         Raises:

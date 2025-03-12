@@ -656,9 +656,6 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return log_partition.unsqueeze(dim=1)  # (F, 1, K)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        # if noise is not None:
-        #     dist = distributions.Normal(loc=self.mean(), scale=torch.clamp(self.stddev() - noise, min=1e-5))
-        # else:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
         samples = dist.sample((num_samples,))  # (N, F, K)
         samples = samples.permute(1, 2, 0)  # (F, K, N)
