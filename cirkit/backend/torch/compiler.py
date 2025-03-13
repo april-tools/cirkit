@@ -1,11 +1,11 @@
 import functools
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from itertools import chain
 from typing import cast
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from cirkit.backend.compiler import (
     AbstractCompiler,
@@ -14,7 +14,12 @@ from cirkit.backend.compiler import (
     CompilerParameterRegistry,
 )
 from cirkit.backend.registry import CompilerRegistry
-from cirkit.backend.torch.circuits import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
+from cirkit.backend.torch.circuits import (
+    AbstractTorchCircuit,
+    TorchCircuit,
+    TorchConditionalCircuit,
+    TorchConstantCircuit,
+)
 from cirkit.backend.torch.graph.folding import build_folded_graph
 from cirkit.backend.torch.graph.optimize import (
     GraphOptPattern,
@@ -40,6 +45,7 @@ from cirkit.backend.torch.optimization.registry import (
     ParameterOptRegistry,
 )
 from cirkit.backend.torch.parameters.nodes import (
+    TorchGateFunctionParameter,
     TorchParameterNode,
     TorchParameterOp,
     TorchPointerParameter,
@@ -52,7 +58,8 @@ from cirkit.backend.torch.rules import (
     DEFAULT_PARAMETER_COMPILATION_RULES,
 )
 from cirkit.backend.torch.semiring import Semiring, SemiringImpl
-from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
+from cirkit.backend.torch.utils import CachedGateFunctionEval
+from cirkit.symbolic.circuit import Circuit, ConditionalCircuit, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import Parameter, ParameterNode, TensorParameter
@@ -72,13 +79,32 @@ class TorchCompilerState:
         # Since this is useful only for folding, it will be cleared after each circuit compilation.
         self._symbolic_parameters: dict[TorchTensorParameter, TensorParameter] = {}
 
-    def finish_compilation(self) -> None:
+        # A map from external gate functions identifiers to a tuple containing the object used to evaluate them
+        # and the shape expected from it
+        self._gate_functions_evals: dict[str, tuple[tuple[int, ...], CachedGateFunctionEval]] = {}
+        # A map from external gate functions identifiers to a tuple containing the object used to evaluate them
+        # and the shape expected from it
+        self._gate_functions_evals: dict[str, tuple[tuple[int, ...], CachedGateFunctionEval]] = {}
+
+    @property
+    def gate_functions(self) -> Mapping[str, tuple[tuple[int, ...], CachedGateFunctionEval]]:
+    def gate_functions(self) -> Mapping[str, tuple[tuple[int, ...], CachedGateFunctionEval]]:
+        return self._gate_functions_evals
+
+    def finish_compilation(self):
         # Clear the map from (unfolded) compiled parameter tensors to symbolic ones
-        self._symbolic_parameters.clear()
+        self._symbolic_parameters = {}
+
+        # Clear the map of gate functions
+        self._gate_functions_evals = {}
 
     def has_compiled_parameter(self, p: TensorParameter) -> bool:
         # Retrieve whether a tensor parameter has already been compiled
         return p in self._compiled_parameters
+
+    def has_gate_function(self, gate_function_name: str) -> bool:
+        # Retrieve whether a gate function has already been compiled
+        return gate_function_name in self._gate_functions_evals
 
     def retrieve_compiled_parameter(self, p: TensorParameter) -> tuple[TorchTensorParameter, int]:
         # Retrieve the compiled parameter: we return the fold index as well.
@@ -88,9 +114,15 @@ class TorchCompilerState:
         # Retrieve the symbolic parameter tensor associated to the compiled one (which is unfolded)
         return self._symbolic_parameters[p]
 
+    def retrieve_gate_function(
+        self, gate_function_name: str
+    ) -> tuple[tuple[int, ...], CachedGateFunctionEval]:
+        # Retrieve the external gate function evaluator
+        return self._gate_functions_evals[gate_function_name]
+
     def register_compiled_parameter(
         self, sp: TensorParameter, cp: TorchTensorParameter, *, fold_idx: int | None = None
-    ) -> None:
+    ):
         # Register a link from a symbolic parameter tensor to a compiled parameter tensor.
         if fold_idx is None:
             # We are registering an unfolded compiled parameter tensor
@@ -102,6 +134,10 @@ class TorchCompilerState:
         # So, we associate the symbolic parameter tensor to a particular slice of the
         # folded compiled parameter tensor, which is specified by the 'fold_idx'.
         self._compiled_parameters[sp] = (cp, fold_idx)
+
+    def register_gate_function(self, name: str, gate_function_eval: CachedGateFunctionEval):
+        # Register the gate function evaluator to the running state of the compiler
+        self._gate_functions_evals[name] = gate_function_eval
 
 
 class TorchCompiler(AbstractCompiler):
@@ -217,22 +253,35 @@ class TorchCompiler(AbstractCompiler):
             in_layers[layer] = ins
             compiled_layers_map[sl] = layer
 
-        # If the symbolic circuit being compiled has empty scope,
-        # then return a 'constant circuit' whose interface does not require inputs
-        cc_cls = TorchCircuit if sc.scope else TorchConstantCircuit
-
         # Construct the sequence of output layers
         outputs = [compiled_layers_map[sl] for sl in sc.outputs]
 
-        # Construct the tensorized circuit
+        # Collect the layers for the tensorized circuit
         layers = list(compiled_layers_map.values())
-        cc = cc_cls(
-            sc.scope,
-            layers=layers,
-            in_layers=in_layers,
-            outputs=outputs,
-            properties=sc.properties,
-        )
+
+        # Prepare the arguments for the torch circuit
+        cc_kwargs = {
+            "scope": sc.scope,
+            "layers": layers,
+            "in_layers": in_layers,
+            "outputs": outputs,
+            "properties": sc.properties,
+        }
+
+        if isinstance(sc, ConditionalCircuit):
+            # Compile a conditional circuit if the symbolic one is conditional
+            cc_cls = TorchConditionalCircuit
+            cc_kwargs["gate_function_evals"] = self._state.gate_functions
+            cc_kwargs["gate_function_specs"] = sc.gate_function_specs
+        elif not sc.scope:
+            # If the symbolic circuit being compiled has empty scope,
+            # then return a 'constant circuit' whose interface does not require inputs
+            cc_cls = TorchConstantCircuit
+        else:
+            cc_cls = TorchCircuit
+
+        # Instantiate the circuit
+        cc = cc_cls(**cc_kwargs)
 
         # Post-process the compiled circuit, i.e.,
         # optionally apply optimizations to it and then fold it
@@ -272,14 +321,21 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
     )
 
     # Instantiate a folded circuit
-    return type(cc)(
-        cc.scope,
-        layers,
-        in_layers,
-        outputs,
-        properties=cc.properties,
-        fold_idx_info=fold_idx_info,
-    )
+    cc_kwargs = {
+        "scope": cc.scope,
+        "layers": layers,
+        "in_layers": in_layers,
+        "outputs": outputs,
+        "properties": cc.properties,
+        "fold_idx_info": fold_idx_info,
+    }
+
+    if isinstance(cc, TorchConditionalCircuit):
+        cc_kwargs["gate_function_evals"] = cc.gate_function_evals
+        cc_kwargs["gate_function_specs"] = cc.gate_function_specs
+
+    cc = type(cc)(**cc_kwargs)
+    return cc
 
 
 def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> TorchLayer:
@@ -396,6 +452,21 @@ def _fold_parameter_nodes_group(
             )
         )
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
+    # Catch the case we are folding parameters obtained from an external function
+    if issubclass(fold_node_cls, TorchGateFunctionParameter):
+        assert all(isinstance(p, TorchGateFunctionParameter) for p in group)
+        if len(group) == 1:
+            # Catch the case we are folding a single torch function parameter
+            # In such a case, we just return it as it is
+            return group[0]
+        # Catch the case we are folding multiple torch function parameters
+        fold_idx: list[int] = list(chain.from_iterable(p.fold_idx for p in group))
+        return TorchGateFunctionParameter(
+            *group[0].shape,
+            gate_function_eval=group[0].gate_function_eval,
+            name=group[0].name,
+            fold_idx=fold_idx,
+        )
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)
     return fold_node_cls(**group[0].config, num_folds=len(group))
@@ -505,7 +576,20 @@ def _optimize_layers(
     if optimize_result is None:
         return cc, False
     layers, in_layers, outputs = optimize_result
-    cc = type(cc)(cc.scope, layers, in_layers, outputs, properties=cc.properties)
+
+    cc_kwargs = {
+        "scope": cc.scope,
+        "layers": layers,
+        "in_layers": in_layers,
+        "outputs": outputs,
+        "properties": cc.properties,
+    }
+
+    if isinstance(cc, TorchConditionalCircuit):
+        cc_kwargs["gate_function_evals"] = cc.gate_function_evals
+        cc_kwargs["gate_function_specs"] = cc.gate_function_specs
+
+    cc = type(cc)(**cc_kwargs)
     return cc, True
 
 

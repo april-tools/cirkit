@@ -7,6 +7,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchClampParameter,
     TorchConjugateParameter,
     TorchExpParameter,
+    TorchGateFunctionParameter,
     TorchGaussianProductLogPartition,
     TorchGaussianProductMean,
     TorchGaussianProductStddev,
@@ -31,12 +32,14 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchSumParameter,
     TorchTensorParameter,
 )
+from cirkit.backend.torch.utils import CachedGateFunctionEval
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.parameters import (
     ClampParameter,
     ConjugateParameter,
     ConstantParameter,
     ExpParameter,
+    GateFunctionParameter,
     GaussianProductLogPartition,
     GaussianProductMean,
     GaussianProductStddev,
@@ -105,6 +108,25 @@ def compile_reference_parameter(
     # and wrap it in a pointer parameter node.
     compiled_p, fold_idx = compiler.state.retrieve_compiled_parameter(p.deref())
     return TorchPointerParameter(compiled_p, fold_idx=fold_idx)
+
+
+def compile_gate_function_parameter(
+    compiler: "TorchCompiler", p: GateFunctionParameter
+) -> TorchGateFunctionParameter:
+    # Register the external model to the running state of the compiler, if needed
+    if compiler.state.has_gate_function(p.name):
+        # compiler keeps track of the shape and evaluation of gate functions
+        gate_function_eval = compiler.state.retrieve_gate_function(p.name)
+    else:
+        # Retrieve the external model, based on the model id
+        gate_function = compiler.get_gate_function(p.name)
+        # Build the external model evaluator, and register it
+        gate_function_eval = CachedGateFunctionEval(p.name, gate_function)
+        compiler.state.register_gate_function(p.name, gate_function_eval)
+    # Build the torch model parameter computational node
+    return TorchGateFunctionParameter(
+        *p.shape, gate_function_eval=gate_function_eval, name=p.name, fold_idx=p.index
+    )
 
 
 def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
@@ -263,6 +285,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCom
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,
+    GateFunctionParameter: compile_gate_function_parameter,
     IndexParameter: compile_index_parameter,
     SumParameter: compile_sum_parameter,
     HadamardParameter: compile_hadamard_parameter,

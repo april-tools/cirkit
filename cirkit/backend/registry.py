@@ -27,9 +27,8 @@ class CompilerRegistry(Generic[RegistrySign, RegistryFunc], ABC):
         self._rules = {} if rules is None else rules
 
     @classmethod
-    @abstractmethod
     def _validate_rule_function(cls, func: RegistryFunc) -> bool:
-        ...
+        return True
 
     @classmethod
     def _retrieve_signature(cls, func: RegistryFunc) -> RegistrySign:

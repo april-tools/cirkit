@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from cirkit.backend.torch.graph.modules import AbstractTorchModule
+from cirkit.backend.torch.utils import CachedGateFunctionEval
 
 
 class TorchParameterNode(AbstractTorchModule, ABC):
@@ -264,14 +265,14 @@ class TorchPointerParameter(TorchParameterInput):
         return self._parameter.shape
 
     @property
-    def config(self) -> dict[str, Any]:
-        return {"parameter": self._parameter}
-
-    @property
     def fold_idx(self) -> list[int] | None:
         if self._fold_idx is None:
             return None
         return self._fold_idx.cpu().tolist()
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {"parameter": self._parameter}
 
     def deref(self) -> TorchTensorParameter:
         return self._parameter
@@ -281,6 +282,54 @@ class TorchPointerParameter(TorchParameterInput):
         if self._fold_idx is None:
             return x
         return x[self._fold_idx]
+
+
+class TorchGateFunctionParameter(TorchParameterInput):
+    def __init__(
+        self,
+        *shape: int,
+        gate_function_eval: CachedGateFunctionEval,
+        name: str,
+        fold_idx: int | list[int],
+    ):
+        fold_idx = fold_idx if isinstance(fold_idx, list) else [fold_idx]
+        super().__init__(num_folds=len(fold_idx))
+        self._gate_function_eval = gate_function_eval
+        self._shape = shape
+        self._name = name
+        self.register_buffer("_fold_idx", torch.tensor(fold_idx))
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self._shape
+
+    @property
+    def gate_function_eval(self) -> CachedGateFunctionEval:
+        return self._gate_function_eval
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def fold_idx(self) -> list[int]:
+        return self._fold_idx.cpu().tolist()
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {
+            "shape": self._shape,
+            "gate_function_eval": self.gate_function_eval,
+            "name": self._name,
+        }
+
+    def forward(self) -> Tensor:
+        # A dictionary from gate functions to their tensor value
+        y = self.gate_function_eval()  # shape: (B, group_size, K_1, ..., K_n)
+        # Slice the tensor by using the fold index
+        y = y[:, self._fold_idx]  # (B, F, K_1, ..., K_n)
+        # flat the batch dimension as if they were foldings
+        return y.permute(1, 0, *tuple(range(2, len(y.size())))) # (F, K_1, ..., K_n)
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
