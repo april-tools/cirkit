@@ -514,6 +514,45 @@ class Circuit(DiAcyclicGraph[Layer]):
         return cls(layers, in_layers, outputs, operation=operation)
 
 
+class ConditionalCircuit(Circuit):
+    """The symbolic conditional circuit representation where
+    some layers are parametrized by external gate functions."""
+
+    def __init__(
+        self,
+        layers: Sequence[Layer],
+        in_layers: Mapping[Layer, Sequence[Layer]],
+        outputs: Sequence[Layer],
+        *,
+        operation: CircuitOperation | None = None,
+        gate_function_specs: GateFunctionParameterSpecs,
+    ) -> None:
+        """Initializes a symbolic circuit.
+
+        Args:
+            layers: The list of symbolic layers.
+            in_layers: A dictionary containing the list of inputs to each layer.
+            outputs: The output layers of the circuit.
+            operation: The optional operation the circuit has been obtained through.
+            gate_function_specs: The specification that the gate functions must
+                follow.
+        """
+        super().__init__(layers, in_layers, outputs, operation=operation)
+        self._gate_function_specs = gate_function_specs
+
+    @property
+    def gate_function_specs(self) -> GateFunctionParameterSpecs:
+        """Retrieve the specifications of this circuit.
+
+        Args:
+            sl: The layer.
+
+        Returns:
+            The gate function specifications..
+        """
+        return self._gate_function_specs
+
+
 def are_compatible(sc1: Circuit, sc2: Circuit) -> bool:
     """Check if two symbolic circuits are compatible.
      Note that compatibility is a commutative property of circuits.

@@ -58,7 +58,7 @@ from cirkit.backend.torch.rules import (
 )
 from cirkit.backend.torch.semiring import Semiring, SemiringImpl
 from cirkit.backend.torch.utils import CachedGateFunctionEval
-from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
+from cirkit.symbolic.circuit import Circuit, ConditionalCircuit, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import Parameter, ParameterNode, TensorParameter
@@ -80,10 +80,10 @@ class TorchCompilerState:
 
         # A map from external gate functions identifiers to a tuple containing the object used to evaluate them
         # and the shape expected from it
-        self._gate_functions_evals: dict[str, tuple[tuple[int, ...], CachedGateFunctionEval]] = {}
+        self._gate_functions_evals: Mapping[Mapping[str, CachedGateFunctionEval]] = {}
 
     @property
-    def gate_functions(self) -> Mapping[str, tuple[tuple[int, ...], CachedGateFunctionEval]]:
+    def gate_functions(self) -> Mapping[str, CachedGateFunctionEval]:
         return self._gate_functions_evals
 
     def finish_compilation(self):
@@ -248,17 +248,13 @@ class TorchCompiler(AbstractCompiler):
             in_layers[layer] = ins
             compiled_layers_map[sl] = layer
 
-        # If the symbolic circuit being compiled has empty scope,
-        # then return a 'constant circuit' whose interface does not require inputs
-        cc_cls = TorchCircuit if sc.scope else TorchConstantCircuit
-
         # Construct the sequence of output layers
         outputs = [compiled_layers_map[sl] for sl in sc.outputs]
 
-        # Retrieve the gate functions
+        # Retrieve the external gate function evaluators
         gate_function_evals = self._state.gate_functions
 
-        # Collect the layers for the tensorized circuit
+        # Construct the tensorized circuit
         layers = list(compiled_layers_map.values())
         cc = cc_cls(
             sc.scope,
