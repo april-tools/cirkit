@@ -17,7 +17,6 @@ from cirkit.backend.registry import CompilerRegistry
 from cirkit.backend.torch.circuits import (
     AbstractTorchCircuit,
     TorchCircuit,
-    TorchConditionalCircuit,
     TorchConstantCircuit,
 )
 from cirkit.backend.torch.graph.folding import build_folded_graph
@@ -59,7 +58,7 @@ from cirkit.backend.torch.rules import (
 )
 from cirkit.backend.torch.semiring import Semiring, SemiringImpl
 from cirkit.backend.torch.utils import CachedGateFunctionEval
-from cirkit.symbolic.circuit import Circuit, ConditionalCircuit, pipeline_topological_ordering
+from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import Parameter, ParameterNode, TensorParameter
@@ -249,35 +248,26 @@ class TorchCompiler(AbstractCompiler):
             in_layers[layer] = ins
             compiled_layers_map[sl] = layer
 
+        # If the symbolic circuit being compiled has empty scope,
+        # then return a 'constant circuit' whose interface does not require inputs
+        cc_cls = TorchCircuit if sc.scope else TorchConstantCircuit
+
         # Construct the sequence of output layers
         outputs = [compiled_layers_map[sl] for sl in sc.outputs]
 
+        # Retrieve the gate functions
+        gate_function_evals = self._state.gate_functions
+
         # Collect the layers for the tensorized circuit
         layers = list(compiled_layers_map.values())
-
-        # Prepare the arguments for the torch circuit
-        cc_kwargs = {
-            "scope": sc.scope,
-            "layers": layers,
-            "in_layers": in_layers,
-            "outputs": outputs,
-            "properties": sc.properties,
-        }
-
-        if isinstance(sc, ConditionalCircuit):
-            # Compile a conditional circuit if the symbolic one is conditional
-            cc_cls = TorchConditionalCircuit
-            cc_kwargs["gate_function_evals"] = self._state.gate_functions
-            cc_kwargs["gate_function_specs"] = sc.gate_function_specs
-        elif not sc.scope:
-            # If the symbolic circuit being compiled has empty scope,
-            # then return a 'constant circuit' whose interface does not require inputs
-            cc_cls = TorchConstantCircuit
-        else:
-            cc_cls = TorchCircuit
-
-        # Instantiate the circuit
-        cc = cc_cls(**cc_kwargs)
+        cc = cc_cls(
+            sc.scope,
+            layers=layers,
+            in_layers=in_layers,
+            outputs=outputs,
+            properties=sc.properties,
+            gate_function_evals=gate_function_evals
+        )
 
         # Post-process the compiled circuit, i.e.,
         # optionally apply optimizations to it and then fold it
@@ -316,22 +306,15 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
     )
 
-    # Instantiate a folded circuit
-    cc_kwargs = {
-        "scope": cc.scope,
-        "layers": layers,
-        "in_layers": in_layers,
-        "outputs": outputs,
-        "properties": cc.properties,
-        "fold_idx_info": fold_idx_info,
-    }
-
-    if isinstance(cc, TorchConditionalCircuit):
-        cc_kwargs["gate_function_evals"] = cc.gate_function_evals
-        cc_kwargs["gate_function_specs"] = cc.gate_function_specs
-
-    cc = type(cc)(**cc_kwargs)
-    return cc
+    return type(cc)(
+        cc.scope,
+        layers,
+        in_layers,
+        outputs,
+        properties=cc.properties,
+        fold_idx_info=fold_idx_info,
+        gate_function_evals=cc.gate_function_evals
+    )
 
 
 def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> TorchLayer:
@@ -573,19 +556,15 @@ def _optimize_layers(
         return cc, False
     layers, in_layers, outputs = optimize_result
 
-    cc_kwargs = {
-        "scope": cc.scope,
-        "layers": layers,
-        "in_layers": in_layers,
-        "outputs": outputs,
-        "properties": cc.properties,
-    }
-
-    if isinstance(cc, TorchConditionalCircuit):
-        cc_kwargs["gate_function_evals"] = cc.gate_function_evals
-        cc_kwargs["gate_function_specs"] = cc.gate_function_specs
-
-    cc = type(cc)(**cc_kwargs)
+    cc = type(cc)(
+        scope=cc.scope,
+        layers=layers,
+        in_layers=in_layers,
+        outputs=outputs,
+        properties=cc.properties,
+        gate_function_evals=cc.gate_function_evals
+    )
+    
     return cc, True
 
 
