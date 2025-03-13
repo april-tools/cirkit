@@ -306,19 +306,8 @@ class TorchCircuit(AbstractTorchCircuit):
             Tensor: The tensor output of the circuit, with shape $(B, O, K)$,
                 where $O$ is the number of vectorized outputs (i.e., the number of output layers),
                 and $K$ is the number of scalars in each output (e.g., the number of classes).
-        """
-        # Evaluate the external models and cache their result.
-        # This will be called just before the invokation of the
-        # [evaluate][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph.evaluate] method.
-        gate_function_kwargs = {} if gate_function_kwargs is None else gate_function_kwargs
-        for gate_function_id, gate_function_eval in self._gate_function_evals.items():
-            kwargs = gate_function_kwargs.get(gate_function_id, {})
-            # provide the correct shape to the gate function (including the batch size)
-            # and memoize its execution on the provided arguments
-            shape = (x.size(0), *self.gate_function_specs[gate_function_id])
-            gate_function_eval.memoize(shape, **kwargs)
-        
-        return self._evaluate_layers(x)
+        """        
+        return self._evaluate_layers(x, gate_function_kwargs=gate_function_kwargs)
 
 
 class TorchConstantCircuit(AbstractTorchCircuit):

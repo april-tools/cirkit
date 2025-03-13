@@ -248,6 +248,10 @@ class TorchCompiler(AbstractCompiler):
             in_layers[layer] = ins
             compiled_layers_map[sl] = layer
 
+        # If the symbolic circuit being compiled has empty scope,
+        # then return a 'constant circuit' whose interface does not require inputs
+        cc_cls = TorchCircuit if sc.scope else TorchConstantCircuit
+
         # Construct the sequence of output layers
         outputs = [compiled_layers_map[sl] for sl in sc.outputs]
 
