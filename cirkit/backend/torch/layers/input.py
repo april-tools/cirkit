@@ -268,7 +268,7 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
         # for each fold and batch retrieve the corresponding state
         idx_fold = torch.arange(self.num_folds, device=weight.device)
         idx_batch = torch.arange(weight.size(1), device=weight.device)
-        x = weight[idx_fold[:, None], idx_batch, :, x]
+        x = weight[idx_fold, idx_batch, :, x]
         x = self.semiring.map_from(x, SumProductSemiring)
         return x  # (F, B, K)
 
@@ -725,12 +725,7 @@ class TorchConstantValueLayer(TorchConstantLayer):
     def forward(self, batch_size: int) -> Tensor:
         value = self.value()  # (F, B, Ko)
 
-        if value.size(1) != 1 and value.size(1) != batch_size:
-            raise ValueError(
-                f"The batch size of the parameter ({value.size(1)})"
-                f"does not match batch_size {batch_size}."
-            )
-        elif value.size(1) == 1 and batch_size != 1:
+        if value.size(1) == 1 and batch_size != 1:
             # expand value to the requested batch size
             value = value.expand(-1, batch_size, *tuple(value.shape[2:]))
 

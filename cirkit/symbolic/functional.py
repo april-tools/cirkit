@@ -12,7 +12,6 @@ from cirkit.symbolic.circuit import (
     CircuitBlock,
     CircuitOperation,
     CircuitOperator,
-    ConditionalCircuit,
     StructuralPropertyError,
     are_compatible,
 )
@@ -671,15 +670,9 @@ def condition_circuit(
             Groups are constructed by collating together parameters with the same shape.
 
     Raises:
-        ValueError: If the given circuit is the output of a circuit operator.
-            That is, this function is designed for circuits that are entry points to a circuit
-            pipeline.
         ValueError: If the provided gate functions are not defined on pairwise mutually disjoint
             sets of layers.
     """
-    if circuit.operation is not None:
-        raise ValueError("The circuit to parameterize must not be the output of a circuit operator")
-
     # the layers specified in the gate function specification all be mutually disjoint
     if any(
         len(set(l1).intersection(l2)) != 0
@@ -724,8 +717,6 @@ def condition_circuit(
         for prev_sl, sl in layers_map.items()
     }
     output_layers = [layers_map[prev_sli] for prev_sli in circuit.outputs]
-    circuit = ConditionalCircuit(
-        layers, in_layers=in_layers, outputs=output_layers, gate_function_specs=gate_function_specs
-    )
+    circuit = Circuit(layers, in_layers=in_layers, outputs=output_layers)
 
     return circuit, gate_function_specs

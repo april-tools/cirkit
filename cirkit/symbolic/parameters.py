@@ -150,7 +150,7 @@ class ConstantParameter(TensorParameter):
         return {"shape": self.shape, "value": self.value}
 
 
-class GateFunctionParameter(ParameterInput):
+class GateFunctionParameter(TensorParameter):
     """A symbolic parameter whose value is computed by an externally-provided function.
     For example, this function can be the evaluation of a neural network.
     """
@@ -175,9 +175,20 @@ class GateFunctionParameter(ParameterInput):
             raise ValueError(
                 f"The shape {shape} must be non-empty and have positive dimension sizes"
             )
+        if name is None:
+            raise ValueError(f"The name must not be None.")
+        if index is None:
+            raise ValueError(f"The index must not be None.")
         if index is not None and index < 0:
             raise ValueError("The index must be a non-negative integer")
-        super().__init__()
+        
+        initializer = ConstantTensorInitializer(0.0)
+        super().__init__(
+            *shape,
+            initializer=initializer,
+            learnable=False,
+        )
+
         self._shape = shape
         self._name = name
         self._index = index
@@ -1045,7 +1056,7 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         # become references to the tensors of the 'self' parameter's computational graph.
         # All the other nodes are new objects.
         def _replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
-            return ReferenceParameter(n) if isinstance(n, TensorParameter) else copy(n)
+            return ReferenceParameter(n) if isinstance(n, (TensorParameter, GateFunctionParameter)) else copy(n)
 
         return self._process_nodes(_replace_ref_or_copy)
 

@@ -7,9 +7,8 @@ from typing import cast
 import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.initializers import ConstantTensorInitializer
 from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, InputLayer, Layer, SumLayer
-from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
+from cirkit.symbolic.parameters import Parameter, ParameterFactory, ConstantParameter
 from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
 from cirkit.utils.scope import Scope
@@ -113,13 +112,12 @@ def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
         Returns:
             InputLayer: Symbolic input layer.
         """
-        param = np.array([1.0, 0.0]) if negated else np.array([0.0, 1.0])
-        initializer = ConstantTensorInitializer(param)
+        param = np.array([[1.0, 0.0]]) if negated else np.array([[0.0, 1.0]])
         return CategoricalLayer(
             scope,
             num_categories=2,
             num_output_units=num_units,
-            probs=Parameter.from_input(TensorParameter(1, 2, initializer=initializer)),
+            probs=Parameter.from_input(ConstantParameter(1, 2, value=param)),
         )
 
     return input_factory
@@ -405,9 +403,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         if weight_factory is None:
             # default to unitary weights
             def weight_factory(n: tuple[int]) -> Parameter:
-                # locally import numpy to avoid dependency on the whole file
-                initializer = ConstantTensorInitializer(1.0)
-                return Parameter.from_input(TensorParameter(*n, initializer=initializer))
+                return Parameter.from_input(ConstantParameter(*n, value=1.0))
 
         # map each input literal to a symbolic input layer
         for i in self.inputs:

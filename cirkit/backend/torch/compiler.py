@@ -54,7 +54,7 @@ from cirkit.backend.torch.rules import (
 )
 from cirkit.backend.torch.semiring import Semiring, SemiringImpl
 from cirkit.backend.torch.utils import CachedGateFunctionEval
-from cirkit.symbolic.circuit import Circuit, ConditionalCircuit, pipeline_topological_ordering
+from cirkit.symbolic.circuit import Circuit, pipeline_topological_ordering
 from cirkit.symbolic.initializers import Initializer
 from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import Parameter, ParameterNode, TensorParameter
