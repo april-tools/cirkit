@@ -16,6 +16,8 @@ from cirkit.backend.torch.graph.modules import (
 )
 from cirkit.backend.torch.parameters.nodes import TorchParameterNode
 
+from cirkit.utils.shape import comp_shape
+
 
 class ParameterAddressBook(AddressBook):
     """The address book data structure for the parameter computational graphs.
@@ -151,12 +153,16 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         the number of folds. That is, if the number of folds
         (see [TorchParameter.num_folds][cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
         is F and the shape is (K_1,\ldots,K_n), it means the torch parameter
-        computes a tensor of shape (F, K_1,\ldots,K_n).
+        computes a tensor of shape (F, B, K_1,\ldots,K_n) where B is the batch size.
+        A batched parameter means that each sample in an input is parameterized by a different tensor.
+        If the parameter has a batch size of 1 then it is broadcasted to all the samples in the input
+        batch.
 
         Returns:
             The shape of the computed tensor parameter, without considering the number of folds.
+            The value -1 is used to indicate an unknown batch size.
         """
-        return self.outputs[0].shape
+        return (-1, *self.outputs[0].shape)
 
     def reset_parameters(self) -> None:
         """Reset the parameters of the parameter computational graph."""
@@ -171,9 +177,9 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         r"""Evaluate the parameter computational graph.
 
         Returns:
-            Tensor: The output parameter tensor, having shape (F, K_1,\ldots K_n),
-                where F is the number of folds, and (K_1,\ldots,K_n) is the shape
-                of each parameter tensor slice.
+            Tensor: The output parameter tensor, having shape (F, B, K_1,\ldots K_n),
+                where F is the number of folds, B the batch size and (K_1,\ldots,K_n) 
+                is the shape of each parameter tensor slice.
         """
         return self.evaluate()
 

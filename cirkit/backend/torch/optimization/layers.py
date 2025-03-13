@@ -134,7 +134,7 @@ def _apply_tensordot_rule(
     weight2 = weight.subgraph(in_kronecker2)
 
     # Instantiate two tensor dot layers
-    num_inner_units = weight1.shape[0] * (num_input_units // weight1.shape[1])
+    num_inner_units = weight1.shape[1] * (num_input_units // weight1.shape[2])
     tdot1 = TorchTensorDotLayer(
         num_input_units,
         num_inner_units,
