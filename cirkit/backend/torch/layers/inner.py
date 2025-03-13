@@ -9,7 +9,6 @@ from torch import Tensor
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
-
 from cirkit.utils.shape import comp_shape
 
 

@@ -15,7 +15,6 @@ from cirkit.backend.torch.graph.modules import (
     TorchDiAcyclicGraph,
 )
 from cirkit.backend.torch.parameters.nodes import TorchParameterNode
-
 from cirkit.utils.shape import comp_shape
 
 
@@ -178,7 +177,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
 
         Returns:
             Tensor: The output parameter tensor, having shape (F, B, K_1,\ldots K_n),
-                where F is the number of folds, B the batch size and (K_1,\ldots,K_n) 
+                where F is the number of folds, B the batch size and (K_1,\ldots,K_n)
                 is the shape of each parameter tensor slice.
         """
         return self.evaluate()
