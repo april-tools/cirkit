@@ -100,6 +100,9 @@ def evidence(
         ValueError: If the observation contains variables not defined in the scope of the circuit.
         NotImplementedError: If the evidence of a multivariate input layer needs to be constructed.
     """
+    if circuit.operation is not None:
+        raise ValueError("The circuit to parameterize must not be the output of a circuit operator")
+
     # Check the variables to observe
     scope = Scope(obs.keys())
     if not scope:

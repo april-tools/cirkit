@@ -87,7 +87,7 @@ class TorchCompilerState:
         self._symbolic_parameters = {}
 
         # Clear the map of gate functions
-        self._gate_functions_evals = {}
+        # self._gate_functions_evals = {}
 
     def has_compiled_parameter(self, p: TensorParameter) -> bool:
         # Retrieve whether a tensor parameter has already been compiled

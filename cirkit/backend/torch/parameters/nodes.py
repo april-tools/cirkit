@@ -283,11 +283,6 @@ class TorchPointerParameter(TorchParameterInput):
             return x
         return x[self._fold_idx]
 
-    @torch.no_grad()
-    def reset_parameters(self) -> None:
-        """Reset parameter of referenced parameter"""
-        self._parameter.reset_parameters()
-
 
 class TorchGateFunctionParameter(TorchParameterInput):
     def __init__(

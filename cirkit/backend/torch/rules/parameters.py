@@ -139,20 +139,6 @@ def compile_gate_function_parameter(
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p
 
-    # # Retrieve the external model, based on the model id
-    # gate_function = compiler.get_gate_function(p.name)
-    # # Build the external model evaluator, and register it
-    # gate_function_eval = CachedGateFunctionEval(p.name, gate_function)
-    # compiler.state.register_gate_function(p.name, gate_function_eval)
-    
-    # # Build the torch model parameter computational node
-    # compiled_p = TorchGateFunctionParameter(
-    #     *p.shape, gate_function_eval=gate_function_eval, name=p.name, fold_idx=p.index
-    # )
-
-    # compiler.state.register_compiled_parameter(p, compiled_p)
-    # return compiled_p
-
 
 def compile_index_parameter(compiler: "TorchCompiler", p: IndexParameter) -> TorchIndexParameter:
     (in_shape,) = p.in_shapes
