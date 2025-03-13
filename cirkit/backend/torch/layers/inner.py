@@ -10,6 +10,8 @@ from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
 
+from cirkit.utils.shape import comp_shape
+
 
 class TorchInnerLayer(TorchLayer, ABC):
     """The abstract base class for inner layers, i.e., either sum or product layers."""
@@ -234,7 +236,7 @@ class TorchSumLayer(TorchInnerLayer):
         if not self._valid_weight_shape(weight):
             raise ValueError(
                 f"Expected number of folds {self.num_folds} "
-                f"and shape {self._weight_shape} for 'weight', found"
+                f"and shape {self._weight_shape} for 'weight', found "
                 f"{weight.num_folds} and {weight.shape}, respectively"
             )
         self.weight = weight
@@ -242,11 +244,12 @@ class TorchSumLayer(TorchInnerLayer):
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
-        return w.shape == self._weight_shape
+        return comp_shape(w.shape, self._weight_shape)
 
     @property
     def _weight_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_input_units * self.arity
+        # include batch size in input
+        return -1, self.num_output_units, self.num_input_units * self.arity
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -266,7 +269,7 @@ class TorchSumLayer(TorchInnerLayer):
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
         weight = self.weight()
         return self.semiring.einsum(
-            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbi,fboi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, K_o).
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:

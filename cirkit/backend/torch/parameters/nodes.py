@@ -200,7 +200,9 @@ class TorchTensorParameter(TorchParameterInput):
         allocated, then this function simply call the initializer to reset the parameter values.
         """
         if self._ptensor is None:
-            shape = (self.num_folds, *self._shape)
+            # if parameters is initialized then batch size must be set to 1
+            shape = (self.num_folds, 1, *self._shape)
+
             self._ptensor = nn.Parameter(
                 torch.empty(*shape, dtype=self._dtype), requires_grad=self._requires_grad
             )
@@ -212,8 +214,10 @@ class TorchTensorParameter(TorchParameterInput):
         r"""Evaluate a torch parameter input node.
 
         Returns:
-            Tensor: A tensor of shape $(F,K_1,\ldots,K_n)$, where $F$ is the number of folds, and
-            $(K_1,\ldots,K_n)$ is the shape of the tensors within each fold.
+            Tensor: A tensor of shape $(F, B, K_1,\ldots,K_n)$, where $F$ is the number of folds,
+            $(K_1,\ldots,K_n)$ is the shape of the tensors within each fold and $B$ the batch dimension.
+            If the batch dimension is not specified, the one batch dimension is automatically unsqueezed
+            to allow broadcasting.
 
         Raises:
             ValueError: If the parameter has not been initialized.
@@ -399,7 +403,7 @@ class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return *self.in_shape[: self.dim], *self.in_shape[self.dim + 1 :]
+        return *self.in_shape[:self.dim], *self.in_shape[self.dim + 1:]
 
     @property
     def config(self) -> dict[str, Any]:
@@ -469,7 +473,7 @@ class TorchIndexParameter(TorchUnaryParameterOp):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        return x[:, self._indices]
+        return x[:, :, self.indices]
 
 
 class TorchSumParameter(TorchBinaryParameterOp):
@@ -512,13 +516,26 @@ class TorchKroneckerParameter(TorchBinaryParameterOp):
     ) -> None:
         assert len(in_shape1) == len(in_shape2)
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
-        self._batched_kron = torch.vmap(torch.kron)
+
+        # the kron operation is batched twice - once on the folds dimension
+        # and once on the batch dimension so that the kronecker product
+        self._batched_kron = torch.vmap(torch.vmap(torch.kron))
 
     @cached_property
     def shape(self) -> tuple[int, ...]:
         return tuple(d1 * d2 for d1, d2 in zip(self.in_shape1, self.in_shape2))
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
+        if x1.size(1) != x2.size(1):
+            raise ValueError(
+                f"The dimension of x1 ({x1.shape}) cannot be broadcasted"
+                f"to the dimension of x2 ({x2.shape})"
+            )
+        elif x1.size(1) == 1 and x2.size(1) > 1:
+            x1 = x1.expand_as(x2)
+        elif x1.size(1) > 1 and x2.size(1) == 1:
+            x2 = x2.expand_as(x1)
+
         return self._batched_kron(x1, x2)
 
 
@@ -554,12 +571,12 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
         return config
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        # x1: (F, d1, d2, ..., dk1, ... dn)
-        # x2: (F, d1, d2, ..., dk2, ... dn)
-        x1 = x1.unsqueeze(self.dim + 2)  # (F, d1, d2, ..., dk1, 1, ..., dn)
-        x2 = x2.unsqueeze(self.dim + 1)  # (F, d1, d2, ..., 1, dk1, ...., dn)
+        # x1: (F, B, d1, d2, ..., dk1, ... dn)
+        # x2: (F, B, d1, d2, ..., dk2, ... dn)
+        x1 = x1.unsqueeze(self.dim + 3)  # (F, B, d1, d2, ..., dk1, 1, ..., dn)
+        x2 = x2.unsqueeze(self.dim + 2)  # (F, B, d1, d2, ..., 1, dk1, ...., dn)
         x = x1 * x2  # (F, d1, d2, ..., dk1, dk2, ..., dn)
-        x = x.view(self.num_folds, *self.shape)  # (F, d1, d2, ..., dk1 * dk2, ..., dn)
+        x = x.view(self.num_folds, -1, *self.shape)  # (F, d1, d2, ..., dk1 * dk2, ..., dn)
         return x
 
 
@@ -595,12 +612,12 @@ class TorchOuterSumParameter(TorchBinaryParameterOp):
         return config
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        # x1: (F, d1, d2, ..., dk1, ... dn)
-        # x2: (F, d1, d2, ..., dk2, ... dn)
-        x1 = x1.unsqueeze(self.dim + 2)  # (F, d1, d2, ..., dk1, 1, ..., dn)
-        x2 = x2.unsqueeze(self.dim + 1)  # (F, d1, d2, ..., 1, dk1, ...., dn)
-        x = x1 + x2  # (F, d1, d2, ..., dk1, dk2, ..., dn)
-        x = x.view(self.num_folds, *self.shape)  # (F, d1, d2, ..., dk1 * dk2, ..., dn)
+        # x1: (F, B, d1, d2, ..., dk1, ... dn)
+        # x2: (F, B, d1, d2, ..., dk2, ... dn)
+        x1 = x1.unsqueeze(self.dim + 3)  # (F, B, d1, d2, ..., dk1, 1, ..., dn)
+        x2 = x2.unsqueeze(self.dim + 2)  # (F, B, d1, d2, ..., 1, dk1, ...., dn)
+        x = x1 + x2  # (F, B, d1, d2, ..., dk1, dk2, ..., dn)
+        x = x.view(self.num_folds, -1, *self.shape)  # (F, B, d1, d2, ..., dk1 * dk2, ..., dn)
         return x
 
 
@@ -691,17 +708,17 @@ class TorchConjugateParameter(TorchEntrywiseParameterOp):
 
 class TorchReduceSumParameter(TorchReduceParameterOp):
     def forward(self, x: Tensor) -> Tensor:
-        return torch.sum(x, dim=self.dim + 1)
+        return torch.sum(x, dim=self.dim + 2)
 
 
 class TorchReduceProductParameter(TorchReduceParameterOp):
     def forward(self, x: Tensor) -> Tensor:
-        return torch.prod(x, dim=self.dim + 1)
+        return torch.prod(x, dim=self.dim + 2)
 
 
 class TorchReduceLSEParameter(TorchReduceParameterOp):
     def forward(self, x: Tensor) -> Tensor:
-        return torch.logsumexp(x, dim=self.dim + 1)
+        return torch.logsumexp(x, dim=self.dim + 2)
 
 
 class TorchSoftmaxParameter(TorchEntrywiseReduceParameterOp):
@@ -712,7 +729,7 @@ class TorchSoftmaxParameter(TorchEntrywiseReduceParameterOp):
     """
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.softmax(x, dim=self.dim + 1)
+        return torch.softmax(x, dim=self.dim + 2)
 
 
 class TorchLogSoftmaxParameter(TorchEntrywiseReduceParameterOp):
@@ -723,7 +740,7 @@ class TorchLogSoftmaxParameter(TorchEntrywiseReduceParameterOp):
     """
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.log_softmax(x, dim=self.dim + 1)
+        return torch.log_softmax(x, dim=self.dim + 2)
 
 
 class TorchMatMulParameter(TorchBinaryParameterOp):
@@ -731,7 +748,7 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
         self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
     ) -> None:
         assert len(in_shape1) == len(in_shape2) == 2
-        assert in_shape1[1] == in_shape2[0]
+        assert in_shape1[-1] == in_shape2[-2]
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
 
     @property
@@ -739,9 +756,9 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
         return self.in_shape1[0], self.in_shape2[1]
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        # x1: (F, d1, d2)
-        # x2: (F, d2, d3)
-        return torch.matmul(x1, x2)  # (F, d1, d3)
+        # x1: (F, B, d1, d2)
+        # x2: (F, B, d2, d3)
+        return torch.bmm(x1, x2)  # (F, B, d1, d3)
 
 
 class TorchFlattenParameter(TorchUnaryParameterOp):
@@ -780,7 +797,7 @@ class TorchFlattenParameter(TorchUnaryParameterOp):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.flatten(x, start_dim=self.start_dim + 1, end_dim=self.end_dim + 1)
+        return torch.flatten(x, start_dim=self.start_dim + 2, end_dim=self.end_dim + 2)
 
 
 class TorchMixingWeightParameter(TorchUnaryParameterOp):
@@ -788,17 +805,20 @@ class TorchMixingWeightParameter(TorchUnaryParameterOp):
         super().__init__(in_shape, num_folds=num_folds)
         if len(in_shape) != 2:
             raise ValueError(f"Expected shape (num_units, arity), but found {in_shape}")
+        # diagonalization of weights is performed for each element in the mixing weight 
+        # hence can parallely perform it along folds, batches and units dimension
+        self._diag_weights = torch.vmap(torch.vmap(torch.vmap(torch.diag, in_dims=1)))
 
     @property
     def shape(self) -> tuple[int, ...]:
         return self.in_shape[0], self.in_shape[0] * self.in_shape[1]
 
     def forward(self, x: Tensor) -> Tensor:
-        # x: (F, num_units, arity)
-        # diag_weights: (arity, num_units, num_units)
-        diag_weights = torch.vmap(torch.vmap(torch.diag, in_dims=1))(x)
-        # (F, num_units, arity, num_units) -> (F, num_units, arity * num_units)
-        return diag_weights.permute(0, 2, 1, 3).flatten(start_dim=2)
+        # x: (F, B, num_units, arity)
+        # diag_weights: (F, B, arity, num_units, num_units)
+        diag_weights = self._diag_weights(x)
+        # (F, B, num_units, arity, num_units) -> (F, B, num_units, arity * num_units)
+        return diag_weights.permute(0, 1, 3, 2, 4).flatten(start_dim=3)
 
 
 class TorchGaussianProductMean(TorchParameterOp):
@@ -831,15 +851,15 @@ class TorchGaussianProductMean(TorchParameterOp):
         }
 
     def forward(self, mean1: Tensor, stddev1: Tensor, mean2: Tensor, stddev2: Tensor) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, K1, C)
-        var2 = torch.square(stddev2)  # (F, K2, C)
+        var1 = torch.square(stddev1)  # (F, B, K1, C)
+        var2 = torch.square(stddev2)  # (F, B, K2, C)
         inv_var12 = torch.reciprocal(
-            var1.unsqueeze(dim=2) + var2.unsqueeze(dim=1)
-        )  # (F, K1, K2, C)
-        wm1 = mean1.unsqueeze(dim=2) * var2.unsqueeze(dim=1)  # (F, K1, K2, C)
-        wm2 = mean2.unsqueeze(dim=1) * var1.unsqueeze(dim=2)  # (F, K1, K2, C)
-        mean = (wm1 + wm2) * inv_var12  # (F, K1, K2, C)
-        return mean.view(-1, *self.shape)  # (F, K1 * K2, C)
+            var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)
+        )  # (F, B, K1, K2, C)
+        wm1 = mean1.unsqueeze(dim=3) * var2.unsqueeze(dim=2)  # (F, B, K1, K2, C)
+        wm2 = mean2.unsqueeze(dim=2) * var1.unsqueeze(dim=3)  # (F, B, K1, K2, C)
+        mean = (wm1 + wm2) * inv_var12  # (F, B, K1, K2, C)
+        return mean.view(self.num_folds, -1, *self.shape)  # (F, B, K1 * K2, C)
 
 
 class TorchGaussianProductStddev(TorchBinaryParameterOp):
@@ -861,12 +881,12 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
         return {"in_stddev1_shape": self.in_shapes[0], "in_stddev2_shape": self.in_shapes[1]}
 
     def forward(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, K1, C)
-        var2 = torch.square(stddev2)  # (F, K2, C)
-        inv_var1 = torch.reciprocal(var1).unsqueeze(dim=2)  # (F, K1, 1, C)
-        inv_var2 = torch.reciprocal(var2).unsqueeze(dim=1)  # (F, 1, K2, C)
-        var = torch.reciprocal(inv_var1 + inv_var2)  # (F, K1, K2, C)
-        return torch.sqrt(var).view(-1, *self.shape)  # (F, K1 * K2, C)
+        var1 = torch.square(stddev1)  # (F, B, K1, C)
+        var2 = torch.square(stddev2)  # (F, B, K2, C)
+        inv_var1 = torch.reciprocal(var1).unsqueeze(dim=3)  # (F, B, K1, 1, C)
+        inv_var2 = torch.reciprocal(var2).unsqueeze(dim=2)  # (F, B, 1, K2, C)
+        var = torch.reciprocal(inv_var1 + inv_var2)  # (F, B, K1, K2, C)
+        return torch.sqrt(var).view(self.num_folds, -1, *self.shape)  # (F, B, K1 * K2, C)
 
 
 class TorchGaussianProductLogPartition(TorchParameterOp):
@@ -906,13 +926,13 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         mean2: Tensor,
         stddev2: Tensor,
     ) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, K1, C)
-        var2 = torch.square(stddev2)  # (F, K2, C)
-        var12 = var1.unsqueeze(dim=2) + var2.unsqueeze(dim=1)  # (F, K1, K2, C)
+        var1 = torch.square(stddev1)  # (F, B, K1, C)
+        var2 = torch.square(stddev2)  # (F, B, K2, C)
+        var12 = var1.unsqueeze(dim=3) + var2.unsqueeze(dim=2)  # (F, B, K1, K2, C)
         inv_var12 = torch.reciprocal(var12)
-        sq_mahalanobis = torch.square(mean1.unsqueeze(dim=2) - mean2.unsqueeze(dim=1)) * inv_var12
+        sq_mahalanobis = torch.square(mean1.unsqueeze(dim=3) - mean2.unsqueeze(dim=2)) * inv_var12
         log_partition = -0.5 * (self._log_two_pi + torch.log(var12) + sq_mahalanobis)
-        return log_partition.view(-1, *self.shape)  # (F, K1 * K2, C)
+        return log_partition.view(self.num_folds, -1, *self.shape)  # (F, B, K1 * K2, C)
 
 
 class TorchPolynomialProduct(TorchBinaryParameterOp):

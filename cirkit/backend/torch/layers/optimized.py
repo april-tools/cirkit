@@ -9,6 +9,8 @@ from cirkit.backend.torch.layers import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
 
+from cirkit.utils.shape import comp_shape
+
 
 class TorchTuckerLayer(TorchInnerLayer):
     """The Tucker layer optimized implementation, leveraging a ```torch.einsum``` operation."""
@@ -144,11 +146,11 @@ class TorchCPTLayer(TorchInnerLayer):
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
-        return w.shape == self._weight_shape
+        return comp_shape(w.shape, self._weight_shape)
 
     @property
     def _weight_shape(self) -> tuple[int, ...]:
-        return self.num_output_units, self.num_input_units
+        return (-1, self.num_output_units, self.num_input_units)
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -165,10 +167,10 @@ class TorchCPTLayer(TorchInnerLayer):
     def forward(self, x: Tensor) -> Tensor:
         # x: (F, B, Ki)
         x = self.semiring.prod(x, dim=1, keepdim=False)
-        # weight: (F, Ko, Ki)
+        # weight: (F, B, Ko, Ki)
         weight = self.weight()
         return self.semiring.einsum(
-            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbi,fboi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
@@ -254,17 +256,17 @@ class TorchTensorDotLayer(TorchInnerLayer):
                 f"but found {weight.num_folds} and {weight.shape}, respectively"
             )
         self.weight = weight
-        self._num_contract_units = weight.shape[1]
+        self._num_contract_units = weight.shape[-1]
         self._num_batch_units = num_input_units // self._num_contract_units
 
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
-        if len(w.shape) != 2:
+        if len(w.shape) != 3:
             return False
-        if self.num_input_units % w.shape[1]:
+        if self.num_input_units % w.shape[-1]:
             return False
-        if self.num_output_units != w.shape[0] * (self.num_input_units // w.shape[1]):
+        if self.num_output_units != w.shape[-2] * (self.num_input_units // w.shape[-1]):
             return False
         return True
 
@@ -282,11 +284,11 @@ class TorchTensorDotLayer(TorchInnerLayer):
         # x: (F, B, Ki) -> (F, B, Kj, Kq) -> (F, B, Kq, Kj)
         x = x.view(x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units)
         x = x.permute(0, 1, 3, 2)
-        # weight: (F, Kk, Kj)
+        # weight: (F, B, Kk, Kj)
         weight = self.weight()
         # y: (F, B, Kq, Kj)
         y = self.semiring.einsum(
-            "fbqj,fkj->fbqk", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbqj,fbkj->fbqk", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
         # return y: (F, B, Kq * Kk) = (F, B, Ko)
         return y.view(y.shape[0], y.shape[1], self.num_output_units)
