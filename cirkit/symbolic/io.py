@@ -97,7 +97,7 @@ def plot_circuit(
                 )
 
     def _default_input_label(sl: InputLayer) -> str:
-        return " ".join(map(str, sl.scope)) if sl.label is None else sl.label
+        return " ".join(map(str, sl.scope))
 
     if product_label is None:
         product_label = _default_product_label

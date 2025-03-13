@@ -28,7 +28,6 @@ from cirkit.symbolic.parameters import (
     TensorParameter,
     UnaryParameterOp,
 )
-from cirkit.utils.label import LayerLabel
 from cirkit.utils.scope import Scope
 
 
@@ -52,7 +51,7 @@ class Parameterization:
 class InputLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
     """The protocol of a factory that constructs input layers."""
 
-    def __call__(self, scope: Scope, num_units: int, label: LayerLabel | None = None) -> InputLayer:
+    def __call__(self, scope: Scope, num_units: int) -> InputLayer:
         """Constructs an input layer.
 
         Args:
