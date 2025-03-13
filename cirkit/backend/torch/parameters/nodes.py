@@ -450,7 +450,7 @@ class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return *self.in_shape[:self.dim], *self.in_shape[self.dim + 1:]
+        return *self.in_shape[: self.dim], *self.in_shape[self.dim + 1 :]
 
     @property
     def config(self) -> dict[str, Any]:
@@ -852,7 +852,7 @@ class TorchMixingWeightParameter(TorchUnaryParameterOp):
         super().__init__(in_shape, num_folds=num_folds)
         if len(in_shape) != 2:
             raise ValueError(f"Expected shape (num_units, arity), but found {in_shape}")
-        # diagonalization of weights is performed for each element in the mixing weight 
+        # diagonalization of weights is performed for each element in the mixing weight
         # hence can parallely perform it along folds, batches and units dimension
         self._diag_weights = torch.vmap(torch.vmap(torch.vmap(torch.diag, in_dims=1)))
 

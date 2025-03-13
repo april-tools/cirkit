@@ -27,6 +27,8 @@ def comp_shape(a: tuple[int, ...], b: tuple[int, ...]) -> bool:
         if (a_i != -1) and (b_i != -1) and a_i != b_i:
             return False
 
-    return len(a) == len(b) or \
-        (len(a) == (len(b) + 1) and a[0] == -1) or \
-        (len(a) + 1 == len(b) and b[0] == -1)
+    return (
+        len(a) == len(b)
+        or (len(a) == (len(b) + 1) and a[0] == -1)
+        or (len(a) + 1 == len(b) and b[0] == -1)
+    )
