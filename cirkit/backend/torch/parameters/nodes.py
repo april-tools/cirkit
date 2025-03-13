@@ -329,7 +329,7 @@ class TorchGateFunctionParameter(TorchParameterInput):
         # Slice the tensor by using the fold index
         y = y[:, self._fold_idx]  # (B, F, K_1, ..., K_n)
         # flat the batch dimension as if they were foldings
-        return y.permute(1, 0, *tuple(range(2, len(y.size())))) # (F, K_1, ..., K_n)
+        return y.permute(1, 0, *tuple(range(2, len(y.size()))))  # (F, K_1, ..., K_n)
 
 
 class TorchParameterOp(TorchParameterNode, ABC):

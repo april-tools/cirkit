@@ -14,11 +14,7 @@ from cirkit.backend.compiler import (
     CompilerParameterRegistry,
 )
 from cirkit.backend.registry import CompilerRegistry
-from cirkit.backend.torch.circuits import (
-    AbstractTorchCircuit,
-    TorchCircuit,
-    TorchConstantCircuit,
-)
+from cirkit.backend.torch.circuits import AbstractTorchCircuit, TorchCircuit, TorchConstantCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
 from cirkit.backend.torch.graph.optimize import (
     GraphOptPattern,
@@ -266,7 +262,7 @@ class TorchCompiler(AbstractCompiler):
             in_layers=in_layers,
             outputs=outputs,
             properties=sc.properties,
-            gate_function_evals=gate_function_evals
+            gate_function_evals=gate_function_evals,
         )
 
         # Post-process the compiled circuit, i.e.,
@@ -313,7 +309,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: AbstractTorchCircuit) -> Abstract
         outputs,
         properties=cc.properties,
         fold_idx_info=fold_idx_info,
-        gate_function_evals=cc.gate_function_evals
+        gate_function_evals=cc.gate_function_evals,
     )
 
 
@@ -562,9 +558,9 @@ def _optimize_layers(
         in_layers=in_layers,
         outputs=outputs,
         properties=cc.properties,
-        gate_function_evals=cc.gate_function_evals
+        gate_function_evals=cc.gate_function_evals,
     )
-    
+
     return cc, True
 
 

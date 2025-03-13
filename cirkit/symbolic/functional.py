@@ -32,7 +32,7 @@ from cirkit.symbolic.parameters import (
     TensorParameter,
 )
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
-from cirkit.utils.conditional import GateFunctionSpecs, GateFunctionParameterSpecs
+from cirkit.utils.conditional import GateFunctionParameterSpecs, GateFunctionSpecs
 from cirkit.utils.scope import Scope
 
 
@@ -653,10 +653,8 @@ def conjugate(
 
 
 def condition_circuit(
-        circuit: Circuit, 
-        *, 
-        gate_functions: GateFunctionSpecs
-    ) -> tuple[Circuit, GateFunctionParameterSpecs]:
+    circuit: Circuit, *, gate_functions: GateFunctionSpecs
+) -> tuple[Circuit, GateFunctionParameterSpecs]:
     """Parameterize some layers of a symbolic circuit by means of externally-provided gate functions.
 
     Args:

@@ -243,7 +243,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 
         Returns:
             Mapping[str, CachedGateFunctionEval]: The mapping between a gate
-                function and its evaluation. 
+                function and its evaluation.
         """
         return self._gate_function_evals
 
@@ -277,7 +277,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         # Memoize the gate functions.This will be called just before the invocation of the
         # [evaluate][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph.evaluate] method.
         self._memoize_gate_functions({} if gate_function_kwargs is None else gate_function_kwargs)
-        
+
         # Evaluate layers on the given input
         y = self.evaluate(x)  # (O, B, K)
         return y.transpose(0, 1)  # (B, O, K)
@@ -289,11 +289,15 @@ class TorchCircuit(AbstractTorchCircuit):
     this circuit expects some input tensor, i.e., the assignment to variables.
     """
 
-    def __call__(self, x: Tensor, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
+    def __call__(
+        self, x: Tensor, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x, gate_function_kwargs=gate_function_kwargs)  # type: ignore[no-any-return,misc]
 
-    def forward(self, x: Tensor, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
+    def forward(
+        self, x: Tensor, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> Tensor:
         """Evaluate the circuit layers in forward mode, i.e., by evaluating each layer by
         following the topological ordering.
 
@@ -306,7 +310,7 @@ class TorchCircuit(AbstractTorchCircuit):
             Tensor: The tensor output of the circuit, with shape $(B, O, K)$,
                 where $O$ is the number of vectorized outputs (i.e., the number of output layers),
                 and $K$ is the number of scalars in each output (e.g., the number of classes).
-        """        
+        """
         return self._evaluate_layers(x, gate_function_kwargs=gate_function_kwargs)
 
 
