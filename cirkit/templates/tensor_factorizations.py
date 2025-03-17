@@ -11,6 +11,7 @@ from cirkit.templates.utils import (
     InputLayerFactory,
     Parameterization,
     name_to_input_layer_factory,
+    named_parameterizations_to_factories,
     parameterization_to_factory,
 )
 from cirkit.utils.scope import Scope
@@ -29,15 +30,6 @@ def _input_layer_factory_builder(
         case _:
             assert False
     return name_to_input_layer_factory(input_layer, **factor_dim_kwargs, **factor_param_kwargs)
-
-
-def _input_param_factories(
-    input_params: dict[str, Parameterization]
-) -> dict[str, ParameterFactory]:
-    return {
-        name + "_factory": parameterization_to_factory(param)
-        for name, param in input_params.items()
-    }
 
 
 def cp(
@@ -122,7 +114,10 @@ def cp(
         weight = None
 
     # Construct the factor, hadamard and sum layers
-    factor_param_kwargs = {} if input_params is None else _input_param_factories(input_params)
+    if input_params is None:
+        factor_param_kwargs = {}
+    else:
+        factor_param_kwargs = named_parameterizations_to_factories(input_params)
     embedding_layer_factories: list[InputLayerFactory] = [
         _input_layer_factory_builder(input_layer, dim, factor_param_kwargs) for dim in shape
     ]
@@ -211,7 +206,10 @@ def tucker(
     weight_factory = parameterization_to_factory(core_param)
 
     # Construct the embedding, kronecker and sum layers
-    factor_param_kwargs = {} if input_params is None else _input_param_factories(input_params)
+    if input_params is None:
+        factor_param_kwargs = {}
+    else:
+        factor_param_kwargs = named_parameterizations_to_factories(input_params)
     embedding_layer_factories: list[InputLayerFactory] = [
         _input_layer_factory_builder(input_layer, dim, factor_param_kwargs) for dim in shape
     ]
