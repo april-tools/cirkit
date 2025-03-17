@@ -2,7 +2,6 @@ import itertools
 
 import pytest
 
-
 from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, SumLayer
 from cirkit.templates import pgms
 from cirkit.utils.scope import Scope
@@ -11,9 +10,7 @@ from cirkit.utils.scope import Scope
 @pytest.mark.parametrize("num_variables", [1, 5])
 def test_pgm_fully_factorized(num_variables: int):
     circuit = pgms.fully_factorized(
-        num_variables,
-        input_layer='categorical',
-        input_layer_kwargs={'num_categories': 3}
+        num_variables, input_layer="categorical", input_layer_kwargs={"num_categories": 3}
     )
     assert circuit.scope == Scope(range(num_variables))
     input_layers = list(circuit.inputs)
@@ -25,7 +22,7 @@ def test_pgm_fully_factorized(num_variables: int):
     assert len(sum_layers) == 0
     assert len(product_layers) == (1 if num_variables > 1 else 0)
     if num_variables > 1:
-        prod_sl, = product_layers
+        (prod_sl,) = product_layers
         assert isinstance(prod_sl, HadamardLayer)
         assert prod_sl.num_input_units == 1 and prod_sl.arity == num_variables
 
@@ -35,9 +32,9 @@ def test_pgm_hmm(num_variables: int, num_latent_states: int):
     ordering = list(range(num_variables))
     circuit = pgms.hmm(
         ordering,
-        input_layer='categorical',
+        input_layer="categorical",
         num_latent_states=num_latent_states,
-        input_layer_kwargs={'num_categories': 3}
+        input_layer_kwargs={"num_categories": 3},
     )
     assert circuit.scope == Scope(range(num_variables))
     input_layers = list(circuit.inputs)
