@@ -1,6 +1,7 @@
 site_name: cirkit
 site_url: https://cirkit-docs.readthedocs.io
 repo_url: https://github.com/april-tools/cirkit
+edit_uri: blob/main
 nav:
   - Getting Started: 'index.md'
   - Notebooks:
