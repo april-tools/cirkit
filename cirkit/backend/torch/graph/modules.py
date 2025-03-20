@@ -302,7 +302,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
     def evaluate(
         self, x: Tensor | None = None, module_fn: ModuleEvalFunctional | None = None
-    ) -> Tensor:
+    ) -> list[Tensor]:
         """Evaluate the Torch graph by following the topological ordering,
             and by using the address book information to retrieve the inputs to each module.
 
@@ -313,8 +313,8 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 the module itself is used.
 
         Returns:
-            The output tensor of the Torch graph.
-            If the Torch graph has multiple outputs, then they will be stacked.
+            A list of Tensors corresponding to the outputs of each layer from input to output.
+            If the Torch graph has multiple outputs, then output of the last layer will be stacked.
 
         Raises:
             RuntimeError: If the address book is somehow not well-formed.
@@ -326,7 +326,9 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
             if module is None:
                 (output,) = inputs
-                return output
+                # return the list of outputs from each layer
+                module_outputs[-1] = output
+                return module_outputs
             if module_fn is None:
                 y = module(*inputs)
             else:
