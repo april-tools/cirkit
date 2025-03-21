@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import IntEnum, auto
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
+from cirkit.symbolic.metadata import LayerMetadata
 from cirkit.symbolic.parameters import (
     Parameter,
     ParameterFactory,
@@ -44,6 +45,7 @@ class Layer(ABC):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
+        metadata: LayerMetadata = None,
     ):
         """Initializes a symbolic layer.
 
@@ -52,6 +54,7 @@ class Layer(ABC):
             num_output_units: The number of output units, i.e., the number of computational units
                 in this layer.
             arity: The arity of the layer, i.e., the number of input layers to this layer.
+            metadata: A dictionary encoding relevant metadata for this symbolic layer.
 
         Raises:
             ValueError: If the number of input units, output units or the arity are not positvie.
@@ -65,6 +68,7 @@ class Layer(ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
+        self.metadata = metadata if metadata is not None else LayerMetadata()
 
     @property
     @abstractmethod
@@ -89,16 +93,38 @@ class Layer(ABC):
         """
         return {}
 
-    def copyref(self) -> "Layer":
-        """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic parameters
-        are copied by reference, thus effectively creating a symbolic parameter sharing between
-        the new layer and the layer being copied.
+    def copy(self, *, params: Mapping[str, Parameter] | None = None) -> "Layer":
+        """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic
+        parameters are copied by reference. If some parameters are specified, then
+        these are replaced when performing the copy by reference.
+
+        Args:
+            params: The parameters that must be replaced when performing the copy.
+                It can be None. If it is None, then this method defaults to a _shallow_
+                copy of the layer.
 
         Returns:
-            A shallow copy of the layer, with reference to the parameters.
+            A shallow copy of the layer.
+        """
+        if params is None:
+            return type(self)(**self.config, **self.params)
+        updated_params = dict(self.params)
+        updated_params.update(params)
+        return type(self)(**self.config, **updated_params)
+
+    def copyref(self) -> "Layer":
+        """Creates a _reference_ copy of the layer, i.e., a shallow copy where the symbolic
+        parameters are re-instantiated and where the tensor parameters are replaced to
+        reference parameters, thus effectively creating a symbolic parameter sharing between
+        the new layer and the layer being copied by _reference_.
+
+        Returns:
+            A reference copy of the layer, with reference to the parameters.
         """
         ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
-        return type(self)(**self.config, **ref_params)
+        copy = type(self)(**self.config, **ref_params)
+        copy.metadata = self.metadata
+        return copy
 
     def __repr__(self) -> str:
         config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
@@ -110,6 +136,7 @@ class Layer(ABC):
             f"arity={self.arity}, "
             f"config=({config_repr}), "
             f"params=({params_repr})"
+            ")"
         )
 
 
@@ -147,7 +174,7 @@ class InputLayer(Layer, ABC):
             f"{self.__class__.__name__}("
             f"scope={self.scope}, "
             f"num_output_units={self.num_output_units}, "
-            f"config=({config_repr})"
+            f"config=({config_repr}), "
             f"params=({params_repr})"
             ")"
         )
@@ -586,7 +613,13 @@ class PolynomialLayer(InputLayer):
 class ConstantValueLayer(ConstantLayer):
     """A symbolic layer computing a constant function encoded by a parameter."""
 
-    def __init__(self, num_output_units: int, *, log_space: bool = False, value: Parameter):
+    def __init__(
+        self,
+        num_output_units: int,
+        *,
+        log_space: bool = False,
+        value: Parameter,
+    ):
         """Initializes a constant value layer.
 
         Args:
@@ -609,7 +642,10 @@ class ConstantValueLayer(ConstantLayer):
 
     @property
     def config(self) -> Mapping[str, Any]:
-        return {"num_output_units": self.num_output_units, "log_space": self.log_space}
+        return {
+            "num_output_units": self.num_output_units,
+            "log_space": self.log_space,
+        }
 
     @property
     def params(self) -> Mapping[str, Parameter]:
@@ -675,11 +711,7 @@ class KroneckerLayer(ProductLayer):
         """
         if arity < 2:
             raise ValueError("The arity should be at least 2")
-        super().__init__(
-            num_input_units,
-            cast(int, num_input_units**arity),
-            arity=arity,
-        )
+        super().__init__(num_input_units, cast(int, num_input_units**arity), arity=arity)
 
     @property
     def config(self) -> Mapping[str, Any]:
