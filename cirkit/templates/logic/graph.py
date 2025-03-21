@@ -374,9 +374,10 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                 "be specified at the same time or be none."
             )
 
-        self.prune()
         if enforce_smoothness:
             self.smooth()
+        self.prune()
+        self.simplify()
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicalCircuitNode, Layer] = {}
