@@ -190,8 +190,16 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         to_visit = [self.output]
         while len(to_visit):
             node = to_visit.pop()
-            children = list(self.node_inputs(node))           
-            in_nodes[node] = children
+            
+            children = list(self.node_inputs(node))
+            if len(children) == 1 and node != self.output:
+                # if the node has only one child then remove it and
+                # directly connect with child descendants
+                in_nodes[node] = self.node_inputs(children[0])
+            else:
+                in_nodes[node] = children
+
+            #in_nodes[node] = children
             to_visit.extend(children)
 
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
@@ -377,7 +385,8 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         if enforce_smoothness:
             self.smooth()
         self.prune()
-        self.simplify()
+        self.simplify() # minimize the graph
+        self.simplify() # simplify the graph
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicalCircuitNode, Layer] = {}
