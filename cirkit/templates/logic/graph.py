@@ -1,6 +1,7 @@
 import itertools
 from abc import ABC
 from collections.abc import Iterator, Sequence
+from collections import deque, defaultdict
 from functools import cache, cached_property
 from typing import cast
 
@@ -144,74 +145,59 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         super().__init__(nodes, in_nodes, outputs)
 
     def prune(self):
-        """Prune the current graph by applying unit propagation.
+        """Prune the current graph by applying unit propagation.  
 
         Prune a graph in place by applying unit propagation to conjunction and disjunctions.
         See https://en.wikipedia.org/wiki/Unit_propagation.
-        Nodes that are not used as input to other nodes and are not among the output nodes
-        are removed too.
         """
+        # pruning is performed by visiting the graph bottom-up
+        # if a node is a literal, we keep going
+        # if it is a conjunction or a disjunction, we exclude null elements from its children
+        # and replace it by its null element if one of its children is the absorbing element
         absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
         null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
 
-        @cache
-        def absorb_node(node):
-            if isinstance(node, (ConjunctionNode, DisjunctionNode)):
-                children = [absorb_node(c) for c in self.node_inputs(node)]
-
-                # if the node contains the absorbing element, then it is replaced
-                # altogether
-                if any(isinstance(c, absorbing_element(node)) for c in children):
-                    return absorbing_element(node)()
-
-            return node
-
-        # apply node absorbion and remove null elements from conjunctions and disjunctions
         in_nodes = {}
-        for n, children in self._in_nodes.items():
-            absorbed = absorb_node(n)
-
-            if not isinstance(absorbed, (TopNode, BottomNode)):
-                in_nodes[n] = [
-                    c
-                    for c in [absorb_node(c) for c in children]
-                    if not isinstance(c, null_element(n))
+        node_map = {n: n for n in self.nodes}
+        for node in self.topological_ordering():
+            if isinstance(node, (LogicalInputNode, BottomNode, TopNode)):
+                pass
+            elif isinstance(node, (ConjunctionNode, DisjunctionNode)):
+                # gather current children excluding null elements
+                children = [
+                    node_map[c] for c in self.node_inputs(node) 
+                    if not isinstance(node_map[c], null_element(node))
                 ]
 
-        # remove nodes that are not used as input to any other node if they are not the output node
-        out_nodes = graph_nodes_outgoings(self.nodes, lambda n: in_nodes.get(n, []))
-        in_nodes = {
-            n: children
-            for n, children in in_nodes.items()
-            if len(out_nodes.get(n, [])) > 0 or n in self._outputs
-        }
-
+                # if one of the children is an absorbing element then
+                # we replace this node with it
+                if any(isinstance(c, absorbing_element(node)) for c in children):
+                    node_map[node] = absorbing_element(node)()
+                else:
+                    in_nodes[node_map[node]] = children
+                
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
 
         # re initialize the graph
         self.__init__(nodes, in_nodes, list(self.outputs))
 
     def simplify(self):
-        """Promote nodes that only have one child"""
+        """Simplify the graph by removing orphan nodes."""
+        # visit the graph top-down and remove nodes that are not in the subcircuit
+        # identified by the root node
+        in_nodes = {}
 
-        in_nodes = self._in_nodes
-        output = self.output
-        for node in self.topological_ordering():
-            if len(self.node_inputs(node)) == 1:
-                # replace all occurrences of this node with child
-                in_nodes = {
-                    n: [self.node_inputs(node)[0] if c == node else c for c in children]
-                    for n, children in in_nodes.items()
-                    if n != node
-                }
-
-                if node == output:
-                    output = self.node_inputs(node)[0]
+        to_visit = [self.output]
+        while len(to_visit):
+            node = to_visit.pop()
+            children = list(self.node_inputs(node))           
+            in_nodes[node] = children
+            to_visit.extend(children)
 
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
 
         # re initialize the graph
-        self.__init__(nodes, in_nodes, [output])
+        self.__init__(nodes, in_nodes, list(self.outputs))
 
     @property
     def inputs(self) -> Iterator[LogicalCircuitNode]:
@@ -340,7 +326,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
                     # if input to disjunction is a conjunction or a disjunction
                     # then directly add to its inputs else create an ad-hoc node
-                    if input_to_d in in_nodes:
+                    if not isinstance(input_to_d, LogicalInputNode):
                         in_nodes[input_to_d].extend(to_add_for_smoothing)
                     else:
                         ad_hoc = ConjunctionNode()
@@ -388,10 +374,9 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                 "be specified at the same time or be none."
             )
 
+        self.prune()
         if enforce_smoothness:
             self.smooth()
-        self.prune()
-        self.simplify()
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicalCircuitNode, Layer] = {}
