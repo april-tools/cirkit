@@ -1,7 +1,6 @@
 import itertools
 from abc import ABC
 from collections.abc import Iterator, Sequence
-from collections import deque, defaultdict
 from functools import cache, cached_property
 from typing import cast
 
@@ -9,7 +8,7 @@ import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, InputLayer, Layer, SumLayer
-from cirkit.symbolic.parameters import Parameter, ParameterFactory, ConstantParameter
+from cirkit.symbolic.parameters import ConstantParameter, Parameter, ParameterFactory
 from cirkit.templates.utils import InputLayerFactory
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
 from cirkit.utils.scope import Scope
@@ -145,7 +144,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         super().__init__(nodes, in_nodes, outputs)
 
     def prune(self):
-        """Prune the current graph by applying unit propagation.  
+        """Prune the current graph by applying unit propagation.
 
         Prune a graph in place by applying unit propagation to conjunction and disjunctions.
         See https://en.wikipedia.org/wiki/Unit_propagation.
@@ -165,7 +164,8 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             elif isinstance(node, (ConjunctionNode, DisjunctionNode)):
                 # gather current children excluding null elements
                 children = [
-                    node_map[c] for c in self.node_inputs(node) 
+                    node_map[c]
+                    for c in self.node_inputs(node)
                     if not isinstance(node_map[c], null_element(node))
                 ]
 
@@ -175,7 +175,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                     node_map[node] = absorbing_element(node)()
                 else:
                     in_nodes[node_map[node]] = children
-                
+
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
 
         # re initialize the graph
@@ -190,7 +190,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         to_visit = [self.output]
         while len(to_visit):
             node = to_visit.pop()
-            
+
             children = list(self.node_inputs(node))
             if len(children) == 1 and node != self.output:
                 # if the node has only one child then remove it and
@@ -199,7 +199,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             else:
                 in_nodes[node] = children
 
-            #in_nodes[node] = children
+            # in_nodes[node] = children
             to_visit.extend(children)
 
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
@@ -385,8 +385,8 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         if enforce_smoothness:
             self.smooth()
         self.prune()
-        self.simplify() # minimize the graph
-        self.simplify() # simplify the graph
+        self.simplify()  # minimize the graph
+        self.simplify()  # simplify the graph
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicalCircuitNode, Layer] = {}
