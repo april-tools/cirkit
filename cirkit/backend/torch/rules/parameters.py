@@ -131,7 +131,7 @@ def compile_gate_function_parameter(
         # Build the external model evaluator, and register it
         gate_function_eval = CachedGateFunctionEval(p.name, gate_function)
         compiler.state.register_gate_function(p.name, gate_function_eval)
-    
+
     # Build the torch model parameter computational node
     compiled_p = TorchGateFunctionParameter(
         *p.shape, gate_function_eval=gate_function_eval, name=p.name, fold_idx=p.index

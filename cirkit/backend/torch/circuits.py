@@ -322,11 +322,15 @@ class TorchConstantCircuit(AbstractTorchCircuit):
     instantiated when a circuit encoding a partition function is compiled.
     """
 
-    def __call__(self, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
+    def __call__(
+        self, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(gate_function_kwargs=gate_function_kwargs)  # type: ignore[no-any-return,misc]
 
-    def forward(self, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
+    def forward(
+        self, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> Tensor:
         """Evaluate the circuit layers in forward mode, i.e., by evaluating each layer by
         following the topological ordering.
 

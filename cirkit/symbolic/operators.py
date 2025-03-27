@@ -41,10 +41,10 @@ def integrate_embedding_layer(sl: EmbeddingLayer, *, scope: Scope) -> CircuitBlo
         )
     reduce_sum = ReduceSumParameter(sl.weight.shape, axis=1)
     value = Parameter.from_unary(reduce_sum, sl.weight.ref())
-    
+
     i_sl = ConstantValueLayer(sl.num_output_units, log_space=False, value=value)
-    i_sl.metadata = sl.metadata # inject metadata
-    
+    i_sl.metadata = sl.metadata  # inject metadata
+
     return CircuitBlock.from_layer(i_sl)
 
 
@@ -59,10 +59,10 @@ def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> Circui
     else:
         reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=1)
         log_partition = Parameter.from_unary(reduce_lse, sl.logits.ref())
-    
+
     i_sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
-    i_sl.metadata = sl.metadata # inject metadata
-    
+    i_sl.metadata = sl.metadata  # inject metadata
+
     return CircuitBlock.from_layer(i_sl)
 
 
@@ -76,9 +76,9 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock
         log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
         log_partition = sl.log_partition.ref()
-    
+
     i_sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
-    i_sl.metadata = sl.metadata # inject metadata
+    i_sl.metadata = sl.metadata  # inject metadata
 
     return CircuitBlock.from_layer(i_sl)
 
@@ -100,15 +100,15 @@ def multiply_embedding_layers(sl1: EmbeddingLayer, sl2: EmbeddingLayer) -> Circu
         sl1.weight.ref(),
         sl2.weight.ref(),
     )
-    
+
     i_sl = EmbeddingLayer(
         sl1.scope,
         sl1.num_output_units * sl2.num_output_units,
         num_states=sl1.num_states,
         weight=weight,
     )
-    i_sl.metadata = sl.metadata # inject metadata
-    
+    i_sl.metadata = sl.metadata  # inject metadata
+
     return CircuitBlock.from_layer(i_sl)
 
 
@@ -298,7 +298,6 @@ def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
     return CircuitBlock.from_layer(c_sl)
 
 
-
 def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
     coeff = Parameter.from_unary(ConjugateParameter(sl.coeff.shape), sl.coeff.ref())
     c_sl = PolynomialLayer(sl.scope, sl.num_output_units, degree=sl.degree, coeff=coeff)
@@ -306,13 +305,11 @@ def conjugate_polynomial_layer(sl: PolynomialLayer) -> CircuitBlock:
     return CircuitBlock.from_layer(c_sl)
 
 
-
 def conjugate_sum_layer(sl: SumLayer) -> CircuitBlock:
     weight = Parameter.from_unary(ConjugateParameter(sl.weight.shape), sl.weight.ref())
     c_sl = SumLayer(sl.num_input_units, sl.num_output_units, arity=sl.arity, weight=weight)
     c_sl.metadata = sl.metadata
     return CircuitBlock.from_layer(c_sl)
-
 
 
 class LayerOperatorFunc(Protocol):

@@ -181,7 +181,7 @@ class GateFunctionParameter(TensorParameter):
             raise ValueError(f"The index must not be None.")
         if index is not None and index < 0:
             raise ValueError("The index must be a non-negative integer")
-        
+
         initializer = ConstantTensorInitializer(0.0)
         super().__init__(
             *shape,
@@ -1056,7 +1056,11 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         # become references to the tensors of the 'self' parameter's computational graph.
         # All the other nodes are new objects.
         def _replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
-            return ReferenceParameter(n) if isinstance(n, (TensorParameter, GateFunctionParameter)) else copy(n)
+            return (
+                ReferenceParameter(n)
+                if isinstance(n, (TensorParameter, GateFunctionParameter))
+                else copy(n)
+            )
 
         return self._process_nodes(_replace_ref_or_copy)
 
