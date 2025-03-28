@@ -3,6 +3,7 @@ from abc import ABC
 from collections.abc import Iterator, Sequence
 from functools import cache, cached_property
 from typing import cast
+from copy import copy
 
 import numpy as np
 
@@ -191,16 +192,16 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         while len(to_visit):
             node = to_visit.pop()
 
-            children = list(self.node_inputs(node))
+            children = in_nodes.get(node, [])
             if len(children) == 1 and node != self.output:
-                # if the node has only one child then remove it and
-                # directly connect with child descendants
-                in_nodes[node] = self.node_inputs(children[0])
-            else:
+                # if the node has only one outgoing and one ingoing connections 
+                # then remove it and directly connect with child's descendants
+                children = in_nodes.get(children[0], [])
+                #to_visit.insert(0, node)
+            
+            if len(children) > 0:
                 in_nodes[node] = children
-
-            # in_nodes[node] = children
-            to_visit.extend(children)
+                to_visit.extend(children)
 
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
 
@@ -381,12 +382,10 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                 "Both literal_input_factory and negated_literal_input_factory should"
                 "be specified at the same time or be none."
             )
-
         if enforce_smoothness:
             self.smooth()
         self.prune()
-        self.simplify()  # minimize the graph
-        self.simplify()  # simplify the graph
+        # self.simplify()
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicalCircuitNode, Layer] = {}
