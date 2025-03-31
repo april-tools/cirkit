@@ -3,7 +3,6 @@ from abc import ABC
 from collections.abc import Iterator, Sequence
 from functools import cache, cached_property
 from typing import cast
-from copy import copy
 
 import numpy as np
 
@@ -194,11 +193,11 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
             children = in_nodes.get(node, [])
             if len(children) == 1 and node != self.output:
-                # if the node has only one outgoing and one ingoing connections 
+                # if the node has only one outgoing and one ingoing connections
                 # then remove it and directly connect with child's descendants
                 children = in_nodes.get(children[0], [])
-                #to_visit.insert(0, node)
-            
+                # to_visit.insert(0, node)
+
             if len(children) > 0:
                 in_nodes[node] = children
                 to_visit.extend(children)
