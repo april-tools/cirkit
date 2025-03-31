@@ -8,7 +8,6 @@ from torch import Tensor
 from cirkit.backend.torch.layers import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
-from cirkit.utils.shape import comp_shape
 
 
 class TorchTuckerLayer(TorchInnerLayer):
@@ -145,11 +144,11 @@ class TorchCPTLayer(TorchInnerLayer):
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
-        return comp_shape(w.shape, self._weight_shape)
+        return w.shape == self._weight_shape
 
     @property
     def _weight_shape(self) -> tuple[int, ...]:
-        return (-1, self.num_output_units, self.num_input_units)
+        return self.num_output_units, self.num_input_units
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -181,20 +180,25 @@ class TorchCPTLayer(TorchInnerLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
-        # x: (F, H, K, num_samples, D)
-        x = torch.sum(x, dim=1)  # (F, K, num_samples, D)
+        # x: (F, B, H, K, num_samples, D)
+        x = torch.sum(x, dim=2)  # (F, B, K, num_samples, D)
 
-        num_samples = x.shape[2]
-        d = x.shape[3]
+        # x: (F, B, H, Ki, N, D) -> (F, B, H * Ki, N, D)
+        x = x.flatten(2, 3)
+        num_samples, d = x.shape[-2], x.shape[-1]
 
-        # mixing_distribution: (F, O, K)
+        # mixing_distribution: (F, B, Ko, H * Ki)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
+        # mixing_samples: (N, F, B, Ko) -> (F, B, Ko, num_samples)
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
+        mixing_samples = E.rearrange(mixing_samples, "n f b k -> f b k n")
 
-        x = torch.gather(x, dim=1, index=mixing_indices)
+        # mixing_indices: (F, B, Ko, num_samples, D)
+        mixing_indices = E.repeat(mixing_samples, "f b k n -> f b k n d", d=d)
+
+        # x: (F, B, Ko, num_samples, D)
+        x = torch.gather(x, dim=2, index=mixing_indices)
         return x, mixing_samples
 
 
@@ -261,11 +265,11 @@ class TorchTensorDotLayer(TorchInnerLayer):
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
-        if len(w.shape) != 3:
+        if len(w.shape) != 2:
             return False
-        if self.num_input_units % w.shape[-1]:
+        if self.num_input_units % w.shape[1]:
             return False
-        if self.num_output_units != w.shape[-2] * (self.num_input_units // w.shape[-1]):
+        if self.num_output_units != w.shape[0] * (self.num_input_units // w.shape[1]):
             return False
         return True
 

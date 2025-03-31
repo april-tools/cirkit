@@ -15,7 +15,6 @@ from cirkit.backend.torch.graph.modules import (
     TorchDiAcyclicGraph,
 )
 from cirkit.backend.torch.parameters.nodes import TorchParameterNode
-from cirkit.utils.shape import comp_shape
 
 
 class ParameterAddressBook(AddressBook):
@@ -158,10 +157,10 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         batch.
 
         Returns:
-            The shape of the computed tensor parameter, without considering the number of folds.
-            The value -1 is used to indicate an unknown batch size.
+            The shape of the computed tensor parameter, without considering the number of folds
+                and the batch size.
         """
-        return (-1, *self.outputs[0].shape)
+        return self.outputs[0].shape
 
     def reset_parameters(self) -> None:
         """Reset the parameters of the parameter computational graph."""

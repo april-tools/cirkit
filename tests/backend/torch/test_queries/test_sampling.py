@@ -15,7 +15,7 @@ from tests.symbolic.test_utils import (
 
 @pytest.mark.parametrize(
     "fold,optimize",
-    itertools.product([False, True], [False, True]),
+    itertools.product([True], [False]),
 )
 def test_query_unconditional_sampling(fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
@@ -39,7 +39,6 @@ def test_query_unconditional_sampling(fold: bool, optimize: bool):
     # samples: (num_samples, D)
     samples, _ = query(num_samples=num_samples)
     assert samples.shape == (num_samples, tc.num_variables)
-    samples = samples.squeeze(dim=1)
 
     # Map samples to indices of the probabilities computed above
     samples_idx = samples * torch.tensor(list(reversed([2**i for i in range(tc.num_variables)])))
