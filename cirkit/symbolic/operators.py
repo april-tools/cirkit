@@ -107,7 +107,7 @@ def multiply_embedding_layers(sl1: EmbeddingLayer, sl2: EmbeddingLayer) -> Circu
         num_states=sl1.num_states,
         weight=weight,
     )
-    i_sl.metadata = sl.metadata  # inject metadata
+    # TODO: Handle injection into the new symbolic layer
 
     return CircuitBlock.from_layer(i_sl)
 
