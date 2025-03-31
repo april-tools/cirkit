@@ -652,12 +652,12 @@ def conjugate(
 
 
 def condition_circuit(
-    circuit: Circuit, *, gate_functions: GateFunctionSpecs
+    sc: Circuit, *, gate_functions: GateFunctionSpecs
 ) -> tuple[Circuit, GateFunctionParameterSpecs]:
     """Parameterize some layers of a symbolic circuit by means of externally-provided gate functions.
 
     Args:
-        circuit: The symbolic circuit.
+        sc: The symbolic circuit.
         gate_functions: A mapping from a gate function identifier to the
             list of layers it will parametrize.
 
@@ -687,7 +687,7 @@ def condition_circuit(
     # in folded fashion and upacked later
     # make sure that all elements within a group are compatible (same parameter type and shape)
     gate_function_specs: GateFunctionParameterSpecs = {}
-    layers_map: dict[Layer, Layer] = {l: l.copy() for l in circuit.layers}
+    layers_map: dict[Layer, Layer] = {l: l.copy() for l in sc.layers}
 
     for gf_group, gf_layers in gate_functions.items():
         # group layers together based on metadata
@@ -714,12 +714,12 @@ def condition_circuit(
 
     # Construct the resulting circuit
     # use a shallow copy of the parameters that have not been changed
-    layers = [layers_map[l] for l in circuit.layers]
+    layers = [layers_map[l] for l in sc.layers]
     in_layers = {
-        sl: [layers_map[prev_sli] for prev_sli in circuit.layer_inputs(prev_sl)]
+        sl: [layers_map[prev_sli] for prev_sli in sc.layer_inputs(prev_sl)]
         for prev_sl, sl in layers_map.items()
     }
-    output_layers = [layers_map[prev_sli] for prev_sli in circuit.outputs]
-    circuit = Circuit(layers, in_layers=in_layers, outputs=output_layers)
+    output_layers = [layers_map[prev_sli] for prev_sli in sc.outputs]
+    sc = Circuit(layers, in_layers=in_layers, outputs=output_layers)
 
-    return circuit, gate_function_specs
+    return sc, gate_function_specs
