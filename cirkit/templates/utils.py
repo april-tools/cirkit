@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -91,6 +91,22 @@ class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
         Returns:
             ProductLayer: A product layer.
         """
+
+
+def named_parameterizations_to_factories(
+    params: Mapping[str, Parameterization]
+) -> Mapping[str, ParameterFactory]:
+    """Given a mapping of parameters names to parameterizations, retrieve a dictionary
+        mapping the  same parameters names to symbolic parameter factories.
+
+    Args:
+        params: A mapping from parameter names to parameterization objects.
+
+    Returns:
+        Mapping[str, ParameterFactory]: A mapping from parameter names to symbolic
+            parameter factories.
+    """
+    return {name + "_factory": parameterization_to_factory(param) for name, param in params.items()}
 
 
 def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
