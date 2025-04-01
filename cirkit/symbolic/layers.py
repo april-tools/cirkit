@@ -68,7 +68,7 @@ class Layer(ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
-        self.metadata = metadata
+        self._metadata = metadata
 
     @property
     @abstractmethod
@@ -93,6 +93,18 @@ class Layer(ABC):
         """
         return {}
 
+    @property
+    def metadata(self) -> LayerMetadata:
+        """Retrieves the layer metadata structure.
+        If it is None, then it is created when trying to access it.
+
+        Returns:
+            LayerMetadata: The layer metadata.
+        """
+        if self._metadata is None:
+            self._metadata = LayerMetadata()
+        return self._metadata
+
     def copy(self, *, params: Mapping[str, Parameter] | None = None) -> "Layer":
         """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic
         parameters are copied by reference. If some parameters are specified, then
@@ -110,7 +122,10 @@ class Layer(ABC):
             return type(self)(**self.config, **self.params)
         updated_params = dict(self.params)
         updated_params.update(params)
-        return type(self)(**self.config, **updated_params)
+        sl = type(self)(**self.config, **updated_params)
+        if self._metadata is not None:
+            sl._metadata = self._metadata
+        return sl
 
     def copyref(self) -> "Layer":
         """Creates a _reference_ copy of the layer, i.e., a shallow copy where the symbolic
@@ -122,9 +137,10 @@ class Layer(ABC):
             A reference copy of the layer, with reference to the parameters.
         """
         ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
-        copy = type(self)(**self.config, **ref_params)
-        copy.metadata = self.metadata
-        return copy
+        sl = type(self)(**self.config, **ref_params)
+        if self._metadata is not None:
+            sl._metadata = self._metadata
+        return sl
 
     def __repr__(self) -> str:
         config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
