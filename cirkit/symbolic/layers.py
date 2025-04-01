@@ -45,7 +45,7 @@ class Layer(ABC):
         num_input_units: int,
         num_output_units: int,
         arity: int = 1,
-        metadata: LayerMetadata = None,
+        metadata: LayerMetadata | None = None,
     ):
         """Initializes a symbolic layer.
 
@@ -57,7 +57,7 @@ class Layer(ABC):
             metadata: A dictionary encoding relevant metadata for this symbolic layer.
 
         Raises:
-            ValueError: If the number of input units, output units or the arity are not positvie.
+            ValueError: If the number of input units, output units or the arity are not positive.
         """
         if num_input_units < 0:
             raise ValueError("The number of input units should be non-negative")
@@ -68,7 +68,7 @@ class Layer(ABC):
         self.num_input_units = num_input_units
         self.num_output_units = num_output_units
         self.arity = arity
-        self.metadata = metadata if metadata is not None else LayerMetadata()
+        self.metadata = metadata
 
     @property
     @abstractmethod
