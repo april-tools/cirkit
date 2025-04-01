@@ -22,6 +22,16 @@ class LayerMetadata(MutableMapping):
         """
         return cast(Iterator[tuple[str, Any]], self._map.items())
 
+    def __copy__(self) -> "LayerMetadata":
+        """Shallow copy the metadata.
+
+        Returns:
+            LayerMetadata: A shallow copy of the metadata.
+        """
+        metadata = LayerMetadata()
+        metadata._map = self._map.copy()
+        return metadata
+
     def __iter__(self) -> Iterator[str]:
         """
         Returns the iterable over the keys in the metadata.

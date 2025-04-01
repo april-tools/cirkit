@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from copy import copy
 from enum import IntEnum, auto
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.metadata import LayerMetadata
@@ -124,7 +125,7 @@ class Layer(ABC):
         updated_params.update(params)
         sl = type(self)(**self.config, **updated_params)
         if self._metadata is not None:
-            sl._metadata = self._metadata
+            sl._metadata = copy(self._metadata)
         return sl
 
     def copyref(self) -> "Layer":
@@ -139,7 +140,7 @@ class Layer(ABC):
         ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
         sl = type(self)(**self.config, **ref_params)
         if self._metadata is not None:
-            sl._metadata = self._metadata
+            sl._metadata = copy(self._metadata)
         return sl
 
     def __repr__(self) -> str:
