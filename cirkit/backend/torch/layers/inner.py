@@ -125,8 +125,8 @@ class TorchHadamardLayer(TorchInnerLayer):
 
     def sample(self, x: Tensor) -> tuple[Tensor, None]:
         # Concatenate samples over disjoint variables through a sum
-        # x: (F, B, H, K, N, D)
-        x = torch.sum(x, dim=2)  # (F, B, K, N, D)
+        # x: (F, H, B, K, N, D)
+        x = torch.sum(x, dim=1)  # (F, B, K, N, D)
         return x, None
 
 
@@ -184,9 +184,9 @@ class TorchKroneckerLayer(TorchInnerLayer):
         return y0
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
-        # x: (F, B, H, K, N, D)
-        y0 = x[:, :, 0]  # (F, B, K, N, D)
-        for i in range(1, x.shape[2]):
+        # x: (F, H, B, K, N, D)
+        y0 = x[:, 0]  # (F, B, K, N, D)
+        for i in range(1, x.shape[1]):
             y0 = y0.unsqueeze(dim=3)  # (F, B, K, 1, N, D)
             y1 = x[:, i].unsqueeze(dim=2)  # (F, B, 1, Ki, N, D)
             y0 = torch.flatten(y0 + y1, start_dim=2, end_dim=3)
@@ -277,20 +277,20 @@ class TorchSumLayer(TorchInnerLayer):
         if negative or not normalized:
             raise TypeError("Sampling in sum layers only works with positive weights summing to 1")
 
-        # x: (F, B, H, Ki, N, D) -> (F, B, H * Ki, N, D)
-        x = x.flatten(2, 3)
+        # x: (F, H, B, Ki, N, D) -> (F, B, H * Ki, N, D)
+        x = x.transpose(1, 2).flatten(2, 3)
         num_samples, d = x.shape[-2], x.shape[-1]
 
         # mixing_distribution: (F, B, Ko, H * Ki)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
-        # mixing_samples: (N, F, B, Ko) -> (F, B, Ko, num_samples)
+        # mixing_samples: (N, F, B, Ko) -> (F, B, Ko, N)
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f b k -> f b k n")
 
-        # mixing_indices: (F, B, Ko, num_samples, D)
+        # mixing_indices: (F, B, Ko, N, D)
         mixing_indices = E.repeat(mixing_samples, "f b k n -> f b k n d", d=d)
 
-        # x: (F, B, Ko, num_samples, D)
+        # x: (F, B, Ko, N, D)
         x = torch.gather(x, dim=2, index=mixing_indices)
         return x, mixing_samples

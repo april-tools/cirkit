@@ -254,7 +254,7 @@ class SamplingQuery(Query):
             raise NotImplementedError(
                 "Sampling is yet not implemented for circuits having multiple outputs"
             )
-        if samples.shape[2] != 1 != 1:
+        if samples.shape[2] != 1:
             raise NotImplementedError(
                 "Sampling is yet not implemented for circuits having batched parameters"
             )

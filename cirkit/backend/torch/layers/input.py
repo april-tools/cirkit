@@ -266,7 +266,7 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
 
         # for each fold and batch retrieve the corresponding state
         idx_fold = torch.arange(self.num_folds, device=weight.device)
-        idx_batch = torch.arange(weight.size(1), device=weight.device)
+        idx_batch = torch.arange(weight.shape[1], device=weight.device)
         x = weight[idx_fold, idx_batch, :, x]
         x = self.semiring.map_from(x, SumProductSemiring)
         return x  # (F, B, K)
@@ -410,7 +410,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
 
         idx_fold = torch.arange(self.num_folds, device=logits.device)
-        idx_batch = torch.arange(logits.size(1), device=logits.device)
+        idx_batch = torch.arange(logits.shape[1], device=logits.device)
         x = logits[idx_fold[:, None], idx_batch, :, x]
         return x  # (F, B, K)
 
@@ -720,7 +720,7 @@ class TorchConstantValueLayer(TorchConstantLayer):
     def forward(self, batch_size: int) -> Tensor:
         value = self.value()  # (F, B, Ko)
 
-        if value.size(1) == 1 and batch_size != 1:
+        if value.shape[1] == 1 and batch_size != 1:
             # expand value to the requested batch size
             value = value.expand(-1, batch_size, *tuple(value.shape[2:]))
 
@@ -784,16 +784,16 @@ class TorchEvidenceLayer(TorchConstantLayer):
     def forward(self, batch_size: int) -> Tensor:
         obs = self.observation()  # (F, B, D)
 
-        if obs.size(1) != 1 and obs.size(1) != batch_size:
+        if obs.shape[1] != 1 and obs.shape[1] != batch_size:
             raise ValueError(
-                f"The batch size of the observation ({obs.size(1)})"
+                f"The batch size of the observation ({obs.shape[1]})"
                 f"does not match batch_size {batch_size}."
             )
 
         x = self.layer(obs)
 
-        if x.size(1) == 1:
-            x = x.expand(x.size(0), batch_size, x.size(2))
+        if x.shape[1] == 1:
+            x = x.expand(x.shape[0], batch_size, x.shape[2])
 
         return x
 

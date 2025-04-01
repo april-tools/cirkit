@@ -15,7 +15,7 @@ from tests.symbolic.test_utils import (
 
 @pytest.mark.parametrize(
     "fold,optimize",
-    itertools.product([True], [False]),
+    itertools.product([False, True], [False, True]),
 )
 def test_query_unconditional_sampling(fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
