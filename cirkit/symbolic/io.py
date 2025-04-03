@@ -149,6 +149,6 @@ def plot_circuit(
                 f.write(dot.source)
         else:
             dot.format = fmt
-            dot.render(out_path)
+            dot.render(out_path, cleanup=True)
 
     return dot
