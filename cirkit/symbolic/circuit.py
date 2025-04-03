@@ -340,6 +340,15 @@ class Circuit(DiAcyclicGraph[Layer]):
         return self.nodes
 
     @property
+    def input_layers(self) -> Iterator[InputLayer]:
+        """Retrieves an iterator over input layers.
+
+        Returns:
+            Iterator[InputLayer]:
+        """
+        return (sl for sl in self.layers if isinstance(sl, InputLayer))
+
+    @property
     def inner_layers(self) -> Iterator[SumLayer | ProductLayer]:
         """Retrieves an iterator over inner layers (i.e., non-input layers).
 

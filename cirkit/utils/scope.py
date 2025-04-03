@@ -4,6 +4,10 @@ class Scope(frozenset[int]):
     but for efficiency this is not checked.
     """
 
+    def __iter__(self):
+        """Ensure iteration happens in sorted order."""
+        return iter(sorted(super().__iter__()))
+
     def __repr__(self) -> str:
         """Generate the repr string of the scope, for repr().
 
