@@ -139,7 +139,7 @@ def hmm(
 
     layers: list[Layer] = []
     in_layers: dict[Layer, list[Layer]] = {}
-    input_sl = input_factories[0](Scope([ordering[0]]), num_latent_states)
+    input_sl = input_factories[-1](Scope([ordering[-1]]), num_latent_states)
     layers.append(input_sl)
 
     # Set the sum weight factory
@@ -147,12 +147,13 @@ def hmm(
         weight_param = Parameterization(activation="softmax", initialization="normal")
     weight_factory = parameterization_to_factory(weight_param)
 
-    sum_sl = SumLayer(num_latent_states, num_latent_states, weight_factory=weight_factory)
+    num_units_out = 1 if num_variables == 1 else num_latent_states
+    sum_sl = SumLayer(num_latent_states, num_units_out, weight_factory=weight_factory)
     layers.append(sum_sl)
     in_layers[sum_sl] = [input_sl]
 
     # Loop over the number of variables
-    for i in range(1, num_variables):
+    for i in reversed(range(num_variables - 1)):
         last_dense = layers[-1]
 
         input_sl = input_factories[i](Scope([ordering[i]]), num_latent_states)
@@ -161,7 +162,7 @@ def hmm(
         layers.append(prod_sl)
         in_layers[prod_sl] = [last_dense, input_sl]
 
-        num_units_out = num_latent_states if i != num_variables - 1 else 1
+        num_units_out = 1 if i == 0 else num_latent_states
         sum_sl = SumLayer(
             num_latent_states,
             num_units_out,
