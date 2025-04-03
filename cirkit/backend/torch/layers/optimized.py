@@ -165,10 +165,10 @@ class TorchCPTLayer(TorchInnerLayer):
     def forward(self, x: Tensor) -> Tensor:
         # x: (F, B, Ki)
         x = self.semiring.prod(x, dim=1, keepdim=False)
-        # weight: (F, Ko, Ki)
+        # weight: (F, B, Ko, Ki)
         weight = self.weight()
         return self.semiring.einsum(
-            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbi,fboi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
@@ -180,20 +180,22 @@ class TorchCPTLayer(TorchInnerLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
-        # x: (F, H, K, num_samples, D)
-        x = torch.sum(x, dim=1)  # (F, K, num_samples, D)
+        # x: (F, H, B, K, N, D)
+        x = torch.sum(x, dim=1)  # (F, B, K, N, D)
+        num_samples, d = x.shape[-2], x.shape[-1]
 
-        num_samples = x.shape[2]
-        d = x.shape[3]
-
-        # mixing_distribution: (F, O, K)
+        # mixing_distribution: (F, B, Ko, Ki)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
+        # mixing_samples: (N, F, B, Ko) -> (F, B, Ko, N)
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
+        mixing_samples = E.rearrange(mixing_samples, "n f b k -> f b k n")
 
-        x = torch.gather(x, dim=1, index=mixing_indices)
+        # mixing_indices: (F, B, Ko, N, D)
+        mixing_indices = E.repeat(mixing_samples, "f b k n -> f b k n d", d=d)
+
+        # x: (F, B, Ko, num_samples, D)
+        x = torch.gather(x, dim=2, index=mixing_indices)
         return x, mixing_samples
 
 
@@ -254,7 +256,7 @@ class TorchTensorDotLayer(TorchInnerLayer):
                 f"but found {weight.num_folds} and {weight.shape}, respectively"
             )
         self.weight = weight
-        self._num_contract_units = weight.shape[1]
+        self._num_contract_units = weight.shape[-1]
         self._num_batch_units = num_input_units // self._num_contract_units
 
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
@@ -282,11 +284,11 @@ class TorchTensorDotLayer(TorchInnerLayer):
         # x: (F, B, Ki) -> (F, B, Kj, Kq) -> (F, B, Kq, Kj)
         x = x.view(x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units)
         x = x.permute(0, 1, 3, 2)
-        # weight: (F, Kk, Kj)
+        # weight: (F, B, Kk, Kj)
         weight = self.weight()
         # y: (F, B, Kq, Kj)
         y = self.semiring.einsum(
-            "fbqj,fkj->fbqk", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbqj,fbkj->fbqk", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
         # return y: (F, B, Kq * Kk) = (F, B, Ko)
         return y.view(y.shape[0], y.shape[1], self.num_output_units)

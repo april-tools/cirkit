@@ -26,7 +26,6 @@ from cirkit.symbolic.parameters import (
     PolynomialDifferential,
     PolynomialProduct,
     ReduceLSEParameter,
-    ReduceProductParameter,
     ReduceSumParameter,
     SumParameter,
 )
