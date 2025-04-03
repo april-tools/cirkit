@@ -1,27 +1,36 @@
-from collections import defaultdict
 from collections.abc import MutableMapping
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, cast
 
 
 class LayerMetadata(MutableMapping):
     """The metadata for a symbolic layer. It acts as a recursive
     defaultdict object where an empty dict is always used when a
-    key is not available. Keys are alwyas strings.
+    key is not available. Keys are always strings.
     """
 
     def __init__(self):
         """Initialize the layer metadata as an empty dictionary."""
-        self._map = {}
+        self._map: dict = {}
 
     def items(self) -> Iterator[tuple[str, Any]]:
         """
         Returns the items of the layer metadata.
 
         Returns:
-            Iterable[tuple[str, Any]]: An iterable where each element
+            Iterator[tuple[str, Any]]: An iterable where each element
                 is a tuple with the key and its value.
         """
-        return self._map.items()
+        return cast(Iterator[tuple[str, Any]], self._map.items())
+
+    def __copy__(self) -> "LayerMetadata":
+        """Shallow copy the metadata.
+
+        Returns:
+            LayerMetadata: A shallow copy of the metadata.
+        """
+        metadata = LayerMetadata()
+        metadata._map = self._map.copy()
+        return metadata
 
     def __iter__(self) -> Iterator[str]:
         """
@@ -34,11 +43,11 @@ class LayerMetadata(MutableMapping):
 
     def __setitem__(self, k: str, v: Any):
         """
-        Sets an iten in the metadata.
+        Sets an item in the metadata.
 
         Args:
-            k (str): The key of the item.
-            v (Any): The value of the item.
+            k: The key of the item.
+            v: The value of the item.
         """
         self._map[k] = v
 
@@ -47,7 +56,7 @@ class LayerMetadata(MutableMapping):
         Deletes an item from the metadata.
 
         Args:
-            k (str): The key of the item to delete.
+            k: The key of the item to delete.
         """
         del self._map[k]
 
@@ -67,7 +76,7 @@ class LayerMetadata(MutableMapping):
         stored at that key and returned instead.
 
         Args:
-            k (str): The key of the item.
+            k: The key of the item.
 
         Returns:
             Any: The element stored as the key k.
@@ -84,7 +93,7 @@ class LayerMetadata(MutableMapping):
         as not existing.
 
         Args:
-            k (str): The key of the metadata.
+            k: The key of the metadata.
 
         Returns:
             bool: True if the key exists, False otherwise.

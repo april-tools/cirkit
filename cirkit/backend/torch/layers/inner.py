@@ -9,7 +9,6 @@ from torch import Tensor
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
-from cirkit.utils.shape import comp_shape
 
 
 class TorchInnerLayer(TorchLayer, ABC):
@@ -126,8 +125,8 @@ class TorchHadamardLayer(TorchInnerLayer):
 
     def sample(self, x: Tensor) -> tuple[Tensor, None]:
         # Concatenate samples over disjoint variables through a sum
-        # x: (F, H, C, K, num_samples, D)
-        x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
+        # x: (F, H, B, K, N, D)
+        x = torch.sum(x, dim=1)  # (F, B, K, N, D)
         return x, None
 
 
@@ -185,13 +184,13 @@ class TorchKroneckerLayer(TorchInnerLayer):
         return y0
 
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
-        # x: (F, H, C, K, num_samples, D)
-        y0 = x[:, 0]
+        # x: (F, H, B, K, N, D)
+        y0 = x[:, 0]  # (F, B, K, N, D)
         for i in range(1, x.shape[1]):
-            y0 = y0.unsqueeze(dim=3)  # (F, C, K, 1, num_samples, D)
-            y1 = x[:, i].unsqueeze(dim=2)  # (F, C, 1, Ki, num_samples, D)
+            y0 = y0.unsqueeze(dim=3)  # (F, B, K, 1, N, D)
+            y1 = x[:, i].unsqueeze(dim=2)  # (F, B, 1, Ki, N, D)
             y0 = torch.flatten(y0 + y1, start_dim=2, end_dim=3)
-        # y0: (F, C, Ko=Ki ** arity, num_samples, D)
+        # y0: (F, B, Ko=Ki ** arity, N, D)
         return y0, None
 
 
@@ -243,12 +242,12 @@ class TorchSumLayer(TorchInnerLayer):
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
-        return comp_shape(w.shape, self._weight_shape)
+        return w.shape == self._weight_shape
 
     @property
     def _weight_shape(self) -> tuple[int, ...]:
         # include batch size in input
-        return -1, self.num_output_units, self.num_input_units * self.arity
+        return self.num_output_units, self.num_input_units * self.arity
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -278,22 +277,20 @@ class TorchSumLayer(TorchInnerLayer):
         if negative or not normalized:
             raise TypeError("Sampling in sum layers only works with positive weights summing to 1")
 
-        # x: (F, H, Ki, num_samples, D) -> (F, H * Ki, num_samples, D)
-        x = x.flatten(1, 2)
+        # x: (F, H, B, Ki, N, D) -> (F, B, H * Ki, N, D)
+        x = x.transpose(1, 2).flatten(2, 3)
+        num_samples, d = x.shape[-2], x.shape[-1]
 
-        num_samples = x.shape[2]
-        d = x.shape[3]
-
-        # mixing_distribution: (F, Ko, H * Ki)
+        # mixing_distribution: (F, B, Ko, H * Ki)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
-        # mixing_samples: (num_samples, F, Ko) -> (F, Ko, num_samples)
+        # mixing_samples: (N, F, B, Ko) -> (F, B, Ko, N)
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
+        mixing_samples = E.rearrange(mixing_samples, "n f b k -> f b k n")
 
-        # mixing_indices: (F, Ko, num_samples, D)
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
+        # mixing_indices: (F, B, Ko, N, D)
+        mixing_indices = E.repeat(mixing_samples, "f b k n -> f b k n d", d=d)
 
-        # x: (F, Ko, num_samples, D)
-        x = torch.gather(x, dim=1, index=mixing_indices)
+        # x: (F, B, Ko, N, D)
+        x = torch.gather(x, dim=2, index=mixing_indices)
         return x, mixing_samples

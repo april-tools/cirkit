@@ -1007,15 +1007,15 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
 
         degp1 = coeff1.shape[-1] + coeff2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
 
-        spec1 = fft(coeff1, n=degp1, dim=-1)  # shape (F, K1, dp1).
-        spec2 = fft(coeff2, n=degp1, dim=-1)  # shape (F, K2, dp1).
+        spec1 = fft(coeff1, n=degp1, dim=-1)  # shape (F, B, K1, dp1).
+        spec2 = fft(coeff2, n=degp1, dim=-1)  # shape (F, B, K2, dp1).
 
-        # shape (F, K1, 1, dp1), (F, 1, K2, dp1) -> (F, K1, K2, dp1) -> (F, K1*K2, dp1).
+        # shape (F, B, K1, 1, dp1), (F, B, 1, K2, dp1) -> (F, B, K1, K2, dp1) -> (F, B, K1*K2, dp1).
         spec = torch.flatten(
-            spec1.unsqueeze(dim=2) * spec2.unsqueeze(dim=1), start_dim=1, end_dim=2
+            spec1.unsqueeze(dim=-2) * spec2.unsqueeze(dim=-3), start_dim=2, end_dim=3
         )
 
-        return ifft(spec, n=degp1, dim=-1)  # shape (F, K1*K2, dp1).
+        return ifft(spec, n=degp1, dim=-1)  # shape (F, B, K1*K2, dp1).
 
 
 class TorchPolynomialDifferential(TorchUnaryParameterOp):
@@ -1035,14 +1035,14 @@ class TorchPolynomialDifferential(TorchUnaryParameterOp):
 
     @classmethod
     def _diff_once(cls, x: Tensor) -> Tensor:
-        degp1 = x.shape[-1]  # x shape (F, K, dp1).
-        arange = torch.arange(1, degp1).to(x)  # shape (deg,).
+        degp1 = x.shape[-1]  # x shape (F, B, K, dp1).
+        arange = torch.arange(1, degp1, device=x.device)  # shape (deg,).
         return x[..., 1:] * arange  # a_n x^n -> n a_n x^(n-1), with a_0 disappeared.
 
     def forward(self, coeff: Tensor) -> Tensor:
         if coeff.shape[-1] <= self.order:
-            return torch.zeros_like(coeff[..., :1])  # shape (F, K, 1).
+            return torch.zeros_like(coeff[..., :1])  # shape (F, B, K, 1).
 
         for _ in range(self.order):
             coeff = self._diff_once(coeff)
-        return coeff  # shape (F, K, dp1-ord).
+        return coeff  # shape (F, B, K, dp1-ord).

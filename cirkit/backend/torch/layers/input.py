@@ -9,7 +9,6 @@ from torch.distributions.utils import probs_to_logits
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSemiring
-from cirkit.utils.shape import comp_shape
 
 
 class TorchInputLayer(TorchLayer, ABC):
@@ -242,7 +241,7 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
     def _valid_weight_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return comp_shape(p.shape, self._weight_shape)
+        return p.shape == self._weight_shape
 
     @property
     def _weight_shape(self) -> tuple[int, ...]:
@@ -267,7 +266,7 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
 
         # for each fold and batch retrieve the corresponding state
         idx_fold = torch.arange(self.num_folds, device=weight.device)
-        idx_batch = torch.arange(weight.size(1), device=weight.device)
+        idx_batch = torch.arange(weight.shape[1], device=weight.device)
         x = weight[idx_fold, idx_batch, :, x]
         x = self.semiring.map_from(x, SumProductSemiring)
         return x  # (F, B, K)
@@ -383,11 +382,11 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return comp_shape(p.shape, self._probs_logits_shape)
+        return p.shape == self._probs_logits_shape
 
     @property
     def _probs_logits_shape(self) -> tuple[int, ...]:
-        return (-1, self.num_output_units, self.num_categories)
+        return self.num_output_units, self.num_categories
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -411,7 +410,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
 
         idx_fold = torch.arange(self.num_folds, device=logits.device)
-        idx_batch = torch.arange(logits.size(1), device=logits.device)
+        idx_batch = torch.arange(logits.shape[1], device=logits.device)
         x = logits[idx_fold[:, None], idx_batch, :, x]
         return x  # (F, B, K)
 
@@ -426,8 +425,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     def sample(self, num_samples: int = 1) -> Tensor:
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Categorical(logits=logits)
-        samples = dist.sample((num_samples,))  # (N, F, K)
-        samples = samples.permute(1, 2, 0)  # (F, K, N)
+        samples = dist.sample((num_samples,))  # (N, F, B, K)
         return samples
 
 
@@ -505,7 +503,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return comp_shape(p.shape, self._probs_logits_shape)
+        return p.shape == self._probs_logits_shape
 
     @property
     def _probs_logits_shape(self) -> tuple[int, ...]:
@@ -544,8 +542,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
     def sample(self, num_samples: int = 1) -> Tensor:
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Binomial(self.total_count, logits=logits)
-        samples = dist.sample((num_samples,))  # (num_samples, F, K)
-        samples = samples.permute(1, 2, 0)  # (F, K, num_samples)
+        samples = dist.sample((num_samples,))  # (N, F, B, K)
         return samples
 
 
@@ -620,12 +617,12 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
     def _valid_mean_stddev_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
-        return comp_shape(p.shape, self._mean_stddev_shape)
+        return p.shape == self._mean_stddev_shape
 
     def _valid_log_partition_shape(self, log_partition: TorchParameter) -> bool:
         if log_partition.num_folds != self.num_folds:
             return False
-        return comp_shape(log_partition.shape, self._log_partition_shape)
+        return log_partition.shape == self._log_partition_shape
 
     @property
     def _mean_stddev_shape(self) -> tuple[int, ...]:
@@ -664,8 +661,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
     def sample(self, num_samples: int = 1) -> Tensor:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
-        samples = dist.sample((num_samples,))  # (N, F, K)
-        samples = samples.permute(1, 2, 0)  # (F, K, N)
+        samples = dist.sample((num_samples,))  # (N, F, B, K)
         return samples
 
 
@@ -705,10 +701,9 @@ class TorchConstantValueLayer(TorchConstantLayer):
                 f"but found {value.num_folds}"
             )
 
-        if not comp_shape(value.shape, (num_output_units,)):
+        if value.shape != (num_output_units,):
             raise ValueError(
-                f"The shape of the value must be (-1, {num_output_units}), "
-                f"but found {value.shape}"
+                f"The shape of the value must be ({num_output_units},), " f"but found {value.shape}"
             )
         self.value = value
         self.log_space = log_space
@@ -725,7 +720,7 @@ class TorchConstantValueLayer(TorchConstantLayer):
     def forward(self, batch_size: int) -> Tensor:
         value = self.value()  # (F, B, Ko)
 
-        if value.size(1) == 1 and batch_size != 1:
+        if value.shape[1] == 1 and batch_size != 1:
             # expand value to the requested batch size
             value = value.expand(-1, batch_size, *tuple(value.shape[2:]))
 
@@ -761,14 +756,14 @@ class TorchEvidenceLayer(TorchConstantLayer):
                 f"The number of folds in the observation and in the layer should be the same, "
                 f"but found {observation.num_folds} and {layer.num_folds} respectively"
             )
-        if not comp_shape(observation.shape, (1,)):
+        if len(observation.shape) != 1:
             raise ValueError(
                 f"Expected observation of shape (num_variables,), " f"but found {observation.shape}"
             )
-        if observation.shape[-1] != layer.num_variables:
+        if observation.shape[0] != layer.num_variables:
             raise ValueError(
                 f"Expected an observation with number of variables {layer.num_variables}, "
-                f"but found {observation.shape[-1]}"
+                f"but found {observation.shape[0]}"
             )
         super().__init__(layer.num_output_units, layer.num_folds, semiring=semiring)
         self.layer = layer
@@ -789,16 +784,16 @@ class TorchEvidenceLayer(TorchConstantLayer):
     def forward(self, batch_size: int) -> Tensor:
         obs = self.observation()  # (F, B, D)
 
-        if obs.size(1) != 1 and obs.size(1) != batch_size:
+        if obs.shape[1] != 1 and obs.shape[1] != batch_size:
             raise ValueError(
-                f"The batch size of the observation ({obs.size(1)})"
+                f"The batch size of the observation ({obs.shape[1]})"
                 f"does not match batch_size {batch_size}."
             )
 
         x = self.layer(obs)
 
-        if x.size(1) == 1:
-            x = x.expand(x.size(0), batch_size, x.size(2))
+        if x.shape[1] == 1:
+            x = x.expand(x.shape[0], batch_size, x.shape[2])
 
         return x
 
@@ -807,8 +802,8 @@ class TorchEvidenceLayer(TorchConstantLayer):
             raise NotImplementedError("Sampling a multivariate Evidence layer is not implemented")
         # Sampling an evidence layer translates to return the given observation
         obs = self.observation()  # (F, D=1)
-        obs = obs.unsqueeze(dim=-1)  # (F, 1, 1)
-        return obs.expand(size=(-1, -1, self.num_output_units, num_samples))
+        obs = obs.unsqueeze(dim=-1).unsqueeze(dim=-1)  # (N, F, 1, 1)
+        return obs.expand(size=(num_samples, -1, -1, self.num_output_units))
 
 
 class TorchPolynomialLayer(TorchInputFunctionLayer):
@@ -870,7 +865,7 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
         r"""Evaluate polynomial given coefficients and point, with the shape for PolynomialLayer.
 
         Args:
-            coeff: The coefficients of the polynomial, shape $(F, K_o, \mathsf{degree} + 1)$.
+            coeff: The coefficients of the polynomial, shape $(F, B, K_o, \mathsf{degree} + 1)$.
             x: The point of the variable, shape $(F, H, B, K_i)$, where $H=K_i=1$.
 
         Returns:
@@ -881,10 +876,10 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
 
         # TODO: iterating over dim=2 is inefficient
         for a_n in reversed(
-            coeff.unbind(dim=2)
+            coeff.unbind(dim=3)
         ):  # Reverse iterator of the degree axis, shape (F, Ko).
             # a_n shape (F, Ko) -> (F, 1, Ko).
-            y = torch.addcmul(a_n.unsqueeze(dim=1), x, y)  # y = a_n + x * y, by Horner's method.
+            y = torch.addcmul(a_n, x, y)  # y = a_n + x * y, by Horner's method.
         return y  # shape (F, B, Ko).
 
     @property
