@@ -14,19 +14,19 @@ from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
 from cirkit.utils.scope import Scope
 
 
-class LogicalCircuitNode(ABC):
+class LogicCircuitNode(ABC):
     """The abstract base class for nodes in logic circuits."""
 
 
-class TopNode(LogicalCircuitNode):
+class TopNode(LogicCircuitNode):
     """The top node representing True in the logic circuit."""
 
 
-class BottomNode(LogicalCircuitNode):
+class BottomNode(LogicCircuitNode):
     """The bottom node representing False in the logic circuit."""
 
 
-class LogicalInputNode(LogicalCircuitNode):
+class LogicInputNode(LogicCircuitNode):
     """The abstract base class for input nodes in logic circuits."""
 
     def __init__(self, literal: int) -> None:
@@ -56,7 +56,7 @@ class LogicalInputNode(LogicalCircuitNode):
         return f"{type(self).__name__}@0x{id(self):x}({self.literal})"
 
 
-class LiteralNode(LogicalInputNode):
+class LiteralNode(LogicInputNode):
     """A literal in the logical circuit."""
 
     def __repr__(self) -> str:
@@ -68,7 +68,7 @@ class LiteralNode(LogicalInputNode):
         return str(self.literal)
 
 
-class NegatedLiteralNode(LogicalInputNode):
+class NegatedLiteralNode(LogicInputNode):
     """A negated literal in the logical circuit."""
 
     def __repr__(self) -> str:
@@ -80,11 +80,11 @@ class NegatedLiteralNode(LogicalInputNode):
         return f"¬ {self.literal}"
 
 
-class ConjunctionNode(LogicalCircuitNode):
+class ConjunctionNode(LogicCircuitNode):
     """A conjunction in the logical circuit."""
 
 
-class DisjunctionNode(LogicalCircuitNode):
+class DisjunctionNode(LogicCircuitNode):
     """A conjunction in the logical circuit."""
 
 
@@ -123,20 +123,20 @@ def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
     return input_factory
 
 
-class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
+class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
     def __init__(
         self,
-        nodes: Sequence[LogicalCircuitNode],
-        in_nodes: dict[LogicalCircuitNode, Sequence[LogicalCircuitNode]],
-        outputs: Sequence[LogicalCircuitNode],
+        nodes: Sequence[LogicCircuitNode],
+        in_nodes: dict[LogicCircuitNode, Sequence[LogicCircuitNode]],
+        outputs: Sequence[LogicCircuitNode],
     ) -> None:
-        """A Logical circuit represented as a rooted acyclic graph.
+        """A Logic circuit represented as a rooted acyclic graph.
 
         Args:
-            nodes (Sequence[LogicalCircuitNode]): The list of nodes in the logic graph.
-            in_nodes (dict[LogicalCircuitNode, Sequence[LogicalCircuitNode]]):
+            nodes (Sequence[LogicCircuitNode]): The list of nodes in the logic graph.
+            in_nodes (dict[LogicCircuitNode, Sequence[LogicCircuitNode]]):
                 A dictionary containing the list of inputs to each layer.
-            outputs (Sequence[LogicalCircuitNode]):
+            outputs (Sequence[LogicCircuitNode]):
                 The output layers of the circuit.
         """
         if len(outputs) != 1:
@@ -159,7 +159,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         in_nodes = {}
         node_map = {n: n for n in self.nodes}
         for node in self.topological_ordering():
-            if isinstance(node, (LogicalInputNode, BottomNode, TopNode)):
+            if isinstance(node, (LogicInputNode, BottomNode, TopNode)):
                 pass
             elif isinstance(node, (ConjunctionNode, DisjunctionNode)):
                 # gather current children excluding null elements
@@ -208,34 +208,34 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         self.__init__(nodes, in_nodes, list(self.outputs))
 
     @property
-    def inputs(self) -> Iterator[LogicalCircuitNode]:
+    def inputs(self) -> Iterator[LogicCircuitNode]:
         """Returns the inputs of the circuit.
 
         Returns:
-            Iterator[LogicalCircuitNode]: Input of the circuit.
+            Iterator[LogicCircuitNode]: Input of the circuit.
         """
-        return (cast(LogicalCircuitNode, node) for node in super().inputs)
+        return (cast(LogicCircuitNode, node) for node in super().inputs)
 
     @property
-    def outputs(self) -> Iterator[LogicalCircuitNode]:
+    def outputs(self) -> Iterator[LogicCircuitNode]:
         """Returns the outputs of the circuit.
 
         Returns:
-            Iterator[LogicalCircuitNode]: Output of the circuit.
+            Iterator[LogicCircuitNode]: Output of the circuit.
         """
-        return (cast(LogicalCircuitNode, node) for node in super().outputs)
+        return (cast(LogicCircuitNode, node) for node in super().outputs)
 
     @property
-    def literals(self) -> Iterator[LogicalInputNode]:
+    def literals(self) -> Iterator[LogicInputNode]:
         """Returns the literals in the graph.
 
         Returns:
-            Iterator[LogicalInputNode]: An iterator over all the literals in the graph.
+            Iterator[LogicInputNode]: An iterator over all the literals in the graph.
         """
         return (
-            cast(LogicalCircuitNode, node)
+            cast(LogicCircuitNode, node)
             for node in self.inputs
-            if isinstance(node, LogicalInputNode)
+            if isinstance(node, LogicInputNode)
         )
 
     @property
@@ -266,14 +266,14 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         Returns:
             int: The number of literals.
         """
-        return len({i.literal for i in self.inputs if isinstance(i, LogicalInputNode)})
+        return len({i.literal for i in self.inputs if isinstance(i, LogicInputNode)})
 
     @cache
-    def node_scope(self, node: LogicalCircuitNode) -> Scope:
+    def node_scope(self, node: LogicCircuitNode) -> Scope:
         """Compute the scope of a node.
 
         Args:
-            node (LogicalCircuitNode): The node for which the scope is computed.
+            node (LogicCircuitNode): The node for which the scope is computed.
 
         Returns:
             Scope: The scope of the node.
@@ -299,9 +299,9 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         for more information.
 
         Returns:
-            LogicalCircuit: A new logic graph that is smooth.
+            LogicCircuit: A new logic graph that is smooth.
         """
-        literal_map: dict[tuple[int, bool], LogicalCircuitNode] = {
+        literal_map: dict[tuple[int, bool], LogicCircuitNode] = {
             (node.literal, isinstance(node, LiteralNode)): node
             for node in self.nodes
             if isinstance(node, (LiteralNode, NegatedLiteralNode))
@@ -315,7 +315,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             d_scope = self.node_scope(d)
 
             for input_to_d in self.node_inputs(d):
-                to_add_for_smoothing: list[LogicalCircuitNode] = []
+                to_add_for_smoothing: list[LogicCircuitNode] = []
                 missing_literals = d_scope.difference(self.node_scope(input_to_d))
 
                 if len(missing_literals) > 0:
@@ -334,7 +334,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
                     # if input to disjunction is a conjunction or a disjunction
                     # then directly add to its inputs else create an ad-hoc node
-                    if not isinstance(input_to_d, LogicalInputNode):
+                    if not isinstance(input_to_d, LogicInputNode):
                         in_nodes[input_to_d].extend(to_add_for_smoothing)
                     else:
                         ad_hoc = ConjunctionNode()
@@ -387,7 +387,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         # self.simplify()
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
-        node_to_layer: dict[LogicalCircuitNode, Layer] = {}
+        node_to_layer: dict[LogicCircuitNode, Layer] = {}
 
         if (literal_input_factory is None) and (negated_literal_input_factory is None):
             literal_input_factory = default_literal_input_factory(negated=False)

@@ -7,14 +7,14 @@ from cirkit.templates.logic.graph import (
     ConjunctionNode,
     DisjunctionNode,
     LiteralNode,
-    LogicalCircuit,
-    LogicalCircuitNode,
+    LogicCircuit,
+    LogicCircuitNode,
     NegatedLiteralNode,
     TopNode,
 )
 
 
-class SDD(LogicalCircuit):
+class SDD(LogicCircuit):
     @staticmethod
     def load(filename: str) -> "SDD":
         """Load the SDD from a file.
@@ -33,14 +33,14 @@ class SDD(LogicalCircuit):
             filename (str): The file name for loading.
 
         Returns:
-            LogicalCircuit: The loaded logic graph.
+            LogicCircuit: The loaded logic graph.
         """
         tag_re = re.compile(r"^(c|sdd|F|T|L|D)")
         line_re = re.compile(r"(-?\d+)")
 
-        nodes_map: dict[int, LogicalCircuitNode] = {}
-        literal_map: dict[tuple[int, bool], LogicalCircuitNode] = {}
-        in_nodes: dict[LogicalCircuitNode, list[LogicalCircuitNode]] = defaultdict(list)
+        nodes_map: dict[int, LogicCircuitNode] = {}
+        literal_map: dict[tuple[int, bool], LogicCircuitNode] = {}
+        in_nodes: dict[LogicCircuitNode, list[LogicCircuitNode]] = defaultdict(list)
 
         with open(filename, encoding="utf-8") as f:
             for line in f.readlines():
