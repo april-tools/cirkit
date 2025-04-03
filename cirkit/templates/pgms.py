@@ -111,7 +111,7 @@ def hmm(
     if not ordering:
         raise ValueError("The ordering should be non-empty")
     num_variables = len(ordering)
-    if max(ordering) != num_variables - 1 or min(ordering):
+    if set(ordering) != set(range(num_variables)):
         raise ValueError("The 'ordering' of variables is not valid")
     if input_layer not in ["categorical", "binomial", "gaussian"]:
         raise ValueError(f"Unknown input layer called {input_layer}")
