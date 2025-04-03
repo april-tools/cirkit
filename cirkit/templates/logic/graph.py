@@ -257,6 +257,24 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 literals in the graph.
         """
         return (node for node in self.literals if isinstance(node, NegatedLiteralNode))
+    
+    @property
+    def disjunctions(self) -> Iterator[DisjunctionNode]:
+        """Returns the disjunctions in the graph.
+
+        Returns:
+            Iterator[DisjunctionNode]: An iterator over the disjunctions in the graph.
+        """
+        return (node for node in self.nodes if isinstance(node, DisjunctionNode))
+    
+    @property
+    def conjunctions(self) -> Iterator[ConjunctionNode]:
+        """Returns the conjunctions in the graph.
+
+        Returns:
+            Iterator[ConjunctionNode]: An iterator over the conjunctions in the graph.
+        """
+        return (node for node in self.nodes if isinstance(node, ConjunctionNode))
 
     @cached_property
     def num_variables(self) -> int:
@@ -293,7 +311,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         return scope
 
     def smooth(self):
-        """Convert the current graph to a smooth graph in place.
+        """Convert the a logic circuit to a smooth logic circuit in place.
         see https://yoojungchoi.github.io/files/ProbCirc20.pdf and
         https://proceedings.neurips.cc/paper/2019/file/940392f5f32a7ade1cc201767cf83e31-Paper.pdf
         for more information.
@@ -301,53 +319,52 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         Returns:
             LogicCircuit: A new logic graph that is smooth.
         """
+        # collect all the nodes of literals in the circuit
         literal_map: dict[tuple[int, bool], LogicCircuitNode] = {
             (node.literal, isinstance(node, LiteralNode)): node
-            for node in self.nodes
+            for node in self._nodes
             if isinstance(node, (LiteralNode, NegatedLiteralNode))
         }
-        # smoothing map keeps track of the disjunctions created for smoothing purposes
+        
+        # iterate over all the disjunctions (sums)
+        # whenever we find there are elements in the disjunction whose scope is not the same
+        # of the disjunction node we add a one new children to that element for each missing
+        # scope. The new children is a disjunction over both the literal and its negation, 
+        # hence it does not influence the result of the original disjunction
+        # we construct in advance this set of conjunctions
         smoothing_map: dict[int, DisjunctionNode] = {}
-        disjunctions = [n for n in self.nodes if isinstance(n, DisjunctionNode)]
-
-        in_nodes = self._in_nodes
+        for l in self.node_scope(self.output):
+            l_disjunction = DisjunctionNode()
+            self._in_nodes[l_disjunction] = [
+                literal_map.get((l, True), LiteralNode(l)),
+                literal_map.get((l, False), NegatedLiteralNode(l)),
+            ]
+            smoothing_map[l] = l_disjunction
+        
+        disjunctions = list(self.disjunctions)
         for d in disjunctions:
+            # collect the scope of the disjunction
             d_scope = self.node_scope(d)
-
-            for input_to_d in self.node_inputs(d):
+            d_inputs = list(self.node_inputs(d))
+            for input_to_d in d_inputs:
                 to_add_for_smoothing: list[LogicCircuitNode] = []
-                missing_literals = d_scope.difference(self.node_scope(input_to_d))
+                
+                for missing_literal in d_scope.difference(self.node_scope(input_to_d)):
+                    smoothed_literal = smoothing_map[missing_literal]
+                    self._in_nodes[d].append(smoothed_literal)
 
-                if len(missing_literals) > 0:
-                    for ml in missing_literals:
-                        if ml not in smoothing_map:
-                            # construct a conjunction representing the literal ml
-                            # for smoothing purposes
-                            smooth_ml = DisjunctionNode()
-                            in_nodes[smooth_ml] = [
-                                literal_map.get((ml, True), LiteralNode(ml)),
-                                literal_map.get((ml, False), NegatedLiteralNode(ml)),
-                            ]
-                            smoothing_map[ml] = smooth_ml
+                    if smoothed_literal not in self._nodes:
+                        self._nodes.append(smoothed_literal)
+        
+        # filter out unused smoothing literals
+        self._in_nodes = { 
+            n: n_inputs 
+            for n, n_inputs in self._in_nodes.items() 
+            if n in self._nodes 
+        }
 
-                        to_add_for_smoothing.append(smoothing_map[ml])
-
-                    # if input to disjunction is a conjunction or a disjunction
-                    # then directly add to its inputs else create an ad-hoc node
-                    if not isinstance(input_to_d, LogicInputNode):
-                        in_nodes[input_to_d].extend(to_add_for_smoothing)
-                    else:
-                        ad_hoc = ConjunctionNode()
-                        in_nodes[ad_hoc] = to_add_for_smoothing
-                        in_nodes[ad_hoc].append(input_to_d)
-
-                        # replace input_to_d with the ad-hoc disjunction
-                        in_nodes[d].remove(input_to_d)
-                        # add to the top so that it does not get checked again
-                        in_nodes[d].insert(0, ad_hoc)
-
-        nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
-        self.__init__(nodes, in_nodes, self._outputs)
+        # re-initialize the relevant parts of the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
 
     def build_circuit(
         self,
@@ -383,9 +400,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
             )
         if enforce_smoothness:
             self.smooth()
-        self.prune()
-        # self.simplify()
-
+    
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicCircuitNode, Layer] = {}
 
