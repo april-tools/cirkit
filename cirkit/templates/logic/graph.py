@@ -1,6 +1,7 @@
 import itertools
 from abc import ABC
 from collections.abc import Iterator, Sequence
+from collections import deque
 from functools import cache, cached_property
 from typing import cast
 
@@ -366,6 +367,71 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         # re-initialize the relevant parts of the graph
         self.__init__(self._nodes, self._in_nodes, self._outputs)
 
+    def trim(self):
+        """Prune a graph in place by applying unit propagation to conjunction and disjunctions.
+        
+        The resulting logic graph will not contain Top or Bottom nodes.
+        See https://en.wikipedia.org/wiki/Unit_propagation.
+        """
+        # pruning is performed by visiting the graph bottom-up
+        # if a node is a literal, we keep going
+        # if it is a conjunction or a disjunction, we exclude null elements from its children
+        # and replace it by its null element if one of its children is the absorbing element
+        absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
+        null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
+
+        # keep track of rewritten nodes
+        node_map = {n: n for n in self.nodes}
+        for node in self.topological_ordering():
+            if isinstance(node, (ConjunctionNode, DisjunctionNode)):
+                # if one of the children is an absorbing element then this node must
+                # be replace by its absorbing element all together
+                if any(isinstance(c, absorbing_element(node)) for c in self.node_inputs(node)):
+                    node_map[node] = absorbing_element(node)()
+                else:
+                    # make sure that all the inputs of this node are up to date
+                    # while doing so, remove null elements
+                    self._in_nodes[node] = [
+                        node_map[c]
+                        for c in self.node_inputs(node)
+                        if not isinstance(node_map[c], null_element(node))
+                    ]
+
+        # re initialize the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
+
+    def compress(self):
+        """The trimming operation might leave nodes unused.
+        We can compress the graph by removing all the nodes that are not reachable
+        from the root node."""
+        on_the_path = []
+        to_visit = deque(self.outputs)
+        while to_visit:
+            node = to_visit.popleft()
+            
+            # if the node does not have any children and is not
+            # and input node then we remove it and reconsider
+            # check again its parents
+            node_children = self.node_inputs(node)
+            if len(node_children) == 0 and node not in self.inputs:
+                to_visit.extendleft(self.node_outputs(node))
+            else:
+                # otherwise we visit its children regularly
+                if node not in on_the_path:
+                    on_the_path.append(node)
+                    to_visit.extendleft(self.node_inputs(node))
+
+        # filter out removed nodes smoothing literals
+        self._nodes = on_the_path
+        self._in_nodes = { 
+            n: [i for i in n_inputs if i in self._nodes]
+            for n, n_inputs in self._in_nodes.items() 
+            if n in self._nodes
+        }
+
+        # re initialize the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
+
     def build_circuit(
         self,
         literal_input_factory: InputLayerFactory = None,
@@ -400,6 +466,8 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
             )
         if enforce_smoothness:
             self.smooth()
+        self.trim() # remove bottom and top nodes by trimming the graph
+        self.compress() # remove nodes that are not used due anymore to trimming
     
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicCircuitNode, Layer] = {}
