@@ -147,7 +147,7 @@ class InputLayer(Layer, ABC):
             f"{self.__class__.__name__}("
             f"scope={self.scope}, "
             f"num_output_units={self.num_output_units}, "
-            f"config=({config_repr})"
+            f"config=({config_repr}), "
             f"params=({params_repr})"
             ")"
         )
