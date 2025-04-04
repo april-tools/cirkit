@@ -1,7 +1,7 @@
 import itertools
 from abc import ABC
-from collections.abc import Iterator, Sequence
 from collections import deque
+from collections.abc import Iterator, Sequence
 from functools import cache, cached_property
 from typing import cast
 
@@ -234,9 +234,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
             Iterator[LogicInputNode]: An iterator over all the literals in the graph.
         """
         return (
-            cast(LogicCircuitNode, node)
-            for node in self.inputs
-            if isinstance(node, LogicInputNode)
+            cast(LogicCircuitNode, node) for node in self.inputs if isinstance(node, LogicInputNode)
         )
 
     @property
@@ -258,7 +256,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 literals in the graph.
         """
         return (node for node in self.literals if isinstance(node, NegatedLiteralNode))
-    
+
     @property
     def disjunctions(self) -> Iterator[DisjunctionNode]:
         """Returns the disjunctions in the graph.
@@ -267,7 +265,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
             Iterator[DisjunctionNode]: An iterator over the disjunctions in the graph.
         """
         return (node for node in self.nodes if isinstance(node, DisjunctionNode))
-    
+
     @property
     def conjunctions(self) -> Iterator[ConjunctionNode]:
         """Returns the conjunctions in the graph.
@@ -322,46 +320,62 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         """
         # collect all the nodes of literals in the circuit
         literal_map: dict[tuple[int, bool], LogicCircuitNode] = {
-            (node.literal, isinstance(node, LiteralNode)): node
-            for node in self._nodes
-            if isinstance(node, (LiteralNode, NegatedLiteralNode))
+            **{(l.literal, True): l for l in self.positive_literals},
+            **{(l.literal, False): l for l in self.negated_literals},
         }
-        
-        # iterate over all the disjunctions (sums)
-        # whenever we find there are elements in the disjunction whose scope is not the same
-        # of the disjunction node we add a one new children to that element for each missing
-        # scope. The new children is a disjunction over both the literal and its negation, 
-        # hence it does not influence the result of the original disjunction
-        # we construct in advance this set of conjunctions
+
+        # create smoothing disjunctions composed of a literal and its negation
         smoothing_map: dict[int, DisjunctionNode] = {}
         for l in self.node_scope(self.output):
             l_disjunction = DisjunctionNode()
             self._in_nodes[l_disjunction] = [
-                literal_map.get((l, True), LiteralNode(l)),
-                literal_map.get((l, False), NegatedLiteralNode(l)),
+                literal_map.setdefault((l, True), LiteralNode(l)),
+                literal_map.setdefault((l, False), NegatedLiteralNode(l)),
             ]
             smoothing_map[l] = l_disjunction
-        
+
         disjunctions = list(self.disjunctions)
         for d in disjunctions:
-            # collect the scope of the disjunction
             d_scope = self.node_scope(d)
-            d_inputs = list(self.node_inputs(d))
-            for input_to_d in d_inputs:
-                to_add_for_smoothing: list[LogicCircuitNode] = []
-                
-                for missing_literal in d_scope.difference(self.node_scope(input_to_d)):
-                    smoothed_literal = smoothing_map[missing_literal]
-                    self._in_nodes[d].append(smoothed_literal)
+            d_children = list(self.node_inputs(d))
 
-                    if smoothed_literal not in self._nodes:
-                        self._nodes.append(smoothed_literal)
-        
-        # filter out unused smoothing literals
-        self._in_nodes = { 
-            n: n_inputs 
-            for n, n_inputs in self._in_nodes.items() 
-            if n in self._nodes 
+            # if any child of the disjunction does not have the same scope of the
+            # disjunction we replace it with a conjunction containing itself and
+            # the smoorhing disjunctions needed to match the target scope
+            for d_child in d_children:
+                missing_literals = d_scope.difference(self.node_scope(d_child))
+
+                if len(missing_literals) > 0:
+                    if isinstance(d_child, ConjunctionNode):
+                        # if d_child is already a conjunction we direcly add to it
+                        smoothing_conjunction = d_child
+                    else:
+                        # create the conjunction node and place it between the node and its child
+                        smoothing_conjunction = ConjunctionNode()
+                        self._in_nodes[smoothing_conjunction] = [
+                            d_child,
+                        ]
+                        self._in_nodes[d].remove(d_child)
+                        self._in_nodes[d].append(smoothing_conjunction)
+                        self._nodes.append(smoothing_conjunction)
+
+                    for missing_literal in missing_literals:
+                        smoothed_literal = smoothing_map[missing_literal]
+                        self._in_nodes[smoothing_conjunction].append(smoothed_literal)
+
+                        # register the smoothed literal in the graph and its children
+                        # if needed
+                        if smoothed_literal not in self._nodes:
+                            self._nodes.append(smoothed_literal)
+                            for child in self.node_inputs(smoothed_literal):
+                                if child not in self._nodes:
+                                    self._nodes.append(child)
+
+        # filter out unused nodes
+        self._in_nodes = {
+            n: [i for i in n_inputs if i in self._nodes]
+            for n, n_inputs in self._in_nodes.items()
+            if n in self._nodes
         }
 
         # re-initialize the relevant parts of the graph
@@ -369,7 +383,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
 
     def trim(self):
         """Prune a graph in place by applying unit propagation to conjunction and disjunctions.
-        
+
         The resulting logic graph will not contain Top or Bottom nodes.
         See https://en.wikipedia.org/wiki/Unit_propagation.
         """
@@ -381,7 +395,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
 
         # keep track of rewritten nodes
-        node_map = {n: n for n in self.nodes}
+        node_map = {n: n for n in self._nodes}
         for node in self.topological_ordering():
             if isinstance(node, (ConjunctionNode, DisjunctionNode)):
                 # if one of the children is an absorbing element then this node must
@@ -404,28 +418,58 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         """The trimming operation might leave nodes unused.
         We can compress the graph by removing all the nodes that are not reachable
         from the root node."""
-        on_the_path = []
+        on_the_path = set()
         to_visit = deque(self.outputs)
         while to_visit:
             node = to_visit.popleft()
-            
-            # if the node does not have any children and is not
-            # and input node then we remove it and reconsider
-            # check again its parents
-            node_children = self.node_inputs(node)
-            if len(node_children) == 0 and node not in self.inputs:
-                to_visit.extendleft(self.node_outputs(node))
-            else:
-                # otherwise we visit its children regularly
-                if node not in on_the_path:
-                    on_the_path.append(node)
-                    to_visit.extendleft(self.node_inputs(node))
 
-        # filter out removed nodes smoothing literals
-        self._nodes = on_the_path
-        self._in_nodes = { 
+            node_children = self.node_inputs(node)
+            if node in self.literals:
+                # literals are always accepted
+                on_the_path.add(node)
+            elif len(node_children) == 1:
+                # if this node has only one child, then it is a trivial node
+                # we can remove it and attach its parents as parents of the
+                # unique children
+                node_parents = self.node_outputs(node)
+
+                if len(node_parents) == 0:
+                    # we are replacing the root node with its child
+                    self._outputs = [node_children[0]]
+                else:
+                    # the node has parents: connect them to its child
+                    for node_parent in node_parents:
+                        self._in_nodes[node_parent].remove(node)
+                        self._in_nodes[node_parent].append(node_children[0])
+
+                to_visit.appendleft(node_children[0])
+            elif len(node_children) > 1:
+                on_the_path.add(node)
+
+                # inspect children, if there are some that are
+                # of the same type of this node, we can merge them
+                # on this node and visit this node again
+                visit_node_again = False
+                for node_child in node_children:
+                    if type(node) is type(node_child):
+                        node_child_descendants = self.node_inputs(node_child)
+
+                        # replace the node child with its descendants
+                        self._in_nodes[node].remove(node_child)
+                        self._in_nodes[node].extend(node_child_descendants)
+
+                        visit_node_again = True
+
+                if visit_node_again:
+                    to_visit.appendleft(node)
+                else:
+                    to_visit.extendleft(node_children)
+
+        self._nodes = list(on_the_path)
+        # filter out all nodes that have been compressed
+        self._in_nodes = {
             n: [i for i in n_inputs if i in self._nodes]
-            for n, n_inputs in self._in_nodes.items() 
+            for n, n_inputs in self._in_nodes.items()
             if n in self._nodes
         }
 
@@ -464,11 +508,17 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 "Both literal_input_factory and negated_literal_input_factory should"
                 "be specified at the same time or be none."
             )
+
+        # remove bottom and top nodes by trimming the graph
+        self.trim()
+
+        # smooth the circuit if required
         if enforce_smoothness:
             self.smooth()
-        self.trim() # remove bottom and top nodes by trimming the graph
-        self.compress() # remove nodes that are not used due anymore to trimming
-    
+
+        # simplify the circuit by removing trivial and non-reachable nodes
+        self.compress()
+
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicCircuitNode, Layer] = {}
 

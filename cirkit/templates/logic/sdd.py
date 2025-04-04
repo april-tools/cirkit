@@ -13,7 +13,6 @@ from cirkit.templates.logic.graph import (
     TopNode,
 )
 
-#  will be opened with mode="r" and encoding="utf-8".
 
 class SDD(LogicCircuit):
     @staticmethod
@@ -82,9 +81,9 @@ class SDD(LogicCircuit):
 
     @staticmethod
     def from_file(filename: str):
-        """Load the SDD from a file. 
+        """Load the SDD from a file.
         The file will be opened with mode="r" and encoding="utf-8".
-        
+
         See SDD.from_string to see the file syntax.
 
         Args:
