@@ -436,13 +436,14 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 if len(node_parents) == 0:
                     # we are replacing the root node with its child
                     self._outputs = [node_children[0]]
+                    to_visit.extendleft(self._outputs)
                 else:
                     # the node has parents: connect them to its child
                     for node_parent in node_parents:
                         self._in_nodes[node_parent].remove(node)
                         self._in_nodes[node_parent].append(node_children[0])
-
-                to_visit.appendleft(node_children[0])
+                    to_visit.extendleft(node_parents)
+                
             elif len(node_children) > 1:
                 on_the_path.add(node)
 
@@ -464,6 +465,9 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                     to_visit.appendleft(node)
                 else:
                     to_visit.extendleft(node_children)
+
+            # update graph metadata
+            self._out_nodes = graph_nodes_outgoings(self._nodes, self.node_inputs)
 
         self._nodes = list(on_the_path)
         # filter out all nodes that have been compressed
