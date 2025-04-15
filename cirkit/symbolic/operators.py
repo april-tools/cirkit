@@ -1,5 +1,7 @@
 from typing import Protocol
 
+import numpy as np
+
 from cirkit.symbolic.circuit import CircuitBlock
 from cirkit.symbolic.layers import (
     CategoricalLayer,
@@ -7,6 +9,7 @@ from cirkit.symbolic.layers import (
     EmbeddingLayer,
     GaussianLayer,
     HadamardLayer,
+    KroneckerLayer,
     Layer,
     LayerOperator,
     PolynomialLayer,
@@ -216,11 +219,38 @@ def multiply_polynomial_layers(sl1: PolynomialLayer, sl2: PolynomialLayer) -> Ci
 
 
 def multiply_hadamard_layers(sl1: HadamardLayer, sl2: HadamardLayer) -> CircuitBlock:
+    arity = max(sl1.arity, sl2.arity)
     sl = HadamardLayer(
         sl1.num_input_units * sl2.num_input_units,
-        arity=max(sl1.arity, sl2.arity),
+        arity=arity,
     )
     return CircuitBlock.from_layer(sl)
+
+
+def multiply_kronecker_layers(sl1: KroneckerLayer, sl2: KroneckerLayer) -> CircuitBlock:
+    arity = max(sl1.arity, sl2.arity)
+    kron_sl = KroneckerLayer(sl1.num_input_units * sl2.num_input_units, arity=arity)
+    # Start with a reshaped identity matrix
+    perm_matrix = np.eye(kron_sl.num_output_units, kron_sl.num_output_units).reshape(
+        kron_sl.num_output_units,
+        *((sl1.num_input_units,) * sl1.arity),
+        *((sl2.num_input_units,) * sl2.arity),
+    )
+    # Construct the permutation matrix required to represent the product of
+    # Kronecker layers as yet another Kronecker layer
+    perm_matrix = np.transpose(
+        perm_matrix, axes=sum([(1 + a, 1 + a + arity) for a in range(arity)], start=(0,))
+    ).reshape(kron_sl.num_output_units, kron_sl.num_output_units)
+    # The permutation matrix is applied by using a sum layer having the permutation
+    # matrix has constant parameters
+    sum_sl = SumLayer(
+        kron_sl.num_output_units,
+        kron_sl.num_output_units,
+        weight=Parameter.from_input(
+            ConstantParameter(kron_sl.num_output_units, kron_sl.num_output_units, value=perm_matrix)
+        ),
+    )
+    return CircuitBlock.from_layer_composition(kron_sl, sum_sl)
 
 
 def multiply_sum_layers(sl1: SumLayer, sl2: SumLayer) -> CircuitBlock:
@@ -317,6 +347,7 @@ DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
         multiply_gaussian_layers,
         multiply_polynomial_layers,
         multiply_hadamard_layers,
+        multiply_kronecker_layers,
         multiply_sum_layers,
     ],
     LayerOperator.CONJUGATION: [

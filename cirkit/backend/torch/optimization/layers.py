@@ -15,11 +15,29 @@ from cirkit.backend.torch.optimization.registry import (
     LayerOptPattern,
     ParameterOptPattern,
 )
-from cirkit.backend.torch.parameters.nodes import TorchKroneckerParameter
+from cirkit.backend.torch.parameters.nodes import TorchKroneckerParameter, TorchMatMulParameter
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 
 if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
+
+
+class SumCollapsePattern(LayerOptPattern):
+    @classmethod
+    def is_output(cls) -> bool:
+        return False
+
+    @classmethod
+    def entries(cls) -> list[type[TorchLayer]]:
+        return [TorchSumLayer, TorchSumLayer]
+
+    @classmethod
+    def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
+        return [{} for _ in cls.entries()]
+
+    @classmethod
+    def cpatterns(cls) -> list[dict[str, Any]]:
+        return [{"arity": 1}, {}]
 
 
 class TuckerPattern(LayerOptPattern):
@@ -92,6 +110,22 @@ class TensorDotKroneckerPattern(LayerOptPattern):
     @classmethod
     def cpatterns(cls) -> list[dict[str, Any]]:
         return [{}]
+
+
+def apply_sum_collapse(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchSumLayer]:
+    dense1 = cast(TorchSumLayer, match.entries[0])
+    dense2 = cast(TorchSumLayer, match.entries[1])
+    weight = TorchParameter.from_binary(
+        TorchMatMulParameter(dense1.weight.shape, dense2.weight.shape), dense1.weight, dense2.weight
+    )
+    dense = TorchSumLayer(
+        dense2.num_input_units,
+        dense1.num_output_units,
+        arity=dense2.arity,
+        weight=weight,
+        semiring=compiler.semiring,
+    )
+    return (dense,)
 
 
 def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchTuckerLayer]:
@@ -173,6 +207,7 @@ def apply_tensordot_tensordot(
 
 
 DEFAULT_LAYER_FUSE_OPT_RULES: dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
+    SumCollapsePattern: apply_sum_collapse,
     TuckerPattern: apply_tucker,
     CandecompPattern: apply_candecomp,
 }

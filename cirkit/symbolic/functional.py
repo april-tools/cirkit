@@ -2,7 +2,7 @@ import heapq
 import itertools
 from collections.abc import Iterable, Sequence
 from numbers import Number
-from typing import NamedTuple, TypeVar
+from typing import NamedTuple
 
 import numpy as np
 
@@ -368,7 +368,9 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: OperatorRegistry | None = 
             # TODO: generalize product such that it can multiply layers of different arity
             #       this is related to the much more relaxed definition of compatibility between
             #       circuits
-            assert len(l1_inputs) == len(l2_inputs)
+            assert len(l1_inputs) == len(
+                l2_inputs
+            ), f"{l1.arity} {l2.arity} {len(l1_inputs)} {len(l2_inputs)} {l1.__class__} {l2.__class__}"
             # Sort layers based on the scope, such that we can multiply layers with matching scopes
             l1_inputs = sorted(l1_inputs, key=sc1.layer_scope)
             l2_inputs = sorted(l2_inputs, key=sc2.layer_scope)
