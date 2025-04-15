@@ -436,14 +436,17 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 if len(node_parents) == 0:
                     # we are replacing the root node with its child
                     self._outputs = [node_children[0]]
-                    to_visit.extendleft(self._outputs)
+                    self._nodes.remove(node)
                 else:
                     # the node has parents: connect them to its child
                     for node_parent in node_parents:
                         self._in_nodes[node_parent].remove(node)
                         self._in_nodes[node_parent].append(node_children[0])
-                    to_visit.extendleft(node_parents)
                 
+                to_visit.appendleft(node_children[0])
+
+                # remove from nodes
+                self._nodes = [n for n in self._nodes if n != node]
             elif len(node_children) > 1:
                 on_the_path.add(node)
 
@@ -457,7 +460,11 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
 
                         # replace the node child with its descendants
                         self._in_nodes[node].remove(node_child)
-                        self._in_nodes[node].extend(node_child_descendants)
+                        self._in_nodes[node].extend([
+                            d 
+                            for d in node_child_descendants 
+                            if d not in self._in_nodes[node]
+                        ])
 
                         visit_node_again = True
 
