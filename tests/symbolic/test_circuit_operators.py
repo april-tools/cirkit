@@ -18,6 +18,7 @@ from cirkit.symbolic.layers import (
 )
 from cirkit.symbolic.parameters import (
     ConjugateParameter,
+    ConstantParameter,
     KroneckerParameter,
     PolynomialDifferential,
     ReferenceParameter,
@@ -75,12 +76,12 @@ def test_symop_integrate_circuit(num_units: int, input_layer: str):
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "gaussian", "polynomial"]),
 )
-def test_symop_multiply_circuits(num_units: int, input_layer: str):
+def test_symop_multiply_circuits_hadamard(num_units: int, input_layer: str):
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
-        num_units=num_units, input_layer=input_layer
+        num_units=num_units, input_layer=input_layer, product_layer="hadamard"
     )
     sc2 = build_multivariate_monotonic_structured_cpt_pc(
-        num_units=num_units * 2 + 1, input_layer=input_layer
+        num_units=num_units * 2 + 1, input_layer=input_layer, product_layer="hadamard"
     )
     prod_num_units = num_units * (num_units * 2 + 1)
     sc = SF.multiply(sc1, sc2)
@@ -109,6 +110,49 @@ def test_symop_multiply_circuits(num_units: int, input_layer: str):
             assert isinstance(in_2, PolynomialLayer)
             assert isinstance(in_prod, PolynomialLayer)
             assert in_prod.degree == in_1.degree + in_2.degree
+
+
+@pytest.mark.parametrize(
+    "num_units,input_layer",
+    itertools.product([1, 3], ["bernoulli", "gaussian"]),
+)
+def test_symop_multiply_circuits_kronecker(num_units: int, input_layer: str):
+    sc1 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units, input_layer=input_layer, product_layer="kronecker"
+    )
+    sc2 = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=num_units * 2 + 1, input_layer=input_layer, product_layer="kronecker"
+    )
+    prod_num_units = num_units * (num_units * 2 + 1)
+    sc = SF.multiply(sc1, sc2)
+    assert are_compatible(sc1, sc) and are_compatible(sc, sc1)
+    assert are_compatible(sc2, sc) and are_compatible(sc, sc2)
+    assert len(list(sc.inputs)) == len(list(sc1.inputs))
+    assert len(list(sc.inputs)) == len(list(sc2.inputs))
+    assert all(l.num_output_units == prod_num_units for l in sc.inputs)
+    dense_layers = list(filter(lambda l: isinstance(l, SumLayer), sc.inner_layers))
+    kron_dense_layers = list(
+        filter(lambda l: isinstance(l.weight.output, KroneckerParameter), dense_layers)
+    )
+    assert all(len(sc.layer_inputs(sl)) == 1 for sl in kron_dense_layers)
+    assert all(
+        isinstance(sc.layer_inputs(sl)[0], SumLayer)
+        and isinstance(sc.layer_inputs(sl)[0].weight.output, ConstantParameter)
+        for sl in kron_dense_layers
+    )  # Checks permutation matrices
+    assert all(
+        l.weight.shape == (prod_num_units, prod_num_units**2)
+        for l in kron_dense_layers
+        if sc.layer_outputs(l)
+    )
+    prod_layers = list(filter(lambda l: not isinstance(l, SumLayer), sc.inner_layers))
+    assert all(isinstance(l, KroneckerLayer) for l in prod_layers)
+    assert all(
+        l.num_input_units == prod_num_units**2 for l in kron_dense_layers if sc.layer_outputs(l)
+    )
+    assert all(
+        l.num_output_units == prod_num_units for l in kron_dense_layers if sc.layer_outputs(l)
+    )
 
 
 @pytest.mark.parametrize(
