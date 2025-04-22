@@ -231,7 +231,7 @@ def multiply_kronecker_layers(sl1: KroneckerLayer, sl2: KroneckerLayer) -> Circu
     arity = max(sl1.arity, sl2.arity)
     kron_sl = KroneckerLayer(sl1.num_input_units * sl2.num_input_units, arity=arity)
     # Start with a reshaped identity matrix
-    perm_matrix = np.eye(kron_sl.num_output_units, dtype=np.uint8).reshape(
+    perm_matrix = np.eye(kron_sl.num_output_units, dtype=np.float32).reshape(
         kron_sl.num_output_units,
         *((sl1.num_input_units,) * sl1.arity),
         *((sl2.num_input_units,) * sl2.arity),
