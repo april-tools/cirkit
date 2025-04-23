@@ -184,7 +184,8 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
                 where F is the number of folds, and (K_1,\ldots,K_n) is the shape
                 of each parameter tensor slice.
         """
-        return self.evaluate()
+        output = self.evaluate()[-1]
+        return output
 
     def _build_unfold_index_info(self) -> FoldIndexInfo:
         return build_unfold_index_info(
