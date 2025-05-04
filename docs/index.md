@@ -29,6 +29,8 @@ hide:
 -   :fontawesome-solid-screwdriver-wrench:{ .lg .middle } __Build a circuit...__
 
     ---
+    [:octicons-arrow-right-24: manually, layer by layer](notebooks/learning-a-gaussian-mixture-model.ipynb)
+
     [:octicons-arrow-right-24: from region graphs](notebooks/region-graphs-and-parametrisation.ipynb)
 
 <!--
