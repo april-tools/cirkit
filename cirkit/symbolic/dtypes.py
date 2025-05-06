@@ -35,7 +35,7 @@ def dtype_value(x: Number | np.ndarray) -> DataType:
         return DataType.REAL
     if isinstance(x, complex):
         return DataType.COMPLEX
-    if isinstance(x, np.ndarray):
+    if isinstance(x, (np.ndarray, np.number)):
         if issubclass(x.dtype.type, np.integer):
             return DataType.INTEGER
         if issubclass(x.dtype.type, np.floating):

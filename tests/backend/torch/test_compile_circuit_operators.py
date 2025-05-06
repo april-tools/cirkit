@@ -67,7 +67,7 @@ def test_compile_evidence_integrate_pc_categorical(semiring: str, fold: bool, op
         ["sum-product", "lse-sum"], [False, True], [False, True], [False, True], [2, 3, 4]
     ),
 )
-def test_compile_product_integrate_pc_categorical(
+def test_compile_product_integrate_pc_categorical_hadamard(
     semiring: str, fold: bool, optimize: bool, normalized: bool, num_products: int
 ):
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
@@ -75,7 +75,56 @@ def test_compile_product_integrate_pc_categorical(
     last_sc = None
     for i in range(num_products):
         sci = build_multivariate_monotonic_structured_cpt_pc(
-            num_units=2 + i, input_layer="bernoulli", normalized=normalized
+            num_units=2 + i,
+            input_layer="bernoulli",
+            product_layer="hadamard",
+            normalized=normalized,
+        )
+        tci = compiler.compile(sci)
+        scs.append(sci)
+        tcs.append(tci)
+        last_sc = sci if i == 0 else SF.multiply(last_sc, sci)
+    tc: TorchCircuit = compiler.compile(last_sc)
+    int_sc = SF.integrate(last_sc)
+    int_tc = compiler.compile(int_sc)
+
+    # Test the partition function value
+    z = int_tc()
+    assert z.shape == (1, 1)
+    z = z.squeeze()
+    if normalized:
+        if semiring == "sum-product":
+            assert 0.0 < z.item() < 1.0
+        elif semiring == "lse-sum":
+            assert -np.inf < z.item() < 0.0
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables)))
+    scores = tc(worlds)
+    assert scores.shape == (2**tc.num_variables, 1, 1)
+    scores = scores.squeeze()
+    assert isclose(compiler.semiring.sum(scores, dim=0), int_tc())
+
+    # Test the products of the circuits evaluated over all possible assignments
+    each_tc_scores = torch.stack([tci(worlds).squeeze() for tci in tcs], dim=0)
+    assert allclose(compiler.semiring.prod(each_tc_scores, dim=0), scores)
+
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,normalized,num_products",
+    itertools.product(["sum-product", "lse-sum"], [False, True], [False, True], [False, True], [2]),
+)
+def test_compile_product_integrate_pc_categorical_kronecker(
+    semiring: str, fold: bool, optimize: bool, normalized: bool, num_products: int
+):
+    # TODO: fix product algorithm to support multiple products of circuits with kronecker layers
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    scs, tcs = [], []
+    last_sc = None
+    for i in range(num_products):
+        sci = build_multivariate_monotonic_structured_cpt_pc(
+            num_units=2 + i,
+            input_layer="bernoulli",
+            product_layer="hadamard",
+            normalized=normalized,
         )
         tci = compiler.compile(sci)
         scs.append(sci)

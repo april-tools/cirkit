@@ -96,7 +96,10 @@ def compile_constant_parameter(
     compiler: "TorchCompiler", p: ConstantParameter
 ) -> TorchTensorParameter:
     initializer_ = compiler.compile_initializer(p.initializer)
-    compiled_p = TorchTensorParameter(*p.shape, requires_grad=False, initializer_=initializer_)
+    dtype = _retrieve_dtype(p.dtype)
+    compiled_p = TorchTensorParameter(
+        *p.shape, requires_grad=False, initializer_=initializer_, dtype=dtype
+    )
     compiler.state.register_compiled_parameter(p, compiled_p)
     return compiled_p
 

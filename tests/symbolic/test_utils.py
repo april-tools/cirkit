@@ -14,6 +14,7 @@ from cirkit.symbolic.layers import (
     EmbeddingLayer,
     GaussianLayer,
     HadamardLayer,
+    KroneckerLayer,
     Layer,
     PolynomialLayer,
     SumLayer,
@@ -32,6 +33,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
     *,
     num_units: int = 2,
     input_layer: str = "bernoulli",
+    product_layer: str = "hadamard",
     parameterize: bool = True,
     normalized: bool = True,
 ):
@@ -99,7 +101,7 @@ def build_bivariate_monotonic_structured_cpt_pc(
         )
     dense_layers = {
         scope: SumLayer(
-            num_input_units=num_units,
+            num_input_units=num_units**2 if product_layer == "kronecker" else num_units,
             num_output_units=1 if len(scope) == 2 else num_units,
             weight_factory=dense_weight_factory,
         )
@@ -107,7 +109,13 @@ def build_bivariate_monotonic_structured_cpt_pc(
     }
 
     # Build hadamard product layer
-    product_layer = HadamardLayer(num_input_units=num_units, arity=2)
+    if product_layer == "hadamard":
+        product_layer_cls = HadamardLayer
+    elif product_layer == "kronecker":
+        product_layer_cls = KroneckerLayer
+    else:
+        raise NotImplementedError()
+    product_layer = product_layer_cls(num_input_units=num_units, arity=2)
 
     # Set the connections between layers
     in_layers: dict[Layer, list[Layer]] = {
@@ -135,6 +143,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
     *,
     num_units: int = 2,
     input_layer: str = "bernoulli",
+    product_layer: str = "hadamard",
     parameterize: bool = True,
     normalized: bool = True,
 ):
@@ -227,16 +236,22 @@ def build_multivariate_monotonic_structured_cpt_pc(
         )
     dense_layers = {
         scope: SumLayer(
-            num_input_units=num_units,
+            num_input_units=num_units**2 if product_layer == "kronecker" else num_units,
             num_output_units=1 if len(scope) == 5 else num_units,
             weight_factory=dense_weight_factory,
         )
         for scope in [(0, 2), (1, 3), (0, 1, 2, 3), (0, 1, 2, 3, 4)]
     }
 
-    # Build hadamard product layers
+    # Build product layers
+    if product_layer == "hadamard":
+        product_layer_cls = HadamardLayer
+    elif product_layer == "kronecker":
+        product_layer_cls = KroneckerLayer
+    else:
+        raise NotImplementedError()
     product_layers = {
-        scope: HadamardLayer(num_input_units=num_units, arity=2) for scope in dense_layers
+        scope: product_layer_cls(num_input_units=num_units, arity=2) for scope in dense_layers
     }
 
     # Set the connections between layers
@@ -290,7 +305,7 @@ def build_monotonic_structured_categorical_cpt_pc(
 
     # Build the symbolic circuit
     circuit = build_multivariate_monotonic_structured_cpt_pc(
-        num_units=2, input_layer="bernoulli", parameterize=False
+        num_units=2, input_layer="bernoulli", product_layer="hadamard", parameterize=False
     )
 
     for sl in circuit.inputs:
@@ -410,7 +425,7 @@ def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
 
     # Build the symbolic circuit
     circuit = build_bivariate_monotonic_structured_cpt_pc(
-        num_units=2, input_layer="gaussian", parameterize=False
+        num_units=2, input_layer="gaussian", product_layer="hadamard", parameterize=False
     )
 
     for sl in circuit.inputs:

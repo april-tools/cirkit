@@ -1,4 +1,7 @@
+from collections import ChainMap
 from collections.abc import Iterator, Sequence
+from itertools import chain
+from typing import Union
 
 import torch
 from torch import Tensor
@@ -14,7 +17,13 @@ from cirkit.backend.torch.graph.modules import (
     FoldIndexInfo,
     TorchDiAcyclicGraph,
 )
-from cirkit.backend.torch.parameters.nodes import TorchParameterNode
+from cirkit.backend.torch.parameters.nodes import (
+    TorchBinaryParameterOp,
+    TorchParameterInput,
+    TorchParameterNode,
+    TorchParameterOp,
+    TorchUnaryParameterOp,
+)
 
 
 class ParameterAddressBook(AddressBook):
@@ -191,3 +200,103 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
 
     def extra_repr(self) -> str:
         return f"shape: {(self.num_folds, *self.shape)}"
+
+    @classmethod
+    def from_input(cls, p: TorchParameterInput) -> "TorchParameter":
+        """Constructs a parameter from a leaf symbolic node only.
+
+        Args:
+            p: The parameter input.
+
+        Returns:
+            A parameter containing only the given parameter input.
+        """
+        return TorchParameter([p], {}, outputs=[p])
+
+    @classmethod
+    def from_sequence(
+        cls, p: Union[TorchParameterInput, "TorchParameter"], *ns: TorchParameterOp
+    ) -> "TorchParameter":
+        """Constructs a parameter from a composition of parameter nodes.
+
+        Args:
+            p: The entry point of the sequence, which can be either a parameter
+                input or another parameter.
+            *ns: A sequence of parameter nodes.
+
+        Returns:
+            A parameter that encodes the composition of the parameter nodes,
+                starting from the given entry point of the sequence.
+        """
+        assert p.num_folds == 1
+        if isinstance(p, TorchParameterInput):
+            p = TorchParameter.from_input(p)
+        nodes = list(p.nodes) + list(ns)
+        in_nodes = dict(p.nodes_inputs)
+        for i, n in enumerate(ns):
+            in_nodes[n] = [ns[i - 1]] if i - 1 >= 0 else [p.outputs[0]]
+        return TorchParameter(nodes, in_nodes, [ns[-1]])
+
+    @classmethod
+    def from_nary(
+        cls, n: TorchParameterOp, *ps: Union[TorchParameterInput, "TorchParameter"]
+    ) -> "TorchParameter":
+        """Constructs a parameter by using a parameter operation node and by specifying its inputs.
+
+        Args:
+            n: The parameter operation node.
+            *ps: A sequence of parameter input nodes or parameters.
+
+        Returns:
+            A parameter that encodes the application of the given parameter operation node
+                to the outputs given by the parameter input nodes or parameters.
+        """
+        assert n.num_folds == 1
+        ps = tuple(
+            TorchParameter.from_input(p) if isinstance(p, TorchParameterInput) else p for p in ps
+        )
+        assert all(len(p.outputs) == 1 for p in ps)
+        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
+        in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
+        in_nodes[n] = list(p.outputs[0] for p in ps)
+        return TorchParameter(p_nodes, in_nodes, [n])
+
+    @classmethod
+    def from_unary(
+        cls, n: TorchUnaryParameterOp, p: Union[TorchParameterInput, "TorchParameter"]
+    ) -> "TorchParameter":
+        """Constructs a parameter by using a unary parameter operation node and by specifying its
+        inputs.
+
+        Args:
+            n: The unary parameter operation node.
+            p: The parameter input node, or another parameter.
+
+        Returns:
+            A parameter that encodes the application of the given parameter operation
+                node to the output given by the parameter input node or parameter.
+        """
+        assert n.num_folds == 1 and p.num_folds == 1
+        return TorchParameter.from_sequence(p, n)
+
+    @classmethod
+    def from_binary(
+        cls,
+        n: TorchBinaryParameterOp,
+        p1: Union[TorchParameterInput, "TorchParameter"],
+        p2: Union[TorchParameterInput, "TorchParameter"],
+    ) -> "TorchParameter":
+        """Constructs a parameter by using a binary parameter operation node and by specifying
+        its inputs.
+
+        Args:
+            n: The binary parameter operation node.
+            p1: The first parameter input node, or another parameter.
+            p2: The second parameter input node, or another parameter.
+
+        Returns:
+            A parameter that encodes the application of the given parameter operation
+                node to the two outputs given by the parameter inputs or parameters.
+        """
+        assert n.num_folds == 1 and p1.num_folds == 1 and p2.num_folds == 1
+        return TorchParameter.from_nary(n, p1, p2)
