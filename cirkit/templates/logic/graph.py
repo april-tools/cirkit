@@ -419,9 +419,11 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         We can compress the graph by removing all the nodes that are not reachable
         from the root node."""
         on_the_path = set()
+        visited = set()
         to_visit = deque(self.outputs)
         while to_visit:
             node = to_visit.popleft()
+            visited.add(node)
 
             node_children = self.node_inputs(node)
             if node in self.literals:
@@ -443,7 +445,8 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                         self._in_nodes[node_parent].remove(node)
                         self._in_nodes[node_parent].append(node_children[0])
 
-                to_visit.appendleft(node_children[0])
+                if node_children[0] not in visited:
+                    to_visit.appendleft(node_children[0])
 
                 # remove from nodes
                 self._nodes = [n for n in self._nodes if n != node]
@@ -453,26 +456,32 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 # inspect children, if there are some that are
                 # of the same type of this node, we can merge them
                 # on this node and visit this node again
-                visit_node_again = False
                 for node_child in node_children:
                     if type(node) is type(node_child):
-                        node_child_descendants = self.node_inputs(node_child)
+                        node_child_descendants = [
+                            d
+                            for d in self.node_inputs(node_child)
+                            if d not in self._in_nodes[node]
+                        ]
 
-                        # replace the node child with its descendants
                         self._in_nodes[node].remove(node_child)
-                        self._in_nodes[node].extend(
-                            [d for d in node_child_descendants if d not in self._in_nodes[node]]
-                        )
+                        self._in_nodes[node].extend(node_child_descendants)
 
-                        visit_node_again = True
-
-                if visit_node_again:
-                    to_visit.appendleft(node)
-                else:
-                    to_visit.extendleft(node_children)
+                to_visit.extendleft([c for c in node_children if c not in visited])
 
             # update graph metadata
             self._out_nodes = graph_nodes_outgoings(self._nodes, self.node_inputs)
+
+        self._nodes = list(on_the_path)
+        # filter out all nodes that have been compressed
+        self._in_nodes = {
+            n: [i for i in n_inputs if i in self._nodes]
+            for n, n_inputs in self._in_nodes.items()
+            if n in self._nodes
+        }
+
+        # re initialize the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
 
         self._nodes = list(on_the_path)
         # filter out all nodes that have been compressed
