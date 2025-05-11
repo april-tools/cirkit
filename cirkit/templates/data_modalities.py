@@ -3,9 +3,10 @@ from typing import Any
 
 import numpy as np
 
+from torch import Tensor
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.parameters import mixing_weight_factory
-from cirkit.templates.region_graph import PoonDomingos, QuadGraph, QuadTree, RandomBinaryTree
+from cirkit.templates.region_graph import PoonDomingos, QuadGraph, QuadTree, RandomBinaryTree, ChowLiuTree
 from cirkit.templates.utils import (
     Parameterization,
     name_to_input_layer_factory,
@@ -130,6 +131,129 @@ def image_data(
         nary_sum_weight_factory = sum_weight_factory
 
     # Build and return the symbolic circuit
+    return rg.build_circuit(
+        input_factory=input_factory,
+        sum_product=sum_product_layer,
+        sum_weight_factory=sum_weight_factory,
+        nary_sum_weight_factory=nary_sum_weight_factory,
+        num_input_units=num_input_units,
+        num_sum_units=num_sum_units,
+        num_classes=num_classes,
+        factorize_multivariate=True,
+    )
+
+
+def tabular_data(
+    region_graph: str = "random-binary-tree",
+    *,
+    num_features: int | None = None,
+    data: Tensor | None = None,
+    kwargs: int,
+    input_layer: str,
+    num_input_units: int,
+    sum_product_layer: str,
+    num_sum_units: int,
+    num_classes: int = 1,
+    sum_weight_param: Parameterization | None = None,
+    use_mixing_weights: bool = True,
+) -> Circuit:
+    """
+    Constructs a symbolic circuit whose structure is tailored for tabular data sets,
+    supporting either a fixed random-binary-tree or a learned Chow–Liu tree.
+
+    Args:
+        region_graph (str, default="random-binary-tree"):
+            Which region graph to use.  
+            - `"random-binary-tree"`: build a random binary tree over the feature indices.  
+            - `"chow-liu-tree"`: learn a Chow–Liu tree from data.
+        num_features (int, optional):
+            Number of features (columns) in the dataset.  
+            **Required** if `region_graph="random-binary-tree"`.  
+        data (Tensor, optional):
+            A Torch tensor of shape `(n_samples, n_features)`.  
+            **Required** if `region_graph="chow-liu-tree"`, since the tree structure is learned from these samples.
+        kwargs (int):
+            A single integer that serves dual purposes depending on context:  
+            - When `region_graph="chow-liu-tree"`, this is `num_categories` for the discrete Chow–Liu MI estimator.  
+            - When `region_graph="random-binary-tree"`, it still feeds into the input layer below.  
+            - In the input layer (see `input_layer`), it is interpreted as:  
+              - `num_categories` for `"categorical"`,   
+              - _unused_ for `"gaussian"`.
+        input_layer (str):
+            Which per-feature distribution to use. One of:
+            - `"categorical"`: discrete Categorical over `kwargs` outcomes.   
+            - `"gaussian"`: continuous Gaussian (no extra kwargs).
+        num_input_units (int):
+            Number of parallel input units (e.g. mixtures/components) per feature.
+        sum_product_layer (str):
+            Which inner sum/product decomposition to use. E.g. `"cp"`, `"cpt"`, or `"tucker"`.
+        num_sum_units (int):
+            Number of sum (or mixing) units in each sum layer.
+        num_classes (int, default=1):
+            Number of output classes (or root-layer mixtures). Often 1 for pure density estimation.
+        sum_weight_param (Parameterization | None, default=None):
+            If provided, a `Parameterization` object specifying activation & initialization
+            for sum-layer weights.  Defaults internally to a softmax + Normal init.
+        use_mixing_weights (bool, default=True):
+            Whether to use “mixing” sum layers (i.e. learn a linear combination of child outputs)
+            for nodes of arity >1.  If False, falls back to a matrix-vector product.
+
+    Returns:
+        Circuit
+            A fully-specified sum-product circuit over the given region graph with the chosen
+            input distributions and inner decomposition layer.
+
+    Raises:
+        ValueError:
+          - If `input_layer` is not one of `"categorical"`, `"gaussian"`.  
+          - If `region_graph="random-binary-tree"` but `num_features` is `None`.  
+          - If `region_graph="chow-liu-tree"` but `data` is `None`.  
+          - If `region_graph` is not one of the supported strings.
+    """
+    
+    if input_layer not in ["categorical", "gaussian"]:
+        raise ValueError(f"Unknown input layer called {input_layer}")
+    
+    if region_graph == "random-binary-tree":
+        if num_features is None:
+            raise ValueError(f"You must pass `num_features=` if you ask for {region_graph}.")
+        rg = RandomBinaryTree(num_features)
+
+    elif region_graph == "chow-liu-tree":
+        if data is None:
+            raise ValueError(f"You must pass `data=` if you ask for `chow-liu-tree`.")
+        rg = ChowLiuTree(
+            data=data,
+            input_type=input_layer,
+            num_categories=kwargs,
+            as_region_graph=True
+        )
+
+    else:
+        raise ValueError(f"Unknown region graph {region_graph!r}")
+
+    input_kwargs: dict[str, Any]
+    match input_layer:
+        case "categorical":
+            input_kwargs = {"num_categories": kwargs}
+        case "gaussian":
+            input_kwargs = {}
+        case _:
+            assert False
+    
+    input_factory = name_to_input_layer_factory(input_layer, **input_kwargs)
+    
+    if sum_weight_param is None:
+        sum_weight_param = Parameterization(activation="softmax", initialization="normal")
+    sum_weight_factory = parameterization_to_factory(sum_weight_param)
+
+    if use_mixing_weights:
+        nary_sum_weight_factory = functools.partial(
+            mixing_weight_factory, param_factory=sum_weight_factory
+        )
+    else:
+        nary_sum_weight_factory = sum_weight_factory
+    
     return rg.build_circuit(
         input_factory=input_factory,
         sum_product=sum_product_layer,
