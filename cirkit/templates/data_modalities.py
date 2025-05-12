@@ -145,9 +145,9 @@ def image_data(
 
 def tabular_data(
     region_graph: str = "random-binary-tree",
-    *,
     num_features: int | None = None,
     data: Tensor | None = None,
+    *,
     kwargs: int,
     input_layer: str,
     num_input_units: int,
