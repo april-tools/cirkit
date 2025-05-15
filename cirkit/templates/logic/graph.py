@@ -459,9 +459,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 for node_child in node_children:
                     if type(node) is type(node_child):
                         node_child_descendants = [
-                            d
-                            for d in self.node_inputs(node_child)
-                            if d not in self._in_nodes[node]
+                            d for d in self.node_inputs(node_child) if d not in self._in_nodes[node]
                         ]
 
                         self._in_nodes[node].remove(node_child)
