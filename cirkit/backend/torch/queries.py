@@ -1,6 +1,7 @@
 import functools
 from abc import ABC
 from collections.abc import Iterable
+from typing import Any, Mapping
 
 import torch
 from torch import Tensor
@@ -46,7 +47,13 @@ class IntegrateQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, x: Tensor, *, integrate_vars: Tensor | Scope | Iterable[Scope]) -> Tensor:
+    def __call__(
+        self,
+        x: Tensor,
+        *,
+        integrate_vars: Tensor | Scope | Iterable[Scope],
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Tensor:
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
@@ -100,6 +107,9 @@ class IntegrateQuery(Query):
                 "want to broadcast. Found #inputs = "
                 f"{x.shape[0]} != {integrate_vars_mask.shape[0]} = len(integrate_vars)"
             )
+
+        # Memoize the gate functions before evaluating the circuit
+        self._circuit._memoize_gate_functions(gate_function_kwargs)
 
         output = self._circuit.evaluate(
             x,
@@ -230,7 +240,7 @@ class SamplingQuery(Query):
             raise ValueError("The number of samples must be a positive number")
 
         mixture_samples: list[Tensor] = []
-        # samples: (O, K, num_samples, D)
+        # samples: (F, B, K, N, D)
         samples = self._circuit.evaluate(
             module_fn=functools.partial(
                 self._layer_fn,
@@ -238,10 +248,18 @@ class SamplingQuery(Query):
                 mixture_samples=mixture_samples,
             ),
         )
-        # samples: (num_samples, O, K, D)
-        samples = samples.permute(2, 0, 1, 3)
-        # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
-        samples = samples[:, 0, 0]  # (num_samples, D)
+        # samples: (N, F, B, K, D)
+        samples = samples.permute(3, 0, 1, 2, 4)
+        if samples.shape[1] != 1 or samples.shape[3] != 1:
+            raise NotImplementedError(
+                "Sampling is yet not implemented for circuits having multiple outputs"
+            )
+        if samples.shape[2] != 1:
+            raise NotImplementedError(
+                "Sampling is yet not implemented for circuits having batched parameters"
+            )
+        mixture_samples = [m.squeeze(dim=1) for m in mixture_samples]
+        samples = samples[:, 0, 0, 0]  # (N, B, D)
         return samples, mixture_samples
 
     def _layer_fn(
@@ -250,7 +268,8 @@ class SamplingQuery(Query):
         # Sample from an input layer
         if not inputs:
             assert isinstance(layer, TorchInputLayer)
-            samples = layer.sample(num_samples)
+            samples = layer.sample(num_samples)  # (N, F, B, K)
+            samples = samples.permute(1, 2, 3, 0)  # (F, B, K, N)
             samples = self._pad_samples(samples, layer.scope_idx)
             mixture_samples.append(samples)
             return samples
@@ -269,10 +288,10 @@ class SamplingQuery(Query):
         if scope_idx.shape[1] != 1:
             raise NotImplementedError("Padding is only implemented for univariate samples")
 
-        # padded_samples: (F, K, num_samples, D)
+        # padded_samples: (F, B, K, N, D)
         padded_samples = torch.zeros(
             (*samples.shape, len(self._circuit.scope)), device=samples.device, dtype=samples.dtype
         )
         fold_idx = torch.arange(samples.shape[0], device=samples.device)
-        padded_samples[fold_idx, :, :, scope_idx.squeeze(dim=1)] = samples
+        padded_samples[fold_idx, :, :, :, scope_idx.squeeze(dim=1)] = samples
         return padded_samples

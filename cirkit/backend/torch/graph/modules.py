@@ -221,7 +221,7 @@ class AddressBook(nn.Module, ABC):
         """
 
 
-class ModuleEvalFunctional(Protocol):  # pylint: disable=too-few-public-methods
+class ModuleEvalFunction(Protocol):  # pylint: disable=too-few-public-methods
     """The protocol of a function that evaluates a module on some inputs."""
 
     def __call__(self, module: TorchModule, *inputs: Tensor) -> Tensor:
@@ -242,7 +242,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
     def __init__(
         self,
         modules: Sequence[TorchModule],
-        in_modules: dict[TorchModule, Sequence[TorchModule]],
+        in_modules: Mapping[TorchModule, Sequence[TorchModule]],
         outputs: Sequence[TorchModule],
         *,
         fold_idx_info: FoldIndexInfo | None = None,
@@ -301,7 +301,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         return self.__class__(nodes, in_nodes, outputs=roots)
 
     def evaluate(
-        self, x: Tensor | None = None, module_fn: ModuleEvalFunctional | None = None
+        self, x: Tensor | None = None, module_fn: ModuleEvalFunction | None = None
     ) -> Tensor:
         """Evaluate the Torch graph by following the topological ordering,
             and by using the address book information to retrieve the inputs to each module.
