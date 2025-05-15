@@ -807,7 +807,7 @@ class TorchMatMulParameter(TorchBinaryParameterOp):
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1: (F, B, d1, d2)
         # x2: (F, B, d2, d3)
-        return torch.bmm(x1, x2)  # (F, B, d1, d3)
+        return torch.vmap(torch.bmm)(x1, x2)  # (F, B, d1, d3)
 
 
 class TorchFlattenParameter(TorchUnaryParameterOp):

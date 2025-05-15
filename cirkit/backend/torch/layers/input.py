@@ -267,7 +267,7 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
         # for each fold and batch retrieve the corresponding state
         idx_fold = torch.arange(self.num_folds, device=weight.device)
         idx_batch = torch.arange(weight.shape[1], device=weight.device)
-        x = weight[idx_fold, idx_batch, :, x]
+        x = weight[idx_fold[:, None], idx_batch[:, None], :, x]
         x = self.semiring.map_from(x, SumProductSemiring)
         return x  # (F, B, K)
 

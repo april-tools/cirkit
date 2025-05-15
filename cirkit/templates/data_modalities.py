@@ -45,7 +45,7 @@ def image_data(
         num_input_units: The number of input units per input layer.
         sum_product_layer: The name of the sum-product inner layer. It can be one of the following:
             'cp' (the canonical decomposition layer, consisting of dense layers followed by a
-            hadamard product layer), 'cpt' (the transposed canonical decomposition layer, consisting
+            hadamard product layer), 'cp-t' (the transposed canonical decomposition layer, consisting
             of a hadamard product layer followed by a single dense layer), 'tucker' (the Tucker
             decomposition layer, consisting of a kronecker product layer followed by a single dense
             layer).

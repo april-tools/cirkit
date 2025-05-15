@@ -3,7 +3,6 @@ import itertools
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from numbers import Number
-from typing import NamedTuple
 from typing import Iterable, NamedTuple, TypeVar
 
 import numpy as np
