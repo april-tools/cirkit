@@ -45,7 +45,24 @@ class LayerAddressBook(AddressBook):
                 if len(in_layer_ids_h) == 1:
                     x = module_outputs[in_layer_ids_h[0]]
                 else:
-                    x = torch.cat([module_outputs[mid] for mid in in_layer_ids_h], dim=0)
+                    # when parameters are batched inputs from constant layers
+                    # might have a batch size of 1 if in_graph is always None
+                    # we have expand those inputs to match the others
+                    module_inputs = [module_outputs[mid] for mid in in_layer_ids_h]
+
+                    # check that we have coherent batch sizes and the missing ones
+                    # are broadcastable
+                    # TODO: check for a more efficient implementation than casting to a set
+                    if in_graph is None:
+                        batch_sizes = sorted([i.size(1) for i in module_inputs])
+                        assert len(set(batch_sizes)) <= 2
+
+                        module_inputs = [
+                            i if i.size(1) != 1 else i.expand(-1, batch_sizes[-1], -1)
+                            for i in module_inputs
+                        ]
+
+                    x = torch.cat(module_inputs, dim=0)
                 x = x[in_fold_idx_h]
                 yield layer, (x,)
                 continue
