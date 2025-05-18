@@ -43,7 +43,19 @@ class ParameterAddressBook(AddressBook):
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
             else:
-                t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
+                module_inputs = [module_outputs[mid] for mid in mids]
+
+                # check that we have coherent batch sizes and the missing ones
+                # are broadcastable
+                # TODO: check for a more efficient implementation than casting to a set
+                batch_sizes = sorted([i.size(1) for i in module_inputs])
+                assert len(set(batch_sizes)) <= 2
+                module_inputs = [
+                    i if i.size(1) != 1 else i.expand(-1, batch_sizes[-1], *([-1,] * len(i.shape[2:])))
+                    for i in module_inputs
+                ]
+
+                t = torch.cat(module_inputs, dim=0)
             return t[idx]
 
         # Loop through the entries and yield inputs
