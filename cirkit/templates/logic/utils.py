@@ -31,3 +31,16 @@ def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
         )
 
     return input_factory
+
+
+def logic_circuit_input_label(sl: InputLayer) -> str:
+    """Returns the input label of a symbolic layer representing a node
+    originally in a logic circuit by using its string representation.
+
+    Args:
+        sl (InputLayer): The symbolic layer
+
+    Returns:
+        str: The string output
+    """
+    return str(sl.metadata["logic"]["source"])
