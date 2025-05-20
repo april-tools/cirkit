@@ -402,14 +402,17 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 # be replace by its absorbing element all together
                 if any(isinstance(c, absorbing_element(node)) for c in self.node_inputs(node)):
                     node_map[node] = absorbing_element(node)()
-                else:
+                
                     # make sure that all the inputs of this node are up to date
                     # while doing so, remove null elements
-                    self._in_nodes[node] = [
-                        node_map[c]
-                        for c in self.node_inputs(node)
-                        if not isinstance(node_map[c], null_element(node))
-                    ]
+                    self._in_nodes = {
+                        node_map[n]: [
+                            node_map[c] 
+                            for c in n_inputs 
+                            if not isinstance(c, (TopNode, BottomNode)) and not isinstance(node_map[c], null_element(node))
+                        ]
+                        for n, n_inputs in self._in_nodes.items()
+                    }
 
         # re initialize the graph
         self.__init__(self._nodes, self._in_nodes, self._outputs)
