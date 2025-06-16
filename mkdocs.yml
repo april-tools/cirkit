@@ -8,13 +8,14 @@ nav:
     - Overview: 'notebooks/README.md'
     - Overview:
       - nb1: 'notebooks/learning-a-circuit.ipynb'
-      - nb2: 'notebooks/region-graphs-and-parametrisation.ipynb'
-      - nb3: 'notebooks/sum-of-squares-circuits.ipynb'
-      - nb4: 'notebooks/compilation-options.ipynb'
-      - nb5: 'notebooks/learning-a-circuit-with-pic.ipynb'
-      - nb6: 'notebooks/logic-circuits.ipynb'
-      - nb7: 'notebooks/compression-cp-factorization.ipynb'
-      - nb8: 'notebooks/generative-vs-discriminative-circuit.ipynb'
+      - nb2: 'notebooks/learning-a-gaussian-mixture-model.ipynb'
+      - nb3: 'notebooks/region-graphs-and-parametrisation.ipynb'
+      - nb4: 'notebooks/sum-of-squares-circuits.ipynb'
+      - nb5: 'notebooks/compilation-options.ipynb'
+      - nb6: 'notebooks/learning-a-circuit-with-pic.ipynb'
+      - nb7: 'notebooks/logic-circuits.ipynb'
+      - nb8: 'notebooks/compression-cp-factorization.ipynb'
+      - nb9: 'notebooks/generative-vs-discriminative-circuit.ipynb'
   - API documentation: 'api/'
 plugins:
   - search
