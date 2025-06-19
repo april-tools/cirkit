@@ -391,28 +391,22 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         # if a node is a literal, we keep going
         # if it is a conjunction or a disjunction, we exclude null elements from its children
         # and replace it by its null element if one of its children is the absorbing element
-        absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
-        null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
+        
+        for node in filter(lambda n: isinstance(n, (ConjunctionNode, DisjunctionNode)), self.topological_ordering()):
+            absorbing_element, null_element = (BottomNode, TopNode) if isinstance(node, ConjunctionNode) else (TopNode, BottomNode)
+            
+            # remove null elements from child
+            self._in_nodes[node] = [c for c in self._in_nodes[node] if not isinstance(c, null_element)]
 
-        # keep track of rewritten nodes
-        node_map = {n: n for n in self._nodes}
-        for node in self.topological_ordering():
-            if isinstance(node, (ConjunctionNode, DisjunctionNode)):
-                # if one of the children is an absorbing element then this node must
-                # be replace by its absorbing element all together
-                if any(isinstance(c, absorbing_element(node)) for c in self.node_inputs(node)):
-                    node_map[node] = absorbing_element(node)()
-                
-                    # make sure that all the inputs of this node are up to date
-                    # while doing so, remove null elements
-                    self._in_nodes = {
-                        node_map[n]: [
-                            node_map[c] 
-                            for c in n_inputs 
-                            if not isinstance(c, (TopNode, BottomNode)) and not isinstance(node_map[c], null_element(node))
-                        ]
-                        for n, n_inputs in self._in_nodes.items()
-                    }
+            # prune trivial node if absorbing element is within children
+            if any(isinstance(c, absorbing_element) for c in self.node_inputs(node)):
+                del self._in_nodes[node]
+
+                # remove any reference to node
+                self._in_nodes = {
+                    n: [ni for ni in n_inputs if ni != node]
+                    for n, n_inputs in self._in_nodes.items()
+                }
 
         # re initialize the graph
         self.__init__(self._nodes, self._in_nodes, self._outputs)
