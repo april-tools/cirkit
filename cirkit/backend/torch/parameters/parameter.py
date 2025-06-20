@@ -43,7 +43,19 @@ class ParameterAddressBook(AddressBook):
             if len(mids) == 1:
                 t = module_outputs[mids[0]]
             else:
-                t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
+                module_inputs = [module_outputs[mid] for mid in mids]
+
+                # check that we have coherent batch sizes and the missing ones
+                # are broadcastable
+                # TODO: check for a more efficient implementation than casting to a set
+                batch_sizes = sorted([i.size(1) for i in module_inputs])
+                assert len(set(batch_sizes)) <= 2
+                module_inputs = [
+                    i if i.size(1) != 1 else i.expand(-1, batch_sizes[-1], *([-1,] * len(i.shape[2:])))
+                    for i in module_inputs
+                ]
+
+                t = torch.cat(module_inputs, dim=0)
             return t[idx]
 
         # Loop through the entries and yield inputs
@@ -160,10 +172,14 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         the number of folds. That is, if the number of folds
         (see [TorchParameter.num_folds][cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
         is F and the shape is (K_1,\ldots,K_n), it means the torch parameter
-        computes a tensor of shape (F, K_1,\ldots,K_n).
+        computes a tensor of shape (F, B, K_1,\ldots,K_n) where B is the batch size.
+        A batched parameter means that each sample in an input is parameterized by a different tensor.
+        If the parameter has a batch size of 1 then it is broadcasted to all the samples in the input
+        batch.
 
         Returns:
-            The shape of the computed tensor parameter, without considering the number of folds.
+            The shape of the computed tensor parameter, without considering the number of folds
+                and the batch size.
         """
         return self.outputs[0].shape
 
@@ -180,9 +196,9 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         r"""Evaluate the parameter computational graph.
 
         Returns:
-            Tensor: The output parameter tensor, having shape (F, K_1,\ldots K_n),
-                where F is the number of folds, and (K_1,\ldots,K_n) is the shape
-                of each parameter tensor slice.
+            Tensor: The output parameter tensor, having shape (F, B, K_1,\ldots K_n),
+                where F is the number of folds, B the batch size and (K_1,\ldots,K_n)
+                is the shape of each parameter tensor slice.
         """
         return self.evaluate()
 
