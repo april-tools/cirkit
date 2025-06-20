@@ -7,7 +7,13 @@ import torch
 from torch import Tensor
 
 from cirkit.backend.torch.circuits import TorchCircuit
-from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
+from cirkit.backend.torch.layers import (
+    TorchHadamardLayer,
+    TorchInnerLayer,
+    TorchInputLayer,
+    TorchLayer,
+    TorchSumLayer,
+)
 from cirkit.utils.scope import Scope
 
 
@@ -295,3 +301,138 @@ class SamplingQuery(Query):
         fold_idx = torch.arange(samples.shape[0], device=samples.device)
         padded_samples[fold_idx, :, :, :, scope_idx.squeeze(dim=1)] = samples
         return padded_samples
+
+
+class MAPQuery(Query):
+    """The integration query object allows marginalising out variables.
+
+    Computes output in two forward passes:
+        a) The normal circuit forward pass for input x
+        b) The integration forward pass where all variables are marginalised
+
+    A mask over random variables is computed based on the scopes passed as
+    input. This determines whether the integrated or normal circuit result
+    is returned for each variable.
+    """
+
+    def __init__(self, circuit: TorchCircuit) -> None:
+        """Initialize an integration query object.
+
+        Args:
+            circuit: The circuit to integrate over.
+
+        Raises:
+            ValueError: If the circuit to integrate is not smooth or not decomposable.
+        """
+        if not circuit.properties.smooth or not circuit.properties.decomposable:
+            raise ValueError(
+                f"The circuit to integrate must be smooth and decomposable, "
+                f"but found {circuit.properties}"
+            )
+        super().__init__()
+        self._circuit = circuit
+
+    def __call__(
+        self,
+        *,
+        x: Tensor | None = None,
+        evidence_vars: Tensor | Scope | Iterable[Scope] | None = None,
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Tensor:
+        """Solve an integration query, given an input batch and the variables to integrate.
+
+        Args:
+            x: An input batch of shape $(B, D)$, where $B$ is the batch size,
+                and $D$ is the number of variables.
+            integrate_vars: The variables to integrate. It must be a subset of the variables on
+                which the circuit given in the constructor is defined on.
+                The format can be one of the following three:
+                    1. Tensor of shape (B, D) where B is the batch size and D is the number of
+                        variables in the scope of the circuit. Its dtype should be torch.bool
+                        and have True in the positions of random variables that should be
+                        marginalised out and False elsewhere.
+                    2. Scope, in this case the same integration mask is applied for all entries
+                        of the batch
+                    3. List of Scopes, where the length of the list must be either 1 or B. If
+                        the list has length 1, behaves as above.
+        Returns:
+            The result of the integration query, given as a tensor of shape $(B, O, K)$,
+                where $B$ is the batch size, $O$ is the number of output vectors of the circuit, and
+                $K$ is the number of units in each output vector.
+        """
+        if (x is None) ^ (evidence_vars is None):
+            assert ValueError("Both evidence and the evidence variables must be provided.")
+
+        # Memoize the gate functions before evaluating the circuit
+        self._circuit._memoize_gate_functions(gate_function_kwargs)
+
+        # prepare the evidence vector by replacing non-evidence variables with
+        # the mode of each input
+        if x is None:
+            x = torch.empty((1, self._circuit.num_variables), dtype=torch.long)
+            evidence_vars = x.clone().to(torch.bool)
+        state = x.clone()
+
+        self._circuit.backtrack(
+            x.clone(),
+            forward_module_fn=functools.partial(
+                MAPQuery._map_forward_fn, evidence_vars=evidence_vars
+            ),
+            backward_module_fn=functools.partial(
+                MAPQuery._layer_fn, state=state, evidence_vars=evidence_vars
+            ),
+        )
+        return state
+
+    @staticmethod
+    def _map_forward_fn(layer: TorchLayer, x: Tensor, *, evidence_vars: Tensor) -> Tensor:
+        # Evaluate a layer: if it is not an input layer, then evaluate it in the usual
+        # feed-forward way. Otherwise, use the variables to integrate to solve the marginal
+        # queries on the input layers.
+        # TODO: call the map function of the layer
+        if isinstance(layer, TorchInputLayer):
+            # retrieve the map state from the input layer and reshape ir
+            from cirkit.backend.torch.semiring import SumProductSemiring
+            output, input = layer.probs().max(dim=-1)
+        else:
+            # if it is not an input layer then evaluate in feedforward way
+            output, input = layer(x), x
+
+        return input, output
+
+    @staticmethod
+    def _layer_fn(layer: TorchLayer, x: Tensor, *, state: Tensor, evidence_vars: Tensor) -> Tensor:
+        # Evaluate a layer: if it is not an input layer, then evaluate it in the usual
+        # feed-forward way. Otherwise, use the variables to integrate to solve the marginal
+        # queries on the input layers.
+        # TODO: call the map function of the layer
+        if isinstance(layer, TorchInputLayer):
+            # retrieve the map state from the input layer and reshape ir
+            
+            # lmax
+            layer_max = layer.probs().argmax(dim=-1)
+            state[:, layer.scope_idx.flatten()] = layer_max
+            idxs = slice(None)
+        elif isinstance(layer, TorchSumLayer):
+            # if it is not an input layer then inner layers indicate which of their
+            # input should be followed
+
+            if layer.num_folds == 1 and len(x.shape) == 3:
+                x = x.unsqueeze(0)
+
+            # x: (F, H, B, Ki) -> (F, B, H * Ki)
+            x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
+            weight = layer.weight()
+            out = layer.semiring.einsum(
+                "fbi,fboi->fboi", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            )
+
+            # get maximum indices along fold and arity dimension
+            # idxs: (F, H)
+            idxs = out.argmax(dim=-1)
+        elif isinstance(layer, TorchHadamardLayer):
+            # if it is not an input layer then inner layers indicate which of their
+            # input should be followed
+            idxs = torch.arange(layer.arity).unsqueeze(0).tile((layer.num_folds, 1))
+
+        return idxs

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
@@ -124,7 +125,8 @@ class AddressBook(nn.Module, ABC):
         """
         if not entries:
             raise ValueError("The list of address book entry must not be empty")
-        last_entry = entries[-1]
+        self._entries = entries
+        last_entry = self._entries[-1]
         if last_entry.module is not None:
             raise ValueError(
                 "The last entry of the address book must not have a module associated to it"
@@ -138,8 +140,9 @@ class AddressBook(nn.Module, ABC):
             raise ValueError("The output fold index tensor should be a 1-dimensional tensor")
         super().__init__()
         self._num_outputs = out_fold_idx.shape[0]
-        self._entry_modules: list[TorchModule | None] = [e.module for e in entries]
-        self._entry_in_module_ids: list[list[list[int]]] = [e.in_module_ids for e in entries]
+        self._module_to_entry: Mapping[TorchModule, AddressBookEntry] = { e.module: e for e in self._entries}
+        self._entry_modules: list[TorchModule | None] = [e.module for e in self._entries]
+        self._entry_in_module_ids: list[list[list[int]]] = [e.in_module_ids for e in self._entries]
         # We register the book-keeping tensor indices as buffers.
         # By doing so they are automatically transferred to the device
         # This reduces CPU-device communications required to transfer these indices
@@ -147,7 +150,7 @@ class AddressBook(nn.Module, ABC):
         # TODO: Perhaps this can be made more elegant in the future, if someone
         #  decides to introduce a nn.BufferList container in torch
         self._entry_in_fold_idx_targets: list[list[str]] = []
-        for i, e in enumerate(entries):
+        for i, e in enumerate(self._entries):
             self._entry_in_fold_idx_targets.append([])
             for j, fi in enumerate(e.in_fold_idx):
                 in_fold_idx_target = f"_in_fold_idx_{i}_{j}"
@@ -333,6 +336,45 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 y = module_fn(module, *inputs)
             module_outputs.append(y)
         raise RuntimeError("The address book is malformed")
+
+    def backtrack(
+        self,
+        x: Tensor | None = None,
+        forward_module_fn: ModuleEvalFunction | None = None,
+        backward_module_fn: ModuleEvalFunction | None = None,
+    ) -> Tensor:
+        """Evaluate the Torch graph by top-down traversal,
+            and by using the address book information to retrieve the outputs of each module.
+
+        Args:
+            x: The input of the Torch computational graph. It can be None.
+            module_fn: A functional over modules that overrides the forward method defined by a
+                module. It can be None. If it is None, then the ```__call__``` method defined by
+                the module itself is used.
+
+        Returns:
+            The output tensor of the Torch graph.
+            If the Torch graph has multiple outputs, then they will be stacked.
+
+        Raises:
+            RuntimeError: If the address book is somehow not well-formed.
+        """
+        # perform forward pass to compute the activations given x and the evaluation
+        # function
+        module_inputs = []
+        module_outputs = []
+        for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
+            if module is None:
+                (output,) = inputs
+                break
+            
+            i, y = forward_module_fn(module, *inputs)
+            
+            module_outputs.append(y)
+            module_inputs.append(i)
+            
+        self._address_book.backtrack(module_inputs, backtrack_fn=backward_module_fn)
+        return output, x
 
     @abstractmethod
     def _build_unfold_index_info(self) -> FoldIndexInfo:

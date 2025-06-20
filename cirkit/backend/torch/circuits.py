@@ -1,6 +1,8 @@
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any
 
+from collections import deque
+
 import torch
 from torch import Tensor
 
@@ -14,7 +16,7 @@ from cirkit.backend.torch.graph.modules import (
     FoldIndexInfo,
     TorchDiAcyclicGraph,
 )
-from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
+from cirkit.backend.torch.layers import TorchInputLayer, TorchHadamardLayer, TorchSumLayer, TorchLayer
 from cirkit.backend.torch.utils import CachedGateFunctionEval
 from cirkit.symbolic.circuit import StructuralProperties
 from cirkit.utils.conditional import GateFunctionParameterSpecs
@@ -29,6 +31,57 @@ class LayerAddressBook(AddressBook):
     where each entry stores the information needed to gather the inputs to each (possibly folded)
     circuit layer.
     """
+
+
+    def backtrack(
+        self, 
+        module_inputs: list[Tensor],
+        *,
+        backtrack_fn,
+    ) -> Iterator[tuple[TorchLayer | None, tuple]]:
+        # TODO: what about multiple outputs?
+        output = self._entries[-1]
+        
+        entry_queue = deque([(output, None, module_inputs[-1][0])])
+        while entry_queue:
+            entry, entry_unit, entry_inputs = entry_queue.popleft()
+            module = entry.module
+
+            idxs = None
+            if entry.in_module_ids:
+                in_modules_ids_h = entry.in_module_ids[0]
+                
+                in_modules = [
+                    (self._entries[i], None, module_inputs[i][0])
+                    for i in in_modules_ids_h
+                ]
+
+
+                match module:
+                    case None:
+                        # the index select by the circuit output is
+                        # simply the output itself
+                        entry_queue.appendleft(in_modules[0])
+                    case TorchSumLayer():
+                        idx = backtrack_fn(module, entry_inputs)
+
+                        # recover the input module idx
+                        module_idx = idx % module.arity
+                        # recover the input unit
+                        unit_idx = idx // module.num_input_units
+
+                        # select the next module
+                        next_module, _, next_inputs = in_modules[module_idx]
+                        
+                        entry_queue.append((next_module, unit_idx, next_inputs))
+                        pass
+                    case _:
+                        entry_queue.extend([(n_e, entry_unit, n_i) for n_e, _, n_i in in_modules])
+
+            # catch the case where we are at an input unit
+            elif module is not None:
+                assert isinstance(module, TorchInputLayer)
+                backtrack_fn(module, unit_idx)
 
     def lookup(
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
