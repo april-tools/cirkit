@@ -1,0 +1,148 @@
+import itertools
+
+import pytest
+import torch
+import numpy as np
+
+from cirkit.symbolic.layers import SumLayer, HadamardLayer, CategoricalLayer
+from cirkit.symbolic.circuit import Circuit
+
+from cirkit.symbolic.parameters import Parameter, ConstantParameter, SoftmaxParameter, TensorParameter
+from cirkit.symbolic.initializers import NormalInitializer
+
+import cirkit.symbolic.functional as SF
+from cirkit.backend.torch.circuits import TorchCircuit
+from cirkit.backend.torch.compiler import TorchCompiler
+from cirkit.backend.torch.queries import MAPQuery
+from cirkit.utils.scope import Scope
+from cirkit.templates import data_modalities, utils
+from tests.floats import allclose
+
+
+def build_deterministic_categorical_mixture(num_units: int):
+    true_p = np.array([[0.0, 1.0]] * num_units)
+    false_p = np.array([[1.0, 0.0]] * num_units)
+
+    # construct simple deterministic circuit
+    Xt = CategoricalLayer(Scope([0]), num_units, num_categories=2, probs=Parameter.from_input(ConstantParameter(num_units, 2, value=true_p)))
+    Xf = CategoricalLayer(Scope([0]), num_units, num_categories=2, probs=Parameter.from_input(ConstantParameter(num_units, 2, value=false_p)))
+
+    Yt = CategoricalLayer(Scope([1]), num_units, num_categories=2, probs=Parameter.from_input(ConstantParameter(num_units, 2, value=true_p)))
+    Yf = CategoricalLayer(Scope([1]), num_units, num_categories=2, probs=Parameter.from_input(ConstantParameter(num_units, 2, value=false_p)))
+
+    prod_Xf_Yf = HadamardLayer(num_units, 2)
+    prod_Xt_Yf = HadamardLayer(num_units, 2)
+    prod_Xt_Yt = HadamardLayer(num_units, 2)
+
+    dense_weight_factory = lambda shape: Parameter.from_unary(
+        SoftmaxParameter(shape, axis=1),
+        TensorParameter(*shape, initializer=NormalInitializer()),
+    )
+    sum = SumLayer(num_units, num_units, 2, weight_factory=dense_weight_factory)
+    root = SumLayer(num_units, 1, 2, weight_factory=dense_weight_factory)
+
+    in_nodes = {
+        root: [prod_Xf_Yf, sum],
+        prod_Xf_Yf: [Xf, Yf],
+        sum: [prod_Xt_Yf, prod_Xt_Yt],
+        prod_Xt_Yf: [Xt, Yf],
+        prod_Xt_Yt: [Xt, Yt]
+    }
+
+    sc = Circuit(
+        layers=[root, sum, prod_Xf_Yf, prod_Xt_Yf, prod_Xt_Yt, Xt, Xf, Yt, Yf],
+        in_layers=in_nodes,
+        outputs=[root,]
+    )
+
+    return sc
+
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 2]),
+)
+def test_query_map(semiring: str, fold: bool, optimize: bool, num_units: int):
+    sc = build_deterministic_categorical_mixture(num_units)    
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    
+    tc: TorchCircuit = compiler.compile(sc)
+    
+    # compute the likelihood for all possible assignments
+    worlds = torch.tensor(
+        list(itertools.product([0, 1], repeat=sc.num_variables)),
+        dtype=torch.long
+    )
+    worlds_ll = tc(worlds)
+
+    # compute map and check that its state matches the enumerated one
+    map_query = MAPQuery(tc)
+    map_state = map_query()
+
+    if num_units == 1:
+        # deterministic circuit: check correctness of query
+        assert allclose(worlds[worlds_ll.argmax()], map_state)
+    else:
+        # TODO: Figure out a way of checking approximate correctness
+        pass
+
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 2]),
+)
+def test_query_map_with_evidence(semiring: str, fold: bool, optimize: bool, num_units: int):
+    sc = build_deterministic_categorical_mixture(num_units)    
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+    
+    tc: TorchCircuit = compiler.compile(sc)
+    
+    # compute the likelihood for all possible assignments
+    worlds = torch.tensor(
+        list(itertools.product([0, 1], repeat=sc.num_variables)),
+        dtype=torch.long
+    )
+    worlds_ll = tc(worlds)
+
+    # compute map and check that its state matches the enumerated one
+    map_query = MAPQuery(tc)
+    map_state = map_query(
+        x=torch.tensor([[0, 1]]),
+        evidence_vars=torch.tensor([[False, True]])
+    )
+
+    if num_units == 1:
+        # deterministic circuit: check correctness of query
+        assert allclose(map_state, torch.tensor([1, 1]))
+    else:
+        # TODO: Figure out a way of checking approximate correctness
+        pass
+
+
+def test_query_map_image_data():
+    symbolic_circuit = data_modalities.image_data(
+        (1, 4, 4),                # The shape of MNIST image, i.e., (num_channels, image_height, image_width)
+        region_graph='quad-graph',  # Select the structure of the circuit to follow the QuadGraph region graph
+        input_layer='categorical',  # Use Categorical distributions for the pixel values (0-255) as input layers
+        num_input_units=2,         # Each input layer consists of 64 Categorical input units
+        sum_product_layer='cp',     # Use CP sum-product layers, i.e., alternate dense layers with Hadamard product layers
+        num_sum_units=2,           # Each dense sum layer consists of 64 sum units
+        sum_weight_param=utils.Parameterization(
+            activation='softmax',   # Parameterize the sum weights by using a softmax activation
+            initialization='normal' # Initialize the sum weights by sampling from a standard normal distribution
+        )
+    )
+
+    compiler = TorchCompiler(semiring="lse-sum", fold=False, optimize=False)
+    
+    tc = compiler.compile(symbolic_circuit).train()
+    tc(torch.randint(0, 255, (1, 16)))
+
+    map_query = MAPQuery(tc)
+    map_state = map_query()
+
+    pass
