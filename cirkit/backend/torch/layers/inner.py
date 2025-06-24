@@ -78,6 +78,18 @@ class TorchInnerLayer(TorchLayer, ABC):
         """
         raise TypeError(f"Sampling not implemented for {type(self)}")
 
+    def max(self) -> tuple[Tensor, Tensor]:
+        """Perform a backward maximization step.
+
+        Returns:
+            Tensor: A tuple of tensors where the first value is the input element that maximizes 
+                the layer and the second element is the maximum value of the layer.
+        
+        Raises:
+            TypeError: If max is not supported by the layer.
+        """
+        raise TypeError(f"Max is not supported for layers of type {type(self)}")
+
 
 class TorchHadamardLayer(TorchInnerLayer):
     """The Hadamard product layer, which computes an element-wise (or Hadamard) product of
@@ -128,6 +140,22 @@ class TorchHadamardLayer(TorchInnerLayer):
         # x: (F, H, B, K, N, D)
         x = torch.sum(x, dim=1)  # (F, B, K, N, D)
         return x, None
+
+    def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        """The maximum of a Hadamard product layer is the same as a standard 
+        forward pass over the layer.
+
+        Args:
+            x (Tensor): The input to the layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor ranges over all elements in the
+                arity of this layer and the second element is the result of a forward pass on this
+                layer. 
+        """
+        out = self(x)
+        idxs = torch.arange(x.size(1)).tile((x.size(1), 1))
+        return idxs, out
 
 
 class TorchKroneckerLayer(TorchInnerLayer):
@@ -192,6 +220,22 @@ class TorchKroneckerLayer(TorchInnerLayer):
             y0 = torch.flatten(y0 + y1, start_dim=2, end_dim=3)
         # y0: (F, B, Ko=Ki ** arity, N, D)
         return y0, None
+
+    def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        """The maximum of a Kronecker product layer is the same as a standard 
+        forward pass over the layer.
+
+        Args:
+            x (Tensor): The input to the layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor ranges over all elements in the
+                arity of this layer and the second element is the result of a forward pass on this
+                layer. 
+        """
+        out = self(x)
+        idxs = torch.arange(x.size(1)).tile((x.size(1), 1))
+        return idxs, out
 
 
 class TorchSumLayer(TorchInnerLayer):
@@ -294,3 +338,46 @@ class TorchSumLayer(TorchInnerLayer):
         # x: (F, B, Ko, N, D)
         x = torch.gather(x, dim=2, index=mixing_indices)
         return x, mixing_samples
+
+    def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        r"""The maximum of a sum layer is the computed by weighting the input
+        tensor with the respective weight that would be used by the layer for the
+        weighted sum.
+
+        The maximizer index is given in raveled form. Given the index $i$ it is possible
+        to recover the index of the input element maximizing the layer as $i // I$ and
+        the unit of that element as $i mod I$ where $I$ is the number of inputs of this
+        layer (i.e. the number of units of each element that is input to this layer).
+
+        Args:
+            x (Tensor): The input to the layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the raveled index 
+                of the input maximizing the layer and the second value is that particular 
+                maximum value. 
+        """
+        # x: (F, H, B, Ki) -> (F, B, H * Ki)
+        x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
+        
+        # weight: (F, B, Ko, H * Ki)
+        weight = self.weight()
+        # weighted_x: (F, B, H * Ko)
+        weighted_x = self.semiring.einsum(
+            "fbi,fboi->fbi", 
+            inputs=(x,), 
+            operands=(weight,), 
+            dim=-1, 
+            keepdim=True
+        )
+
+        # obtain raveled index
+        idx = weighted_x.argmax(dim=-1)
+
+        # compute maximum
+        # (F, B, H * Ko) -> (F, B, H, Ko)
+        weighted_x = weighted_x.view(*weighted_x.shape[:2], self.arity, -1)
+        output = weighted_x.amax(dim=-2)
+        
+        return idx, output
+        

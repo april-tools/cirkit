@@ -111,7 +111,7 @@ class ParameterAddressBook(AddressBook):
         )
         entries.append(entry)
 
-        return ParameterAddressBook(entries)
+        return ParameterAddressBook(entries, fold_idx_info=fold_idx_info)
 
 
 class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):

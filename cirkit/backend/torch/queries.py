@@ -304,25 +304,16 @@ class SamplingQuery(Query):
 
 
 class MAPQuery(Query):
-    """The integration query object allows marginalising out variables.
-
-    Computes output in two forward passes:
-        a) The normal circuit forward pass for input x
-        b) The integration forward pass where all variables are marginalised
-
-    A mask over random variables is computed based on the scopes passed as
-    input. This determines whether the integrated or normal circuit result
-    is returned for each variable.
-    """
+    """Compute the MAP state of the circuit, optionally using evidence."""
 
     def __init__(self, circuit: TorchCircuit) -> None:
-        """Initialize an integration query object.
+        """Initialize a MAP query object.
 
         Args:
-            circuit: The circuit to integrate over.
+            circuit: The circuit used to compute the MAP.
 
         Raises:
-            ValueError: If the circuit to integrate is not smooth or not decomposable.
+            ValueError: If the circuit is not smooth or not decomposable.
         """
         if not circuit.properties.smooth or not circuit.properties.decomposable:
             raise ValueError(
@@ -369,70 +360,46 @@ class MAPQuery(Query):
         # prepare the evidence vector by replacing non-evidence variables with
         # the mode of each input
         if x is None:
-            x = torch.empty((1, self._circuit.num_variables), dtype=torch.long)
-            evidence_vars = x.clone().to(torch.bool)
-        state = x.clone()
-
-        self._circuit.backtrack(
-            x.clone(),
-            forward_module_fn=functools.partial(
-                MAPQuery._map_forward_fn, evidence_vars=evidence_vars
-            ),
-            backward_module_fn=functools.partial(
-                MAPQuery._layer_fn, state=state, evidence_vars=evidence_vars
-            ),
+            state = torch.full((1, self._circuit.num_variables), 0, dtype=torch.long)
+            evidence_vars = state.clone().to(torch.bool)
+        else:
+            state = x.clone()
+        
+        state = self._circuit.backtrack(
+            x=state,
+            module_fn=functools.partial(
+                MAPQuery._layer_fn, evidence_vars=evidence_vars
+            )
         )
         return state
 
     @staticmethod
-    def _map_forward_fn(layer: TorchLayer, x: Tensor, *, evidence_vars: Tensor) -> Tensor:
-        # Evaluate a layer: if it is not an input layer, then evaluate it in the usual
-        # feed-forward way. Otherwise, use the variables to integrate to solve the marginal
-        # queries on the input layers.
-        # TODO: call the map function of the layer
+    def _layer_fn(layer: TorchLayer, x: Tensor, *, evidence_vars: Tensor) -> tuple[Tensor, Tensor]:
+        """Evaluate the layer in the usual feedforward sense using its maximizer semantics.
+
+        Args:
+            layer (TorchLayer): The layer for the forward pass.
+            x (Tensor): The input to the layer.
+            evidence_vars (Tensor): A tensor that indicates which variables are set
+                as evidence.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple which contains the input that maximizes the layer
+                and its output. In the case of inner layers, the maximizer input is the same
+                as x. In the case of input layer, it is the variable that maximizes
+                the input distribution.
+        """
         if isinstance(layer, TorchInputLayer):
-            # retrieve the map state from the input layer and reshape ir
-            from cirkit.backend.torch.semiring import SumProductSemiring
-            output, input = layer.probs().max(dim=-1)
+            # compute the input layer maximizer
+            idx, output = layer.max()
+
+            # use evidence if specified
+            is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2).expand_as(output)
+            if is_evidence.any():
+                output[is_evidence] = layer(x)[is_evidence]
+                idx[is_evidence] = x.expand_as(output)[is_evidence]
         else:
             # if it is not an input layer then evaluate in feedforward way
-            output, input = layer(x), x
+            idx, output = layer.max(x)
 
-        return input, output
-
-    @staticmethod
-    def _layer_fn(layer: TorchLayer, x: Tensor, *, state: Tensor, evidence_vars: Tensor) -> Tensor:
-        # Evaluate a layer: if it is not an input layer, then evaluate it in the usual
-        # feed-forward way. Otherwise, use the variables to integrate to solve the marginal
-        # queries on the input layers.
-        # TODO: call the map function of the layer
-        if isinstance(layer, TorchInputLayer):
-            # retrieve the map state from the input layer and reshape ir
-            
-            # lmax
-            layer_max = layer.probs().argmax(dim=-1)
-            state[:, layer.scope_idx.flatten()] = layer_max
-            idxs = slice(None)
-        elif isinstance(layer, TorchSumLayer):
-            # if it is not an input layer then inner layers indicate which of their
-            # input should be followed
-
-            if layer.num_folds == 1 and len(x.shape) == 3:
-                x = x.unsqueeze(0)
-
-            # x: (F, H, B, Ki) -> (F, B, H * Ki)
-            x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
-            weight = layer.weight()
-            out = layer.semiring.einsum(
-                "fbi,fboi->fboi", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
-            )
-
-            # get maximum indices along fold and arity dimension
-            # idxs: (F, H)
-            idxs = out.argmax(dim=-1)
-        elif isinstance(layer, TorchHadamardLayer):
-            # if it is not an input layer then inner layers indicate which of their
-            # input should be followed
-            idxs = torch.arange(layer.arity).unsqueeze(0).tile((layer.num_folds, 1))
-
-        return idxs
+        return idx, output

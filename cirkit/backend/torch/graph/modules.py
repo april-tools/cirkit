@@ -89,7 +89,6 @@ class AddressBookEntry:
     of other modules, and (iii) the (optionally None) fold index tensor to apply in order
     to recover the input tensors to each fold.
     """
-
     module: TorchModule | None
     """The module the entry refers to. It can be None if the entry is then used to
     compute the output of the whole computational graph."""
@@ -101,6 +100,7 @@ class AddressBookEntry:
     gathering the input tensors, i.e., if the indexing operation would act as an unsqueezing
     operation that can be much more efficient."""
 
+    fold_index_info: FoldIndexInfo = None
 
 class AddressBook(nn.Module, ABC):
     """The address book data structure, sometimes also known as book-keeping.
@@ -110,7 +110,7 @@ class AddressBook(nn.Module, ABC):
     torch module.
     """
 
-    def __init__(self, entries: list[AddressBookEntry]) -> None:
+    def __init__(self, entries: list[AddressBookEntry], fold_idx_info: FoldIndexInfo = None) -> None:
         """Initializes an address book.
 
         Args:
@@ -123,6 +123,7 @@ class AddressBook(nn.Module, ABC):
                 if it has more than one fold index tensor, or if the fold index tensor
                 is not a 1-dimensional tensor.
         """
+        self._fold_idx_info = fold_idx_info
         if not entries:
             raise ValueError("The list of address book entry must not be empty")
         self._entries = entries
@@ -339,42 +340,41 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
     def backtrack(
         self,
+        module_fn: ModuleEvalFunction,
         x: Tensor | None = None,
-        forward_module_fn: ModuleEvalFunction | None = None,
-        backward_module_fn: ModuleEvalFunction | None = None,
     ) -> Tensor:
-        """Evaluate the Torch graph by top-down traversal,
-            and by using the address book information to retrieve the outputs of each module.
+        """Evaluate the Torch graph by top-down traversal first,
+            using the address book information to retrieve the outputs of each module,
+            and compute the related state by bottom-up traversal.
 
         Args:
+            module_fn: A functional over modules used to compute the forward
+                pass on the circuit.
             x: The input of the Torch computational graph. It can be None.
-            module_fn: A functional over modules that overrides the forward method defined by a
-                module. It can be None. If it is None, then the ```__call__``` method defined by
-                the module itself is used.
 
         Returns:
-            The output tensor of the Torch graph.
-            If the Torch graph has multiple outputs, then they will be stacked.
+            The state obtained through the backward pass.
 
         Raises:
             RuntimeError: If the address book is somehow not well-formed.
         """
         # perform forward pass to compute the activations given x and the evaluation
         # function
-        module_inputs = []
+        module_idxs = []
         module_outputs = []
         for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
             if module is None:
                 (output,) = inputs
+                module_idxs.append(None)
+                module_outputs.append(output)
                 break
             
-            i, y = forward_module_fn(module, *inputs)
+            idx, y = module_fn(module, *inputs)
             
             module_outputs.append(y)
-            module_inputs.append(i)
-            
-        self._address_book.backtrack(module_inputs, backtrack_fn=backward_module_fn)
-        return output, x
+            module_idxs.append(idx)
+        
+        return self._address_book.backtrack(x, module_idxs)
 
     @abstractmethod
     def _build_unfold_index_info(self) -> FoldIndexInfo:

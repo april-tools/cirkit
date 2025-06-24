@@ -108,6 +108,19 @@ class TorchInputLayer(TorchLayer, ABC):
         """
         raise TypeError(f"Sampling is not supported for layers of type {type(self)}")
 
+    def max(self) -> tuple[Tensor, Tensor]:
+        """If the input layer encodes a probability distribution then return the state
+        that maximizes the variable along side its mode.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first element is the maximum state
+                and the second element is the mode of the input.
+        
+        Raises:
+            TypeError: If max is not supported by the layer.
+        """
+        raise TypeError(f"Max is not supported for layers of type {type(self)}")
+
     def extra_repr(self) -> str:
         return (
             "  ".join(
@@ -427,6 +440,20 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         dist = distributions.Categorical(logits=logits)
         samples = dist.sample((num_samples,))  # (N, F, B, K)
         return samples
+
+    def max(self) -> tuple[Tensor, Tensor]:
+        r"""Retrieves the mode of the categorical layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the state 
+                with maximum probability and the second value is the mode
+                of the distribution.
+        """
+        # logits: (F, B, K, N)
+        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        m, m_state = logits.max(dim=-1)
+        m = self.semiring.map_from(m, LSESumSemiring)
+        return m_state, m
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
