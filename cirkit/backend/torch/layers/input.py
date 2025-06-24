@@ -115,7 +115,7 @@ class TorchInputLayer(TorchLayer, ABC):
         Returns:
             tuple[Tensor, Tensor]: A tuple where the first element is the maximum state
                 and the second element is the mode of the input.
-        
+
         Raises:
             TypeError: If max is not supported by the layer.
         """
@@ -445,7 +445,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         r"""Retrieves the mode of the categorical layer.
 
         Returns:
-            tuple[Tensor, Tensor]: A tuple where the first tensor is the state 
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the state
                 with maximum probability and the second value is the mode
                 of the distribution.
         """

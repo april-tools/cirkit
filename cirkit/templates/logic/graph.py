@@ -391,12 +391,20 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         # if a node is a literal, we keep going
         # if it is a conjunction or a disjunction, we exclude null elements from its children
         # and replace it by its null element if one of its children is the absorbing element
-        
-        for node in filter(lambda n: isinstance(n, (ConjunctionNode, DisjunctionNode)), self.topological_ordering()):
-            absorbing_element, null_element = (BottomNode, TopNode) if isinstance(node, ConjunctionNode) else (TopNode, BottomNode)
-            
+
+        for node in filter(
+            lambda n: isinstance(n, (ConjunctionNode, DisjunctionNode)), self.topological_ordering()
+        ):
+            absorbing_element, null_element = (
+                (BottomNode, TopNode)
+                if isinstance(node, ConjunctionNode)
+                else (TopNode, BottomNode)
+            )
+
             # remove null elements from child
-            self._in_nodes[node] = [c for c in self._in_nodes[node] if not isinstance(c, null_element)]
+            self._in_nodes[node] = [
+                c for c in self._in_nodes[node] if not isinstance(c, null_element)
+            ]
 
             # prune trivial node if absorbing element is within children
             if any(isinstance(c, absorbing_element) for c in self.node_inputs(node)):

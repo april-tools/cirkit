@@ -82,9 +82,9 @@ class TorchInnerLayer(TorchLayer, ABC):
         """Perform a backward maximization step.
 
         Returns:
-            Tensor: A tuple of tensors where the first value is the input element that maximizes 
+            Tensor: A tuple of tensors where the first value is the input element that maximizes
                 the layer and the second element is the maximum value of the layer.
-        
+
         Raises:
             TypeError: If max is not supported by the layer.
         """
@@ -142,7 +142,7 @@ class TorchHadamardLayer(TorchInnerLayer):
         return x, None
 
     def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        """The maximum of a Hadamard product layer is the same as a standard 
+        """The maximum of a Hadamard product layer is the same as a standard
         forward pass over the layer.
 
         Args:
@@ -151,7 +151,7 @@ class TorchHadamardLayer(TorchInnerLayer):
         Returns:
             tuple[Tensor, Tensor]: A tuple where the first tensor ranges over all elements in the
                 arity of this layer and the second element is the result of a forward pass on this
-                layer. 
+                layer.
         """
         out = self(x)
         idxs = torch.arange(x.size(1)).tile((x.size(1), 1))
@@ -222,7 +222,7 @@ class TorchKroneckerLayer(TorchInnerLayer):
         return y0, None
 
     def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        """The maximum of a Kronecker product layer is the same as a standard 
+        """The maximum of a Kronecker product layer is the same as a standard
         forward pass over the layer.
 
         Args:
@@ -231,7 +231,7 @@ class TorchKroneckerLayer(TorchInnerLayer):
         Returns:
             tuple[Tensor, Tensor]: A tuple where the first tensor ranges over all elements in the
                 arity of this layer and the second element is the result of a forward pass on this
-                layer. 
+                layer.
         """
         out = self(x)
         idxs = torch.arange(x.size(1)).tile((x.size(1), 1))
@@ -353,22 +353,18 @@ class TorchSumLayer(TorchInnerLayer):
             x (Tensor): The input to the layer.
 
         Returns:
-            tuple[Tensor, Tensor]: A tuple where the first tensor is the raveled index 
-                of the input maximizing the layer and the second value is that particular 
-                maximum value. 
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the raveled index
+                of the input maximizing the layer and the second value is that particular
+                maximum value.
         """
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
-        
+
         # weight: (F, B, Ko, H * Ki)
         weight = self.weight()
         # weighted_x: (F, B, H * Ko)
         weighted_x = self.semiring.einsum(
-            "fbi,fboi->fbi", 
-            inputs=(x,), 
-            operands=(weight,), 
-            dim=-1, 
-            keepdim=True
+            "fbi,fboi->fbi", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
         # obtain raveled index
@@ -378,6 +374,5 @@ class TorchSumLayer(TorchInnerLayer):
         # (F, B, H * Ko) -> (F, B, H, Ko)
         weighted_x = weighted_x.view(*weighted_x.shape[:2], self.arity, -1)
         output = weighted_x.amax(dim=-2)
-        
+
         return idx, output
-        

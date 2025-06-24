@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
 from collections import deque
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
@@ -89,6 +89,7 @@ class AddressBookEntry:
     of other modules, and (iii) the (optionally None) fold index tensor to apply in order
     to recover the input tensors to each fold.
     """
+
     module: TorchModule | None
     """The module the entry refers to. It can be None if the entry is then used to
     compute the output of the whole computational graph."""
@@ -102,6 +103,7 @@ class AddressBookEntry:
 
     fold_index_info: FoldIndexInfo = None
 
+
 class AddressBook(nn.Module, ABC):
     """The address book data structure, sometimes also known as book-keeping.
     The address book stores a list of
@@ -110,7 +112,9 @@ class AddressBook(nn.Module, ABC):
     torch module.
     """
 
-    def __init__(self, entries: list[AddressBookEntry], fold_idx_info: FoldIndexInfo = None) -> None:
+    def __init__(
+        self, entries: list[AddressBookEntry], fold_idx_info: FoldIndexInfo = None
+    ) -> None:
         """Initializes an address book.
 
         Args:
@@ -141,7 +145,9 @@ class AddressBook(nn.Module, ABC):
             raise ValueError("The output fold index tensor should be a 1-dimensional tensor")
         super().__init__()
         self._num_outputs = out_fold_idx.shape[0]
-        self._module_to_entry: Mapping[TorchModule, AddressBookEntry] = { e.module: e for e in self._entries}
+        self._module_to_entry: Mapping[TorchModule, AddressBookEntry] = {
+            e.module: e for e in self._entries
+        }
         self._entry_modules: list[TorchModule | None] = [e.module for e in self._entries]
         self._entry_in_module_ids: list[list[list[int]]] = [e.in_module_ids for e in self._entries]
         # We register the book-keeping tensor indices as buffers.
@@ -368,12 +374,12 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
                 module_idxs.append(None)
                 module_outputs.append(output)
                 break
-            
+
             idx, y = module_fn(module, *inputs)
-            
+
             module_outputs.append(y)
             module_idxs.append(idx)
-        
+
         return self._address_book.backtrack(x, module_idxs)
 
     @abstractmethod

@@ -364,12 +364,9 @@ class MAPQuery(Query):
             evidence_vars = state.clone().to(torch.bool)
         else:
             state = x.clone()
-        
+
         state = self._circuit.backtrack(
-            x=state,
-            module_fn=functools.partial(
-                MAPQuery._layer_fn, evidence_vars=evidence_vars
-            )
+            x=state, module_fn=functools.partial(MAPQuery._layer_fn, evidence_vars=evidence_vars)
         )
         return state
 

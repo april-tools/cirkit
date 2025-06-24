@@ -1,9 +1,11 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import HadamardLayer, Layer, SumLayer, CategoricalLayer
-from cirkit.symbolic.parameters import Parameter, ConstantParameter
+from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, Layer, SumLayer
+from cirkit.symbolic.parameters import ConstantParameter, Parameter
 from cirkit.templates.utils import (
     Parameterization,
     name_to_input_layer_factory,
@@ -11,8 +13,6 @@ from cirkit.templates.utils import (
     parameterization_to_factory,
 )
 from cirkit.utils.scope import Scope
-
-import numpy as np
 
 
 def fully_factorized(
@@ -73,10 +73,7 @@ def fully_factorized(
     return Circuit(input_layers + [prod_sl], in_layers={prod_sl: input_layers}, outputs=[prod_sl])
 
 
-def overparameterized_deep_fully_factorized(
-    num_variables: int,
-    num_units: int
-) -> Circuit:
+def overparameterized_deep_fully_factorized(num_variables: int, num_units: int) -> Circuit:
     """Construct a circuit encoding a deep fully-factorized model following
     a latent interpretation of a circuit.
 
@@ -91,7 +88,7 @@ def overparameterized_deep_fully_factorized(
 
     nodes = []
     in_nodes = {}
-    
+
     weight_factory = parameterization_to_factory(
         Parameterization(activation="softmax", initialization="normal")
     )
@@ -101,13 +98,13 @@ def overparameterized_deep_fully_factorized(
 
     pos_param = Parameter.from_input(ConstantParameter(num_units, 2, value=pos_param_value))
     neg_param = Parameter.from_input(ConstantParameter(num_units, 2, value=neg_param_value))
-    
+
     v_i = 0
     node = None
     while v_i < num_variables:
         pos_v_i = CategoricalLayer(Scope([v_i]), 1, num_categories=2, probs=pos_param)
         neg_v_i = CategoricalLayer(Scope([v_i]), 1, num_categories=2, probs=neg_param)
-    
+
         nodes.extend([pos_v_i, neg_v_i])
         if node is None:
             node = SumLayer(num_units, num_units, 2, weight_factory=weight_factory)
@@ -123,10 +120,10 @@ def overparameterized_deep_fully_factorized(
             in_nodes[r_child] = [neg_v_i, node]
 
             node = SumLayer(
-                num_units, 
-                1 if v_i == num_variables else num_units, 
-                2, 
-                weight_factory=weight_factory
+                num_units,
+                1 if v_i == num_variables else num_units,
+                2,
+                weight_factory=weight_factory,
             )
             nodes.append(node)
             in_nodes[node] = [l_child, r_child]
@@ -137,9 +134,7 @@ def overparameterized_deep_fully_factorized(
     return s_circuit
 
 
-def deterministic_fully_factorized(
-    num_variables: int
-) -> Circuit:
+def deterministic_fully_factorized(num_variables: int) -> Circuit:
     """Construct a deterministic circuit encoding a fully-factorized model following
     a latent interpretation of a circuit.
 

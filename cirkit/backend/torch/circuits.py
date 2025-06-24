@@ -1,8 +1,7 @@
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from typing import Any
-from dataclasses import dataclass
-
 from collections import deque
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -17,7 +16,12 @@ from cirkit.backend.torch.graph.modules import (
     FoldIndexInfo,
     TorchDiAcyclicGraph,
 )
-from cirkit.backend.torch.layers import TorchInputLayer, TorchHadamardLayer, TorchSumLayer, TorchLayer
+from cirkit.backend.torch.layers import (
+    TorchHadamardLayer,
+    TorchInputLayer,
+    TorchLayer,
+    TorchSumLayer,
+)
 from cirkit.backend.torch.utils import CachedGateFunctionEval
 from cirkit.symbolic.circuit import StructuralProperties
 from cirkit.utils.conditional import GateFunctionParameterSpecs
@@ -33,18 +37,13 @@ class LayerAddressBook(AddressBook):
     circuit layer.
     """
 
-
-    def backtrack(
-        self, 
-        state,
-        module_idxs: list[Tensor]
-    ) -> Tensor:
+    def backtrack(self, state, module_idxs: list[Tensor]) -> Tensor:
         # entry queue holds a tuple of the form:
         # (module address book id, idxs of module, previous module address book id)
         entry_queue = deque([(len(self._entries) - 1, None, None, None)])
         while entry_queue:
             entry_id, p_fold_idx, p_arity_idx, p_unit_idx = entry_queue.popleft()
-        
+
             entry = self._entries[entry_id]
             module = entry.module
             in_module_ids = entry.in_module_ids
@@ -55,9 +54,11 @@ class LayerAddressBook(AddressBook):
                 in_fold_idx_h = in_fold_idx[0]
 
                 if module is None:
-                    entry_queue.extend([(next_m_id, 0, None, None) for next_m_id in in_modules_ids_h])
+                    entry_queue.extend(
+                        [(next_m_id, 0, None, None) for next_m_id in in_modules_ids_h]
+                    )
                     continue
-                
+
                 match module:
                     case TorchSumLayer():
                         in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][0]
@@ -72,18 +73,20 @@ class LayerAddressBook(AddressBook):
                         continue
                     case _:
                         in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][p_fold_idx]
-                        
+
                         # for product layers we visit all the children
                         for next_module_id, fold_idx in in_fold_info:
-                            entry_queue.append((next_module_id, fold_idx, None, p_unit_idx))    
+                            entry_queue.append((next_module_id, fold_idx, None, p_unit_idx))
                         continue
             # catch the case where we are at an input unit
             elif module is not None:
                 assert isinstance(module, TorchInputLayer)
                 # set state
-                state[:, module.scope_idx[p_fold_idx]] = module_idxs[entry_id][p_fold_idx, :, unit_idx]
-        
-        return state   
+                state[:, module.scope_idx[p_fold_idx]] = module_idxs[entry_id][
+                    p_fold_idx, :, unit_idx
+                ]
+
+        return state
 
     def lookup(
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
