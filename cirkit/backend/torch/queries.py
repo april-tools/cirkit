@@ -329,7 +329,7 @@ class MAPQuery(Query):
         x: Tensor | None = None,
         evidence_vars: Tensor | Scope | Iterable[Scope] | None = None,
         gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
@@ -356,19 +356,41 @@ class MAPQuery(Query):
 
         # Memoize the gate functions before evaluating the circuit
         self._circuit._memoize_gate_functions(gate_function_kwargs)
+        if gate_function_kwargs is not None:
+            # retrieve the batch size from the gate function so that we produce
+            # one state for each batched parameter
+            batch_size = list(list(gate_function_kwargs.values())[0].values())[0].size(0)
+        else:
+            batch_size = 1
 
         # prepare the evidence vector by replacing non-evidence variables with
         # the mode of each input
         if x is None:
-            state = torch.full((1, self._circuit.num_variables), 0, dtype=torch.long)
+            num_variables = self._circuit.num_variables
+
+            # it no variables in the circuit, check if the circuit is the result
+            # of an operation and retrieve the variables from there
+            if num_variables == 0:
+                if "scope" in self._circuit.symbolic_operation.metadata:
+                    num_variables = len(self._circuit.symbolic_operation.metadata["scope"])
+                else:
+                    raise ValueError("The circuit does not have variables.")
+
+            state = torch.full((batch_size, num_variables), 0, dtype=torch.long)
             evidence_vars = state.clone().to(torch.bool)
         else:
             state = x.clone()
+            if state.size(0) == 1:
+                state = state.tile((batch_size, 1))
+            elif state.size(0) != batch_size:
+                raise ValueError(
+                    f"The evidence has batch dimension {state.size(0)} but {batch_size} is required."
+                )
 
-        state = self._circuit.backtrack(
+        map, state = self._circuit.backtrack(
             x=state, module_fn=functools.partial(MAPQuery._layer_fn, evidence_vars=evidence_vars)
         )
-        return state
+        return map, state
 
     @staticmethod
     def _layer_fn(layer: TorchLayer, x: Tensor, *, evidence_vars: Tensor) -> tuple[Tensor, Tensor]:
@@ -388,13 +410,14 @@ class MAPQuery(Query):
         """
         if isinstance(layer, TorchInputLayer):
             # compute the input layer maximizer
-            idx, output = layer.max()
+            idx, output = layer.max(x)
 
-            # use evidence if specified
-            is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2).expand_as(output)
-            if is_evidence.any():
-                output[is_evidence] = layer(x)[is_evidence]
-                idx[is_evidence] = x.expand_as(output)[is_evidence]
+            # if layer is not a constant layer expand batch sizes if needed
+            if layer.num_variables > 0:
+                is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2).expand_as(output)
+                if is_evidence.any():
+                    output[is_evidence] = layer(x)[is_evidence]
+                    idx[is_evidence] = x.expand_as(output)[is_evidence]
         else:
             # if it is not an input layer then evaluate in feedforward way
             idx, output = layer.max(x)

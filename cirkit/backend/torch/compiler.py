@@ -263,6 +263,7 @@ class TorchCompiler(AbstractCompiler):
             outputs=outputs,
             properties=sc.properties,
             gate_function_evals=gate_function_evals,
+            symbolic_operation=sc.operation,
         )
 
         # Post-process the compiled circuit, i.e.,

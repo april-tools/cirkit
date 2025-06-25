@@ -108,9 +108,12 @@ class TorchInputLayer(TorchLayer, ABC):
         """
         raise TypeError(f"Sampling is not supported for layers of type {type(self)}")
 
-    def max(self) -> tuple[Tensor, Tensor]:
+    def max(self, x: Any = None) -> tuple[Tensor, Tensor]:
         """If the input layer encodes a probability distribution then return the state
         that maximizes the variable along side its mode.
+
+        Args:
+            x: Optional input to compute the layer maximizer. Defaults to None.
 
         Returns:
             tuple[Tensor, Tensor]: A tuple where the first element is the maximum state
@@ -441,7 +444,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         samples = dist.sample((num_samples,))  # (N, F, B, K)
         return samples
 
-    def max(self) -> tuple[Tensor, Tensor]:
+    def max(self, x=None) -> tuple[Tensor, Tensor]:
         r"""Retrieves the mode of the categorical layer.
 
         Returns:
@@ -752,6 +755,16 @@ class TorchConstantValueLayer(TorchConstantLayer):
             value = value.expand(-1, batch_size, *tuple(value.shape[2:]))
 
         return self.semiring.map_from(value, self._source_semiring)
+
+    def max(self, x: int):
+        value = self.value()  # (F, B, Ko)
+
+        if value.shape[1] == 1 and x != 1:
+            # expand value to the requested batch size
+            value = value.expand(-1, x, *tuple(value.shape[2:]))
+
+        m, m_state = self.value().max(dim=-1, keepdim=True)
+        return m_state, m
 
 
 class TorchEvidenceLayer(TorchConstantLayer):

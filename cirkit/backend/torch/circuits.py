@@ -23,7 +23,7 @@ from cirkit.backend.torch.layers import (
     TorchSumLayer,
 )
 from cirkit.backend.torch.utils import CachedGateFunctionEval
-from cirkit.symbolic.circuit import StructuralProperties
+from cirkit.symbolic.circuit import CircuitOperation, StructuralProperties
 from cirkit.utils.conditional import GateFunctionParameterSpecs
 from cirkit.utils.scope import Scope
 
@@ -40,22 +40,23 @@ class LayerAddressBook(AddressBook):
     def backtrack(self, state, module_idxs: list[Tensor]) -> Tensor:
         # entry queue holds a tuple of the form:
         # (module address book id, idxs of module, previous module address book id)
-        entry_queue = deque([(len(self._entries) - 1, None, None, None)])
+        entry_queue = deque([(len(self._entries) - 1, None, None, None, None)])
         while entry_queue:
-            entry_id, p_fold_idx, p_arity_idx, p_unit_idx = entry_queue.popleft()
+            entry_id, p_fold_idx, p_batch_idx, p_arity_idx, p_unit_idx = entry_queue.popleft()
 
             entry = self._entries[entry_id]
             module = entry.module
             in_module_ids = entry.in_module_ids
-            in_fold_idx = entry.in_fold_idx
 
             if in_module_ids:
                 in_modules_ids_h = in_module_ids[0]
-                in_fold_idx_h = in_fold_idx[0]
 
                 if module is None:
                     entry_queue.extend(
-                        [(next_m_id, 0, None, None) for next_m_id in in_modules_ids_h]
+                        [
+                            (next_m_id, 0, torch.arange(state.size(0)), slice(None), slice(None))
+                            for next_m_id in in_modules_ids_h
+                        ]
                     )
                     continue
 
@@ -63,27 +64,45 @@ class LayerAddressBook(AddressBook):
                     case TorchSumLayer():
                         in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][0]
 
-                        # retrieve arity and unit indexes by unraveling
-                        raveled_idx = module_idxs[entry_id][p_fold_idx]
-                        arity_idx = raveled_idx // module.num_input_units
-                        unit_idx = raveled_idx % module.num_input_units
+                        # retrieve arity and unit indexes by unraveling each batch
+                        raveled_idxs = module_idxs[entry_id][
+                            p_fold_idx, p_batch_idx, p_unit_idx
+                        ].squeeze()
+                        arity_idxs = raveled_idxs // module.num_input_units
+                        unit_idxs = raveled_idxs % module.num_input_units
 
-                        next_module_id, fold_idx = in_fold_info[arity_idx]
-                        entry_queue.append((next_module_id, fold_idx, None, unit_idx[0]))
+                        for arity_i, (next_module_id, fold_idx) in enumerate(in_fold_info):
+                            batch_idxs_at_arity = arity_idxs == arity_i
+
+                            if batch_idxs_at_arity.any():
+                                # specify which states are interested in the input module i
+                                # and for each state which unit they are interested in
+                                entry_queue.append(
+                                    (
+                                        next_module_id,
+                                        fold_idx,
+                                        p_batch_idx[batch_idxs_at_arity],
+                                        None,
+                                        unit_idxs[batch_idxs_at_arity],
+                                    )
+                                )
+
                         continue
                     case _:
                         in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][p_fold_idx]
 
                         # for product layers we visit all the children
                         for next_module_id, fold_idx in in_fold_info:
-                            entry_queue.append((next_module_id, fold_idx, None, p_unit_idx))
+                            entry_queue.append(
+                                (next_module_id, fold_idx, p_batch_idx, None, p_unit_idx)
+                            )
                         continue
             # catch the case where we are at an input unit
             elif module is not None:
                 assert isinstance(module, TorchInputLayer)
                 # set state
-                state[:, module.scope_idx[p_fold_idx]] = module_idxs[entry_id][
-                    p_fold_idx, :, unit_idx
+                state[p_batch_idx, module.scope_idx[p_fold_idx]] = module_idxs[entry_id][
+                    p_fold_idx, p_batch_idx, p_unit_idx
                 ]
 
         return state
@@ -212,6 +231,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         properties: StructuralProperties,
         fold_idx_info: FoldIndexInfo | None = None,
         gate_function_evals: Mapping[Mapping[str, CachedGateFunctionEval]] | None = None,
+        symbolic_operation: CircuitOperation | None = None,
     ) -> None:
         """Initializes a torch circuit.
 
@@ -224,6 +244,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             fold_idx_info: The folding index information.
                 It can be None if the circuit is not folded.
             gate_function_evals: A mapping from external gate functions to cached evaluations.
+            symbolic_operation: The symbolic operation that created the circuit, if any.
         """
         super().__init__(
             layers,
@@ -235,6 +256,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self._properties = properties
         gate_function_evals = {} if gate_function_evals is None else gate_function_evals
         self._gate_function_evals = gate_function_evals
+        self._symbolic_operation = symbolic_operation
 
     @property
     def scope(self) -> Scope:
@@ -262,6 +284,15 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             The structural properties.
         """
         return self._properties
+
+    @property
+    def symbolic_operation(self) -> CircuitOperation:
+        """Retrieve the symbolic operation that created the circuit.
+
+        Returns:
+            The symbolic operation.
+        """
+        return self._symbolic_operation
 
     @property
     def layers(self) -> Sequence[TorchLayer]:

@@ -8,7 +8,7 @@ from torch import Tensor
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import Semiring
+from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
 class TorchInnerLayer(TorchLayer, ABC):
@@ -154,7 +154,7 @@ class TorchHadamardLayer(TorchInnerLayer):
                 layer.
         """
         out = self(x)
-        idxs = torch.arange(x.size(1)).tile((x.size(1), 1))
+        idxs = torch.arange(x.size(1)).tile((x.size(0), 1))
         return idxs, out
 
 
@@ -258,9 +258,10 @@ class TorchSumLayer(TorchInnerLayer):
             num_input_units: The number of input units.
             num_output_units: The number of output units.
             arity: The arity of the layer.
-            weight: The weight parameter, which must have shape $(F, K_o, K_i\cdot H)$,
-                where $F$ is the number of folds, $K_o$ is the number of output units,
-                   $K_i$ is the number of input units, and $H$ is the arity.
+            weight: The weight parameter, which must have shape $(F, B, K_o, K_i\cdot H)$,
+                where $F$ is the number of folds, $B$ the batch size,
+                   $K_o$ is the number of output units, $K_i$ is the number of input units,
+                   and $H$ is the arity.
             semiring: The evaluation semiring.
                 Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
             num_folds: The number of channels.
@@ -360,19 +361,16 @@ class TorchSumLayer(TorchInnerLayer):
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
 
-        # weight: (F, B, Ko, H * Ki)
+        # weight: (F, B, K_o, H * Ki)
         weight = self.weight()
-        # weighted_x: (F, B, H * Ko)
-        weighted_x = self.semiring.einsum(
-            "fbi,fboi->fbi", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+
+        # intermediary weighted results are computed in the sum product semiring
+        # since very small products leading to underflow would not be selected
+        # by max anyway
+        x = SumProductSemiring.map_from(x, self.semiring)
+        weighted_x = self.semiring.map_from(
+            torch.einsum("fbi,fboi->fboi", x, weight), SumProductSemiring
         )
 
-        # obtain raveled index
-        idx = weighted_x.argmax(dim=-1)
-
-        # compute maximum
-        # (F, B, H * Ko) -> (F, B, H, Ko)
-        weighted_x = weighted_x.view(*weighted_x.shape[:2], self.arity, -1)
-        output = weighted_x.amax(dim=-2)
-
+        output, idx = weighted_x.max(dim=-1)
         return idx, output

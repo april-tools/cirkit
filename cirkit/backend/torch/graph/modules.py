@@ -348,7 +348,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         self,
         module_fn: ModuleEvalFunction,
         x: Tensor | None = None,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         """Evaluate the Torch graph by top-down traversal first,
             using the address book information to retrieve the outputs of each module,
             and compute the related state by bottom-up traversal.
@@ -359,7 +359,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             x: The input of the Torch computational graph. It can be None.
 
         Returns:
-            The state obtained through the backward pass.
+            The value computed through the forward and its corresponding state.
 
         Raises:
             RuntimeError: If the address book is somehow not well-formed.
@@ -368,7 +368,9 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         # function
         module_idxs = []
         module_outputs = []
+        module_inputs = []
         for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
+            module_inputs.append(inputs)
             if module is None:
                 (output,) = inputs
                 module_idxs.append(None)
@@ -380,7 +382,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             module_outputs.append(y)
             module_idxs.append(idx)
 
-        return self._address_book.backtrack(x, module_idxs)
+        return module_outputs[-1], self._address_book.backtrack(x, module_idxs)
 
     @abstractmethod
     def _build_unfold_index_info(self) -> FoldIndexInfo:
