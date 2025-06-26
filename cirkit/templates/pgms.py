@@ -102,8 +102,8 @@ def overparameterized_deep_fully_factorized(num_variables: int, num_units: int) 
     v_i = 0
     node = None
     while v_i < num_variables:
-        pos_v_i = CategoricalLayer(Scope([v_i]), 1, num_categories=2, probs=pos_param)
-        neg_v_i = CategoricalLayer(Scope([v_i]), 1, num_categories=2, probs=neg_param)
+        pos_v_i = CategoricalLayer(Scope([v_i]), num_units, num_categories=2, probs=pos_param)
+        neg_v_i = CategoricalLayer(Scope([v_i]), num_units, num_categories=2, probs=neg_param)
 
         nodes.extend([pos_v_i, neg_v_i])
         if node is None:
@@ -121,7 +121,7 @@ def overparameterized_deep_fully_factorized(num_variables: int, num_units: int) 
 
             node = SumLayer(
                 num_units,
-                1 if v_i == num_variables else num_units,
+                1 if v_i == (num_variables - 1) else num_units,
                 2,
                 weight_factory=weight_factory,
             )
