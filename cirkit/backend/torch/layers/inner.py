@@ -284,6 +284,10 @@ class TorchSumLayer(TorchInnerLayer):
             )
         self.weight = weight
 
+        # prepare max and argmaxing functions across folds and batches
+        self._max_fn = torch.vmap(torch.vmap(lambda x: torch.amax(x, dim=-1)))
+        self._argmax_fn = torch.vmap(torch.vmap(lambda x: torch.argmax(x, dim=-1)))
+
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
@@ -368,9 +372,9 @@ class TorchSumLayer(TorchInnerLayer):
         # since very small products leading to underflow would not be selected
         # by max anyway
         x = SumProductSemiring.map_from(x, self.semiring)
+        # weighted_x: (F, B, H * Ki, Ko)
         weighted_x = self.semiring.map_from(
             torch.einsum("fbi,fboi->fboi", x, weight), SumProductSemiring
         )
 
-        output, idx = weighted_x.max(dim=-1)
-        return idx, output
+        return self._argmax_fn(weighted_x), self._max_fn(weighted_x)

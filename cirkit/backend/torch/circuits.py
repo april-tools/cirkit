@@ -40,9 +40,9 @@ class LayerAddressBook(AddressBook):
     def backtrack(self, state, module_idxs: list[Tensor]) -> Tensor:
         # entry queue holds a tuple of the form:
         # (module address book id, idxs of module, previous module address book id)
-        entry_queue = deque([(len(self._entries) - 1, None, None, None, None)])
+        entry_queue = deque([(len(self._entries) - 1, None, None, None)])
         while entry_queue:
-            entry_id, p_fold_idx, p_batch_idx, p_arity_idx, p_unit_idx = entry_queue.popleft()
+            entry_id, p_fold_idx, p_batch_idx, p_unit_idx = entry_queue.popleft()
 
             entry = self._entries[entry_id]
             module = entry.module
@@ -54,7 +54,7 @@ class LayerAddressBook(AddressBook):
                 if module is None:
                     entry_queue.extend(
                         [
-                            (next_m_id, 0, torch.arange(state.size(0)), slice(None), slice(None))
+                            (next_m_id, 0, torch.arange(state.size(0), device=state.device), slice(None))
                             for next_m_id in in_modules_ids_h
                         ]
                     )
@@ -62,17 +62,19 @@ class LayerAddressBook(AddressBook):
 
                 match module:
                     case TorchSumLayer():
-                        in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][0]
-
+                        in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][p_fold_idx]
+                        
                         # retrieve arity and unit indexes by unraveling each batch
-                        raveled_idxs = module_idxs[entry_id][
-                            p_fold_idx, p_batch_idx, p_unit_idx
-                        ].squeeze()
-                        arity_idxs = raveled_idxs // module.num_input_units
-                        unit_idxs = raveled_idxs % module.num_input_units
+                        raveled_idxs = module_idxs[entry_id][p_fold_idx, p_batch_idx, p_unit_idx]
+                        arity_idxs, unit_idxs =  torch.unravel_index(
+                            raveled_idxs, 
+                            (module.arity, module.num_input_units)
+                        )
+                        #arity_idxs = raveled_idxs // module.num_input_units
+                        #unit_idxs = raveled_idxs % module.num_input_units
 
                         for arity_i, (next_module_id, fold_idx) in enumerate(in_fold_info):
-                            batch_idxs_at_arity = arity_idxs == arity_i
+                            batch_idxs_at_arity = (arity_idxs == arity_i).flatten()
 
                             if batch_idxs_at_arity.any():
                                 # specify which states are interested in the input module i
@@ -82,8 +84,7 @@ class LayerAddressBook(AddressBook):
                                         next_module_id,
                                         fold_idx,
                                         p_batch_idx[batch_idxs_at_arity],
-                                        None,
-                                        unit_idxs[batch_idxs_at_arity],
+                                        unit_idxs[batch_idxs_at_arity]
                                     )
                                 )
 
@@ -94,7 +95,7 @@ class LayerAddressBook(AddressBook):
                         # for product layers we visit all the children
                         for next_module_id, fold_idx in in_fold_info:
                             entry_queue.append(
-                                (next_module_id, fold_idx, p_batch_idx, None, p_unit_idx)
+                                (next_module_id, fold_idx, p_batch_idx, p_unit_idx)
                             )
                         continue
             # catch the case where we are at an input unit
@@ -284,6 +285,15 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             The structural properties.
         """
         return self._properties
+
+    @property
+    def device(self) -> torch.device:
+        """Retrieve the device on which the circuit is loaded.
+
+        Returns:
+            torch.device: The device.
+        """
+        return next(self.parameters()).device
 
     @property
     def symbolic_operation(self) -> CircuitOperation:

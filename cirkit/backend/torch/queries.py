@@ -376,9 +376,10 @@ class MAPQuery(Query):
                 else:
                     raise ValueError("The circuit does not have variables.")
 
-            state = torch.full((batch_size, num_variables), 0, dtype=torch.long)
+            state = torch.full((batch_size, num_variables), 0, dtype=torch.long, device=self._circuit.device)
             evidence_vars = state.clone().to(torch.bool)
         else:
+            x = x.to(self._circuit.device)
             state = x.clone()
             if state.size(0) == 1:
                 state = state.tile((batch_size, 1))

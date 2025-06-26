@@ -395,6 +395,10 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         self.probs = probs
         self.logits = logits
 
+        # prepare max and argmaxing functions across folds and batches
+        self._max_fn = torch.vmap(torch.vmap(lambda x: torch.amax(x, dim=-1)))
+        self._argmax_fn = torch.vmap(torch.vmap(lambda x: torch.argmax(x, dim=-1)))
+
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
@@ -453,9 +457,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
                 of the distribution.
         """
         # logits: (F, B, K, N)
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        m, m_state = logits.max(dim=-1)
-        m = self.semiring.map_from(m, LSESumSemiring)
+        params = self.probs() if self.logits is None else self.logits()
+        m = self._max_fn(params)
+        m_state = self._argmax_fn(params)
         return m_state, m
 
 
