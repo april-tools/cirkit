@@ -411,10 +411,16 @@ class MAPQuery(Query):
             idx, output = layer.max(x)
 
             # if layer is not a constant layer expand batch sizes if needed
-            if layer.num_variables > 0:
-                is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2).expand_as(output)
+            if evidence_vars.any() and layer.num_variables > 0:
+                is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2)
                 if is_evidence.any():
-                    output[is_evidence] = layer(x)[is_evidence]
+                    ff_output = layer(x)
+
+                    # expand output and idx if needed
+                    output = output.expand_as(ff_output)
+                    idx = idx.expand_as(ff_output)
+
+                    output[is_evidence] = ff_output[is_evidence]
                     idx[is_evidence] = x.expand_as(output)[is_evidence]
         else:
             # if it is not an input layer then evaluate in feedforward way

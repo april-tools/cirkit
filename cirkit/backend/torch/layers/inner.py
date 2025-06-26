@@ -154,7 +154,7 @@ class TorchHadamardLayer(TorchInnerLayer):
                 layer.
         """
         out = self(x)
-        idxs = torch.arange(x.size(1)).tile((x.size(0), 1))
+        idxs = torch.arange(x.size(1)).tile((x.size(0), x.size(2), 1))
         return idxs, out
 
 

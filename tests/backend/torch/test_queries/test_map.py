@@ -7,6 +7,7 @@ import torch
 import cirkit.symbolic.functional as SF
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
+from cirkit.pipeline import PipelineContext
 from cirkit.backend.torch.queries import MAPQuery
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import NormalInitializer
@@ -143,30 +144,68 @@ def test_query_map_with_evidence(semiring: str, fold: bool, optimize: bool, num_
         pass
 
 
-def test_query_map_image_data():
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
+)
+def test_query_map_image_data(semiring, fold, optimize, num_units):
     symbolic_circuit = data_modalities.image_data(
         (1, 10, 10),  # The shape of MNIST image, i.e., (num_channels, image_height, image_width)
         region_graph="quad-graph",  # Select the structure of the circuit to follow the QuadGraph region graph
         input_layer="categorical",  # Use Categorical distributions for the pixel values (0-255) as input layers
-        num_input_units=32,  # Each input layer consists of 64 Categorical input units
+        num_input_units=num_units,  # Each input layer consists of 64 Categorical input units
         sum_product_layer="cp",  # Use CP sum-product layers, i.e., alternate dense layers with Hadamard product layers
-        num_sum_units=32,  # Each dense sum layer consists of 64 sum units
+        num_sum_units=num_units,  # Each dense sum layer consists of 64 sum units
         sum_weight_param=utils.Parameterization(
             activation="softmax",  # Parameterize the sum weights by using a softmax activation
             initialization="normal",  # Initialize the sum weights by sampling from a standard normal distribution
         ),
     )
 
-    compiler = TorchCompiler(semiring="lse-sum", fold=True, optimize=False)
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
 
     tc = compiler.compile(symbolic_circuit).train()
-    #tc(torch.randint(0, 2, (1, 4)))
-
-    # worlds = torch.tensor(
-    #     list(itertools.product([0, 1, 2], repeat=symbolic_circuit.num_variables)), dtype=torch.long
-    # )
-
     map_query = MAPQuery(tc)
-    map_state = map_query()
+    map_query()
 
-    pass
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
+)
+def test_query_map_conditional_circuit(semiring, fold, optimize, num_units):
+    sc = build_deterministic_categorical_mixture(1)
+    
+    pm = { "sum": list(sc.sum_layers)}
+    c_sc, gf_specs = SF.condition_circuit(sc, gate_functions=pm)
+    
+    ctx = PipelineContext(backend="torch", semiring=semiring, fold=fold, optimize=optimize)
+    ctx.add_gate_function("sum.weight.0", lambda x: x.view(-1, *gf_specs["sum.weight.0"]))
+    tc = ctx.compile(c_sc)
+
+    # compute map and check that its state matches the enumerated one
+    map_query = MAPQuery(tc)
+    map_query(gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}})
+
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
+)
+def test_query_map_conditional_circuit_with_evidence(semiring, fold, optimize, num_units):
+    sc = build_deterministic_categorical_mixture(1)
+    
+    pm = { "sum": list(sc.sum_layers)}
+    c_sc, gf_specs = SF.condition_circuit(sc, gate_functions=pm)
+    
+    ctx = PipelineContext(backend="torch", semiring=semiring, fold=fold, optimize=optimize)
+    ctx.add_gate_function("sum.weight.0", lambda x: x.view(-1, *gf_specs["sum.weight.0"]))
+    tc = ctx.compile(c_sc)
+
+    # compute map and check that its state matches the enumerated one
+    map_query = MAPQuery(tc)
+    map_query(
+        x=torch.tensor([[0, 1], [0, 1]]), 
+        evidence_vars=torch.tensor([[False, True], [False, True]]),
+        gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}}
+    )

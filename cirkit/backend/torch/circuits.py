@@ -58,7 +58,7 @@ class LayerAddressBook(AddressBook):
                                 next_m_id,
                                 0,
                                 torch.arange(state.size(0), device=state.device),
-                                slice(None),
+                                0,
                             )
                             for next_m_id in in_modules_ids_h
                         ]
@@ -74,11 +74,9 @@ class LayerAddressBook(AddressBook):
                         arity_idxs, unit_idxs = torch.unravel_index(
                             raveled_idxs, (module.arity, module.num_input_units)
                         )
-                        # arity_idxs = raveled_idxs // module.num_input_units
-                        # unit_idxs = raveled_idxs % module.num_input_units
-
+                        
                         for arity_i, (next_module_id, fold_idx) in enumerate(in_fold_info):
-                            batch_idxs_at_arity = (arity_idxs == arity_i).flatten()
+                            batch_idxs_at_arity = (arity_idxs == arity_i)
 
                             if batch_idxs_at_arity.any():
                                 # specify which states are interested in the input module i
@@ -95,7 +93,6 @@ class LayerAddressBook(AddressBook):
                         continue
                     case _:
                         in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][p_fold_idx]
-
                         # for product layers we visit all the children
                         for next_module_id, fold_idx in in_fold_info:
                             entry_queue.append((next_module_id, fold_idx, p_batch_idx, p_unit_idx))
@@ -104,8 +101,11 @@ class LayerAddressBook(AddressBook):
             elif module is not None:
                 assert isinstance(module, TorchInputLayer)
                 # set state
-                state[p_batch_idx, module.scope_idx[p_fold_idx]] = module_idxs[entry_id][
-                    p_fold_idx, p_batch_idx, p_unit_idx
+                input_idxs = module_idxs[entry_id]
+                state[p_batch_idx, module.scope_idx[p_fold_idx]] = input_idxs[
+                    p_fold_idx, 
+                    0 if input_idxs.size(1) == 1 else p_batch_idx,
+                    p_unit_idx
                 ]
 
         return state
@@ -130,18 +130,22 @@ class LayerAddressBook(AddressBook):
                     # we have expand those inputs to match the others
                     module_inputs = [module_outputs[mid] for mid in in_layer_ids_h]
 
-                    # check that we have coherent batch sizes and the missing ones
-                    # are broadcastable
+                    # make sure that all inputs have the same batch size
+                    # if they do not, then it must be possible to partition them
+                    # into two group where one group can be broadcast to the other
+                    # group shape
                     # TODO: check for a more efficient implementation than casting to a set
-                    if in_graph is None:
-                        batch_sizes = sorted([i.size(1) for i in module_inputs])
-                        assert len(set(batch_sizes)) <= 2
-
+                    batch_sizes = sorted([i.size(1) for i in module_inputs])
+                    unique_batch_sizes = len(set(batch_sizes)) 
+                    if unique_batch_sizes == 2:
+                        # broadcast inputs with singleton batch size
                         module_inputs = [
                             i if i.size(1) != 1 else i.expand(-1, batch_sizes[-1], -1)
                             for i in module_inputs
                         ]
-
+                    elif unique_batch_sizes > 2:
+                        raise ValueError("Found an inconsistent batch dimension between units.")
+                    
                     x = torch.cat(module_inputs, dim=0)
                 x = x[in_fold_idx_h]
                 yield layer, (x,)
@@ -295,7 +299,10 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         Returns:
             torch.device: The device.
         """
-        return next(self.parameters()).device
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            return torch.device("cpu")
 
     @property
     def symbolic_operation(self) -> CircuitOperation:
