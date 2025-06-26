@@ -54,7 +54,12 @@ class LayerAddressBook(AddressBook):
                 if module is None:
                     entry_queue.extend(
                         [
-                            (next_m_id, 0, torch.arange(state.size(0), device=state.device), slice(None))
+                            (
+                                next_m_id,
+                                0,
+                                torch.arange(state.size(0), device=state.device),
+                                slice(None),
+                            )
                             for next_m_id in in_modules_ids_h
                         ]
                     )
@@ -63,15 +68,14 @@ class LayerAddressBook(AddressBook):
                 match module:
                     case TorchSumLayer():
                         in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][p_fold_idx]
-                        
+
                         # retrieve arity and unit indexes by unraveling each batch
                         raveled_idxs = module_idxs[entry_id][p_fold_idx, p_batch_idx, p_unit_idx]
-                        arity_idxs, unit_idxs =  torch.unravel_index(
-                            raveled_idxs, 
-                            (module.arity, module.num_input_units)
+                        arity_idxs, unit_idxs = torch.unravel_index(
+                            raveled_idxs, (module.arity, module.num_input_units)
                         )
-                        #arity_idxs = raveled_idxs // module.num_input_units
-                        #unit_idxs = raveled_idxs % module.num_input_units
+                        # arity_idxs = raveled_idxs // module.num_input_units
+                        # unit_idxs = raveled_idxs % module.num_input_units
 
                         for arity_i, (next_module_id, fold_idx) in enumerate(in_fold_info):
                             batch_idxs_at_arity = (arity_idxs == arity_i).flatten()
@@ -84,7 +88,7 @@ class LayerAddressBook(AddressBook):
                                         next_module_id,
                                         fold_idx,
                                         p_batch_idx[batch_idxs_at_arity],
-                                        unit_idxs[batch_idxs_at_arity]
+                                        unit_idxs[batch_idxs_at_arity],
                                     )
                                 )
 
@@ -94,9 +98,7 @@ class LayerAddressBook(AddressBook):
 
                         # for product layers we visit all the children
                         for next_module_id, fold_idx in in_fold_info:
-                            entry_queue.append(
-                                (next_module_id, fold_idx, p_batch_idx, p_unit_idx)
-                            )
+                            entry_queue.append((next_module_id, fold_idx, p_batch_idx, p_unit_idx))
                         continue
             # catch the case where we are at an input unit
             elif module is not None:

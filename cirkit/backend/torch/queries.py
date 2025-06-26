@@ -327,29 +327,24 @@ class MAPQuery(Query):
         self,
         *,
         x: Tensor | None = None,
-        evidence_vars: Tensor | Scope | Iterable[Scope] | None = None,
+        evidence_vars: Tensor | None = None,
         gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> tuple[Tensor, Tensor]:
-        """Solve an integration query, given an input batch and the variables to integrate.
+        """Solve a map query, optionally using an input evidence.
 
         Args:
-            x: An input batch of shape $(B, D)$, where $B$ is the batch size,
+            x: The input evidence of shape $(B, D)$, where $B$ is the batch size,
                 and $D$ is the number of variables.
-            integrate_vars: The variables to integrate. It must be a subset of the variables on
-                which the circuit given in the constructor is defined on.
-                The format can be one of the following three:
-                    1. Tensor of shape (B, D) where B is the batch size and D is the number of
-                        variables in the scope of the circuit. Its dtype should be torch.bool
-                        and have True in the positions of random variables that should be
-                        marginalised out and False elsewhere.
-                    2. Scope, in this case the same integration mask is applied for all entries
-                        of the batch
-                    3. List of Scopes, where the length of the list must be either 1 or B. If
-                        the list has length 1, behaves as above.
+            evidence_vars: The variables to include in the evidence. It must be a subset of the
+                variables on which the circuit given in the constructor is defined on.
+                It must be a Tensor of shape (B, D) where B is the batch size and D is the number of
+                variables in the scope of the circuit. Its dtype should be torch.bool and have True
+                in the positions of random variables that are in the evidence and False elsewhere.
+            gate_function_kwargs: The arguments to pass to each gate function if the circuit is
+                conditionally parameterized.
         Returns:
-            The result of the integration query, given as a tensor of shape $(B, O, K)$,
-                where $B$ is the batch size, $O$ is the number of output vectors of the circuit, and
-                $K$ is the number of units in each output vector.
+            The result of the map query, given as a tuple where the first element is the MAP value
+            for each state and the second value is the state with shape $(B, D)$.
         """
         if (x is None) ^ (evidence_vars is None):
             assert ValueError("Both evidence and the evidence variables must be provided.")
@@ -376,7 +371,9 @@ class MAPQuery(Query):
                 else:
                     raise ValueError("The circuit does not have variables.")
 
-            state = torch.full((batch_size, num_variables), 0, dtype=torch.long, device=self._circuit.device)
+            state = torch.full(
+                (batch_size, num_variables), 0, dtype=torch.long, device=self._circuit.device
+            )
             evidence_vars = state.clone().to(torch.bool)
         else:
             x = x.to(self._circuit.device)
