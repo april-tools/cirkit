@@ -99,6 +99,7 @@ def PoonDomingos(
         if rgn is None:
             rgn = RegionNode(hypercube_to_scope[hypercube])
             nodes.append(rgn)
+            scope_region[hypercube_to_scope[hypercube]] = rgn
         point1, point2 = hypercube
         assert all(
             point1[axis] < cut_point < point2[axis] for cut_point in cut_points
@@ -117,6 +118,7 @@ def PoonDomingos(
             if rgn_hypercube is None:
                 rgn_hypercube = RegionNode(hypercube_to_scope[hypercube])
                 nodes.append(rgn_hypercube)
+                scope_region[hypercube_to_scope[hypercube]] = rgn_hypercube
             region_nodes.append(rgn_hypercube)
 
         # Add partitioning
