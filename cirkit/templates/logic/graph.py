@@ -113,12 +113,15 @@ def default_literal_input_factory(negated: bool = False) -> InputLayerFactory:
         Returns:
             InputLayer: Symbolic input layer.
         """
-        param = np.array([[1.0, 0.0]]) if negated else np.array([[0.0, 1.0]])
+        param = (
+            np.array([[1.0, 0.0] * num_units]) if negated else np.array([[0.0, 1.0] * num_units])
+        )
+        param = param.reshape(num_units, 2)
         return CategoricalLayer(
             scope,
             num_categories=2,
             num_output_units=num_units,
-            probs=Parameter.from_input(ConstantParameter(1, 2, value=param)),
+            probs=Parameter.from_input(ConstantParameter(num_units, 2, value=param)),
         )
 
     return input_factory
@@ -503,6 +506,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         negated_literal_input_factory: InputLayerFactory = None,
         weight_factory: ParameterFactory | None = None,
         enforce_smoothness: bool = True,
+        num_units: int = 1,
     ) -> Circuit:
         """Construct a symbolic circuit from a logic circuit graph.
         If input factories for literals and their negation are not provided the it
@@ -520,6 +524,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 parameters, which instantiate a regular boolean logic graph.
             enforce_smoothness:
                 Enforces smoothness of the circuit to support efficient marginalization.
+            num_units: Number of units. Defaults to 1 for deterministic circuit.
 
         Returns:
             Circuit: A symbolic circuit.
@@ -556,9 +561,9 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         for i in self.inputs:
             match i:
                 case LiteralNode():
-                    i_input = literal_input_factory(Scope([i.literal]), num_units=1)
+                    i_input = literal_input_factory(Scope([i.literal]), num_units=num_units)
                 case NegatedLiteralNode():
-                    i_input = negated_literal_input_factory(Scope([i.literal]), num_units=1)
+                    i_input = negated_literal_input_factory(Scope([i.literal]), num_units=num_units)
 
             i_input.metadata["logic"]["source"] = i
             node_to_layer[i] = i_input
@@ -566,15 +571,15 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         for node in self.topological_ordering():
             match node:
                 case ConjunctionNode():
-                    product_node = HadamardLayer(1, arity=len(self.node_inputs(node)))
+                    product_node = HadamardLayer(num_units, arity=len(self.node_inputs(node)))
                     product_node.metadata["logic"]["source"] = node
 
                     in_layers[product_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = product_node
                 case DisjunctionNode():
                     sum_node = SumLayer(
-                        1,
-                        1,
+                        num_units,
+                        1 if node == self.output else num_units,
                         arity=len(self.node_inputs(node)),
                         weight_factory=weight_factory,
                     )
