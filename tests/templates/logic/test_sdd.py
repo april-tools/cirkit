@@ -3,12 +3,15 @@ import tempfile
 
 import pytest
 
-from cirkit.templates.logic import SDD
 from cirkit.pipeline import compile
+from cirkit.templates.logic import SDD
+
 
 def test_compile_sdd():
     # A & (~ B | C)
-    sdd_s_1 = "L 1 0 1\nL 3 2 2\nL 4 4 3\nL 5 2 -2\nT 6\nD 2 3 2 3 4 5 6\nL 7 0 -1\nF 8\nD 0 1 2 1 2 7 8"
+    sdd_s_1 = (
+        "L 1 0 1\nL 3 2 2\nL 4 4 3\nL 5 2 -2\nT 6\nD 2 3 2 3 4 5 6\nL 7 0 -1\nF 8\nD 0 1 2 1 2 7 8"
+    )
 
     sdd_c = SDD.from_string(sdd_s_1)
     # construct circuit without enforcing smoothness

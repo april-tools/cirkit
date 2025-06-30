@@ -386,10 +386,10 @@ class MAPQuery(Query):
                 )
 
         map, state = self._circuit.backtrack(
-            x=state.to(self._circuit.device), 
+            x=state.to(self._circuit.device),
             module_fn=functools.partial(
-                MAPQuery._layer_fn, 
-                evidence_vars=evidence_vars.to(self._circuit.device))
+                MAPQuery._layer_fn, evidence_vars=evidence_vars.to(self._circuit.device)
+            ),
         )
         return map, state
 

@@ -74,9 +74,9 @@ class LayerAddressBook(AddressBook):
                         arity_idxs, unit_idxs = torch.unravel_index(
                             raveled_idxs, (module.arity, module.num_input_units)
                         )
-                        
+
                         for arity_i, (next_module_id, fold_idx) in enumerate(in_fold_info):
-                            batch_idxs_at_arity = (arity_idxs == arity_i)
+                            batch_idxs_at_arity = arity_idxs == arity_i
 
                             if batch_idxs_at_arity.any():
                                 # specify which states are interested in the input module i
@@ -103,9 +103,7 @@ class LayerAddressBook(AddressBook):
                 # set state
                 input_idxs = module_idxs[entry_id]
                 state[p_batch_idx, module.scope_idx[p_fold_idx]] = input_idxs[
-                    p_fold_idx, 
-                    0 if input_idxs.size(1) == 1 else p_batch_idx,
-                    p_unit_idx
+                    p_fold_idx, 0 if input_idxs.size(1) == 1 else p_batch_idx, p_unit_idx
                 ]
 
         return state
@@ -136,7 +134,7 @@ class LayerAddressBook(AddressBook):
                     # group shape
                     # TODO: check for a more efficient implementation than casting to a set
                     batch_sizes = sorted([i.size(1) for i in module_inputs])
-                    unique_batch_sizes = len(set(batch_sizes)) 
+                    unique_batch_sizes = len(set(batch_sizes))
                     if unique_batch_sizes == 2:
                         # broadcast inputs with singleton batch size
                         module_inputs = [
@@ -145,7 +143,7 @@ class LayerAddressBook(AddressBook):
                         ]
                     elif unique_batch_sizes > 2:
                         raise ValueError("Found an inconsistent batch dimension between units.")
-                    
+
                     x = torch.cat(module_inputs, dim=0)
                 x = x[in_fold_idx_h]
                 yield layer, (x,)
