@@ -254,6 +254,10 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
             )
         self.weight = weight
 
+        # prepare max and argmaxing functions across folds and batches
+        self._max_fn = torch.vmap(torch.vmap(lambda x: torch.amax(x, dim=-1)))
+        self._argmax_fn = torch.vmap(torch.vmap(lambda x: torch.argmax(x, dim=-1)))
+
     def _valid_weight_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
@@ -286,6 +290,21 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
         x = weight[idx_fold[:, None], idx_batch[:, None], :, x]
         x = self.semiring.map_from(x, SumProductSemiring)
         return x  # (F, B, K)
+
+    def max(self, x=None) -> tuple[Tensor, Tensor]:
+        r"""Retrieves the maximum of the embedding layer which is the state
+        with maximum value.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the state
+                with maximum value and the second value is the maximum value
+                of the embedding.
+        """
+        # weight: (F, B, K, N)
+        params = self.weight()
+        m = self._max_fn(params)
+        m_state = self._argmax_fn(params)
+        return m_state, m
 
 
 class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
