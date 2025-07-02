@@ -356,7 +356,10 @@ class MAPQuery(Query):
             # one state for each batched parameter
             batch_size = list(list(gate_function_kwargs.values())[0].values())[0].size(0)
         else:
-            batch_size = 1
+            if x is None:
+                batch_size = 1
+            else:
+                batch_size = x.size(0)
 
         # prepare the evidence vector by replacing non-evidence variables with
         # the mode of each input
@@ -421,10 +424,10 @@ class MAPQuery(Query):
 
                     # expand output and idx if needed
                     output = output.expand_as(ff_output)
-                    idx = idx.expand_as(ff_output)
+                    idx = idx.expand_as(ff_output).clone()
 
-                    output[is_evidence] = ff_output[is_evidence]
-                    idx[is_evidence] = x.expand_as(output)[is_evidence]
+                    output = torch.where(is_evidence, ff_output, output)
+                    idx = torch.where(is_evidence, x, idx)
         else:
             # if it is not an input layer then evaluate in feedforward way
             idx, output = layer.max(x)
