@@ -1,4 +1,5 @@
 # pylint: disable=all
+# type: ignore
 
 import csv
 import os
