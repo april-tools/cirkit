@@ -16,8 +16,7 @@ class GraphOptPatternDefn(Generic[TorchModule]):
         return False
 
     @classmethod
-    def entries(cls) -> list[type[TorchModule]]:
-        ...
+    def entries(cls) -> list[type[TorchModule]]: ...
 
 
 GraphOptPattern = type[GraphOptPatternDefn[TorchModule]]
@@ -49,16 +48,14 @@ class PatternMatcherFunc(Protocol):
         *,
         incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
         outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    ) -> GraphOptMatch[TorchModule] | None:
-        ...
+    ) -> GraphOptMatch[TorchModule] | None: ...
 
 
 class MatchOptimizerFunc(Protocol):
     def __call__(
         self,
         match: GraphOptMatch[TorchModule],
-    ) -> tuple[TorchModule, ...]:
-        ...
+    ) -> tuple[TorchModule, ...]: ...
 
 
 def optimize_graph(
@@ -71,8 +68,15 @@ def optimize_graph(
     pattern_matcher_fn: PatternMatcherFunc,
     match_optimizer_fn: MatchOptimizerFunc,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-) -> tuple[list[TorchModule], dict[TorchModule, list[TorchModule]], list[TorchModule],] | None:
-    # TODO: generalize this as to cover patterns with multiply entry or exit points? (much more difficult)
+) -> (
+    tuple[
+        list[TorchModule],
+        dict[TorchModule, list[TorchModule]],
+        list[TorchModule],
+    ]
+    | None
+):
+    # TODO: generalize this as to cover patterns with multiply entry or exit points?
 
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
     outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
@@ -123,10 +127,10 @@ def optimize_graph(
             ]
             continue
 
-        # If the module belongs to a matched pattern (there can only be a single one by construction),
-        # but it is not the root in that pattern,
-        # then register it as the entry point of the matched sub-computational-graph, if not other entry
-        # point has been registered before.
+        # If the module belongs to a matched pattern (there can only be a single one
+        # by construction), but it is not the root in that pattern,
+        # then register it as the entry point of the matched sub-computational-graph,
+        # if not other entry point has been registered before.
         if match not in match_entry_points:
             match_entry_points[match] = module
 

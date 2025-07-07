@@ -51,13 +51,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "black[jupyter]~=23.0",
-  "mypy==1.7.1",  # should be specific version for stable typing
-  "pylint~=3.0.0",
+  "black[jupyter]~=25.0",
+  "mypy~=1.16.0",
+  "pylint~=3.3.0",
+  "pylint-per-file-ignores~=1.4.0",
   "pydocstyle[toml]~=6.3.0",
-  "pytest",  # this is required to lint the test files
+  "pytest",
   "pytest-cov",
-  "pylint-per-file-ignores",  # TODO: wait for native support in pylint
 ]
 docs = [
   "mkdocs",
@@ -108,7 +108,7 @@ exclude_also = [  # regex for exclusion
 [tool.black]
 line-length = 100
 target-version = ["py310"]
-required-version = "23"
+required-version = "25"
 
 # import style
 [tool.isort]
@@ -128,72 +128,51 @@ add_ignore = "D100,D104"
 # general linting
 [tool.pylint.main]
 py-version = "3.10"
-evaluation = """
-  10 - 10 * min(
-    1, fatal + (5 * error + warning + refactor + convention + 0.1 * info) / statement
-  )
-"""  # take into account `info`
-fail-under = 9
+fail-under = 9.3
 load-plugins = [  # as available in pylint/extensions
-  "pylint.extensions.bad_builtin",
+  "pylint_per_file_ignores",  # TODO: wait for native support in pylint
   "pylint.extensions.broad_try_clause",
   "pylint.extensions.check_elif",
   "pylint.extensions.code_style",
   "pylint.extensions.comparison_placement",
-  "pylint.extensions.confusing_elif",
   "pylint.extensions.consider_refactoring_into_while_condition",
-  "pylint.extensions.consider_ternary_expression",
   "pylint.extensions.dict_init_mutate",
-  "pylint.extensions.docparams",
-  "pylint.extensions.docstyle",
   "pylint.extensions.dunder",
   "pylint.extensions.empty_comment",
   "pylint.extensions.eq_without_hash",
   "pylint.extensions.for_any_all",
-  # "pylint.extensions.magic_value",  # too strict
-  "pylint.extensions.mccabe",
-  "pylint.extensions.no_self_use",
   "pylint.extensions.overlapping_exceptions",
   "pylint.extensions.private_import",
   "pylint.extensions.redefined_loop_name",
   "pylint.extensions.redefined_variable_type",
-  "pylint.extensions.set_membership",
-  "pylint.extensions.typing",
-  "pylint.extensions.while_used",
-  "pylint_per_file_ignores",  # TODO: wait for native support in pylint
-]
-[tool.pylint."messages control"]
-enable= [
-  "use-implicit-booleaness-not-comparison-to-string",
-  "use-implicit-booleaness-not-comparison-to-zero",
-  # "consider-using-augmented-assign",  # inplace operators are not always applicable
-  "prefer-typing-namedtuple",
-  "bad-inline-option",
-  "deprecated-pragma",
-  "use-symbolic-message-instead",
-  "useless-suppression",
-]
-disable = [
-  "too-many-arguments",
-  "too-few-public-methods",
-  "missing-module-docstring",
-  "no-member",
-  "fixme",
-  "duplicate-code"
+  "pylint.extensions.set_membership"
 ]
 per-file-ignores = [  # TODO: wait for native support in pylint
     "/tests/:missing-function-docstring,missing-return-doc",
 ]
-[tool.pylint.dunder]
-good-dunder-names = ["_default_initializer_"]  # intended to be named this way
-[tool.pylint.import]
-allow-reexport-from-package = true
-[tool.pylint.parameter_documentation]
-accept-no-param-doc = false
-accept-no-raise-doc = false
-accept-no-return-doc = false
-accept-no-yields-doc = false
-default-docstring-type = "google"
+
+[tool.pylint."design"]
+max-statements = 60  # default=50
+max-branches = 15  # default=12
+max-locals = 25  # default=15
+max-args = 12  # default=5: many functions require lots of hyperparameters
+max-positional-arguments = 12  # default=5: many functions require lots of hyperparameters
+max-parents = 8  # default=7: there is a deep hierarchy of parameter operation nodes
+
+[tool.pylint."messages control"]
+max-line-length = 100
+disable = [
+  "too-few-public-methods",
+  "missing-module-docstring",
+  "consider-using-assignment-expr",
+  "use-implicit-booleaness-not-len",
+  "useless-import-alias",
+  "unnecessary-lambda-assignment",
+  "no-member",
+  "fixme",
+  "duplicate-code",
+  "too-many-lines",
+]
 
 # type checking
 [tool.mypy]
@@ -218,11 +197,7 @@ disallow_untyped_decorators = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#configuring-warnings
 warn_redundant_casts = true
 warn_unused_ignores = true
-warn_return_any = true
 warn_unreachable = true
-# https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous-strictness-flags
-# implicit_reexport = false  # this breaks torch, from mypy 1.7.0
-strict_equality = true
 # https://mypy.readthedocs.io/en/stable/command_line.html#miscellaneous-strictness-flags
 extra_checks = true
 # https://mypy.readthedocs.io/en/stable/error_code_list2.html#error-codes-for-optional-checks
@@ -233,5 +208,4 @@ enable_error_code = [
   "truthy-bool",
   "truthy-iterable",
   "ignore-without-code",
-  # "explicit-override",  # can be useful, introduced in py3.12 and typing_extensions
 ]

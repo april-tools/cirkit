@@ -13,7 +13,7 @@ from cirkit.utils.scope import Scope
 
 
 # DISABLE: We use function name with upper case to mimic a class constructor.
-# pylint: disable-next=invalid-name,too-complex,too-many-locals
+# pylint: disable-next=invalid-name
 def PoonDomingos(
     shape: tuple[int, int, int],
     *,

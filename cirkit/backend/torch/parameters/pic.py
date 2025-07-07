@@ -1,10 +1,17 @@
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 from cirkit.backend.torch.circuits import TorchCircuit
-from cirkit.backend.torch.layers import *
-from cirkit.backend.torch.layers import TorchTuckerLayer
+from cirkit.backend.torch.layers import (
+    TorchCategoricalLayer,
+    TorchCPTLayer,
+    TorchGaussianLayer,
+    TorchHadamardLayer,
+    TorchKroneckerLayer,
+    TorchSumLayer,
+    TorchTuckerLayer,
+)
 from cirkit.backend.torch.parameters.nodes import TorchParameterOp, TorchTensorParameter
 
 
@@ -90,7 +97,7 @@ class PICInputNet(nn.Module):
         reparam: TorchParameterOp | None = None,
     ):
         super().__init__()
-        assert sharing in ["none", "f", "c"]
+        assert sharing in {"none", "f", "c"}
         self.num_variables = num_variables
         self.num_param = num_param
         self.sharing = sharing
@@ -100,7 +107,7 @@ class PICInputNet(nn.Module):
             self.register_buffer("z_quad", z_quad)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
-        inner_conv_groups = 1 if sharing in ["f", "c"] else num_variables
+        inner_conv_groups = 1 if sharing in {"f", "c"} else num_variables
         last_conv_groups = 1 if sharing == "f" else num_variables
         self.net = nn.Sequential(
             FourierLayer(1, ff_dim, sigma=ff_sigma, learnable=learn_ff),
@@ -137,7 +144,7 @@ class PICInputNet(nn.Module):
         z_quad = self.z_quad if z_quad is None else z_quad
         assert z_quad.ndim == 1
         self.net[1].groups = 1
-        self.net[-1].groups = 1 if self.sharing in ["f", "c"] else self.num_variables
+        self.net[-1].groups = 1 if self.sharing in {"f", "c"} else self.num_variables
         param = torch.cat(
             [self.net(chunk.unsqueeze(1)) for chunk in z_quad.chunk(n_chunks, dim=0)], dim=1
         )
@@ -175,7 +182,7 @@ class PICInnerNet(nn.Module):
         tensor_parameter: TorchTensorParameter | None = None,
     ):
         super().__init__()
-        assert sharing in ["none", "f", "c"]
+        assert sharing in {"none", "f", "c"}
         self.num_dim = num_dim
         self.num_funcs = num_funcs
         self.sharing = sharing
@@ -192,7 +199,7 @@ class PICInnerNet(nn.Module):
             self.register_buffer("w_quad", w_quad)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
-        inner_conv_groups = 1 if sharing in ["c", "f"] else num_funcs
+        inner_conv_groups = 1 if sharing in {"c", "f"} else num_funcs
         last_conv_groups = 1 if sharing == "f" else num_funcs
         self.net = nn.Sequential(
             FourierLayer(num_dim, ff_dim, sigma=ff_sigma, learnable=learn_ff),
@@ -239,7 +246,7 @@ class PICInnerNet(nn.Module):
         assert z_quad.ndim == w_quad.ndim == 1 and len(z_quad) == len(w_quad)
         nip = z_quad.numel()  # number of integration points
         self.net[1].groups = 1
-        self.net[-2].groups = 1 if self.sharing in ["c", "f"] else self.num_funcs
+        self.net[-2].groups = 1 if self.sharing in {"c", "f"} else self.num_funcs
         z_meshgrid = (
             torch.stack(torch.meshgrid([z_quad] * self.num_dim, indexing="ij")).flatten(1).t()
         )
@@ -325,7 +332,7 @@ def pc2qpc(
             else:
                 node.logits = input_net
         elif isinstance(node, TorchGaussianLayer):
-            assert len(node.mean.nodes) <= 2 and len(node.stddev) <= 2
+            assert len(node.mean.nodes) <= 2 and len(node.stddev.nodes) <= 2
             z_quad = zw_quadrature(
                 integration_method=integration_method, nip=node.num_output_units
             )[0]
@@ -368,9 +375,10 @@ def pc2qpc(
                     tensor_parameter._ptensor.requires_grad = False
                     continue
             else:
-                assert (
-                    len(node.weight.nodes) == 1
-                ), "You are probably using a reparameterization. Do not do that, QPCs are already normalized!"
+                assert len(node.weight.nodes) == 1, (
+                    "You are probably using a reparameterization. "
+                    "Do not do that, QPCs are already normalized!"
+                )
                 tensor_parameter = node.weight.nodes[0]
             weight_shape = list(tensor_parameter._ptensor.shape)
             squeezed_weight_shape = [weight_shape[0]] + [
@@ -378,17 +386,17 @@ def pc2qpc(
             ]
             assert (
                 sum(
-                    [
+                    (
                         dim_size % min(squeezed_weight_shape[1:])
                         for dim_size in squeezed_weight_shape[1:]
-                    ]
+                    )
                 )
                 == 0
             ), f"Cannot model a sum layer with shape {weight_shape}!"
             is_tucker = isinstance(node, TorchTuckerLayer)
             nip = int(max(squeezed_weight_shape[1:]) ** (0.5 if is_tucker else 1))
             num_dim = sum(
-                [int(np.emath.logn(nip, dim_size)) for dim_size in squeezed_weight_shape[1:]]
+                (int(np.emath.logn(nip, dim_size)) for dim_size in squeezed_weight_shape[1:])
             )
             z_quad, w_quad = zw_quadrature(integration_method=integration_method, nip=nip)
             node.weight = PICInnerNet(
@@ -409,4 +417,4 @@ def pc2qpc(
         elif isinstance(node, (TorchHadamardLayer, TorchKroneckerLayer)):
             pass
         else:
-            raise NotImplementedError("Layer %s is not yet handled!" % str(type(node)))
+            raise NotImplementedError(f"Layer %s is not yet handled! {type(node)}")

@@ -94,7 +94,7 @@ class ProductLayerFactory(Protocol):  # pylint: disable=too-few-public-methods
 
 
 def named_parameterizations_to_factories(
-    params: Mapping[str, Parameterization]
+    params: Mapping[str, Parameterization],
 ) -> Mapping[str, ParameterFactory]:
     """Given a mapping of parameters names to parameterizations, retrieve a dictionary
         mapping the  same parameters names to symbolic parameter factories.

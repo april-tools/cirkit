@@ -16,14 +16,6 @@ class TorchParameterNode(AbstractTorchModule, ABC):
     See [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter]
     for more details."""
 
-    def __init__(self, *, num_folds: int = 1):
-        """Initialize a torch parameter node.
-
-        Args:
-            num_folds: The number of folds computed by the node.
-        """
-        super().__init__(num_folds=num_folds)
-
     @property
     @abstractmethod
     def shape(self) -> tuple[int, ...]:
@@ -56,8 +48,7 @@ class TorchParameterNode(AbstractTorchModule, ABC):
         return {}
 
     @torch.no_grad()
-    def reset_parameters(self):
-        ...
+    def reset_parameters(self): ...
 
 
 class TorchParameterInput(TorchParameterNode, ABC):
@@ -148,7 +139,7 @@ class TorchTensorParameter(TorchParameterInput):
         """
         if self._ptensor is None:
             raise ValueError(
-                "The tensor parameter has not been initialized. " "Use reset_parameters() first"
+                "The tensor parameter has not been initialized. Use reset_parameters() first"
             )
         return self._ptensor.device
 
@@ -309,8 +300,7 @@ class TorchParameterOp(TorchParameterNode, ABC):
         )
 
     @abstractmethod
-    def forward(self, *xs: Tensor) -> Tensor:
-        ...
+    def forward(self, *xs: Tensor) -> Tensor: ...
 
 
 class TorchUnaryParameterOp(TorchParameterOp, ABC):
@@ -336,8 +326,7 @@ class TorchUnaryParameterOp(TorchParameterOp, ABC):
         return super().__call__(x)  # type: ignore[no-any-return,misc]
 
     @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
-        ...
+    def forward(self, x: Tensor) -> Tensor: ...
 
 
 class TorchBinaryParameterOp(TorchParameterOp, ABC):
@@ -370,8 +359,7 @@ class TorchBinaryParameterOp(TorchParameterOp, ABC):
         return super().__call__(x1, x2)  # type: ignore[no-any-return,misc]
 
     @abstractmethod
-    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        ...
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor: ...
 
 
 class TorchEntrywiseParameterOp(TorchUnaryParameterOp, ABC):
@@ -681,9 +669,6 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
 
 class TorchConjugateParameter(TorchEntrywiseParameterOp):
     """Conjugate parameterization."""
-
-    def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1) -> None:
-        super().__init__(in_shape, num_folds=num_folds)
 
     def forward(self, x: Tensor) -> Tensor:
         return torch.conj(x)

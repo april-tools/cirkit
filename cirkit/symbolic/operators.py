@@ -29,7 +29,6 @@ from cirkit.symbolic.parameters import (
     PolynomialDifferential,
     PolynomialProduct,
     ReduceLSEParameter,
-    ReduceProductParameter,
     ReduceSumParameter,
     SumParameter,
 )
@@ -239,7 +238,7 @@ def multiply_kronecker_layers(sl1: KroneckerLayer, sl2: KroneckerLayer) -> Circu
     # Construct the permutation matrix required to represent the product of
     # Kronecker layers as yet another Kronecker layer
     perm_matrix = np.transpose(
-        perm_matrix, axes=sum([(1 + a, 1 + a + arity) for a in range(arity)], start=(0,))
+        perm_matrix, axes=sum(((1 + a, 1 + a + arity) for a in range(arity)), start=(0,))
     ).reshape(kron_sl.num_output_units, kron_sl.num_output_units)
     # The permutation matrix is applied by using a sum layer having the permutation
     # matrix has constant parameters

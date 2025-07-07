@@ -92,7 +92,9 @@ class OperatorRegistry(AbstractContextManager):
         arg_names = args.keys()
         if "return" not in arg_names or not issubclass(args["return"], CircuitBlock):
             raise ValueError(
-                f"The function is not an operator over symbolic layers.\nIdentifier: {func.__name__}\nAnnotations: {args}"
+                f"The function is not an operator over symbolic layers.\n"
+                f"Identifier: {func.__name__}\n"
+                f"Annotations: {args}"
             )
         del args["return"]
         arg_names = list(args.keys())

@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from torch import Tensor, distributions
 
-from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSemiring
 
@@ -67,8 +67,7 @@ class TorchInputLayer(TorchLayer, ABC):
 
     @property
     @abstractmethod
-    def config(self) -> Mapping[str, Any]:
-        ...
+    def config(self) -> Mapping[str, Any]: ...
 
     @property
     def params(self) -> Mapping[str, TorchParameter]:
@@ -325,9 +324,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
 
         Args:
             scope_idx: A tensor of shape $(F, D)$, where $F$ is the number of folds, and
-                $D$ is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape $(D,)$ can be specified, which will be interpreted
-                as a tensor of shape $(1, D)$, i.e., with $F = 1$.
+                $D$ is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape $(D,)$ can be specified, which will be
+                interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             num_categories: The number of categories for Categorical distribution.
             probs: The probabilities parameter of shape $(F, K, N)$, where $K$ is the number of
@@ -356,7 +355,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             semiring=semiring,
         )
         self.num_categories = num_categories
-        if not ((logits is None) ^ (probs is None)):
+        if not (logits is None) ^ (probs is None):
             raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
         if logits is None:
             assert probs is not None
@@ -446,9 +445,9 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
 
         Args:
             scope_idx: A tensor of shape $(F, D)$, where $F$ is the number of folds, and
-                $D$ is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape $(D,)$ can be specified, which will be interpreted
-                as a tensor of shape $(1, D)$, i.e., with $F = 1$.
+                $D$ is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape $(D,)$ can be specified, which will be
+                interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             total_count: The number of trials.
             probs: The probabilities parameter of shape $(F, K)$, where $K$ is the number of
@@ -475,7 +474,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             semiring=semiring,
         )
         self.total_count = total_count
-        if not ((logits is None) ^ (probs is None)):
+        if not (logits is None) ^ (probs is None):
             raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
         if logits is None:
             assert probs is not None
@@ -485,13 +484,12 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
                     f"and shape {self._probs_logits_shape} for 'probs', found"
                     f"{probs.num_folds} and {probs.shape}, respectively"
                 )
-        else:
-            if not self._valid_parameter_shape(logits):
-                raise ValueError(
-                    f"Expected number of folds {self.num_folds} "
-                    f"and shape {self._probs_logits_shape} for 'logits', found"
-                    f"{logits.num_folds} and {logits.shape}, respectively"
-                )
+        elif not self._valid_parameter_shape(logits):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._probs_logits_shape} for 'logits', found"
+                f"{logits.num_folds} and {logits.shape}, respectively"
+            )
         self.probs = probs
         self.logits = logits
 
@@ -559,9 +557,9 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
         Args:
             scope_idx: A tensor of shape $(F, D)$, where $F$ is the number of folds, and
-                $D$ is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape $(D,)$ can be specified, which will be interpreted
-                as a tensor of shape $(1, D)$, i.e., with $F = 1$.
+                $D$ is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape $(D,)$ can be specified, which will be
+                interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             mean: The mean parameter, having shape $(F, K)$, where $K$ is the number of
                 output units.
@@ -810,8 +808,8 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
                 interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             degree: The degree of polynomial.
-            coeff: The coefficient parameter, having shape $(F, K, \mathsf{degree} + 1)$, where $K$ is the number
-                of output units.
+            coeff: The coefficient parameter, having shape $(F, K, \mathsf{degree} + 1)$,
+                where $K$ is the number of output units.
 
         Raises:
             ValueError: If the scope contains more than one variable.

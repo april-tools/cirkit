@@ -1,3 +1,5 @@
+# pylint: disable=unused-argument
+
 from typing import TYPE_CHECKING
 
 import torch
@@ -75,7 +77,8 @@ def _retrieve_dtype(dtype: DataType) -> torch.dtype:
     if dtype == DataType.COMPLEX:
         return default_float_dtype.to_complex()
     raise ValueError(
-        f"Cannot determine the torch.dtype to use, current default: {default_float_dtype}, given dtype: {dtype}"
+        f"Cannot determine the torch.dtype to use, current default: {default_float_dtype},"
+        f" given dtype: {dtype}"
     )
 
 
@@ -262,6 +265,7 @@ def compile_polynomial_differential(
     return TorchPolynomialDifferential(*p.in_shapes, order=p.order)
 
 
+# pylint: disable-next=line-too-long
 DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,

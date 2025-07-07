@@ -92,6 +92,7 @@ class PipelineContext(AbstractContextManager):
         __traceback: TracebackType | None,
     ) -> bool | None:
         """Exit a pipeline context."""
+        # pylint: disable-next=assignment-from-none
         ret = self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
         _PIPELINE_CONTEXT.reset(self._token)
         self._token = None
@@ -293,6 +294,7 @@ class PipelineContext(AbstractContextManager):
         return self.compile(conj_sc)
 
 
+# pylint: disable-next=redefined-builtin
 def compile(sc: Circuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()

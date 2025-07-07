@@ -72,7 +72,8 @@ class SemiringImpl(ABC):
             other: The source semiring.
 
         Returns:
-            Callable[[Callable[[Tensor], Tensor]], Callable[[Tensor], Tensor]]: The function decorator to register the morphism.
+            Callable[[Callable[[Tensor], Tensor]], Callable[[Tensor], Tensor]]:
+            The function decorator to register the morphism.
         """
 
         def _decorator(func: Callable[[Tensor], Tensor]) -> Callable[[Tensor], Tensor]:
@@ -112,7 +113,8 @@ class SemiringImpl(ABC):
         """
         if name not in SemiringImpl._registry:
             raise IndexError(
-                f"Unknown semiring '{name}'. Use @SemiringImpl.register(<name>) to register a new semiring"
+                f"Unknown semiring '{name}'."
+                f" Use @SemiringImpl.register(<name>) to register a new semiring"
             )
         return SemiringImpl._registry[name]
 
@@ -161,7 +163,23 @@ class SemiringImpl(ABC):
         dim: int,
         keepdim: bool,
     ) -> Tensor:
-        # TODO (LL): We need to remove this super general yet extremely complicated and hard
+        """Perform an einsum operation where sums and products are specified by the semiring.
+
+        Args:
+            equation: The einsum expression.
+            inputs:  The inputs of the einsum.
+            operands: Additional operands to pass to the einsum, after the inputs in the
+                einsum expression.
+            dim: The dimension of the inputs that get summed over in the einsum expression.
+                This is useful to make the einsum computationally stable in some semirings,
+                e.g., the log-sum-exp semiring.
+            keepdim: Whether to keep the dimension that get summed over in the einsum
+                expression.
+
+        Returns:
+            Tensor: the result of the einsum operation over the semiring.
+        """
+        # TODO: We need to remove this super general yet extremely complicated and hard
         #  to maintain einsum definition, which depends on the semiring. A future version of the
         #  compiler in cirkit will be able to emit pytorch code for every layer at compile time
         match equation:
@@ -476,17 +494,14 @@ class ComplexLSESumSemiring(SemiringImpl):
             reduced_max_xs = reduced_max_xs.squeeze(dim)  # To match shape of func_exp_x.
 
         # Compute log(x) and its gradients safely where x is a complex tensor.
-        #
         # The problem is that if x = 0 + 0j, then the complex gradient of log(x) yields NaNs.
         # Note that for real non-monotonic circuits this problem cannot be avoided by simply
-        # clipping the parameters of e.g., dense layers. In fact, even if we clipped the parameters
-        # to be sufficiently far from zero here, cancellations would still arise from negations, which
-        # in turn might result in under-flows. This has been observed in float32 for squared
-        # non-monotonic PCs with real parameters.
-        #
+        # clipping the parameters of e.g., dense layers. In fact, even if we clipped the
+        # parameters to be sufficiently far from zero here, cancellations would still arise
+        # from negations, which in turn might result in under-flows. This has been observed in
+        # float32 for squared non-monotonic PCs with real parameters.
         # To solve this issue, here we use a 'safe' version of the complex logarithm whose gradients
         # are replaced with zero if NaN and to the largest/lowest representable values if +inf/-inf.
-        #
         return csafelog(func_exp_xs) + reduced_max_xs
 
 

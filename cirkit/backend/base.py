@@ -16,18 +16,15 @@ InitializerCompilationSign = type[Initializer]
 
 
 class LayerCompilationFunc(Protocol):
-    def __call__(self, compiler: "AbstractCompiler", sl: Layer, **kwargs) -> Any:
-        ...
+    def __call__(self, compiler: "AbstractCompiler", sl: Layer, **kwargs) -> Any: ...
 
 
 class ParameterCompilationFunc(Protocol):
-    def __call__(self, compiler: "AbstractCompiler", p: ParameterNode, **kwargs) -> Any:
-        ...
+    def __call__(self, compiler: "AbstractCompiler", p: ParameterNode, **kwargs) -> Any: ...
 
 
 class InitializerCompilationFunc(Protocol):
-    def __call__(self, compiler: "AbstractCompiler", init: Initializer, **kwargs) -> Any:
-        ...
+    def __call__(self, compiler: "AbstractCompiler", init: Initializer, **kwargs) -> Any: ...
 
 
 class CompilationRuleNotFound(Exception):
@@ -63,8 +60,9 @@ class CompilerRegistry:
         self,
         layer_rules: dict[LayerCompilationSign, LayerCompilationFunc] | None = None,
         parameter_rules: dict[ParameterCompilationSign, ParameterCompilationFunc] | None = None,
-        initializer_rules: None
-        | (dict[InitializerCompilationSign, InitializerCompilationFunc]) = None,
+        initializer_rules: None | (
+            dict[InitializerCompilationSign, InitializerCompilationFunc]
+        ) = None,
     ):
         self._layer_rules = {} if layer_rules is None else layer_rules
         self._parameter_rules = {} if parameter_rules is None else parameter_rules
@@ -176,24 +174,20 @@ class AbstractCompiler(ABC):
         return self.compile_pipeline(sc)
 
     @abstractmethod
-    def compile_layer(self, sl: Layer) -> Any:
-        ...
+    def compile_layer(self, sl: Layer) -> Any: ...
 
     @abstractmethod
-    def compile_pipeline(self, sc: Circuit) -> CompiledCircuit:
-        ...
+    def compile_pipeline(self, sc: Circuit) -> CompiledCircuit: ...
 
     @abstractmethod
     def save(
         self,
         sym_filepath: IO | os.PathLike | str,
         compiled_filepath: IO | os.PathLike | str,
-    ):
-        ...
+    ): ...
 
     @staticmethod
     @abstractmethod
     def load(
         sym_filepath: IO | os.PathLike | str, tens_filepath: IO | os.PathLike | str
-    ) -> "AbstractCompiler":
-        ...
+    ) -> "AbstractCompiler": ...

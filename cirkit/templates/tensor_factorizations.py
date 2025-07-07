@@ -51,7 +51,8 @@ def cp(
     c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{i=1}^R a^{(1)}_{X_1 i} \cdots a^{(n)}_{X_n i},
     $$
 
-    where for $1\leq j\leq n$ we have that $\mathbf{A}^{(j)}\in\mathbb{R}^{I_j\times R}$ is the $j$-th factor.
+    where for $1\leq j\leq n$ we have that $\mathbf{A}^{(j)}\in\mathbb{R}^{I_j\times R}$ is the
+    $j$-th factor.
 
     Furthermore, this method allows you to return a circuit encoding a CP decomposition
     with additional weights, i.e., a CP factorization of the form
@@ -242,7 +243,7 @@ def tensor_train(
     and $c$ computes a rank-$R$ TT/MPS factorization, i.e.,
 
     $$
-    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{r_1=1}^R \cdots \sum_{r_{n-1}=1}^R v^{(1)}_{X_1 r_1} v^{(2)}_{X_2 r_1 r_2} \cdots v^{(n-1)}_{X_{n-1} r_{n-2} r_{n-1}} v^{(n)}_{X_n r_{n-1}},
+    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{r_1=1}^R \cdots \sum_{r_{n-1}=1}^R v^{(1)}_{X_1 r_1} v^{(2)}_{X_2 r_1 r_2} \cdots v^{(n-1)}_{X_{n-1} r_{n-2} r_{n-1}} v^{(n)}_{X_n r_{n-1}},  pylint: disable=line-too-long
     $$
 
     where $\mathbf{V}^{(1)}\in\mathbb{R}^{I_1\times R}$,
@@ -307,7 +308,7 @@ def tensor_train(
         sl for sls in inner_embeddings for sl in sls
     ]
     in_layers: dict[Layer, list[Layer]] = defaultdict(list)
-    cur_sl = first_embedding
+    cur_sl: Layer = first_embedding
     for i in range(len(shape) - 1):
         if i == len(shape) - 2:
             # i = n

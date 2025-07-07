@@ -129,9 +129,7 @@ def _categorical_mutual_info(
     joint_counts = joint_counts.view(n_features, n_features, num_categories, num_categories)
     marginal_counts = joint_counts[idx_features, idx_features][:, idx_categories, idx_categories]
 
-    marginals = (marginal_counts + num_categories * alpha) / (
-        n_samples + num_categories**2 * alpha
-    )
+    marginals = (marginal_counts + num_categories * alpha) / (n_samples + num_categories**2 * alpha)
     joints = (joint_counts + alpha) / (n_samples + num_categories**2 * alpha)
     joints[idx_features, idx_features] = torch.diag_embed(
         marginals

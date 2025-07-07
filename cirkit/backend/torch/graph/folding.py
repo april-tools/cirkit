@@ -31,8 +31,9 @@ def build_unfold_index_info(
 
     # A useful data structure mapping each module id to
     # a tensor of indices IDX of size (F, H, 2), where F is the number of modules in the fold,
-    # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair (fold_id, slice_idx),
-    # pointing to the folded module of id 'fold_id' and to the slice 'slice_idx' within that fold.
+    # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair
+    # (fold_id, slice_idx), pointing to the folded module of id 'fold_id' and to the slice
+    # 'slice_idx' within that fold.
     in_fold_idx: dict[int, list[list[tuple[int, int]]]] = {}
 
     # Build the fold index information data structure, by following the topological ordering
@@ -78,8 +79,9 @@ def build_folded_graph(
 
     # A useful data structure mapping each folded module id to
     # a tensor of indices IDX of size (F, H, 2), where F is the number of modules in the fold,
-    # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair (fold_id, slice_idx),
-    # pointing to the folded module of id 'fold_id' and to the slice 'slice_idx' within that fold.
+    # H is the number of inputs to each fold. Each entry i,j,: of IDX is a pair
+    # (fold_id, slice_idx), pointing to the folded module of id 'fold_id' and to
+    # the slice 'slice_idx' within that fold.
     in_fold_idx: dict[int, list[list[tuple[int, int]]]] = {}
 
     # The list of folded modules and the inputs of each folded module
@@ -191,7 +193,7 @@ def build_address_book_stacked_entry(
         if len(cum_fold_idx) == 1 and len(cum_fold_idx[0]) == fold_size:
             # Equivalent to .unsqueeze(dim=0)
             return AddressBookEntry(module, [in_module_ids], [(None,)])
-        elif len(cum_fold_idx) == fold_size and len(cum_fold_idx[0]) == 1:
+        if len(cum_fold_idx) == fold_size and len(cum_fold_idx[0]) == 1:
             # Equivalent to .unsqueeze(dim=1)
             return AddressBookEntry(module, [in_module_ids], [(slice(None), None)])
     cum_fold_idx_t = torch.tensor(cum_fold_idx)
@@ -206,8 +208,9 @@ def build_address_book_entry(
 ) -> AddressBookEntry:
     # Transpose the index information, since we will build the
     # address book information for each operand independently
-    # (this is because the inputs of modules might not be stacked, e.g., in the parameter torch graph)
-    in_fold_idx = list(map(list, zip(*in_fold_idx)))
+    # (this is because the inputs of modules might not be stacked,
+    # e.g., in the parameter torch graph)
+    in_fold_idx = [list(hi) for hi in zip(*in_fold_idx)]
 
     # Retrieve the unique fold indices that reference the module inputs
     in_module_ids = [list(dict.fromkeys(idx[0] for idx in hi)) for hi in in_fold_idx]

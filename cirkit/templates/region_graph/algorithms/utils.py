@@ -52,14 +52,12 @@ class HypercubeToScope(dict[HyperCube, Scope]):
         """
         point1, point2 = key  # HyperCube is from point1 to point2.
 
-        if not (len(point1) == len(point2) == self.ndims):
+        if not len(point1) == len(point2) == self.ndims:
             raise ValueError("The dimension of the HyperCube is not correct")
         if not all(0 <= x1 < x2 <= shape for x1, x2, shape in zip(point1, point2, self.shape)):
             raise ValueError("The HyperCube is empty")
         return Scope(
-            self.hypercube[  # type: ignore[misc]
-                tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))
-            ]
+            self.hypercube[tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))]
             .reshape(-1)
             .tolist()
         )

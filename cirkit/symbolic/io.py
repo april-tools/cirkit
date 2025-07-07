@@ -29,7 +29,7 @@ def plot_circuit(
 
     Args:
         circuit: The symbolic circuit to plot.
-        out_path ( str | PathLike[str] | None, optional): The output path where the plot is save
+        out_path: The output path where the plot is save
             If it is None, the plot is not saved to a file. Defaults to None.
             The Output file format is deduce from the path. Possible formats are:
             {'jp2', 'plain-ext', 'sgi', 'x11', 'pic', 'jpeg', 'imap', 'psd', 'pct',
@@ -39,34 +39,34 @@ def plot_circuit(
              'xdot1.4', 'cmapx_np', 'dot', 'tiff', 'ps2', 'gd2', 'gv', 'ps', 'jpg',
              'imap_np', 'wbmp', 'vml', 'eps', 'xdot1.2', 'pov', 'pict', 'ismap', 'exr'}.
              See https://graphviz.org/docs/outputs/ for more.
-        orientation (str, optional): Orientation of the graph. "vertical" puts the root
+        orientation: Orientation of the graph. "vertical" puts the root
             node at the top, "horizontal" at left. Defaults to "vertical".
-        node_shape (str, optional): Default shape for a node in the graph. Defaults to "box".
+        node_shape: Default shape for a node in the graph. Defaults to "box".
             See https://graphviz.org/doc/info/shapes.html for the supported shapes.
-        label_font (str, optional): Font used to render labels. Defaults to "times italic bold".
+        label_font: Font used to render labels. Defaults to "times italic bold".
             See https://graphviz.org/faq/font/ for the available fonts.
-        label_size (str, optional): Size of the font for labels in points. Defaults to 21pt.
-        label_color (str, optional): Color for the labels in the nodes. Defaults to "white".
+        label_size: Size of the font for labels in points. Defaults to 21pt.
+        label_color: Color for the labels in the nodes. Defaults to "white".
             See https://graphviz.org/docs/attr-types/color/ for supported color.
-        sum_label (str | Callable[[SumLayer], str], optional): Either a string or a function.
+        sum_label: Either a string or a function.
             If a function is provided, then it must take as input a sum layer and returns a string
             that will be used as label. Defaults to "+".
-        sum_color (str | Callable[[SumLayer], str], optional): Either a string or a function.
+        sum_color: Either a string or a function.
             If a function is provided, then it must take as input a sum layer and returns a string
             that will be used as color for the sum node. Defaults to "#607d8b".
-        product_label (str | Callable[[ProductLayer], str], optional): Either a string or a function.
-            If a function is provided, then it must take as input a product layer and returns a string
-            that will be used as label. If None, it defaults to "⊙" for Hadamard layers and "⊗" for
-            Kronecker layers.
-        product_color (str | Callable[[ProductLayer], str], optional): Either a string or a function.
-            If a function is provided, then it must take as input a product layer and returns a string
-            that will be used as color for the product node. Defaults to "#24a5af".
-        input_label (_type_, optional): Either a string or a function.
-            If a function is provided, then it must take as input an input layer and returns a string
-            that will be used as label. If None, it defaults to using the scope of the layer.
-        input_color (str | Callable[[ProductLayer], str], optional): Either a string or a function.
-            If a function is provided, then it must take as input an input layer and returns a string
-            that will be used as color for the input layer node. Defaults to "#ffbd2a".
+        product_label: Either a string or a function.
+            If a function is provided, then it must take as input a product layer and returns a
+            string that will be used as label. If None, it defaults to "⊙" for Hadamard layers and
+            "⊗" for Kronecker layers.
+        product_color: Either a string or a function.
+            If a function is provided, then it must take as input a product layer and returns a
+            string that will be used as color for the product node. Defaults to "#24a5af".
+        input_label: Either a string or a function.
+            If a function is provided, then it must take as input an input layer and returns a
+            string that will be used as label. If None, it defaults to using the scope of the layer.
+        input_color: Either a string or a function.
+            If a function is provided, then it must take as input an input layer and returns a
+            string that will be used as color for the input layer node. Defaults to "#ffbd2a".
 
     Raises:
         ValueError: The format is not among the supported ones.

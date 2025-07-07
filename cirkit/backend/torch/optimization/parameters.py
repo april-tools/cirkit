@@ -1,3 +1,5 @@
+# pylint: disable=bad-mcs-classmethod-argument
+
 import itertools
 from typing import TYPE_CHECKING, cast
 
@@ -53,7 +55,7 @@ class ReduceSumOuterProductPattern(ParameterOptPatternDefn):
         return [TorchReduceSumParameter, TorchOuterProductParameter]
 
 
-def apply_log_softmax(
+def apply_log_softmax(  # pylint: disable=unused-argument
     compiler: "TorchCompiler", match: ParameterOptMatch
 ) -> tuple[TorchLogSoftmaxParameter]:
     softmax = cast(TorchSoftmaxParameter, match.entries[1])
@@ -95,7 +97,7 @@ def _emit_outer_reduce_flatten_parameter(
     return einsum, flatten
 
 
-def apply_sum_outer_prod_einsum(
+def apply_sum_outer_prod_einsum(  # pylint: disable=unused-argument
     compiler: "TorchCompiler", match: ParameterOptMatch
 ) -> tuple[TorchEinsumParameter] | tuple[TorchEinsumParameter, TorchFlattenParameter]:
     outer_prod = cast(TorchOuterProductParameter, match.entries[1])
@@ -108,9 +110,8 @@ def apply_sum_outer_prod_einsum(
     return _emit_outer_reduce_flatten_parameter(in_shape1, in_shape2, outer_dim, reduce_dim)
 
 
-DEFAULT_PARAMETER_OPT_RULES: dict[
-    ParameterOptPattern, ParameterOptApplyFunc
-] = {  # type: ignore[misc]
+# pylint: disable-next=line-too-long
+DEFAULT_PARAMETER_OPT_RULES: dict[ParameterOptPattern, ParameterOptApplyFunc] = {  # type: ignore[misc]
     LogSoftmaxPattern: apply_log_softmax,
     ReduceSumOuterProductPattern: apply_sum_outer_prod_einsum,
 }

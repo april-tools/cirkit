@@ -147,6 +147,7 @@ def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> Torc
     )
 
 
+# pylint: disable-next=line-too-long
 DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
     EmbeddingLayer: compile_embedding_layer,
     CategoricalLayer: compile_categorical_layer,

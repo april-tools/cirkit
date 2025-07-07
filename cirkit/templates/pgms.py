@@ -47,7 +47,7 @@ def fully_factorized(
                 f"The list of input layer kwargs should have length num_variables={num_variables}"
             )
         if not all(isinstance(kwargs, Mapping) for kwargs in input_layer_kwargs):
-            raise ValueError(f"The list of input layer kwargs should be a list of dictionaries")
+            raise ValueError("The list of input layer kwargs should be a list of dictionaries")
 
     # Construct the input layers
     if input_params is None:
@@ -125,7 +125,7 @@ def hmm(
                 f"The list of input layer kwargs should have length num_variables={num_variables}"
             )
         if not all(isinstance(kwargs, Mapping) for kwargs in input_layer_kwargs):
-            raise ValueError(f"The list of input layer kwargs should be a list of dictionaries")
+            raise ValueError("The list of input layer kwargs should be a list of dictionaries")
 
     # Get the input layer factories
     if input_params is None:

@@ -143,7 +143,6 @@ class AddressBook(nn.Module, ABC):
         # We register the book-keeping tensor indices as buffers.
         # By doing so they are automatically transferred to the device
         # This reduces CPU-device communications required to transfer these indices
-        #
         # TODO: Perhaps this can be made more elegant in the future, if someone
         #  decides to introduce a nn.BufferList container in torch
         self._entry_in_fold_idx_targets: list[list[str]] = []
@@ -335,12 +334,10 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         raise RuntimeError("The address book is malformed")
 
     @abstractmethod
-    def _build_unfold_index_info(self) -> FoldIndexInfo:
-        ...
+    def _build_unfold_index_info(self) -> FoldIndexInfo: ...
 
     @abstractmethod
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
-        ...
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook: ...
 
     def __repr__(self) -> str:
         def indent(s: str) -> str:

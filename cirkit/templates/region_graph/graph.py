@@ -208,7 +208,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                 will use the intersection of the scopes of the two RG. Defaults to None.
 
         Returns:
-            bool: Whether self is compatible to other.
+            bool: Whether self is compatible with other.
         """
         # _is_frozen is implicitly tested because is_smooth is set in freeze().
         scope = Scope(scope) if scope is not None else self.scope & other.scope
@@ -338,6 +338,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         return RegionGraph(nodes, in_nodes, outputs=outputs)
 
+    # TODO: refactor the following method as to simplify its structure (e.g., remove inline methods)
     def build_circuit(
         self,
         *,

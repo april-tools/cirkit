@@ -18,22 +18,18 @@ ParameterOptMatch = GraphOptMatch[TorchParameterNode]
 class ParameterOptApplyFunc(Protocol):
     def __call__(
         self, compiler: "TorchCompiler", match: ParameterOptMatch
-    ) -> tuple[TorchParameterNode, ...]:
-        ...
+    ) -> tuple[TorchParameterNode, ...]: ...
 
 
 class LayerOptPatternDefn(GraphOptPatternDefn[TorchLayer]):
     @classmethod
-    def entries(cls) -> list[type[TorchLayer]]:
-        ...
+    def entries(cls) -> list[type[TorchLayer]]: ...
 
     @classmethod
-    def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
-        ...
+    def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]: ...
 
     @classmethod
-    def cpatterns(cls) -> list[dict[str, Any]]:
-        ...
+    def cpatterns(cls) -> list[dict[str, Any]]: ...
 
 
 LayerOptPattern = type[LayerOptPatternDefn]
@@ -63,8 +59,9 @@ class LayerOptMatch(GraphOptMatch[TorchLayer]):
 
 
 class LayerOptApplyFunc(Protocol):
-    def __call__(self, compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchLayer, ...]:
-        ...
+    def __call__(
+        self, compiler: "TorchCompiler", match: LayerOptMatch
+    ) -> tuple[TorchLayer, ...]: ...
 
 
 class ParameterOptRegistry(CompilerRegistry[ParameterOptPattern, ParameterOptApplyFunc]):

@@ -373,8 +373,8 @@ def _fold_parameter_nodes_group(
             dtype=group[0].dtype,
         )
         # If we are folding parameter tensors, then update the registry as to maintain the correct
-        # mapping between symbolic parameter leaves (which are unfolded) and slices within the folded
-        # compiled parameter leaves.
+        # mapping between symbolic parameter leaves (which are unfolded) and slices within the
+        # folded compiled parameter leaves
         for i, p in enumerate(group):
             sp = compiler.state.retrieve_symbolic_parameter(p)
             compiler.state.register_compiled_parameter(sp, folded_node, fold_idx=i)
@@ -412,7 +412,8 @@ def _optimize_circuit(
     optimizing = True
     opt_step = 0
     while optimizing and opt_step < max_opt_steps:
-        # First optimization step: optimize the parameters node of the parameter graphs of each layer
+        # First optimization step: optimize the parameters node of the
+        # parameter graphs of each layer
         opt_cc, opt_fuse_parameter_nodes = _optimize_parameter_nodes(compiler, cc)
         del cc
         cc = opt_cc
@@ -465,11 +466,11 @@ def _optimize_parameter_nodes(
             nodes, in_nodes, outputs = optimize_result
 
             # Build the optimized computational graph
-            pgraph = type(pgraph)(nodes, in_nodes, outputs)
+            opt_pgraph = type(pgraph)(nodes, in_nodes, outputs)
 
             # Update the parameter computational graph assigned to the layer
             assert hasattr(layer, pname)
-            setattr(layer, pname, pgraph)
+            setattr(layer, pname, opt_pgraph)
             has_been_optimized = True
 
     # Check whether no parameter optimization has been possible
