@@ -1,3 +1,5 @@
+# pylint: disable=all
+
 import csv
 import os
 from collections import Counter
