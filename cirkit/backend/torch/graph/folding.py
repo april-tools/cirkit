@@ -10,18 +10,18 @@ from cirkit.backend.torch.graph.modules import (
     AbstractTorchModule,
     AddressBookEntry,
     FoldIndexInfo,
-    TorchModule,
+    TorchModuleT,
 )
 
 
 def build_unfold_index_info(
-    ordering: Iterable[TorchModule],
+    ordering: Iterable[TorchModuleT],
     *,
-    outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
+    outputs: Iterable[TorchModuleT],
+    incomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
 ) -> FoldIndexInfo:
     # The topological ordering of modules
-    ordering: list[TorchModule] = list(ordering)
+    ordering: list[TorchModuleT] = list(ordering)
 
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
@@ -60,15 +60,15 @@ def build_unfold_index_info(
 
 
 def build_folded_graph(
-    ordering: Iterable[list[TorchModule]],
+    ordering: Iterable[list[TorchModuleT]],
     *,
-    outputs: Iterable[TorchModule],
-    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    fold_group_fn: Callable[[list[TorchModule]], TorchModule],
+    outputs: Iterable[TorchModuleT],
+    incomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    fold_group_fn: Callable[[list[TorchModuleT]], TorchModuleT],
 ) -> tuple[
-    list[TorchModule],
-    dict[TorchModule, list[TorchModule]],
-    list[TorchModule],
+    list[TorchModuleT],
+    dict[TorchModuleT, list[TorchModuleT]],
+    list[TorchModuleT],
     FoldIndexInfo,
 ]:
     # A useful data structure mapping each unfolded module to
@@ -134,9 +134,9 @@ def build_folded_graph(
 
 
 def group_foldable_modules(
-    modules: list[TorchModule],
-) -> list[list[TorchModule]]:
-    def _gather_fold_settings(module: TorchModule) -> tuple[Any, ...]:
+    modules: list[TorchModuleT],
+) -> list[list[TorchModuleT]]:
+    def _gather_fold_settings(module: TorchModuleT) -> tuple[Any, ...]:
         ss = [type(m), *m.fold_settings]
         for _, sub_module in module.sub_modules.items():
             sub_ss = _gather_fold_settings(sub_module)
@@ -146,7 +146,7 @@ def group_foldable_modules(
     # A dictionary mapping a module fold settings,
     # which uniquely identifies a group of modules that can be folded,
     # into a group of modules.
-    groups: dict[tuple, list[TorchModule]] = defaultdict(list)
+    groups: dict[tuple, list[TorchModuleT]] = defaultdict(list)
 
     # For each module, either create a new group or insert it into an existing one
     for m in modules:
@@ -157,7 +157,7 @@ def group_foldable_modules(
 
 
 def build_address_book_stacked_entry(
-    module: TorchModule | None,
+    module: TorchModuleT | None,
     in_fold_idx: list[list[tuple[int, int]]],
     *,
     num_folds: dict[int, int],
@@ -201,7 +201,7 @@ def build_address_book_stacked_entry(
 
 
 def build_address_book_entry(
-    module: TorchModule | None,
+    module: TorchModuleT | None,
     in_fold_idx: list[list[tuple[int, int]]],
     *,
     num_folds: dict[int, int],
@@ -227,6 +227,7 @@ def build_address_book_entry(
         # The following checks whether using the fold index would yield the same tensor
         # If so, then avoid indexing at all
         module_id = hi[0][0]
+        cum_fold_i_idx_t: Tensor | tuple
         if all(idx[0] == module_id for idx in hi) and cum_fold_i_idx == list(
             range(num_folds[module_id])
         ):

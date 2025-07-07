@@ -97,7 +97,6 @@ class OperatorRegistry(AbstractContextManager):
                 f"Annotations: {args}"
             )
         del args["return"]
-        arg_names = list(args.keys())
         arg_types = [args[a] for a in arg_names]
         arg_layer_types = [
             x for x in enumerate(arg_types) if isinstance(x[1], type) and issubclass(x[1], Layer)

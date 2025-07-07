@@ -16,7 +16,7 @@ def LinearTree(
     num_variables: int,
     *,
     num_repetitions: int = 1,
-    ordering: list[int] = None,
+    ordering: list[int] | None = None,
     randomize: bool = False,
     seed: int = 42,
 ) -> RegionGraph:

@@ -299,8 +299,8 @@ def conjugate_categorical_layer(sl: CategoricalLayer) -> CircuitBlock:
 
 
 def conjugate_gaussian_layer(sl: GaussianLayer) -> CircuitBlock:
-    mean = sl.mean.ref() if sl.mean is not None else None
-    stddev = sl.stddev.ref() if sl.stddev is not None else None
+    mean = sl.mean.ref()
+    stddev = sl.stddev.ref()
     sl = GaussianLayer(sl.scope, sl.num_output_units, mean=mean, stddev=stddev)
     return CircuitBlock.from_layer(sl)
 

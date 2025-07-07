@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Mapping
 from typing import cast
 
 import numpy as np
@@ -116,7 +117,7 @@ def cp(
 
     # Construct the factor, hadamard and sum layers
     if input_params is None:
-        factor_param_kwargs = {}
+        factor_param_kwargs: Mapping[str, ParameterFactory] = {}
     else:
         factor_param_kwargs = named_parameterizations_to_factories(input_params)
     embedding_layer_factories: list[InputLayerFactory] = [
@@ -208,7 +209,7 @@ def tucker(
 
     # Construct the embedding, kronecker and sum layers
     if input_params is None:
-        factor_param_kwargs = {}
+        factor_param_kwargs: Mapping[str, ParameterFactory] = {}
     else:
         factor_param_kwargs = named_parameterizations_to_factories(input_params)
     embedding_layer_factories: list[InputLayerFactory] = [

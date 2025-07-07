@@ -46,7 +46,9 @@ def compile_dirichlet_initializer(  # pylint: disable=unused-argument
 
 
 # pylint: disable-next=line-too-long
-DEFAULT_INITIALIZER_COMPILATION_RULES: dict[InitializerCompilationSign, InitializerCompilationFunc] = {  # type: ignore[misc]
+DEFAULT_INITIALIZER_COMPILATION_RULES: dict[
+    InitializerCompilationSign, InitializerCompilationFunc
+] = {
     ConstantTensorInitializer: compile_constant_tensor_initializer,
     UniformInitializer: compile_uniform_initializer,
     NormalInitializer: compile_normal_initializer,

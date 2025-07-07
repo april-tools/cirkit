@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -128,7 +129,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         self,
         scope: Scope,
         layers: Sequence[TorchLayer],
-        in_layers: dict[TorchLayer, Sequence[TorchLayer]],
+        in_layers: Mapping[TorchLayer, Sequence[TorchLayer]],
         outputs: Sequence[TorchLayer],
         *,
         properties: StructuralProperties,
@@ -259,7 +260,7 @@ class TorchCircuit(AbstractTorchCircuit):
 
     def __call__(self, x: Tensor) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
+        return super().__call__(x)
 
     def forward(self, x: Tensor) -> Tensor:
         """Evaluate the circuit layers in forward mode, i.e., by evaluating each layer by
@@ -287,7 +288,7 @@ class TorchConstantCircuit(AbstractTorchCircuit):
 
     def __call__(self) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
+        return super().__call__()
 
     def forward(self) -> Tensor:
         """Evaluate the circuit layers in forward mode, i.e., by evaluating each layer by

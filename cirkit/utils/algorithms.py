@@ -8,7 +8,7 @@ NodeT = TypeVar("NodeT")
 
 def graph_nodes_outgoings(
     nodes: Iterable[NodeT], incomings_fn: Callable[[NodeT], Sequence[NodeT]]
-) -> dict[NodeT, Sequence[NodeT]]:
+) -> Mapping[NodeT, Sequence[NodeT]]:
     outgoings: dict[NodeT, list[NodeT]] = {}
     for n in nodes:
         incomings = incomings_fn(n)
@@ -104,7 +104,7 @@ def topologically_process_nodes(
     process_fn: Callable[[NodeT], NodeT],
     *,
     incomings_fn: Callable[[NodeT], Sequence[NodeT]],
-) -> tuple[Sequence[NodeT], dict[NodeT, Sequence[NodeT]], Sequence[NodeT]]:
+) -> tuple[Sequence[NodeT], Mapping[NodeT, Sequence[NodeT]], Sequence[NodeT]]:
     nodes_map = {}
     in_nodes = {}
     for n in ordering:

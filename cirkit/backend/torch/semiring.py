@@ -318,7 +318,7 @@ Semiring = type[SemiringImpl]
 
 
 @SemiringImpl.register("sum-product")
-@final  # type: ignore[misc]
+@final
 class SumProductSemiring(SemiringImpl):
     """The linear space computation."""
 
@@ -369,7 +369,7 @@ class SumProductSemiring(SemiringImpl):
 
 
 @SemiringImpl.register("lse-sum")
-@final  # type: ignore[misc]
+@final
 class LSESumSemiring(SemiringImpl):
     """The log space computation."""
 
@@ -433,7 +433,7 @@ class LSESumSemiring(SemiringImpl):
 
 
 @SemiringImpl.register("complex-lse-sum")
-@final  # type: ignore[misc]
+@final
 class ComplexLSESumSemiring(SemiringImpl):
     """The complex log space computation."""
 
@@ -448,6 +448,7 @@ class ComplexLSESumSemiring(SemiringImpl):
 
     @classmethod
     def sum(cls, x: Tensor, /, *, dim: int | None = None, keepdim: bool = False) -> Tensor:
+        assert dim is not None
         return x.logsumexp(dim=dim, keepdim=keepdim)
 
     @classmethod

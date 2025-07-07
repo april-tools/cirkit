@@ -20,7 +20,7 @@ def plot_circuit(
     sum_color: str | Callable[[SumLayer], str] = "#607d8b",
     product_label: str | Callable[[ProductLayer], str] | None = None,
     product_color: str | Callable[[ProductLayer], str] = "#24a5af",
-    input_label: str | Callable[[InputLayer], str] = None,
+    input_label: str | Callable[[InputLayer], str] | None = None,
     input_color: str | Callable[[InputLayer], str] = "#ffbd2a",
 ) -> graphviz.Digraph:
     """Plot the current symbolic circuit using graphviz.

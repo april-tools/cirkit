@@ -53,7 +53,7 @@ class AbstractTorchModule(nn.Module, ABC):
         return {}
 
 
-TorchModule = TypeVar("TorchModule", bound=AbstractTorchModule)
+TorchModuleT = TypeVar("TorchModuleT", bound=AbstractTorchModule)
 """TypeVar: A torch module type that subclasses
     [AbstractTorchModule][cirkit.backend.torch.graph.modules.AbstractTorchModule]."""
 
@@ -68,7 +68,7 @@ class FoldIndexInfo:
     information for each torch module, and (iii) the output fold index information.
     """
 
-    ordering: list[TorchModule]
+    ordering: list[TorchModuleT]
     """The topological ordering of torch modules."""
     in_fold_idx: dict[int, list[list[tuple[int, int]]]]
     """The input fold index information. For each module index, it stores for each output
@@ -89,7 +89,7 @@ class AddressBookEntry:
     to recover the input tensors to each fold.
     """
 
-    module: TorchModule | None
+    module: TorchModuleT | None
     """The module the entry refers to. It can be None if the entry is then used to
     compute the output of the whole computational graph."""
     in_module_ids: list[list[int]]
@@ -138,7 +138,7 @@ class AddressBook(nn.Module, ABC):
             raise ValueError("The output fold index tensor should be a 1-dimensional tensor")
         super().__init__()
         self._num_outputs = out_fold_idx.shape[0]
-        self._entry_modules: list[TorchModule | None] = [e.module for e in entries]
+        self._entry_modules: list[TorchModuleT | None] = [e.module for e in entries]
         self._entry_in_module_ids: list[list[list[int]]] = [e.in_module_ids for e in entries]
         # We register the book-keeping tensor indices as buffers.
         # By doing so they are automatically transferred to the device
@@ -200,7 +200,7 @@ class AddressBook(nn.Module, ABC):
     @abstractmethod
     def lookup(
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
-    ) -> Iterator[tuple[TorchModule | None, tuple]]:
+    ) -> Iterator[tuple[TorchModuleT | None, tuple]]:
         """Retrive an iterator that iteratively returns a torch module and the tensor inputs to it.
 
         Args:
@@ -223,7 +223,7 @@ class AddressBook(nn.Module, ABC):
 class ModuleEvalFunctional(Protocol):  # pylint: disable=too-few-public-methods
     """The protocol of a function that evaluates a module on some inputs."""
 
-    def __call__(self, module: TorchModule, *inputs: Tensor) -> Tensor:
+    def __call__(self, module: TorchModuleT, *inputs: Tensor) -> Tensor:
         """Evaluate a module on some inputs.
 
         Args:
@@ -235,14 +235,14 @@ class ModuleEvalFunctional(Protocol):  # pylint: disable=too-few-public-methods
         """
 
 
-class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
+class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
     """A torch directed acyclic graph module, i.e., a computational graph made of torch modules."""
 
     def __init__(
         self,
-        modules: Sequence[TorchModule],
-        in_modules: dict[TorchModule, Sequence[TorchModule]],
-        outputs: Sequence[TorchModule],
+        modules: Sequence[TorchModuleT],
+        in_modules: Mapping[TorchModuleT, Sequence[TorchModuleT]],
+        outputs: Sequence[TorchModuleT],
         *,
         fold_idx_info: FoldIndexInfo | None = None,
     ):
@@ -255,7 +255,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
             fold_idx_info: The folding index information.
                 It can be None if the Torch graph is not folded.
         """
-        modules: list[TorchModule] = nn.ModuleList(modules)  # type: ignore
+        modules: list[TorchModuleT] = nn.ModuleList(modules)  # type: ignore
         super().__init__()
         super(nn.Module, self).__init__(modules, in_modules, outputs)
         self._is_folded = fold_idx_info is not None
@@ -281,7 +281,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
         """
         return self._address_book
 
-    def subgraph(self, *roots: TorchModule) -> "TorchDiAcyclicGraph[TorchModule]":
+    def subgraph(self, *roots: TorchModuleT) -> "TorchDiAcyclicGraph[TorchModuleT]":
         """Assuming the computational graph is not a folded one,
         this returns the sub-graph having the given root torch modules as output modules.
 
@@ -341,11 +341,11 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModule], ABC):
 
     def __repr__(self) -> str:
         def indent(s: str) -> str:
-            s = s.split("\n")
-            r = s[0]
-            if len(s) == 1:
+            ss = s.split("\n")
+            r = ss[0]
+            if len(ss) == 1:
                 return r
-            return r + "\n" + "\n".join(f"  {t}" for t in s[1:])
+            return r + "\n" + "\n".join(f"  {t}" for t in ss[1:])
 
         lines = [self.__class__.__name__ + "("]
         extra_lines = self.extra_repr()

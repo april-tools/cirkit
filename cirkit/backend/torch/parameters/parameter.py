@@ -1,5 +1,5 @@
 from collections import ChainMap
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Union
 
@@ -113,7 +113,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def __init__(
         self,
         modules: Sequence[TorchParameterNode],
-        in_modules: dict[TorchParameterNode, Sequence[TorchParameterNode]],
+        in_modules: Mapping[TorchParameterNode, Sequence[TorchParameterNode]],
         outputs: Sequence[TorchParameterNode],
         *,
         fold_idx_info: FoldIndexInfo | None = None,

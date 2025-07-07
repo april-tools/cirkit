@@ -97,11 +97,11 @@ class TorchCompilerState:
             # So, we can also register the reverse map (i.e., compiled to symbolic)
             self._compiled_parameters[sp] = (cp, 0)
             self._symbolic_parameters[cp] = sp
-
-        # We are registering a folded compiled parameter tensor
-        # So, we associate the symbolic parameter tensor to a particular slice of the
-        # folded compiled parameter tensor, which is specified by the 'fold_idx'.
-        self._compiled_parameters[sp] = (cp, fold_idx)
+        else:
+            # We are registering a folded compiled parameter tensor
+            # So, we associate the symbolic parameter tensor to a particular slice of the
+            # folded compiled parameter tensor, which is specified by the 'fold_idx'.
+            self._compiled_parameters[sp] = (cp, fold_idx)
 
 
 class TorchCompiler(AbstractCompiler):

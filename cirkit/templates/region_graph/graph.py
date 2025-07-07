@@ -2,7 +2,7 @@ import itertools
 import json
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property
 from typing import TypeAlias, TypedDict, cast, final
 
@@ -83,7 +83,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     def __init__(
         self,
         nodes: Sequence[RegionGraphNode],
-        in_nodes: dict[RegionGraphNode, Sequence[RegionGraphNode]],
+        in_nodes: Mapping[RegionGraphNode, Sequence[RegionGraphNode]],
         outputs: Sequence[RegionGraphNode],
     ) -> None:
         super().__init__(nodes, in_nodes, outputs)
@@ -559,8 +559,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                         in_layers[mix_sl] = [sli]
                 else:
                     mix_ins = [
-                        sum_prod_builder_(node, self.partition_inputs(cast(PartitionNode, ptn)))
-                        for ptn in region_inputs
+                        sum_prod_builder_(node, self.partition_inputs(ptn)) for ptn in region_inputs
                     ]
                 mix_sl = SumLayer(
                     num_units,

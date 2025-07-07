@@ -73,9 +73,7 @@ def RandomBinaryTree(
         # ANNOTATE: ndarray.tolist gives Any.
         # CAST: Numpy has typing issues.
         # IGNORE: Numpy has typing issues.
-        split_point: list[int] = (
-            (split / split[-1] * len(scope)).round().astype(np.int64).tolist()  # type: ignore[misc]
-        )
+        split_point: list[int] = (split / split[-1] * len(scope)).round().astype(np.int64).tolist()
 
         # ANNOTATE: Specify content for empty container.
         scopes: list[Scope] = []

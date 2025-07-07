@@ -1,4 +1,3 @@
-from collections.abc import Iterable
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 from types import TracebackType
@@ -94,6 +93,7 @@ class PipelineContext(AbstractContextManager):
         """Exit a pipeline context."""
         # pylint: disable-next=assignment-from-none
         ret = self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
+        assert self._token is not None
         _PIPELINE_CONTEXT.reset(self._token)
         self._token = None
         return ret
@@ -204,7 +204,7 @@ class PipelineContext(AbstractContextManager):
             if not self._compiler.has_symbolic(cci):
                 raise ValueError(f"The {i}-th given compiled circuit is not known in this pipeline")
         sc = [self._compiler.get_symbolic_circuit(cci) for cci in cc]
-        cat_sc = SF.concatenate(*sc, registry=self._op_registry)
+        cat_sc = SF.concatenate(sc, registry=self._op_registry)
         return self.compile(cat_sc)
 
     def integrate(self, cc: CompiledCircuit, scope: Scope | None = None) -> CompiledCircuit:
@@ -304,12 +304,12 @@ def compile(sc: Circuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
 def concatenate(*cc: CompiledCircuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
-    return ctx.concatenate(cc)
+    return ctx.concatenate(*cc)
 
 
 def integrate(
     cc: CompiledCircuit,
-    scope: Iterable[int] | None = None,
+    scope: Scope | None = None,
     ctx: PipelineContext | None = None,
 ) -> CompiledCircuit:
     if ctx is None:
@@ -347,7 +347,7 @@ def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:
         from cirkit.backend.torch.compiler import TorchCompiler
 
         return TorchCompiler(**backend_kwargs)
-    assert False
+    raise NotImplementedError()
 
 
 # Context variable holding the current global pipeline.

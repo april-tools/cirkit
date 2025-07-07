@@ -591,7 +591,7 @@ class ClampParameter(EntrywiseParameterOp):
         self._vmax = vmax
 
     @property
-    def vmin(self) -> float:
+    def vmin(self) -> float | None:
         """Retrieves the minimum clamping value.
 
         Returns:
@@ -600,7 +600,7 @@ class ClampParameter(EntrywiseParameterOp):
         return self._vmin
 
     @property
-    def vmax(self) -> float:
+    def vmax(self) -> float | None:
         """Retrieves the maximum clamping value.
 
         Returns:

@@ -4,7 +4,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum, auto
 from functools import cached_property
-from typing import Any
+from typing import Any, cast
 
 from cirkit.symbolic.layers import InputLayer, Layer, ProductLayer, SumLayer
 from cirkit.utils.algorithms import (
@@ -256,7 +256,7 @@ class Circuit(DiAcyclicGraph[Layer]):
                         "but expected none"
                     )
                 continue
-            self._scopes[sl] = Scope.union(*tuple(self._scopes[sli] for sli in sl_ins))
+            self._scopes[sl] = cast(Scope, Scope.union(*tuple(self._scopes[sli] for sli in sl_ins)))
             if sl.arity != len(sl_ins):
                 raise ValueError(
                     f"{sl}: expected arity {sl.arity}, " f"but found {len(sl_ins)} input layers"
@@ -461,9 +461,9 @@ class Circuit(DiAcyclicGraph[Layer]):
     @classmethod
     def from_operation(
         cls,
-        blocks: list[CircuitBlock],
-        in_blocks: dict[CircuitBlock, Sequence[CircuitBlock]],
-        output_blocks: list[CircuitBlock],
+        blocks: Sequence[CircuitBlock],
+        in_blocks: Mapping[CircuitBlock, Sequence[CircuitBlock]],
+        output_blocks: Sequence[CircuitBlock],
         *,
         operation: CircuitOperation,
     ) -> "Circuit":

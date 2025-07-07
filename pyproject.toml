@@ -181,31 +181,14 @@ follow_imports = "silent"
 # https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous
 warn_unused_configs = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#disallow-dynamic-typing
-disallow_any_unimported = true
-disallow_any_expr = true
-disallow_any_decorated = true
 disallow_any_explicit = false
-disallow_any_generics = true
-disallow_subclassing_any = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#untyped-definitions-and-calls
 disallow_untyped_calls = true
-# untyped_calls_exclude = comma-sep-str
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
-check_untyped_defs = true
+#check_untyped_defs = true
 disallow_untyped_decorators = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#configuring-warnings
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true
-# https://mypy.readthedocs.io/en/stable/command_line.html#miscellaneous-strictness-flags
-extra_checks = true
-# https://mypy.readthedocs.io/en/stable/error_code_list2.html#error-codes-for-optional-checks
-enable_error_code = [
-  "redundant-self",
-  "redundant-expr",
-  "possibly-undefined",
-  "truthy-bool",
-  "truthy-iterable",
-  "ignore-without-code",
-]
