@@ -6,7 +6,6 @@ import graphviz
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import HadamardLayer, InputLayer, KroneckerLayer, ProductLayer, SumLayer
-from cirkit.templates.region_graph.graph import RegionGraph, RegionNode, PartitionNode
 
 
 def plot_circuit(
