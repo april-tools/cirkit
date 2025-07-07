@@ -55,7 +55,6 @@ dev = [
   "mypy~=1.16.0",
   "pylint~=3.3.0",
   "pylint-per-file-ignores~=1.4.0",
-  "pydocstyle[toml]~=6.3.0",
   "pytest",
   "pytest-cov",
 ]
@@ -118,12 +117,6 @@ line_length = 100
 extra_standard_library = [  # we treat these as stdlib
   "typing_extensions",
 ]
-
-# doc style
-[tool.pydocstyle]
-convention = "google"
-add_select = "D204,D400,D401,D404"
-add_ignore = "D100,D104"
 
 # general linting
 [tool.pylint.main]

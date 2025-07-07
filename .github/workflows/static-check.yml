@@ -42,10 +42,6 @@ jobs:
         id: tool-isort
         if: failure() || steps.python-env-setup.outcome == 'success'
         run: bash scripts/check.sh --tool isort
-      - name: pydocstyle
-        id: tool-pydocstyle
-        if: failure() || steps.python-env-setup.outcome == 'success'
-        run: bash scripts/check.sh --tool pydocstyle
       - name: pylint
         id: tool-pylint
         if: failure() || (steps.tool-black.outcome == 'success' && steps.tool-isort.outcome == 'success')
