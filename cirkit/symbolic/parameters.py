@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
-from collections import ChainMap
 from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from functools import cached_property
 from itertools import chain
-from numbers import Number
 from typing import Any, Protocol, Union
 
 import numpy as np
@@ -112,7 +110,7 @@ class ConstantParameter(TensorParameter):
     a tensor that is not learnable.
     """
 
-    def __init__(self, *shape: int, value: Number | np.ndarray = 0.0):
+    def __init__(self, *shape: int, value: int | float | complex | np.number | np.ndarray = 0.0):
         """Initializes a constant symbolic parameter.
 
         Args:
@@ -918,10 +916,14 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
             A symbolic parameter that encodes the application of the given parameter operation node
                 to the outputs given by the symbolic parameter input nodes or parameters.
         """
-        ps = tuple(Parameter.from_input(p) if isinstance(p, ParameterInput) else p for p in ps)
-        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
-        in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
-        in_nodes[n] = list(p.output for p in ps)
+        p_graphs = tuple(
+            Parameter.from_input(p) if isinstance(p, ParameterInput) else p for p in ps
+        )
+        p_nodes = list(chain.from_iterable(p.nodes for p in p_graphs)) + [n]
+        in_nodes: dict[ParameterNode, Sequence[ParameterNode]] = dict(
+            (k, v) for g in p_graphs for (k, v) in g.nodes_inputs.items()
+        )
+        in_nodes[n] = list(p.output for p in p_graphs)
         return Parameter(p_nodes, in_nodes, [n])
 
     @classmethod

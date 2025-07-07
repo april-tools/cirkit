@@ -28,7 +28,11 @@ from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def concatenate(scs: Sequence[Circuit], *, registry: OperatorRegistry | None = None) -> Circuit:
+def concatenate(
+    scs: Sequence[Circuit],
+    *,
+    registry: OperatorRegistry | None = None,  # pylint: disable=unused-argument
+) -> Circuit:
     """Concatenates a sequence of symbolic circuits. Concatenating circuits means constructing
     another circuit such that its output layers consists of the output layers of each circuit
     (in the given order). This operator does not require the satisfaction of any structural
@@ -72,7 +76,7 @@ def evidence(
     sc: Circuit,
     obs: dict[int, Number | tuple[Number, ...]],
     *,
-    registry: OperatorRegistry | None = None,
+    registry: OperatorRegistry | None = None,  # pylint: disable=unused-argument
 ) -> Circuit:
     """Observe the value of some variables in a symbolic circuit, and represent the given
     evidence as another symbolic circuit.

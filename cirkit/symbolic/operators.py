@@ -1,4 +1,6 @@
-from typing import Protocol
+from collections.abc import Sequence
+from typing import Any, Generic, Mapping, Protocol
+from typing_extensions import TypeVarTuple, Unpack
 
 import numpy as np
 
@@ -43,8 +45,8 @@ def integrate_embedding_layer(sl: EmbeddingLayer, *, scope: Scope) -> CircuitBlo
         )
     reduce_sum = ReduceSumParameter(sl.weight.shape, axis=1)
     value = Parameter.from_unary(reduce_sum, sl.weight.ref())
-    sl = ConstantValueLayer(sl.num_output_units, log_space=False, value=value)
-    return CircuitBlock.from_layer(sl)
+    int_sl = ConstantValueLayer(sl.num_output_units, log_space=False, value=value)
+    return CircuitBlock.from_layer(int_sl)
 
 
 def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> CircuitBlock:
@@ -58,8 +60,8 @@ def integrate_categorical_layer(sl: CategoricalLayer, *, scope: Scope) -> Circui
     else:
         reduce_lse = ReduceLSEParameter(sl.logits.shape, axis=1)
         log_partition = Parameter.from_unary(reduce_lse, sl.logits.ref())
-    sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
-    return CircuitBlock.from_layer(sl)
+    int_sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
+    return CircuitBlock.from_layer(int_sl)
 
 
 def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock:
@@ -72,8 +74,8 @@ def integrate_gaussian_layer(sl: GaussianLayer, *, scope: Scope) -> CircuitBlock
         log_partition = Parameter.from_input(ConstantParameter(sl.num_output_units, value=0.0))
     else:
         log_partition = sl.log_partition.ref()
-    sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
-    return CircuitBlock.from_layer(sl)
+    int_sl = ConstantValueLayer(sl.num_output_units, log_space=True, value=log_partition)
+    return CircuitBlock.from_layer(int_sl)
 
 
 def multiply_embedding_layers(sl1: EmbeddingLayer, sl2: EmbeddingLayer) -> CircuitBlock:
@@ -115,10 +117,12 @@ def multiply_categorical_layers(sl1: CategoricalLayer, sl2: CategoricalLayer) ->
         )
 
     if sl1.logits is None:
+        assert sl1.probs is not None
         sl1_logits = Parameter.from_unary(LogParameter(sl1.probs.shape), sl1.probs.ref())
     else:
         sl1_logits = sl1.logits.ref()
     if sl2.logits is None:
+        assert sl2.probs is not None
         sl2_logits = Parameter.from_unary(LogParameter(sl2.probs.shape), sl2.probs.ref())
     else:
         sl2_logits = sl2.logits.ref()
@@ -166,6 +170,8 @@ def multiply_gaussian_layers(sl1: GaussianLayer, sl2: GaussianLayer) -> CircuitB
     )
 
     if sl1.log_partition is not None or sl2.log_partition is not None:
+        log_partition1: Parameter | ConstantParameter
+        log_partition2: Parameter | ConstantParameter
         if sl1.log_partition is None:
             log_partition1 = ConstantParameter(sl1.num_output_units, value=0.0)
         else:
@@ -317,10 +323,15 @@ def conjugate_sum_layer(sl: SumLayer) -> CircuitBlock:
     return CircuitBlock.from_layer(sl)
 
 
-class LayerOperatorFunc(Protocol):
+LayerTupleT = TypeVarTuple("LayerTupleT")
+"""The variadic generic type for a tuple of objects of type
+ [Layer][cirkit.symbolic.layers.Layer]."""
+
+
+class LayerOperatorFunc(Protocol, Generic[Unpack[LayerTupleT]]):
     """The layer operator function protocol."""
 
-    def __call__(self, *sl: Layer, **kwargs) -> CircuitBlock:
+    def __call__(self, *sl: Unpack[LayerTupleT], **kwargs: Any) -> CircuitBlock:
         """Apply an operator on one or more layers.
 
         Args:
@@ -333,7 +344,7 @@ class LayerOperatorFunc(Protocol):
         """
 
 
-DEFAULT_OPERATOR_RULES: dict[LayerOperator, list[LayerOperatorFunc]] = {
+DEFAULT_OPERATOR_RULES: Mapping[LayerOperator, Sequence[LayerOperatorFunc]] = {
     LayerOperator.INTEGRATION: [
         integrate_embedding_layer,
         integrate_categorical_layer,

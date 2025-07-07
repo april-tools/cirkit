@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import IntEnum, auto
 from typing import Any, cast
+from typing_extensions import Self  # TODO: import from typing in Python 3.11+
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
@@ -89,7 +90,7 @@ class Layer(ABC):
         """
         return {}
 
-    def copyref(self) -> "Layer":
+    def copyref(self) -> Self:
         """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic parameters
         are copied by reference, thus effectively creating a symbolic parameter sharing between
         the new layer and the layer being copied.
@@ -97,8 +98,9 @@ class Layer(ABC):
         Returns:
             A shallow copy of the layer, with reference to the parameters.
         """
-        ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
-        return type(self)(**self.config, **ref_params)
+        kwargs: dict[str, Any] = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
+        kwargs.update(self.config)
+        return type(self)(**kwargs)
 
     def __repr__(self) -> str:
         config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
@@ -348,6 +350,7 @@ class CategoricalLayer(InputLayer):
     @property
     def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 
@@ -431,6 +434,7 @@ class BinomialLayer(InputLayer):
     @property
     def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 

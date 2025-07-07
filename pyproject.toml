@@ -155,6 +155,7 @@ max-parents = 8  # default=7: there is a deep hierarchy of parameter operation n
 [tool.pylint."messages control"]
 max-line-length = 100
 disable = [
+  "fixme",
   "too-few-public-methods",
   "missing-module-docstring",
   "consider-using-assignment-expr",
@@ -162,7 +163,7 @@ disable = [
   "useless-import-alias",
   "unnecessary-lambda-assignment",
   "no-member",
-  "fixme",
+  "useless-parent-delegation",
   "duplicate-code",
   "too-many-lines",
 ]
@@ -185,3 +186,7 @@ disallow_untyped_decorators = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["graphviz.*"]
+ignore_missing_imports = true

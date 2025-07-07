@@ -75,10 +75,11 @@ def plot_circuit(
     Returns:
         graphviz.Digraph: _description_
     """
+    fmt: str
     if out_path is None:
-        fmt: str = "svg"
+        fmt = "svg"
     else:
-        fmt: str = Path(out_path).suffix.replace(".", "")
+        fmt = Path(out_path).suffix.replace(".", "")
         if fmt not in graphviz.FORMATS:
             raise ValueError(f"Supported formats are {graphviz.FORMATS}.")
 
@@ -142,13 +143,13 @@ def plot_circuit(
             dot.edge(str(id(sli)), str(id(sl)))
 
     if out_path is not None:
-        out_path: Path = Path(out_path).with_suffix("")
+        out_dir: Path = Path(out_path).with_suffix("")
 
         if fmt == "dot":
-            with open(out_path, "w", encoding="utf8") as f:
+            with open(out_dir, "w", encoding="utf8") as f:
                 f.write(dot.source)
         else:
             dot.format = fmt
-            dot.render(out_path, cleanup=True)
+            dot.render(out_dir, cleanup=True)
 
     return dot
