@@ -172,7 +172,7 @@ class Scope(Collection[int], Hashable):
 
     def difference(self, other: "Scope") -> "Scope":
         """Take the difference w.r.t. another scope, i.e., the scope
-            containing the variables that are not in the other scope.
+        containing the variables that are not in the other scope.
 
         Args:
             other: The other scope to take the difference with.
@@ -181,3 +181,15 @@ class Scope(Collection[int], Hashable):
             Scope: The difference between scopes.
         """
         return Scope(self._set.difference(other._set))  # pylint: disable=protected-access
+
+    def __sub__(self, other: "Scope") -> "Scope":
+        """Take the difference w.r.t. another scope, i.e., the scope
+        containing the variables that are not in the other scope.
+
+        Args:
+            other: The other scope to take the difference with.
+
+        Returns:
+            Scope: The difference between scopes.
+        """
+        return self.difference(other)
