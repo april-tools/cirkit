@@ -35,7 +35,7 @@ jobs:
         run: |
           ./scripts/coverage.sh --xml
       - name: Upload coverage reports to Codecov
-        if: ${{ github.repository == 'april-tools/cirkit' }}
+        if: ${{ github.repository == 'april-tools/cirkit' && (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name) }}
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
