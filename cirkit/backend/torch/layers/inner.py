@@ -60,7 +60,7 @@ class TorchInnerLayer(TorchLayer, ABC):
                 is the number of output units.
         """
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+    def sample(self, x: Tensor, evidence: Tensor = None) -> tuple[Tensor, Tensor | None]:
         """Perform a forward sampling step.
 
         Args:
@@ -68,6 +68,7 @@ class TorchInnerLayer(TorchLayer, ABC):
                 $(F, H, C, K, N, D)$, where $F$ is the number of folds, $H$ is the arity,
                 $C$ is the number of channels, $K$ is the numbe rof input units, $N$ is the number
                 of samples, $D$ is the number of variables.
+            evidence: A tensor representing the evidence for the layer, having same structure as x.
 
         Returns:
             Tensor: A new tensor representing the new variable assignements the layers gives
@@ -123,7 +124,7 @@ class TorchHadamardLayer(TorchInnerLayer):
     def forward(self, x: Tensor) -> Tensor:
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
-    def sample(self, x: Tensor) -> tuple[Tensor, None]:
+    def sample(self, x: Tensor, evidence: Tensor = None) -> tuple[Tensor, None]:
         # Concatenate samples over disjoint variables through a sum
         # x: (F, H, C, K, num_samples, D)
         x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
@@ -183,7 +184,7 @@ class TorchKroneckerLayer(TorchInnerLayer):
         # y0: (F, B, Ko=Ki ** arity)
         return y0
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+    def sample(self, x: Tensor, evidence: Tensor = None) -> tuple[Tensor, Tensor | None]:
         # x: (F, H, C, K, num_samples, D)
         y0 = x[:, 0]
         for i in range(1, x.shape[1]):
@@ -269,7 +270,7 @@ class TorchSumLayer(TorchInnerLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, K_o).
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor, evidence: Tensor = None) -> tuple[Tensor, Tensor]:
         weight = self.weight()
         negative = torch.any(weight < 0.0)
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
@@ -283,7 +284,15 @@ class TorchSumLayer(TorchInnerLayer):
         d = x.shape[3]
 
         # mixing_distribution: (F, Ko, H * Ki)
-        mixing_distribution = torch.distributions.Categorical(probs=weight)
+        if evidence is not None:
+            prior = torch.log(torch.clamp(weight, min=1e-10))
+            posterior = prior + evidence
+            normalized_posterior = torch.exp(
+                posterior - torch.logsumexp(posterior, 2, keepdim=True)
+            )
+            mixing_distribution = torch.distributions.Categorical(probs=normalized_posterior)
+        else:
+            mixing_distribution = torch.distributions.Categorical(probs=weight)
 
         # mixing_samples: (num_samples, F, Ko) -> (F, Ko, num_samples)
         mixing_samples = mixing_distribution.sample((num_samples,))

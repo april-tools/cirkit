@@ -247,7 +247,7 @@ class AbstractTorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
 
     def _evaluate_layers(self, x: Tensor | None) -> Tensor:
         # Evaluate layers on the given input
-        y = self.evaluate(x)  # (O, B, K)
+        y = self.evaluate(x)[-1]  # (O, B, K)
         return y.transpose(0, 1)  # (B, O, K)
 
 
