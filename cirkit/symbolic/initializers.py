@@ -66,7 +66,7 @@ class ConstantTensorInitializer(Initializer):
         return {"value": self.value}
 
     def allows_shape(self, shape: tuple[int, ...]) -> bool:
-        if isinstance(self.value, (int, float, complex, np.number, np.ndarray)):
+        if isinstance(self.value, (int, float, complex, np.number)):
             return True
         assert isinstance(self.value, np.ndarray)
         try:

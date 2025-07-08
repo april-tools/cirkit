@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from scipy import sparse as sp
-from torch import LongTensor, Tensor
+from torch import Tensor
 
 from cirkit.templates.region_graph.algorithms.utils import tree2rg
 from cirkit.templates.region_graph.graph import RegionGraph
@@ -81,10 +81,10 @@ def _maximum_spanning_tree(
     """
     mst = sp.csgraph.minimum_spanning_tree(-(adj_matrix.cpu().numpy() + 1.0), overwrite=True)
     if root is None:
-        dist_from_all_nodes = sp.csgraph.dijkstra(
+        dist_from_all_nodes: np.ndarray = sp.csgraph.dijkstra(
             abs(mst).todense(), directed=False, return_predecessors=False
         )
-        root = np.argmin(np.max(dist_from_all_nodes, axis=1))
+        root = np.argmin(np.max(dist_from_all_nodes, axis=1)).item()
     bfs, tree = sp.csgraph.breadth_first_order(
         mst, directed=False, i_start=root, return_predecessors=True
     )
@@ -93,7 +93,7 @@ def _maximum_spanning_tree(
 
 
 def _categorical_mutual_info(
-    data: LongTensor,
+    data: Tensor,
     alpha: float = 0.01,
     num_categories: int | None = None,
     chunk_size: int | None = None,
@@ -123,7 +123,7 @@ def _categorical_mutual_info(
     joint_counts = torch.zeros(
         n_features, n_features, num_categories**2, dtype=torch.long, device=data.device
     )
-    for chunk in data.split(chunk_size):
+    for chunk in data.split(chunk_size):  # type: ignore[no-untyped-call]
         joint_values = chunk.t().unsqueeze(1) * num_categories + chunk.t().unsqueeze(0)
         joint_counts.scatter_add_(-1, joint_values.long(), torch.ones_like(joint_values))
     joint_counts = joint_counts.view(n_features, n_features, num_categories, num_categories)

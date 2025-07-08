@@ -1,6 +1,7 @@
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 from types import TracebackType
+from typing import Any, Generic
 
 import cirkit.symbolic.functional as SF
 from cirkit.backend.compiler import (
@@ -18,7 +19,7 @@ from cirkit.symbolic.registry import OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-class PipelineContext(AbstractContextManager):
+class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
     """A pipeline context is a Python context manager used to compile
     circuits and specify backend-specific compilation flags and optimizations.
     A pipeline context can also be used to register compilation rules for user-defined
@@ -26,7 +27,7 @@ class PipelineContext(AbstractContextManager):
     can be added to the context.
     """
 
-    def __init__(self, backend: str = "torch", **backend_kwargs):
+    def __init__(self, backend: str = "torch", **backend_kwargs: Any) -> None:
         """Initialzes a pipeline context, given the compilation backend and
             the compilation flags.
 
@@ -92,13 +93,13 @@ class PipelineContext(AbstractContextManager):
     ) -> bool | None:
         """Exit a pipeline context."""
         # pylint: disable-next=assignment-from-none
-        ret = self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
+        self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
         assert self._token is not None
         _PIPELINE_CONTEXT.reset(self._token)
         self._token = None
-        return ret
+        return None
 
-    def add_operator_rule(self, op: LayerOperator, func: LayerOperatorFunc):
+    def add_operator_rule(self, op: LayerOperator, func: LayerOperatorFunc) -> None:
         """Add a new layer operator to the context.
 
         Args:
@@ -107,7 +108,7 @@ class PipelineContext(AbstractContextManager):
         """
         self._op_registry.add_rule(op, func)
 
-    def add_layer_compilation_rule(self, func: LayerCompilationFunc):
+    def add_layer_compilation_rule(self, func: LayerCompilationFunc) -> None:
         """Add a new layer compilation rule to the current compilation backend.
 
         Args:
@@ -115,7 +116,7 @@ class PipelineContext(AbstractContextManager):
         """
         self._compiler.add_layer_rule(func)
 
-    def add_parameter_compilation_rule(self, func: ParameterCompilationFunc):
+    def add_parameter_compilation_rule(self, func: ParameterCompilationFunc) -> None:
         """Add a new parameter compilation rule to the current compilation backend.
 
         Args:
@@ -123,7 +124,7 @@ class PipelineContext(AbstractContextManager):
         """
         self._compiler.add_parameter_rule(func)
 
-    def add_initializer_compilation_rule(self, func: InitializerCompilationFunc):
+    def add_initializer_compilation_rule(self, func: InitializerCompilationFunc) -> None:
         """Add a new initialization method compilation rule to the current compilation backend.
 
         Args:
@@ -295,7 +296,7 @@ class PipelineContext(AbstractContextManager):
 
 
 # pylint: disable-next=redefined-builtin
-def compile(sc: Circuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
+def compile(sc: Circuit, ctx: PipelineContext[CompiledCircuit] | None = None) -> CompiledCircuit:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.compile(sc)
@@ -339,7 +340,7 @@ def conjugate(cc: CompiledCircuit, ctx: PipelineContext | None = None) -> Compil
     return ctx.conjugate(cc)
 
 
-def retrieve_compiler(backend: str, **backend_kwargs) -> AbstractCompiler:
+def retrieve_compiler(backend: str, **backend_kwargs: Any) -> AbstractCompiler:
     if backend not in SUPPORTED_BACKENDS:
         raise NotImplementedError(f"Backend '{backend}' is not implemented")
     if backend == "torch":

@@ -314,7 +314,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         nodes: list[RegionGraphNode] = []
         in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
-        outputs = []
+        outputs: list[RegionGraphNode] = []
         region_idx: dict[int, RegionNode] = {}
 
         # Load the region nodes
@@ -329,7 +329,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         # Load the partition nodes
         for partitioning in rg_json["graph"]:
-            in_rgns = [region_idx[int(idx)] for idx in partitioning["inputs"]]
+            in_rgns: list[RegionGraphNode] = [
+                region_idx[int(idx)] for idx in partitioning["inputs"]
+            ]
             out_rgn = region_idx[partitioning["output"]]
             ptn = PartitionNode(out_rgn.scope)
             nodes.append(ptn)
@@ -415,7 +417,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
         ) -> HadamardLayer | SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
-            denses = [
+            denses: list[Layer] = [
                 SumLayer(
                     node_to_layer[rgn_in].num_output_units,
                     num_sum_units,
@@ -517,8 +519,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             region_outputs = self.region_outputs(node)
             if not region_inputs:
                 # Input region node
+                input_sl: Layer
                 if factorize_multivariate and len(node.scope) > 1:
-                    factorized_input_sls = [
+                    factorized_input_sls: list[Layer] = [
                         input_factory(Scope([sc]), num_input_units) for sc in node.scope
                     ]
                     input_sl = HadamardLayer(num_input_units, arity=len(factorized_input_sls))
@@ -552,6 +555,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             else:  # len(node_inputs) > 1:
                 # Region node with multiple partitionings
                 num_units = num_sum_units if region_outputs else num_classes
+                mix_ins: list[Layer]
                 if sum_prod_builder_ is not None:
                     mix_ins = [
                         sum_prod_builder_(node, self.partition_inputs(ptn)) for ptn in region_inputs
