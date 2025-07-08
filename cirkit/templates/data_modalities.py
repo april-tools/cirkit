@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.parameters import mixing_weight_factory
+from cirkit.symbolic.parameters import ParameterFactory, mixing_weight_factory
 from cirkit.templates.region_graph import PoonDomingos, QuadGraph, QuadTree, RandomBinaryTree
 from cirkit.templates.utils import (
     Parameterization,
@@ -131,6 +131,7 @@ def image_data(
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
 
     # Set the nary sum weight factory
+    nary_sum_weight_factory: ParameterFactory
     if use_mixing_weights:
         nary_sum_weight_factory = functools.partial(
             mixing_weight_factory, param_factory=sum_weight_factory

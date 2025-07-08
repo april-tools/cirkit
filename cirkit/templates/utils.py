@@ -109,7 +109,7 @@ def named_parameterizations_to_factories(
     return {name + "_factory": parameterization_to_factory(param) for name, param in params.items()}
 
 
-def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
+def name_to_input_layer_factory(name: str, **kwargs: Any) -> InputLayerFactory:
     """Retrieves a factory that constructs symbolic input layers.
 
     Args:
@@ -161,7 +161,7 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
 
 
 def name_to_parameter_activation(
-    name: str, **kwargs
+    name: str, **kwargs: Any
 ) -> Callable[[tuple[int, ...]], UnaryParameterOp] | None:
     """Retrieves a symbolic unary parameter operator by name.
 
@@ -216,7 +216,7 @@ def name_to_dtype(name: str) -> DataType:
             raise ValueError(f"Unknown data type called {name}")
 
 
-def name_to_initializer(name: str, **kwargs) -> Initializer:
+def name_to_initializer(name: str, **kwargs: Any) -> Initializer:
     """Retrieves a symbolic initializer object by name.
 
     Args:

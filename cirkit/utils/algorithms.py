@@ -196,7 +196,7 @@ BiMapRightT = TypeVar("BiMapRightT")
 
 
 class BiMap(Generic[BiMapLeftT, BiMapRightT]):
-    def __init__(self):
+    def __init__(self) -> None:
         self._lhs_map: dict[BiMapLeftT, BiMapRightT] = {}
         self._rhs_map: dict[BiMapRightT, BiMapLeftT] = {}
 
@@ -212,7 +212,7 @@ class BiMap(Generic[BiMapLeftT, BiMapRightT]):
     def get_right(self, rhs: BiMapRightT) -> BiMapLeftT:
         return self._rhs_map[rhs]
 
-    def add(self, lhs: BiMapLeftT, rhs: BiMapRightT):
+    def add(self, lhs: BiMapLeftT, rhs: BiMapRightT) -> None:
         assert not self.has_left(lhs)
         assert not self.has_right(rhs)
         self._lhs_map[lhs] = rhs

@@ -19,7 +19,7 @@ from cirkit.utils.scope import Scope
 
 
 def _input_layer_factory_builder(
-    input_layer: str, dim: int, factor_param_kwargs: dict[str, ParameterFactory]
+    input_layer: str, dim: int, factor_param_kwargs: Mapping[str, ParameterFactory]
 ) -> InputLayerFactory:
     match input_layer:
         case "categorical":
@@ -305,16 +305,15 @@ def tensor_train(
     mav_ones = linalg.block_diag(*((dot_ones,) * rank))
 
     # Build the layers encoding the left-to-right contraction of the TT/MPS factorization
-    layers: list[Layer] = [first_embedding, last_embedding] + [
-        sl for sls in inner_embeddings for sl in sls
-    ]
+    layers: list[Layer] = [first_embedding, last_embedding]
+    layers.extend(sl for sls in inner_embeddings for sl in sls)
     in_layers: dict[Layer, list[Layer]] = defaultdict(list)
     cur_sl: Layer = first_embedding
     for i in range(len(shape) - 1):
         if i == len(shape) - 2:
             # i = n
             # Encode the vector dot product by stacking an hadamard layer and a sum layer
-            prod_sl = HadamardLayer(rank, arity=2)
+            prod_sl: Layer = HadamardLayer(rank, arity=2)
             sum_sl = SumLayer(
                 rank,
                 1,
@@ -329,7 +328,7 @@ def tensor_train(
             continue
         # 0<= i< n
         # Encode the matrix-vector product by stacking hadamard layers and a sum layer
-        prod_sls = [HadamardLayer(rank, arity=2) for _ in range(rank)]
+        prod_sls: list[Layer] = [HadamardLayer(rank, arity=2) for _ in range(rank)]
         sum_sl = SumLayer(
             rank,
             rank,

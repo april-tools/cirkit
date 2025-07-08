@@ -188,5 +188,5 @@ warn_unused_ignores = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["graphviz.*"]
+module = ["graphviz.*", "scipy.*"]
 ignore_missing_imports = true

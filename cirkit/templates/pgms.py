@@ -37,10 +37,11 @@ def fully_factorized(
         raise ValueError("The number of variables should be a positive integer")
     if input_layer not in ["categorical", "binomial", "gaussian"]:
         raise ValueError(f"Unknown input layer called {input_layer}")
+    input_layer_kwargs_ls: list[Mapping[str, Any]]
     if input_layer_kwargs is None:
-        input_layer_kwargs = [{}] * num_variables
-    elif isinstance(input_layer_kwargs, dict):
-        input_layer_kwargs = [input_layer_kwargs] * num_variables
+        input_layer_kwargs_ls = [{}] * num_variables
+    elif isinstance(input_layer_kwargs, Mapping):
+        input_layer_kwargs_ls = [input_layer_kwargs] * num_variables
     elif isinstance(input_layer_kwargs, list):
         if len(input_layer_kwargs) != num_variables:
             raise ValueError(
@@ -48,15 +49,17 @@ def fully_factorized(
             )
         if not all(isinstance(kwargs, Mapping) for kwargs in input_layer_kwargs):
             raise ValueError("The list of input layer kwargs should be a list of dictionaries")
+        input_layer_kwargs_ls = input_layer_kwargs
 
     # Construct the input layers
+    input_param_kwargs: Mapping[str, Any]
     if input_params is None:
         input_param_kwargs = {}
     else:
         input_param_kwargs = named_parameterizations_to_factories(input_params)
     input_factories = [
         name_to_input_layer_factory(input_layer, **kwargs, **input_param_kwargs)
-        for kwargs in input_layer_kwargs
+        for kwargs in input_layer_kwargs_ls
     ]
     input_layers = [f(Scope([i]), 1) for i, f in enumerate(input_factories)]
 
@@ -115,10 +118,11 @@ def hmm(
         raise ValueError("The 'ordering' of variables is not valid")
     if input_layer not in ["categorical", "binomial", "gaussian"]:
         raise ValueError(f"Unknown input layer called {input_layer}")
+    input_layer_kwargs_ls: list[Mapping[str, Any]]
     if input_layer_kwargs is None:
-        input_layer_kwargs = [{}] * num_variables
-    elif isinstance(input_layer_kwargs, dict):
-        input_layer_kwargs = [input_layer_kwargs] * num_variables
+        input_layer_kwargs_ls = [{}] * num_variables
+    elif isinstance(input_layer_kwargs, Mapping):
+        input_layer_kwargs_ls = [input_layer_kwargs] * num_variables
     elif isinstance(input_layer_kwargs, list):
         if len(input_layer_kwargs) != num_variables:
             raise ValueError(
@@ -126,15 +130,17 @@ def hmm(
             )
         if not all(isinstance(kwargs, Mapping) for kwargs in input_layer_kwargs):
             raise ValueError("The list of input layer kwargs should be a list of dictionaries")
+        input_layer_kwargs_ls = input_layer_kwargs
 
     # Get the input layer factories
+    input_param_kwargs: Mapping[str, Any]
     if input_params is None:
         input_param_kwargs = {}
     else:
         input_param_kwargs = named_parameterizations_to_factories(input_params)
     input_factories = [
         name_to_input_layer_factory(input_layer, **kwargs, **input_param_kwargs)
-        for kwargs in input_layer_kwargs
+        for kwargs in input_layer_kwargs_ls
     ]
 
     layers: list[Layer] = []
