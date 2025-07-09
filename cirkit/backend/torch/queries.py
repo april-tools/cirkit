@@ -364,7 +364,7 @@ class MAPQuery(Query):
         # prepare the evidence vector by replacing non-evidence variables with
         # the mode of each input
         if x is None:
-            num_variables = self._circuit.num_variables
+            num_variables = max(self._circuit._scope)
 
             # it no variables in the circuit, check if the circuit is the result
             # of an operation and retrieve the variables from there
