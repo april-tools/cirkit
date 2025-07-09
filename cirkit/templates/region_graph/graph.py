@@ -361,7 +361,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             The factory that constructs the input factory must always be specified.
 
         Args:
-            input_factory: A factory that builds an input layer. If a list is given, then a 
+            input_factory: A factory that builds an input layer. If a list is given, then a
                 different input layer is built for each feature. In this case the length should be
                 the same as the number of input variables in the region graph.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
@@ -517,7 +517,11 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             region_inputs = self.region_inputs(node)
             region_outputs = self.region_outputs(node)
             if not region_inputs:
-                node_input_factory = input_factory[next(iter(node.scope))] if isinstance(input_factory, list) else input_factory
+                node_input_factory = (
+                    input_factory[next(iter(node.scope))]
+                    if isinstance(input_factory, list)
+                    else input_factory
+                )
                 # Input region node
                 if factorize_multivariate and len(node.scope) > 1:
                     factorized_input_sls = [

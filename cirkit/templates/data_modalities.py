@@ -2,16 +2,22 @@ import functools
 from typing import Any
 
 import numpy as np
+from torch import Tensor
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.parameters import mixing_weight_factory
-from cirkit.templates.region_graph import PoonDomingos, QuadGraph, QuadTree, RandomBinaryTree, ChowLiuTree
+from cirkit.templates.region_graph import (
+    ChowLiuTree,
+    PoonDomingos,
+    QuadGraph,
+    QuadTree,
+    RandomBinaryTree,
+)
 from cirkit.templates.utils import (
     Parameterization,
     name_to_input_layer_factory,
     parameterization_to_factory,
 )
-from torch import Tensor
 
 
 def image_data(
@@ -209,7 +215,7 @@ def tabular_data(
           - If `region_graph="chow-liu-tree"` but `data` is `None`.
           - If `region_graph` is not one of the supported strings.
     """
-        
+
     match region_graph:
         case "random-binary-tree":
             if num_features is None:
@@ -222,11 +228,15 @@ def tabular_data(
             rg = RandomBinaryTree(num_features)
         case "chow-liu-tree":
             if data is None:
-                raise ValueError(f"You must pass `data=` if you ask for `chow-liu-tree`.")           
+                raise ValueError(f"You must pass `data=` if you ask for `chow-liu-tree`.")
             rg = ChowLiuTree(
                 data=data,
-                input_type=input_layers["name"] if isinstance(input_layers, dict) else [input_layers['name'] for input_layers in input_layers],
-                num_categories=input_layers["args"]["num_categories"] if isinstance(input_layers, dict) and input_layers["name"] == "categorical" else None,
+                input_type=input_layers["name"]
+                if isinstance(input_layers, dict)
+                else [input_layers["name"] for input_layers in input_layers],
+                num_categories=input_layers["args"]["num_categories"]
+                if isinstance(input_layers, dict) and input_layers["name"] == "categorical"
+                else None,
                 as_region_graph=True,
             )
         case _:
@@ -245,9 +255,7 @@ def tabular_data(
         ]
 
     if sum_weight_param is None:
-        sum_weight_param = Parameterization(
-            activation="softmax", initialization="normal"
-        )
+        sum_weight_param = Parameterization(activation="softmax", initialization="normal")
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
 
     if use_mixing_weights:
@@ -256,7 +264,7 @@ def tabular_data(
         )
     else:
         nary_sum_weight_factory = sum_weight_factory
-        
+
     return rg.build_circuit(
         input_factory=input_factories,
         sum_product=sum_product_layer,

@@ -47,7 +47,9 @@ def ChowLiuTree(
     assert data.ndim == 2
     assert root is None or -1 < root < data.size(-1)
     if isinstance(input_type, list):
-        mutual_info = _heterogeneous_mutual_info(data, is_categorical_mask=[name == "categorical" for name in input_type])
+        mutual_info = _heterogeneous_mutual_info(
+            data, is_categorical_mask=[name == "categorical" for name in input_type]
+        )
     elif input_type == "categorical":
         if num_bins is not None:
             if num_categories is None:
@@ -144,14 +146,16 @@ def _categorical_mutual_info(
     return (joints * (joints.log() - outers.log())).sum(dim=(2, 3)).fill_diagonal_(0)
 
 
-def _heterogeneous_mutual_info(data: Tensor, is_categorical_mask: list[bool], normalize: bool = True) -> Tensor:
+def _heterogeneous_mutual_info(
+    data: Tensor, is_categorical_mask: list[bool], normalize: bool = True
+) -> Tensor:
     """Computes the mutual information matrix for heterogeneous data (both discrete/categorical data and countinuous).
     The mutual information among continuous variables is computed as if they were a Multivariate Gaussian.
     The mutual information among discrete variables is computed using the categorical mutual information defined above.
     The mutual information between a continuous variable C and discrete variable D is computed using the formula:
         I(C, D) = H(C) - H(C | D)
     assuming gaussian distributions p(C|D) for continuous variables when conditioned on discrete variables
-    and gaussian marginals p(c). 
+    and gaussian marginals p(c).
 
     Args:
         data (Tensor): The input data over which computing the MI matrix,
@@ -163,61 +167,76 @@ def _heterogeneous_mutual_info(data: Tensor, is_categorical_mask: list[bool], no
     Returns:
         The mutual information matrix (main diagonal is 0).
     """
-    
+
     GAUSSIAN_ENTROPY_EPSILON = 1e-4
-        
+
     is_categorical = torch.tensor(is_categorical_mask, dtype=torch.bool, device=data.device)
     continuous_subset = torch.where(~is_categorical)[0]
     discrete_subset = torch.where(is_categorical)[0]
-        
+
     mi_matrix = torch.zeros((data.shape[1], data.shape[1]), dtype=torch.float32, device=data.device)
-    
+
     # Compute mutual information for continuous variables as they were a Multivariate Gaussian
     if len(continuous_subset) > 1:
-        mi_matrix[continuous_subset.unsqueeze(1), continuous_subset] = -0.5 * torch.log(1 - torch.corrcoef(data[:, continuous_subset].t()).fill_diagonal_(0) ** 2)
-    
+        mi_matrix[continuous_subset.unsqueeze(1), continuous_subset] = -0.5 * torch.log(
+            1 - torch.corrcoef(data[:, continuous_subset].t()).fill_diagonal_(0) ** 2
+        )
+
     # Compute mutual information for discrete variables
     if len(discrete_subset) > 1:
         mi_matrix[discrete_subset.unsqueeze(1), discrete_subset] = _categorical_mutual_info(
             data=data[:, discrete_subset].long(), num_categories=None, chunk_size=None
         )
-    
+
     def gaussian_entropy(x: Tensor) -> Tensor:
-        return 0.5 * (torch.log(2 * torch.pi * torch.var(x, unbiased=False) + GAUSSIAN_ENTROPY_EPSILON) + 1)
-    
+        return 0.5 * (
+            torch.log(2 * torch.pi * torch.var(x, unbiased=False) + GAUSSIAN_ENTROPY_EPSILON) + 1
+        )
+
     # Precomputing number of categories for discrete variables
-    num_categories = {d_index: int(data[:, d_index].max() + 1) for d_index in discrete_subset.tolist()}
-    
+    num_categories = {
+        d_index: int(data[:, d_index].max() + 1) for d_index in discrete_subset.tolist()
+    }
+
     # Precomputing marginals p(D) for every discrete variable
-    p_D = {d_index: data[:, d_index].long().bincount(minlength=num_categories[d_index]).float() / data.shape[0] for d_index in discrete_subset.tolist()}
-               
+    p_D = {
+        d_index: data[:, d_index].long().bincount(minlength=num_categories[d_index]).float()
+        / data.shape[0]
+        for d_index in discrete_subset.tolist()
+    }
+
     # precomputing gaussian entropy H(C) for each continuous variable
     h_C = {c_index: gaussian_entropy(data[:, c_index]) for c_index in continuous_subset.tolist()}
-               
+
     # I(C, D) = H(C) - H(C | D)
     for c_index in continuous_subset.tolist():
-        for d_index in discrete_subset.tolist():                   
+        for d_index in discrete_subset.tolist():
             # H(C | D) = sum_D{ integral_C{ p(C|D)p(D) log_p(C|D) } } = sum_D{ -H[p(C|D)]p(D) }
-            
+
             # Computing H[p(C|D)] for each category of D
             h_C_given_D = torch.stack(
-                [gaussian_entropy(data[:, c_index][data[:, d_index] == i]) for i in range(num_categories[d_index])],
-                dim=0
+                [
+                    gaussian_entropy(data[:, c_index][data[:, d_index] == i])
+                    for i in range(num_categories[d_index])
+                ],
+                dim=0,
             )
-            
+
             # I(C, D) = H(C) - H(C | D) = H(C) - sum_D{ H[p(C|D)]p(D) }
             mi_matrix[c_index, d_index] = h_C[c_index] - torch.sum(h_C_given_D * p_D[d_index])
-            mi_matrix[d_index, c_index] = mi_matrix[c_index, d_index] # mutual information is symmetric
-                        
+            mi_matrix[d_index, c_index] = mi_matrix[
+                c_index, d_index
+            ]  # mutual information is symmetric
+
     if normalize:
         # NMI(X, Y) = 2 * I(X, Y) / (H(X) + H(Y))
         entropy = torch.zeros(data.shape[1], dtype=torch.float32, device=data.device)
-        entropy[continuous_subset] = torch.tensor(list(h_C.values()), dtype=torch.float32, device=data.device)
-        entropy[discrete_subset] = torch.tensor(
-            [-(p.log()*p).sum() for p in p_D.values()],
-            dtype=torch.float32,
-            device=data.device
+        entropy[continuous_subset] = torch.tensor(
+            list(h_C.values()), dtype=torch.float32, device=data.device
         )
-        mi_matrix = 2*mi_matrix / (entropy.unsqueeze(0) + entropy.unsqueeze(1))
-    
+        entropy[discrete_subset] = torch.tensor(
+            [-(p.log() * p).sum() for p in p_D.values()], dtype=torch.float32, device=data.device
+        )
+        mi_matrix = 2 * mi_matrix / (entropy.unsqueeze(0) + entropy.unsqueeze(1))
+
     return mi_matrix.fill_diagonal_(0)
