@@ -398,6 +398,11 @@ class MAPQuery(Query):
                 MAPQuery._layer_fn, evidence_vars=evidence_vars.to(self._circuit.device)
             ),
         )
+
+        # mantain only elements in the scope of this circuit in case some variables have been
+        # marginalized
+        state = state[:, list(self._circuit._scope)]
+        
         return map, state
 
     @staticmethod
