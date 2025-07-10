@@ -18,7 +18,7 @@ from cirkit.symbolic.parameters import (
     SoftmaxParameter,
     TensorParameter,
 )
-from cirkit.templates import data_modalities, utils
+from cirkit.templates import data_modalities, pgms, utils
 from cirkit.utils.scope import Scope
 from tests.floats import allclose
 
@@ -118,6 +118,30 @@ def test_query_map(semiring: str, fold: bool, optimize: bool, num_units: int):
     "semiring,fold,optimize,num_units",
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
 )
+def test_query_map_marginalized(semiring: str, fold: bool, optimize: bool, num_units: int):
+    sc = pgms.deterministic_fully_factorized(3)
+    sc = SF.integrate(sc, Scope([0]))
+    
+    compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
+    # The following function computes a circuit where we have computed the
+    # partition function and a marginal by hand.
+
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # compute the likelihood for all possible assignments
+    worlds = torch.tensor(
+        list(itertools.product([0, 1], repeat=3)), dtype=torch.long
+    )
+    worlds_ll = tc(worlds)
+
+    # compute map and check that its state matches the enumerated one
+    map_query = MAPQuery(tc)
+    map_value, map_state = map_query()
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
+)
 def test_query_map_with_evidence(semiring: str, fold: bool, optimize: bool, num_units: int):
     sc = build_deterministic_categorical_mixture(num_units)
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
@@ -211,5 +235,26 @@ def test_query_map_conditional_circuit_with_evidence(semiring, fold, optimize, n
     map_query(
         x=torch.tensor([[0, 1], [0, 1]]),
         evidence_vars=torch.tensor([[False, True], [False, True]]),
+        gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}},
+    )
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
+)
+def test_query_map_marginalized_conditional_circuit(semiring, fold, optimize, num_units):
+    sc = pgms.deterministic_fully_factorized(3)
+
+    pm = {"sum": list(sc.sum_layers)}
+    c_sc, gf_specs = SF.condition_circuit(sc, gate_functions=pm)
+    c_sc = SF.integrate(sc, Scope([0]))
+
+    ctx = PipelineContext(backend="torch", semiring=semiring, fold=fold, optimize=optimize)
+    ctx.add_gate_function("sum.weight.0", lambda x: x.view(-1, *gf_specs["sum.weight.0"]))
+    tc = ctx.compile(c_sc)
+
+    # compute map and check that its state matches the enumerated one
+    map_query = MAPQuery(tc)
+    map_query(
         gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}},
     )

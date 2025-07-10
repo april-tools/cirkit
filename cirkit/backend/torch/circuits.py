@@ -102,9 +102,13 @@ class LayerAddressBook(AddressBook):
                 assert isinstance(module, TorchInputLayer)
                 # set state
                 input_idxs = module_idxs[entry_id]
-                state[p_batch_idx, module.scope_idx[p_fold_idx]] = input_idxs[
-                    p_fold_idx, 0 if input_idxs.size(1) == 1 else p_batch_idx, p_unit_idx
-                ]
+                
+                # check that the module is not a marginalized input
+                # in that case ignore the update of this element
+                if module.scope_idx.nelement() > 0:
+                    state[p_batch_idx, module.scope_idx[p_fold_idx]] = input_idxs[
+                        p_fold_idx, 0 if input_idxs.size(1) == 1 else p_batch_idx, p_unit_idx
+                    ]
 
         return state
 

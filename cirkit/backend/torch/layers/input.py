@@ -780,13 +780,8 @@ class TorchConstantValueLayer(TorchConstantLayer):
         return self.semiring.map_from(value, self._source_semiring)
 
     def max(self, x: int):
-        value = self.value()  # (F, B, Ko)
-
-        if value.shape[1] == 1 and x != 1:
-            # expand value to the requested batch size
-            value = value.expand(-1, x, *tuple(value.shape[2:]))
-
-        m, m_state = self.value().max(dim=-1, keepdim=True)
+        m = self(x)  # (F, B, Ko)
+        m_state = torch.zeros_like(m)
         return m_state, m
 
 
