@@ -361,14 +361,16 @@ class MAPQuery(Query):
             else:
                 batch_size = x.size(0)
 
+        if self._circuit.symbolic_operation:
+            circuit_scope = self._circuit.symbolic_operation.operands[0].scope
+        else:
+            circuit_scope = self._circuit.scope
+
         # prepare the evidence vector by replacing non-evidence variables with
         # the mode of each input
         if x is None:
             # if the circuit is the result of some operation then work on the original scope size
-            if self._circuit.symbolic_operation:
-                num_variables = max(self._circuit.symbolic_operation.operands[0].scope) + 1
-            else:
-                num_variables = max(self._circuit.scope) + 1
+            num_variables = max(circuit_scope) + 1
 
             # it no variables in the circuit, check if the circuit is the result
             # of an operation and retrieve the variables from there
@@ -384,7 +386,19 @@ class MAPQuery(Query):
             evidence_vars = state.clone().to(torch.bool)
         else:
             x = x.to(self._circuit.device)
-            state = x.clone()
+            
+            # adjust cope if it does not match the one of the circuit in case a marginalized
+            # circuit is being used
+            if x.shape[1] != len(circuit_scope):
+                state = torch.zeros((x.shape[0], len(circuit_scope)), dtype=torch.long, device=self._circuit.device)
+                state[:, list(self._circuit.scope)] = x
+
+                evidence_vars_adapted = torch.full_like(state, False, dtype=bool, device=self._circuit.device)
+                evidence_vars_adapted[:, list(self._circuit.scope)] = evidence_vars
+                evidence_vars = evidence_vars_adapted
+            else:
+                state = x.clone()
+            
             if state.size(0) == 1:
                 state = state.tile((batch_size, 1))
             elif state.size(0) != batch_size:
