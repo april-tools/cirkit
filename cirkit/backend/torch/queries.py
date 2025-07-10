@@ -317,8 +317,8 @@ class MAPQuery(Query):
         """
         if not circuit.properties.smooth or not circuit.properties.decomposable:
             raise ValueError(
-                f"The circuit to integrate must be smooth and decomposable, "
-                f"but found {circuit.properties}"
+                f"MAP is supported by smooth and decomposable circuits, "
+                f"found {circuit.properties}"
             )
         super().__init__()
         self._circuit = circuit
@@ -364,7 +364,11 @@ class MAPQuery(Query):
         # prepare the evidence vector by replacing non-evidence variables with
         # the mode of each input
         if x is None:
-            num_variables = max(self._circuit._scope)
+            # if the circuit is the result of some operation then work on the original scope size
+            if self._circuit.symbolic_operation:
+                num_variables = max(self._circuit.symbolic_operation.operands[0].scope) + 1
+            else:
+                num_variables = max(self._circuit.scope) + 1
 
             # it no variables in the circuit, check if the circuit is the result
             # of an operation and retrieve the variables from there
