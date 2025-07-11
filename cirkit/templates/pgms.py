@@ -22,7 +22,7 @@ def fully_factorized(
 
     Args:
         num_variables: The number of variables.
-        input_layer: The input layer to use for the factors. It can be 'categorical', 'binomial', 
+        input_layer: The input layer to use for the factors. It can be 'categorical', 'binomial',
             'discretized_logistic' or 'gaussian'. Defaults to 'categorical'.
         input_params: A dictionary mapping each name of a parameter of the input layer to
             its parameterization. If it is None, then the default parameterization of the chosen
@@ -86,7 +86,7 @@ def hmm(
 
     Args:
         ordering: The input order of variables of the HMM.
-        input_layer: The input layer to use for the factors. It can be 'categorical', 'binomial', 
+        input_layer: The input layer to use for the factors. It can be 'categorical', 'binomial',
             'discretized_logistic' or 'gaussian'. Defaults to 'categorical'.
         num_latent_states: The number of states the latent variables can assume or, equivalently,
             the number of sum units per sum layer.

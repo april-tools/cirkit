@@ -809,10 +809,7 @@ class TorchDiscretizedLogisticLayer(TorchExpFamilyLayer):
         rescaled_mean = self._rescaled_mean().unsqueeze(dim=1)  # (F, 1, K)
         rescaled_stddev = self._rescaled_stddev().unsqueeze(dim=1)  # (F, 1, K)
 
-        if x.is_floating_point():
-            x = x.round().long()  # The input should be discrete
-
-        x_out = self._discrete_logistic_ll(x, rescaled_mean, rescaled_stddev)  # (F, B, K)
+        x_out = self._discrete_logistic_ll(x.round(), rescaled_mean, rescaled_stddev)  # (F, B, K)
         if self.log_partition is not None:
             log_partition = self.log_partition()  # (F, K)
             x_out = x_out + log_partition.unsqueeze(dim=1)
