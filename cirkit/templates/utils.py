@@ -13,6 +13,7 @@ from cirkit.symbolic.initializers import (
 from cirkit.symbolic.layers import (
     BinomialLayer,
     CategoricalLayer,
+    DiscretizedLogisticLayer,
     EmbeddingLayer,
     GaussianLayer,
     InputLayer,
@@ -114,7 +115,7 @@ def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
 
     Args:
         name: The name of the input layer. It can be one of the following:
-            'embedding', 'categorical', 'gaussian', 'binomial'.
+            'embedding', 'categorical', 'gaussian', 'binomial', 'discretized_logistic.
         **kwargs: Arguments to pass to the factory.
 
     Returns:
@@ -132,6 +133,8 @@ def name_to_input_layer_factory(name: str, **kwargs) -> InputLayerFactory:
             return functools.partial(BinomialLayer, **kwargs)
         case "gaussian":
             return functools.partial(GaussianLayer, **kwargs)
+        case "discretized_logistic":
+            return functools.partial(DiscretizedLogisticLayer, **kwargs)
         case _:
             raise ValueError(f"Unknown input layer called {name}")
 
