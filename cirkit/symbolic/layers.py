@@ -546,8 +546,10 @@ class DiscretizedLogisticLayer(InputLayer):
         r"""Initializes a discretized logistic layer.
 
         Args:
-            marginal_mean: The mean of the fitted data, which is used to rescale the input.
-            marginal_stddev: The standard deviation of the fitted data, which is used to rescale the input.
+            marginal_mean: The mean of the fitted data, which is used to rescale the learned parameters.
+            marginal_stddev: The standard deviation of the fitted data, which is used to rescale the learned parameters.
+                Instead of rescaling the data to be fitted, the learned parameters are rescaled instead.
+                This allows to preserve the discreteness of data.
             scope: The variables scope the layer depends on.
             num_output_units: The number of discretized logistic units in the layer.
             mean: The mean parameter of shape $(K)$, where $K$ is the number of output units.
