@@ -662,6 +662,188 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return samples
 
 
+class TorchDiscretizedLogisticLayer(TorchExpFamilyLayer):
+    """The discretized logistic distribution layer. Optionally, this layer can encode unnormalized discretized logistic
+    distributions with the spefication of a log-partition function parameter."""
+
+    def __init__(
+        self,
+        scope_idx: Tensor,
+        num_output_units: int,
+        *,
+        marginal_mean: float,
+        marginal_stddev: float,
+        mean: TorchParameter,
+        stddev: TorchParameter,
+        log_partition: TorchParameter | None = None,
+        semiring: Semiring | None = None,
+    ) -> None:
+        r"""Initialize a discretized logistic layer.
+
+        Args:
+            marginal_mean: The mean of the fitted data, which is used to rescale the learned parameters.
+            marginal_stddev: The standard deviation of the fitted data, which is used to rescale the learned parameters.
+                Instead of rescaling the data to be fitted, the learned parameters are rescaled instead.
+                This allows to preserve the discreteness of data.
+            scope_idx: A tensor of shape $(F, D)$, where $F$ is the number of folds, and
+                $D$ is the number of variables on which the input layers in each fold are defined on.
+                Alternatively, a tensor of shape $(D,)$ can be specified, which will be interpreted
+                as a tensor of shape $(1, D)$, i.e., with $F = 1$.
+            num_output_units: The number of output units.
+            mean: The mean parameter, having shape $(F, K)$, where $K$ is the number of
+                output units.
+            stddev: The standard deviation parameter, having shape $(F, K$, where $K$ is the
+                number of output units.
+            log_partition: An optional parameter of shape $(F, K$, encoding the log-partition.
+                function. If this is not None, then the discretized logistic layer encodes unnormalized
+                discretized logistic likelihoods, which are then normalized with the given log-partition
+                function.
+            semiring: The evaluation semiring.
+                Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
+
+        Raises:
+            ValueError: If the scope contains more than one variable.
+            ValueError: If the mean and standard deviation parameter shapes are incorrect.
+            ValueError: If the log-partition function parameter shape is incorrect.
+        """
+        num_variables = scope_idx.shape[-1]
+        if num_variables != 1:
+            raise ValueError("The Gaussian layer encodes a univariate distribution")
+        super().__init__(
+            scope_idx,
+            num_output_units,
+            semiring=semiring,
+        )
+        if not self._valid_mean_stddev_shape(mean):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._mean_stddev_shape} for 'mean', found"
+                f"{mean.num_folds} and {mean.shape}, respectively"
+            )
+        if not self._valid_mean_stddev_shape(stddev):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._mean_stddev_shape} for 'stddev', found"
+                f"{stddev.num_folds} and {stddev.shape}, respectively"
+            )
+        if log_partition is not None and not self._valid_log_partition_shape(log_partition):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._log_partition_shape} for 'log_partition', found"
+                f"{log_partition.num_folds} and {log_partition.shape}, respectively"
+            )
+        self.mean = mean
+        self.stddev = stddev
+        self.log_partition = log_partition
+        self.marginal_mean = marginal_mean
+        self.marginal_stddev = marginal_stddev
+
+    def _valid_mean_stddev_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == self._mean_stddev_shape
+
+    def _valid_log_partition_shape(self, log_partition: TorchParameter) -> bool:
+        if log_partition.num_folds != self.num_folds:
+            return False
+        return log_partition.shape == self._log_partition_shape
+
+    @property
+    def _mean_stddev_shape(self) -> tuple[int, ...]:
+        return (self.num_output_units,)
+
+    @property
+    def _log_partition_shape(self) -> tuple[int, ...]:
+        return (self.num_output_units,)
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_output_units": self.num_output_units,
+            "marginal_mean": self.marginal_mean,
+            "marginal_stddev": self.marginal_stddev,
+        }
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        params = {"mean": self.mean, "stddev": self.stddev}
+        if self.log_partition is not None:
+            params["log_partition"] = self.log_partition
+        return params
+
+    def _log1mexp(self, x: Tensor) -> Tensor:
+        """
+        Computes log(1 - exp(-x)) with x>0 in a numerically stable way.
+        This is based on https://github.com/wouterkool/estimating-gradients-without-replacement/blob/9d8bf8b/bernoulli/gumbel.py#L7-L11
+        """
+        return torch.where(
+            x < 0.693,
+            torch.log(-torch.expm1(-x)),
+            torch.log1p(-torch.exp(-x)),
+        )
+
+    def _discrete_logistic_ll(self, x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
+        """
+        Computes the log-likelihood of the discretized logistic distribution:
+            ll(x) = log(cdf(x + 0.5) - cdf(x - 0.5))
+            where cdf(x) = 1 / (1 + exp(-(x - loc)/scale))
+
+        Check https://en.wikipedia.org/wiki/Logistic_distribution for more details.
+        """
+        precision = 1 / scale
+        a = (x - 0.5 - loc) * precision
+        return (
+            -a
+            + self._log1mexp(precision)
+            + torch.nn.functional.logsigmoid((x + 0.5 - loc) * precision)
+            + torch.nn.functional.logsigmoid(a)
+        )
+
+    def _rescaled_mean(self) -> Tensor:
+        return self.mean() * self.marginal_stddev + self.marginal_mean
+
+    def _rescaled_stddev(self) -> Tensor:
+        return self.stddev() * self.marginal_stddev
+
+    def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
+        rescaled_mean = self._rescaled_mean().unsqueeze(dim=1)  # (F, 1, K)
+        rescaled_stddev = self._rescaled_stddev().unsqueeze(dim=1)  # (F, 1, K)
+
+        if x.is_floating_point():
+            x = x.round().long()  # The input should be discrete
+
+        x_out = self._discrete_logistic_ll(x, rescaled_mean, rescaled_stddev)  # (F, B, K)
+        if self.log_partition is not None:
+            log_partition = self.log_partition()  # (F, K)
+            x_out = x_out + log_partition.unsqueeze(dim=1)
+        return x_out
+
+    def log_partition_function(self) -> Tensor:
+        if self.log_partition is None:
+            return torch.zeros(
+                size=(self.num_folds, 1, self.num_output_units), device=self.mean.device
+            )
+        log_partition = self.log_partition()  # (F, K)
+        return log_partition.unsqueeze(dim=1)  # (F, 1, K)
+
+    def sample(self, num_samples: int = 1) -> Tensor:
+        """Sample from the discretized logistic distribution."""
+
+        def quantile_function(p: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
+            return loc + scale * torch.log(p / (1 - p))
+
+        return (
+            quantile_function(
+                torch.rand(size=(num_samples, *self.mean().shape), device=self.mean().device),
+                self._rescaled_mean(),
+                self._rescaled_stddev(),
+            )
+            .detach()
+            .round()
+            .permute(1, 2, 0)  # (F, K, N)
+        )
+
+
 class TorchConstantValueLayer(TorchConstantLayer):
     """An input layer having empty scope and computing a constant value."""
 

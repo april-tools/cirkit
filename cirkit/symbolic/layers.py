@@ -525,6 +525,107 @@ class GaussianLayer(InputLayer):
         return params
 
 
+class DiscretizedLogisticLayer(InputLayer):
+    """A symbolic discretized logistic layer, which is parameterized by mean and standard deviations.
+    Optionally, it can represent an unnormalized discretized logistic layer by specifying the log partition
+    function."""
+
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        *,
+        marginal_mean: float,
+        marginal_stddev: float,
+        mean: Parameter | None = None,
+        stddev: Parameter | None = None,
+        log_partition: Parameter | None = None,
+        mean_factory: ParameterFactory | None = None,
+        stddev_factory: ParameterFactory | None = None,
+    ):
+        r"""Initializes a discretized logistic layer.
+
+        Args:
+            marginal_mean: The mean of the fitted data, which is used to rescale the input.
+            marginal_stddev: The standard deviation of the fitted data, which is used to rescale the input.
+            scope: The variables scope the layer depends on.
+            num_output_units: The number of discretized logistic units in the layer.
+            mean: The mean parameter of shape $(K)$, where $K$ is the number of output units.
+                If it is None, then a default symbolic parameter will be instantiated with a
+                [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
+                symbolic initializer.
+            stddev: The standard deviation parameter of shape $(K)$, where $K$ is the number of
+                output units. If it is None, then a default symbolic parameter will be instantiated
+                with a [NormalInitializer][cirkit.symbolic.initializers.NormalInitializer] as
+                symbolic initializer, which is then re-parameterized to be positve using a
+                [ScaledSigmoidParameter][cirkit.symbolic.parameters.ScaledSigmoidParameter].
+            log_partition: The log-partition parameter of the discretized laussian, of shape $(K,)$.
+                If the discretized laussian is a normalized discretized laussian, then this should be None.
+            mean_factory: A factory used to construct the mean parameter, if it is not specified.
+            stddev_factory: A factory used to construct the standard deviation parameter, if it is
+                not specified.
+        """
+        if len(scope) != 1:
+            raise ValueError("The discretized laussian layer encodes a univariate distribution")
+        super().__init__(scope, num_output_units)
+        if mean is None:
+            if mean_factory is None:
+                mean = Parameter.from_input(
+                    TensorParameter(*self._mean_stddev_shape, initializer=NormalInitializer())
+                )
+            else:
+                mean = mean_factory(self._mean_stddev_shape)
+        if stddev is None:
+            if stddev_factory is None:
+                stddev = Parameter.from_unary(
+                    ScaledSigmoidParameter(self._mean_stddev_shape, vmin=1e-5, vmax=1.0),
+                    TensorParameter(*self._mean_stddev_shape, initializer=NormalInitializer()),
+                )
+            else:
+                stddev = stddev_factory(self._mean_stddev_shape)
+        if mean.shape != self._mean_stddev_shape:
+            raise ValueError(
+                f"Expected parameter shape {self._mean_stddev_shape}, found {mean.shape}"
+            )
+        if stddev.shape != self._mean_stddev_shape:
+            raise ValueError(
+                f"Expected parameter shape {self._mean_stddev_shape}, found {stddev.shape}"
+            )
+        if log_partition is not None and log_partition.shape != self._log_partition_shape:
+            raise ValueError(
+                f"Expected parameter shape {self._log_partition_shape}, found {log_partition.shape}"
+            )
+        self.mean = mean
+        self.stddev = stddev
+        self.log_partition = log_partition
+        self.marginal_mean = marginal_mean
+        self.marginal_stddev = marginal_stddev
+
+    @property
+    def _mean_stddev_shape(self) -> tuple[int, ...]:
+        return (self.num_output_units,)
+
+    @property
+    def _log_partition_shape(self) -> tuple[int, ...]:
+        return (self.num_output_units,)
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "marginal_mean": self.marginal_mean,
+            "marginal_stddev": self.marginal_stddev,
+        }
+
+    @property
+    def params(self) -> Mapping[str, Parameter]:
+        params = {"mean": self.mean, "stddev": self.stddev}
+        if self.log_partition is not None:
+            params.update(log_partition=self.log_partition)
+        return params
+
+
 class PolynomialLayer(InputLayer):
     """A symbolic layer that evaluates polynomials."""
 
