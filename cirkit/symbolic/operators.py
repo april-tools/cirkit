@@ -1,6 +1,5 @@
-from collections.abc import Sequence
-from typing import Any, Generic, Mapping, Protocol
-from typing_extensions import TypeVarTuple, Unpack
+from collections.abc import Mapping, Sequence
+from typing import Any, Callable, Protocol
 
 import numpy as np
 
@@ -323,15 +322,10 @@ def conjugate_sum_layer(sl: SumLayer) -> CircuitBlock:
     return CircuitBlock.from_layer(sl)
 
 
-LayerTupleT = TypeVarTuple("LayerTupleT")
-"""The variadic generic type for a tuple of objects of type
- [Layer][cirkit.symbolic.layers.Layer]."""
-
-
-class LayerOperatorFunc(Protocol, Generic[Unpack[LayerTupleT]]):
+class LayerOperatorFunc(Protocol):
     """The layer operator function protocol."""
 
-    def __call__(self, *sl: Unpack[LayerTupleT], **kwargs: Any) -> CircuitBlock:
+    def __call__(self, *sl: Layer, **kwargs: Any) -> CircuitBlock:
         """Apply an operator on one or more layers.
 
         Args:
@@ -344,7 +338,7 @@ class LayerOperatorFunc(Protocol, Generic[Unpack[LayerTupleT]]):
         """
 
 
-DEFAULT_OPERATOR_RULES: Mapping[LayerOperator, Sequence[LayerOperatorFunc]] = {
+DEFAULT_OPERATOR_RULES: Mapping[LayerOperator, Sequence[Callable[..., CircuitBlock]]] = {
     LayerOperator.INTEGRATION: [
         integrate_embedding_layer,
         integrate_categorical_layer,

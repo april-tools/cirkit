@@ -2,7 +2,6 @@ from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Generic, TypeVar
 
-# pylint:
 NodeT = TypeVar("NodeT")
 
 

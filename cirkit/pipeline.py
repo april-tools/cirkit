@@ -7,7 +7,7 @@ import cirkit.symbolic.functional as SF
 from cirkit.backend.compiler import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
-    CompiledCircuit,
+    CompiledCircuitT,
     InitializerCompilationFunc,
     LayerCompilationFunc,
     ParameterCompilationFunc,
@@ -19,7 +19,7 @@ from cirkit.symbolic.registry import OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
+class PipelineContext(AbstractContextManager, Generic[CompiledCircuitT]):
     """A pipeline context is a Python context manager used to compile
     circuits and specify backend-specific compilation flags and optimizations.
     A pipeline context can also be used to register compilation rules for user-defined
@@ -64,7 +64,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         """
         return PipelineContext(backend="torch", semiring="lse-sum", fold=True, optimize=True)
 
-    def __getitem__(self, sc: Circuit) -> CompiledCircuit:
+    def __getitem__(self, sc: Circuit) -> CompiledCircuitT:
         """Retrieves a compiled circuit, given a symbolic one.
 
         Args:
@@ -132,7 +132,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         """
         self._compiler.add_initializer_rule(func)
 
-    def compile(self, sc: Circuit) -> CompiledCircuit:
+    def compile(self, sc: Circuit) -> CompiledCircuitT:
         """Compile a symbolic circuit.
 
         Args:
@@ -154,7 +154,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         """
         return self._compiler.is_compiled(sc)
 
-    def has_symbolic(self, cc: CompiledCircuit) -> bool:
+    def has_symbolic(self, cc: CompiledCircuitT) -> bool:
         """Check whether a compiled circuit has a corresponding symbolic circuit
             in this context.
 
@@ -166,7 +166,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         """
         return self._compiler.has_symbolic(cc)
 
-    def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuit:
+    def get_compiled_circuit(self, sc: Circuit) -> CompiledCircuitT:
         """Retrieves a compiled circuit, given a symbolic one.
 
         Args:
@@ -177,7 +177,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         """
         return self._compiler.get_compiled_circuit(sc)
 
-    def get_symbolic_circuit(self, cc: CompiledCircuit) -> Circuit:
+    def get_symbolic_circuit(self, cc: CompiledCircuitT) -> Circuit:
         """Retrieves a symbolic circuit, given a compiled one.
 
         Args:
@@ -188,7 +188,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         """
         return self._compiler.get_symbolic_circuit(cc)
 
-    def concatenate(self, *cc: CompiledCircuit) -> CompiledCircuit:
+    def concatenate(self, *cc: CompiledCircuitT) -> CompiledCircuitT:
         """Circuit concatenation interface for compiled circuits.
             See [concantenate][cirkit.symbolic.functional.concatenate] for more details.
 
@@ -208,7 +208,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         cat_sc = SF.concatenate(sc, registry=self._op_registry)
         return self.compile(cat_sc)
 
-    def integrate(self, cc: CompiledCircuit, scope: Scope | None = None) -> CompiledCircuit:
+    def integrate(self, cc: CompiledCircuitT, scope: Scope | None = None) -> CompiledCircuitT:
         """Circuit integration interface for compiled circuits.
             See [concantenate][cirkit.symbolic.functional.integrate] for more details.
 
@@ -229,7 +229,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         int_sc = SF.integrate(sc, scope=scope, registry=self._op_registry)
         return self.compile(int_sc)
 
-    def multiply(self, cc1: CompiledCircuit, cc2: CompiledCircuit) -> CompiledCircuit:
+    def multiply(self, cc1: CompiledCircuitT, cc2: CompiledCircuitT) -> CompiledCircuitT:
         """Circuit multiplication interface for compiled circuits.
             See [multiply][cirkit.symbolic.functional.multiply] for more details.
 
@@ -252,7 +252,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         prod_sc = SF.multiply(sc1, sc2, registry=self._op_registry)
         return self.compile(prod_sc)
 
-    def differentiate(self, cc: CompiledCircuit, *, order: int = 1) -> CompiledCircuit:
+    def differentiate(self, cc: CompiledCircuitT, *, order: int = 1) -> CompiledCircuitT:
         """Circuit differentiation interface for compiled circuits.
             See [differentiate][cirkit.symbolic.functional.differentiate] for more details.
 
@@ -275,7 +275,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
         diff_sc = SF.differentiate(sc, order=order, registry=self._op_registry)
         return self.compile(diff_sc)
 
-    def conjugate(self, cc: CompiledCircuit) -> CompiledCircuit:
+    def conjugate(self, cc: CompiledCircuitT) -> CompiledCircuitT:
         """Circuit conjugation interface for compiled circuits.
             See [conjugate][cirkit.symbolic.functional.conjugate] for more details.
 
@@ -296,45 +296,45 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuit]):
 
 
 # pylint: disable-next=redefined-builtin
-def compile(sc: Circuit, ctx: PipelineContext[CompiledCircuit] | None = None) -> CompiledCircuit:
+def compile(sc: Circuit, ctx: PipelineContext[CompiledCircuitT] | None = None) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.compile(sc)
 
 
-def concatenate(*cc: CompiledCircuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
+def concatenate(*cc: CompiledCircuitT, ctx: PipelineContext | None = None) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.concatenate(*cc)
 
 
 def integrate(
-    cc: CompiledCircuit,
+    cc: CompiledCircuitT,
     scope: Scope | None = None,
     ctx: PipelineContext | None = None,
-) -> CompiledCircuit:
+) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.integrate(cc, scope=scope)
 
 
 def multiply(
-    cc1: CompiledCircuit, cc2: CompiledCircuit, ctx: PipelineContext | None = None
-) -> CompiledCircuit:
+    cc1: CompiledCircuitT, cc2: CompiledCircuitT, ctx: PipelineContext | None = None
+) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.multiply(cc1, cc2)
 
 
 def differentiate(
-    cc: CompiledCircuit, ctx: PipelineContext | None = None, *, order: int = 1
-) -> CompiledCircuit:
+    cc: CompiledCircuitT, ctx: PipelineContext | None = None, *, order: int = 1
+) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.differentiate(cc, order=order)
 
 
-def conjugate(cc: CompiledCircuit, ctx: PipelineContext | None = None) -> CompiledCircuit:
+def conjugate(cc: CompiledCircuitT, ctx: PipelineContext | None = None) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.conjugate(cc)

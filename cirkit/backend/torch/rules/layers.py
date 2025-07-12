@@ -1,8 +1,10 @@
+from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
 import torch
 
-from cirkit.backend.compiler import LayerCompilationFunc, LayerCompilationSign
+from cirkit.backend.compiler import LayerCompilationSign
+from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.layers.inner import TorchHadamardLayer, TorchKroneckerLayer, TorchSumLayer
 from cirkit.backend.torch.layers.input import (
     TorchBinomialLayer,
@@ -46,11 +48,13 @@ def compile_categorical_layer(
     compiler: "TorchCompiler", sl: CategoricalLayer
 ) -> TorchCategoricalLayer:
     if sl.logits is None:
+        assert sl.probs is not None
         probs = compiler.compile_parameter(sl.probs)
         logits = None
     else:
-        probs = None
+        assert sl.logits is not None
         logits = compiler.compile_parameter(sl.logits)
+        probs = None
     return TorchCategoricalLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
@@ -63,11 +67,13 @@ def compile_categorical_layer(
 
 def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> TorchBinomialLayer:
     if sl.logits is None:
+        assert sl.probs is not None
         probs = compiler.compile_parameter(sl.probs)
         logits = None
     else:
-        probs = None
+        assert sl.logits is not None
         logits = compiler.compile_parameter(sl.logits)
+        probs = None
     return TorchBinomialLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
@@ -147,8 +153,7 @@ def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> Torc
     )
 
 
-# pylint: disable-next=line-too-long
-DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, LayerCompilationFunc] = {  # type: ignore[misc]
+DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, Callable[..., TorchLayer]] = {
     EmbeddingLayer: compile_embedding_layer,
     CategoricalLayer: compile_categorical_layer,
     BinomialLayer: compile_binomial_layer,

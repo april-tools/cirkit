@@ -126,8 +126,7 @@ class TorchInputFunctionLayer(TorchInputLayer):
     """An input layer encoding functions defined over a non-empty set of variables."""
 
     def __call__(self, x: Tensor) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
+        return super().__call__(x)
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
@@ -168,8 +167,7 @@ class TorchConstantLayer(TorchInputLayer, ABC):
         )
 
     def __call__(self, batch_size: int) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(batch_size)  # type: ignore[no-any-return,misc]
+        return super().__call__(batch_size)
 
     @abstractmethod
     def forward(self, batch_size: int) -> Tensor:

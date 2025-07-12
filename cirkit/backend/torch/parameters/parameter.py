@@ -1,4 +1,3 @@
-from collections import ChainMap
 from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Union
@@ -173,8 +172,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
             p.reset_parameters()
 
     def __call__(self) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
+        return super().__call__()
 
     def forward(self) -> Tensor:
         r"""Evaluate the parameter computational graph.
@@ -248,13 +246,15 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
                 to the outputs given by the parameter input nodes or parameters.
         """
         assert n.num_folds == 1
-        ps = tuple(
+        p_graphs = tuple(
             TorchParameter.from_input(p) if isinstance(p, TorchParameterInput) else p for p in ps
         )
-        assert all(len(p.outputs) == 1 for p in ps)
-        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
-        in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
-        in_nodes[n] = list(p.outputs[0] for p in ps)
+        assert all(len(p.outputs) == 1 for p in p_graphs)
+        p_nodes = list(chain.from_iterable(p.nodes for p in p_graphs)) + [n]
+        in_nodes: dict[TorchParameterNode, Sequence[TorchParameterNode]] = dict(
+            (k, v) for g in p_graphs for (k, v) in g.nodes_inputs.items()
+        )
+        in_nodes[n] = list(p.outputs[0] for p in p_graphs)
         return TorchParameter(p_nodes, in_nodes, [n])
 
     @classmethod

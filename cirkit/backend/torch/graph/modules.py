@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
+from typing_extensions import Generic
 
 from torch import Tensor, nn
 
@@ -59,7 +60,7 @@ TorchModuleT = TypeVar("TorchModuleT", bound=AbstractTorchModule)
 
 
 @dataclass(frozen=True)
-class FoldIndexInfo:
+class FoldIndexInfo(Generic[TorchModuleT]):
     """The folding index information of a folded computational graph, i.e.,
     a [directed acylic graph][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph]
     of [torch modules][cirkit.backend.torch.graph.modules.AbstractTorchModule].
@@ -81,7 +82,7 @@ class FoldIndexInfo:
 
 
 @dataclass(frozen=True)
-class AddressBookEntry:
+class AddressBookEntry(Generic[TorchModuleT]):
     """An entry of the address book data structure, which stores (i) the module (if it is
     not an output entry (i.e., an entry used to compute the output of the whole
     computational graph), and for each input module to it, (ii) it stores the unique indices
@@ -101,7 +102,7 @@ class AddressBookEntry:
     operation that can be much more efficient."""
 
 
-class AddressBook(nn.Module, ABC):
+class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
     """The address book data structure, sometimes also known as book-keeping.
     The address book stores a list of
     [AddressBookEntry][cirkit.backend.torch.graph.modules.AddressBookEntry],
@@ -109,7 +110,7 @@ class AddressBook(nn.Module, ABC):
     torch module.
     """
 
-    def __init__(self, entries: list[AddressBookEntry]) -> None:
+    def __init__(self, entries: list[AddressBookEntry[TorchModuleT]]) -> None:
         """Initializes an address book.
 
         Args:
@@ -164,7 +165,7 @@ class AddressBook(nn.Module, ABC):
         """
         return len(self._entry_modules)
 
-    def __iter__(self) -> Iterator[AddressBookEntry]:
+    def __iter__(self) -> Iterator[AddressBookEntry[TorchModuleT]]:
         """Retrieve an iterator over address book entries, i.e., a tuple consisting of
         three objects: (i) the torch module to evaluate (it can be None if the entry
         is needed to return the output of the computational graph); (ii) for each input
