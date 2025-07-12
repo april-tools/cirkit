@@ -1,3 +1,5 @@
+# pylint: disable=bad-mcs-classmethod-argument
+
 from typing import TYPE_CHECKING, Any, cast
 
 from cirkit.backend.torch.layers import (

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import cast
 
 import numpy as np
 
@@ -52,14 +53,12 @@ class HypercubeToScope(dict[HyperCube, Scope]):
         """
         point1, point2 = key  # HyperCube is from point1 to point2.
 
-        if not (len(point1) == len(point2) == self.ndims):
+        if not len(point1) == len(point2) == self.ndims:
             raise ValueError("The dimension of the HyperCube is not correct")
         if not all(0 <= x1 < x2 <= shape for x1, x2, shape in zip(point1, point2, self.shape)):
             raise ValueError("The HyperCube is empty")
         return Scope(
-            self.hypercube[  # type: ignore[misc]
-                tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))
-            ]
+            self.hypercube[tuple(slice(x1, x2) for x1, x2 in zip(point1, point2))]
             .reshape(-1)
             .tolist()
         )
@@ -85,11 +84,12 @@ def tree2rg(tree: np.ndarray) -> RegionGraph:
     for v in range(num_variables):
         cur_v, prev_v = v, int(tree[v])
         while prev_v != -1:
-            if partitions[prev_v] is None:
-                p_scope = {v, prev_v}
+            prev_partition = partitions[prev_v]
+            if prev_partition is None:
+                p_scope = Scope([v, prev_v])
                 partitions[prev_v] = PartitionNode(p_scope)
             else:
-                p_scope = {v} | partitions[prev_v].scope
+                p_scope = Scope([v]) | prev_partition.scope
                 partitions[prev_v] = PartitionNode(p_scope)
             cur_v, prev_v = prev_v, tree[cur_v]
 
@@ -102,19 +102,30 @@ def tree2rg(tree: np.ndarray) -> RegionGraph:
         prev_v = tree[cur_v]
         leaf_region = RegionNode({cur_v})
         nodes.append(leaf_region)
-        if partitions[cur_v] is None:
+        cur_partition = partitions[cur_v]
+        if cur_partition is None:
             if prev_v != -1:
-                in_nodes[partitions[prev_v]].append(leaf_region)
+                prev_partition = partitions[prev_v]
+                assert prev_partition is not None
+                in_nodes[prev_partition].append(leaf_region)
             regions[cur_v] = leaf_region
         else:
-            in_nodes[partitions[cur_v]].append(leaf_region)
-            p_scope = partitions[cur_v].scope
-            if regions[cur_v] is None:
-                regions[cur_v] = RegionNode(p_scope)
-                nodes.append(regions[cur_v])
-            in_nodes[regions[cur_v]].append(partitions[cur_v])
+            in_nodes[cur_partition].append(leaf_region)
+            p_scope = cur_partition.scope
+            cur_region = regions[cur_v]
+            if cur_region is None:
+                cur_region = RegionNode(p_scope)
+                regions[cur_v] = cur_region
+                nodes.append(cur_region)
+            in_nodes[cur_region].append(cur_partition)
             if prev_v != -1:
-                in_nodes[partitions[prev_v]].append(regions[cur_v])
+                prev_partition = partitions[prev_v]
+                assert prev_partition is not None
+                in_nodes[prev_partition].append(cur_region)
 
-    outputs = [regions[cur_v] for cur_v, prev_v in enumerate(tree) if prev_v == -1]
+    outputs_opt: list[RegionNode | None] = [
+        regions[cur_v] for cur_v, prev_v in enumerate(tree) if prev_v == -1
+    ]
+    assert all(rgn is not None for rgn in outputs_opt)
+    outputs = cast(list[RegionNode], outputs_opt)
     return RegionGraph(nodes, in_nodes, outputs=outputs)

@@ -1,3 +1,6 @@
+# pylint: disable=all
+# type: ignore
+
 """Generate the code API documentation pages and navigation."""
 
 from pathlib import Path

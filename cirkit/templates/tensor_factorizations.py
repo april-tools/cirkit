@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Mapping
 from typing import cast
 
 import numpy as np
@@ -18,7 +19,7 @@ from cirkit.utils.scope import Scope
 
 
 def _input_layer_factory_builder(
-    input_layer: str, dim: int, factor_param_kwargs: dict[str, ParameterFactory]
+    input_layer: str, dim: int, factor_param_kwargs: Mapping[str, ParameterFactory]
 ) -> InputLayerFactory:
     match input_layer:
         case "categorical":
@@ -51,7 +52,8 @@ def cp(
     c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{i=1}^R a^{(1)}_{X_1 i} \cdots a^{(n)}_{X_n i},
     $$
 
-    where for $1\leq j\leq n$ we have that $\mathbf{A}^{(j)}\in\mathbb{R}^{I_j\times R}$ is the $j$-th factor.
+    where for $1\leq j\leq n$ we have that $\mathbf{A}^{(j)}\in\mathbb{R}^{I_j\times R}$ is the
+    $j$-th factor.
 
     Furthermore, this method allows you to return a circuit encoding a CP decomposition
     with additional weights, i.e., a CP factorization of the form
@@ -115,7 +117,7 @@ def cp(
 
     # Construct the factor, hadamard and sum layers
     if input_params is None:
-        factor_param_kwargs = {}
+        factor_param_kwargs: Mapping[str, ParameterFactory] = {}
     else:
         factor_param_kwargs = named_parameterizations_to_factories(input_params)
     embedding_layer_factories: list[InputLayerFactory] = [
@@ -207,7 +209,7 @@ def tucker(
 
     # Construct the embedding, kronecker and sum layers
     if input_params is None:
-        factor_param_kwargs = {}
+        factor_param_kwargs: Mapping[str, ParameterFactory] = {}
     else:
         factor_param_kwargs = named_parameterizations_to_factories(input_params)
     embedding_layer_factories: list[InputLayerFactory] = [
@@ -242,7 +244,7 @@ def tensor_train(
     and $c$ computes a rank-$R$ TT/MPS factorization, i.e.,
 
     $$
-    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{r_1=1}^R \cdots \sum_{r_{n-1}=1}^R v^{(1)}_{X_1 r_1} v^{(2)}_{X_2 r_1 r_2} \cdots v^{(n-1)}_{X_{n-1} r_{n-2} r_{n-1}} v^{(n)}_{X_n r_{n-1}},
+    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{r_1=1}^R \cdots \sum_{r_{n-1}=1}^R v^{(1)}_{X_1 r_1} v^{(2)}_{X_2 r_1 r_2} \cdots v^{(n-1)}_{X_{n-1} r_{n-2} r_{n-1}} v^{(n)}_{X_n r_{n-1}},  pylint: disable=line-too-long
     $$
 
     where $\mathbf{V}^{(1)}\in\mathbb{R}^{I_1\times R}$,
@@ -303,16 +305,15 @@ def tensor_train(
     mav_ones = linalg.block_diag(*((dot_ones,) * rank))
 
     # Build the layers encoding the left-to-right contraction of the TT/MPS factorization
-    layers: list[Layer] = [first_embedding, last_embedding] + [
-        sl for sls in inner_embeddings for sl in sls
-    ]
+    layers: list[Layer] = [first_embedding, last_embedding]
+    layers.extend(sl for sls in inner_embeddings for sl in sls)
     in_layers: dict[Layer, list[Layer]] = defaultdict(list)
-    cur_sl = first_embedding
+    cur_sl: Layer = first_embedding
     for i in range(len(shape) - 1):
         if i == len(shape) - 2:
             # i = n
             # Encode the vector dot product by stacking an hadamard layer and a sum layer
-            prod_sl = HadamardLayer(rank, arity=2)
+            prod_sl: Layer = HadamardLayer(rank, arity=2)
             sum_sl = SumLayer(
                 rank,
                 1,
@@ -327,7 +328,7 @@ def tensor_train(
             continue
         # 0<= i< n
         # Encode the matrix-vector product by stacking hadamard layers and a sum layer
-        prod_sls = [HadamardLayer(rank, arity=2) for _ in range(rank)]
+        prod_sls: list[Layer] = [HadamardLayer(rank, arity=2) for _ in range(rank)]
         sum_sl = SumLayer(
             rank,
             rank,

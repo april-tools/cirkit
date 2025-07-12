@@ -1,8 +1,10 @@
 import itertools
+from typing import cast
 
 import numpy as np
 import pytest
 
+from cirkit.backend.torch.parameters.nodes import TorchTensorParameter
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.layers import (
     CategoricalLayer,
@@ -18,7 +20,7 @@ from cirkit.utils.scope import Scope
 
 
 @pytest.mark.parametrize("rank", [1, 5])
-def test_factorization_cp(rank: int):
+def test_factorization_cp(rank: int) -> None:
     shape = (48, 16, 32)
     circuit = tensor_factorizations.cp(shape, rank, input_layer="embedding")
     assert circuit.scope == Scope(range(len(shape)))
@@ -33,13 +35,13 @@ def test_factorization_cp(rank: int):
     assert len(sum_layers) == 1 and isinstance(sum_layers[0], SumLayer)
     assert sum_layers[0].num_input_units == rank and sum_layers[0].num_output_units == 1
     assert sum_layers[0].arity == 1
-    assert all(len(sl.weight.nodes) == 1 for sl in input_layers)
+    assert all(len(cast(EmbeddingLayer, sl).weight.nodes) == 1 for sl in input_layers)
     assert len(sum_layers[0].weight.nodes) == 1
     assert isinstance(sum_layers[0].weight.nodes[0], ConstantParameter)
 
 
 @pytest.mark.parametrize("rank", [1, 5])
-def test_factorization_cp_probabilistic(rank: int):
+def test_factorization_cp_probabilistic(rank: int) -> None:
     shape = (48, 16, 32)
     circuit = tensor_factorizations.cp(
         shape,
@@ -60,7 +62,7 @@ def test_factorization_cp_probabilistic(rank: int):
     assert len(sum_layers) == 1 and isinstance(sum_layers[0], SumLayer)
     assert sum_layers[0].num_input_units == rank and sum_layers[0].num_output_units == 1
     assert sum_layers[0].arity == 1
-    assert all(len(sl.probs.nodes) == 2 for sl in input_layers)
+    assert all(len(cast(CategoricalLayer, sl).probs.nodes) == 2 for sl in input_layers)
     assert all(SoftmaxParameter in map(type, sl.probs.nodes) for sl in input_layers)
     assert len(sum_layers[0].weight.nodes) == 2
     assert SoftmaxParameter in map(type, sum_layers[0].weight.nodes)
@@ -111,7 +113,7 @@ def test_factorization_tucker_probabilistic(rank: int):
     assert sum_layers[0].num_input_units == rank ** len(input_layers)
     assert sum_layers[0].num_output_units == 1
     assert sum_layers[0].arity == 1
-    assert all(len(sl.probs.nodes) == 2 for sl in input_layers)
+    assert all(len(cast(CategoricalLayer, sl).probs.nodes) == 2 for sl in input_layers)
     assert all(SoftmaxParameter in map(type, sl.probs.nodes) for sl in input_layers)
     assert len(sum_layers[0].weight.nodes) == 2
     assert SoftmaxParameter in map(type, sum_layers[0].weight.nodes)
@@ -154,4 +156,5 @@ def test_factorization_tensor_train(rank: int, factor_param: Parameterization | 
     if factor_param is not None:
         for sl in input_layers:
             assert len(sl.weight.nodes) == 1
-            assert sl.weight.nodes[0].dtype == DataType.COMPLEX
+            node_tensor = cast(TorchTensorParameter, sl.weight.nodes[0])
+            assert node_tensor.dtype == DataType.COMPLEX

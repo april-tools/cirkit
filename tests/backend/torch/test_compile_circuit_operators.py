@@ -7,7 +7,7 @@ import pytest
 import torch
 from scipy import integrate
 
-from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
+from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.layers.input import TorchEvidenceLayer
 from cirkit.backend.torch.semiring import SumProductSemiring
@@ -34,7 +34,7 @@ def test_compile_evidence_integrate_pc_categorical(semiring: str, fold: bool, op
     for x, y in gt_outputs["evi"].items():
         evi_sc = SF.evidence(sc, obs={i: v for i, v in enumerate(x)})
         evi_tc = compiler.compile(evi_sc)
-        assert isinstance(evi_tc, TorchConstantCircuit)
+        assert not evi_tc.scope
         if fold:
             assert len([l for l in evi_tc.inputs if isinstance(l, TorchEvidenceLayer)]) == 1
         else:
@@ -48,7 +48,7 @@ def test_compile_evidence_integrate_pc_categorical(semiring: str, fold: bool, op
         evi_sc = SF.evidence(sc, obs={i: v for i, v in enumerate(x) if v is not None})
         mar_sc = SF.integrate(evi_sc)  # Integrate the remaining set of variables
         mar_tc = compiler.compile(mar_sc)
-        assert isinstance(mar_tc, TorchConstantCircuit)
+        assert not mar_tc.scope
         if fold:
             assert len([l for l in mar_tc.inputs if isinstance(l, TorchEvidenceLayer)]) == 1
         else:
@@ -130,7 +130,7 @@ def test_compile_product_integrate_pc_categorical_kronecker(
         scs.append(sci)
         tcs.append(tci)
         last_sc = sci if i == 0 else SF.multiply(last_sc, sci)
-    tc: TorchCircuit = compiler.compile(last_sc)
+    tc = compiler.compile(last_sc)
     int_sc = SF.integrate(last_sc)
     int_tc = compiler.compile(int_sc)
 
@@ -215,7 +215,7 @@ def test_compile_product_pc_polynomial(
     inputs = (
         torch.tensor(0.0)  # Get default float dtype.
         .new_tensor(  # degp1**D should be able to determine the coeffs.
-            list(itertools.product(range(degp1), repeat=num_variables))  # type: ignore[misc]
+            list(itertools.product(range(degp1), repeat=num_variables))
         )
         .requires_grad_()
     )  # shape (B, D=num_variables).
@@ -256,7 +256,7 @@ def test_compile_differentiate_pc_polynomial(semiring: str, fold: bool, optimize
 
     inputs = torch.tensor(
         [[0.0] * num_variables, range(num_variables)]
-    ).requires_grad_()  # type: ignore[misc]  # shape (B=2, D=num_variables).
+    ).requires_grad_()  # shape (B=2, D=num_variables).
 
     with torch.enable_grad():
         output = tc(inputs)

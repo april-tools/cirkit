@@ -31,7 +31,7 @@ class OperatorSignatureNotFound(Exception):
 
 
 class OperatorRegistry(AbstractContextManager):
-    def __init__(self):
+    def __init__(self) -> None:
         # The symbolic operator rule specifications, for each symbolic operator over layers
         self._rules: dict[LayerOperator, LayerOperatorSpecs] = defaultdict(dict)
 
@@ -59,10 +59,10 @@ class OperatorRegistry(AbstractContextManager):
         __exc_type: type[BaseException] | None,
         __exc_value: BaseException | None,
         __traceback: TracebackType | None,
-    ) -> bool | None:
+    ) -> None:
+        assert self._token is not None
         OPERATOR_REGISTRY.reset(self._token)
         self._token = None
-        return None
 
     def has_rule(self, op: LayerOperator, *signature: type[Layer]) -> bool:
         if op not in self._rules:
@@ -87,15 +87,16 @@ class OperatorRegistry(AbstractContextManager):
             return op_rules[signature]
         raise OperatorSignatureNotFound(op, *signature)
 
-    def add_rule(self, op: LayerOperator, func: LayerOperatorFunc):
+    def add_rule(self, op: LayerOperator, func: LayerOperatorFunc) -> None:
         args = func.__annotations__.copy()
         arg_names = args.keys()
         if "return" not in arg_names or not issubclass(args["return"], CircuitBlock):
             raise ValueError(
-                f"The function is not an operator over symbolic layers.\nIdentifier: {func.__name__}\nAnnotations: {args}"
+                f"The function is not an operator over symbolic layers.\n"
+                f"Identifier: {func}\n"
+                f"Annotations: {args}"
             )
         del args["return"]
-        arg_names = list(args.keys())
         arg_types = [args[a] for a in arg_names]
         arg_layer_types = [
             x for x in enumerate(arg_types) if isinstance(x[1], type) and issubclass(x[1], Layer)

@@ -6,18 +6,21 @@ import torch
 from torch import Tensor, autograd
 
 
+# pylint: disable-next=abstract-method
 class SafeLog(autograd.Function):
     @staticmethod
-    def forward(x: Tensor) -> Tensor:
+    def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         return torch.log(x)
 
     @staticmethod
-    def setup_context(ctx: Any, inputs: tuple[Tensor, ...], output: Tensor) -> None:
+    def setup_context(  # pylint: disable=arguments-differ
+        ctx: Any, inputs: tuple[Tensor, ...], output: Tensor
+    ) -> None:
         (x,) = inputs
         ctx.save_for_backward(x)
 
     @staticmethod
-    def backward(ctx: Any, grad_output: Tensor) -> Tensor:
+    def backward(ctx: Any, grad_output: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         (x,) = ctx.saved_tensors
         return torch.nan_to_num(grad_output / x)
 
@@ -25,18 +28,21 @@ class SafeLog(autograd.Function):
 safelog = SafeLog.apply
 
 
+# pylint: disable-next=abstract-method
 class ComplexSafeLog(autograd.Function):
     @staticmethod
-    def forward(x: Tensor) -> Tensor:
+    def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         return torch.log(x)
 
     @staticmethod
-    def setup_context(ctx: Any, inputs: tuple[Tensor, ...], output: Tensor) -> None:
+    def setup_context(  # pylint: disable=arguments-differ
+        ctx: Any, inputs: tuple[Tensor, ...], output: Tensor
+    ) -> None:
         (x,) = inputs
         ctx.save_for_backward(x)
 
     @staticmethod
-    def backward(ctx: Any, grad_output: Tensor) -> Tensor:
+    def backward(ctx: Any, grad_output: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         (x,) = ctx.saved_tensors
         return torch.nan_to_num(grad_output / x.conj())
 
@@ -53,8 +59,8 @@ def flatten_dims(x: Tensor, /, *, dims: Sequence[int]) -> Tensor:
     Intended to be used as a helper for some torch functions that can only work on one dim.
 
     Args:
-        x (Tensor): The tensor to be flattened.
-        dims (Sequence[int]): The dimensions to flatten along, expected to be sorted.
+        x: The tensor to be flattened.
+        dims: The dimensions to flatten along, expected to be sorted.
 
     Returns:
         Tensor: The flattened tensor.

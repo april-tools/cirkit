@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict, deque
 from collections.abc import Sequence
+from typing import cast
 
 from cirkit.templates.region_graph.algorithms.utils import HyperCube, HypercubeToScope
 from cirkit.templates.region_graph.graph import (
@@ -13,7 +14,7 @@ from cirkit.utils.scope import Scope
 
 
 # DISABLE: We use function name with upper case to mimic a class constructor.
-# pylint: disable-next=invalid-name,too-complex,too-many-locals
+# pylint: disable-next=invalid-name
 def PoonDomingos(
     shape: tuple[int, int, int],
     *,
@@ -61,7 +62,7 @@ def PoonDomingos(
     queue: deque[HyperCube] = deque()
     depth_dict: dict[HyperCube, int] = {}  # Also serve as a "visited" set.
 
-    cur_hypercube = ((0,) * len(shape), shape)
+    cur_hypercube: tuple[tuple[int, ...], tuple[int, ...]] = ((0,) * len(shape), shape)
     root_scope = hypercube_to_scope[cur_hypercube]
     root = RegionNode(root_scope)
     nodes.append(root)
@@ -69,7 +70,7 @@ def PoonDomingos(
     queue.append(cur_hypercube)
     depth_dict[cur_hypercube] = 0
 
-    # DISABLE: This is considered a constant.
+    # DISABLE: This is considered a constant
     SENTINEL = ((-1,) * len(shape), (-1,) * len(shape))  # pylint: disable=invalid-name
 
     def cut_hypercube_(
@@ -125,7 +126,7 @@ def PoonDomingos(
         ptn = PartitionNode(rgn.scope)
         nodes.append(ptn)
         in_nodes[rgn].append(ptn)
-        in_nodes[ptn] = region_nodes
+        in_nodes[ptn] = cast(list[RegionGraphNode], region_nodes)
         return hypercubes
 
     def queue_popleft() -> HyperCube:

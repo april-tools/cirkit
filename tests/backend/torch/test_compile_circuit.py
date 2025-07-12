@@ -7,7 +7,7 @@ import torch
 from scipy import integrate
 
 import cirkit.symbolic.functional as SF
-from cirkit.backend.torch.circuits import TorchCircuit, TorchConstantCircuit
+from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.compiler import TorchCompiler
 from cirkit.backend.torch.layers import TorchHadamardLayer, TorchSumLayer
 from cirkit.backend.torch.layers.input import TorchCategoricalLayer
@@ -26,11 +26,11 @@ from tests.symbolic.test_utils import (
 
 def check_discrete_ground_truth(
     tc: TorchCircuit,
-    int_tc: TorchConstantCircuit,
+    int_tc: TorchCircuit,
     semiring: Semiring,
     gt_outputs: dict[tuple[int, ...], float],
     gt_partition_func: float,
-):
+) -> None:
     worlds = torch.tensor(list(itertools.product([0, 1], repeat=tc.num_variables)))
     assert worlds.shape == (2**tc.num_variables, tc.num_variables)
     tc_outputs = tc(worlds)
@@ -53,11 +53,11 @@ def check_discrete_ground_truth(
 
 def check_continuous_ground_truth(
     tc: TorchCircuit,
-    int_tc: TorchConstantCircuit,
+    int_tc: TorchCircuit,
     semiring: Semiring,
     gt_outputs: dict[tuple[int, ...], float],
     gt_partition_func: float,
-):
+) -> None:
     for x, y in gt_outputs.items():
         sample = torch.Tensor(x).unsqueeze(dim=0)
         tc_output = tc(sample)
@@ -74,7 +74,7 @@ def check_continuous_ground_truth(
 
 
 @pytest.mark.parametrize("fold,optimize", itertools.product([False, True], [False, True]))
-def test_compile_circuit_parameters(fold: bool, optimize: bool):
+def test_compile_circuit_parameters(fold: bool, optimize: bool) -> None:
     compiler = TorchCompiler(fold=fold)
     sc = build_multivariate_monotonic_structured_cpt_pc()
     tc: TorchCircuit = compiler.compile(sc)
@@ -88,25 +88,27 @@ def test_compile_circuit_parameters(fold: bool, optimize: bool):
     "fold,optimize,semiring",
     itertools.product([False, True], [False, True], ["sum-product", "lse-sum"]),
 )
-def test_compile_monotonic_structured_categorical_pc(fold: bool, optimize: bool, semiring):
+def test_compile_monotonic_structured_categorical_pc(
+    fold: bool, optimize: bool, semiring: str
+) -> None:
     compiler = TorchCompiler(fold=fold, optimize=optimize, semiring=semiring)
     sc, gt_outputs, gt_partition_func = build_monotonic_structured_categorical_cpt_pc(
         return_ground_truth=True
     )
     int_sc = SF.integrate(sc)
     tc: TorchCircuit = compiler.compile(sc)
-    int_tc: TorchConstantCircuit = compiler.compile(int_sc)
+    int_tc: TorchCircuit = compiler.compile(int_sc)
     check_discrete_ground_truth(tc, int_tc, compiler.semiring, gt_outputs["evi"], gt_partition_func)
 
 
-def test_compile_monotonic_structured_gaussian_pc():
+def test_compile_monotonic_structured_gaussian_pc() -> None:
     compiler = TorchCompiler(fold=True, optimize=True, semiring="lse-sum")
     sc, gt_outputs, gt_partition_func = build_monotonic_bivariate_gaussian_hadamard_dense_pc(
         return_ground_truth=True
     )
     int_sc = SF.integrate(sc)
     tc: TorchCircuit = compiler.compile(sc)
-    int_tc: TorchConstantCircuit = compiler.compile(int_sc)
+    int_tc = compiler.compile(int_sc)
     check_continuous_ground_truth(
         tc, int_tc, compiler.semiring, gt_outputs["evi"], gt_partition_func
     )

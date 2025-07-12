@@ -1,7 +1,7 @@
 from cirkit.templates.utils import Parameterization, parameterization_to_factory
 
 
-def test_param_activation_kwargs():
+def test_param_activation_kwargs() -> None:
     min_var = 0.1
     max_var = 1.0
     stddev_param = Parameterization(

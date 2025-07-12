@@ -1,3 +1,6 @@
+# pylint: disable=all
+# type: ignore
+
 import csv
 import os
 from collections import Counter
@@ -46,12 +49,13 @@ def load_binary_dataset(
     splits: list[str] | None = None,
 ) -> dict[str, np.ndarray]:
     def csv_2_numpy(filename: str, path: str, sep: str, dtype: str | np.dtype) -> np.ndarray:
-        reader = csv.reader(open(os.path.join(path, filename)), delimiter=sep)
-        return np.array(list(reader), dtype=dtype)
+        with csv.reader(open(os.path.join(path, filename), "r"), delimiter=sep) as reader:
+            data = list(reader)
+        return np.array(data, dtype=dtype)
 
     if splits is None:
         splits = ["train", "valid", "test"]
-    filenames = map(lambda s: os.path.join(name, "{}.{}.{}".format(name, s, "data")), splits)
+    filenames = map(lambda s: os.path.join(name, f"{name}.{s}.data"), splits)
     return dict(zip(splits, map(lambda fname: csv_2_numpy(fname, path, sep, dtype), filenames)))
 
 
@@ -125,7 +129,7 @@ def load_artificial_dataset(
     data_valid, data_test = train_test_split(
         data_valid_test, test_size=num_test_samples, shuffle=False
     )
-    return dict(train=data_train, valid=data_valid, test=data_test)
+    return {"train": data_train, "valid": data_valid, "test": data_test}
 
 
 def load_uci_power(
@@ -159,7 +163,7 @@ def load_uci_power(
     data_train = (data_train - mu) / s
     data_valid = (data_valid - mu) / s
     data_test = (data_test - mu) / s
-    return dict(train=data_train, valid=data_valid, test=data_test)
+    return {"train": data_train, "valid": data_valid, "test": data_test}
 
 
 def load_uci_gas(
@@ -191,8 +195,7 @@ def load_uci_gas(
     num_valid_samples = int(0.1 * len(data_train))
     data_valid = data_train[-num_valid_samples:]
     data_train = data_train[0:-num_valid_samples]
-
-    return dict(train=data_train, valid=data_valid, test=data_test)
+    return {"train": data_train, "valid": data_valid, "test": data_test}
 
 
 def load_uci_hepmass(
@@ -234,8 +237,7 @@ def load_uci_hepmass(
     num_valid = int(0.1 * len(data_train))
     data_valid = data_train[-num_valid:]
     data_train = data_train[0:-num_valid]
-
-    return dict(train=data_train, valid=data_valid, test=data_test)
+    return {"train": data_train, "valid": data_valid, "test": data_test}
 
 
 def load_uci_miniboone(
@@ -257,8 +259,7 @@ def load_uci_miniboone(
     data_train = (data_train - mu) / s
     data_valid = (data_valid - mu) / s
     data_test = (data_test - mu) / s
-
-    return dict(train=data_train, valid=data_valid, test=data_test)
+    return {"train": data_train, "valid": data_valid, "test": data_test}
 
 
 def load_uci_bsds300(
@@ -268,7 +269,7 @@ def load_uci_bsds300(
     data_train = f["train"][:].astype(dtype, copy=False)
     data_valid = f["validation"][:].astype(dtype, copy=False)
     data_test = f["test"][:].astype(dtype, copy=False)
-    return dict(train=data_train, valid=data_valid, test=data_test)
+    return {"train": data_train, "valid": data_valid, "test": data_test}
 
 
 def sample_single_ring(

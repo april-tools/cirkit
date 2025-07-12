@@ -5,7 +5,7 @@ import einops as E
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.layers import TorchInnerLayer
+from cirkit.backend.torch.layers.inner import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
 
