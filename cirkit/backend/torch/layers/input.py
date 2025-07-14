@@ -522,7 +522,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             x = x.long()  # The input to Binomial should be discrete
         if self.logits is not None:
             logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
-            dist = distributions.Binomial(self.total_count, logits=logits)
+            dist = distributions.Binomial(self.total_count, probs=torch.exp(logits))
         else:
             probs = self.probs().unsqueeze(dim=1)  # (F, 1, K)
             dist = distributions.Binomial(self.total_count, probs=probs)
