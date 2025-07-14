@@ -517,18 +517,15 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             return {"probs": self.probs}
         return {"logits": self.logits}
 
-    def _get_binomial_distribution(self) -> distributions.Binomial:
-        if self.logits is not None:
-            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
-            return distributions.Binomial(self.total_count, probs=logits)
-        else:
-            probs = self.probs().unsqueeze(dim=1)  # (F, 1, K)
-            return distributions.Binomial(self.total_count, probs=probs)
-
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Binomial should be discrete
-        dist = self._get_binomial_distribution()
+        if self.logits is not None:
+            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
+            dist = distributions.Binomial(self.total_count, logits=logits)
+        else:
+            probs = self.probs().unsqueeze(dim=1)  # (F, 1, K)
+            dist = distributions.Binomial(self.total_count, probs=probs)
         x = dist.log_prob(x)  # (F, B, K)
         return x
 
@@ -537,7 +534,13 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        dist = self._get_binomial_distribution()
+        if self.logits is not None:
+            logits = self.logits()  # (F, 1, K)
+            dist = distributions.Binomial(self.total_count, logits=logits)
+        else:
+            probs = self.probs()  # (F, 1, K)
+            dist = distributions.Binomial(self.total_count, probs=probs)
+        dist = distributions.Binomial(self.total_count, probs=probs)
         samples = dist.sample((num_samples,))  # (num_samples, F, K)
         samples = samples.permute(1, 2, 0)  # (F, K, num_samples)
         return samples
