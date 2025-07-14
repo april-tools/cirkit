@@ -540,7 +540,6 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         else:
             probs = self.probs()  # (F, 1, K)
             dist = distributions.Binomial(self.total_count, probs=probs)
-        dist = distributions.Binomial(self.total_count, probs=probs)
         samples = dist.sample((num_samples,))  # (num_samples, F, K)
         samples = samples.permute(1, 2, 0)  # (F, K, num_samples)
         return samples
