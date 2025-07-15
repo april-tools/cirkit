@@ -6,7 +6,7 @@ from cirkit.backend.torch.utils import csafelog
 from tests.floats import allclose
 
 
-def test_semiring_complex_safelog_derivative():
+def test_semiring_complex_safelog_derivative() -> None:
     torch.set_grad_enabled(True)
     z = torch.randn(512, dtype=torch.complex128)
     z.requires_grad = True
@@ -17,6 +17,7 @@ def test_semiring_complex_safelog_derivative():
     z.requires_grad = True
     log_y = torch.log(z)
     log_y.mean().real.backward()
+    assert z.grad is not None
     grad_log_y = torch.clone(z.grad)
     z.grad = None
     safelog_y = csafelog(z)
@@ -33,10 +34,11 @@ def test_semiring_complex_safelog_derivative():
     z.requires_grad = True
     y = csafelog(z)
     y.mean().real.backward()
+    assert z.grad is not None
     assert torch.all(torch.isfinite(z.grad))
 
 
-def test_semiring_complex_lse_sum_semiring():
+def test_semiring_complex_lse_sum_semiring() -> None:
     torch.set_default_dtype(torch.float32)
 
     x = torch.tensor(

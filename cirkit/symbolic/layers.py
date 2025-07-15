@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import IntEnum, auto
 from typing import Any, cast
+from typing_extensions import Self  # TODO: import from typing in Python 3.11+
 
 from cirkit.symbolic.initializers import NormalInitializer
 from cirkit.symbolic.parameters import (
@@ -16,7 +17,7 @@ from cirkit.utils.scope import Scope
 
 
 class LayerOperator(IntEnum):
-    """The avaliable symbolic operators defined over layers."""
+    """The available symbolic operators defined over layers."""
 
     INTEGRATION = auto()
     """The integration operator defined over input layers."""
@@ -89,7 +90,7 @@ class Layer(ABC):
         """
         return {}
 
-    def copyref(self) -> "Layer":
+    def copyref(self) -> Self:
         """Creates a _shallow_ copy of the layer, i.e., a copy where the symbolic parameters
         are copied by reference, thus effectively creating a symbolic parameter sharing between
         the new layer and the layer being copied.
@@ -97,8 +98,9 @@ class Layer(ABC):
         Returns:
             A shallow copy of the layer, with reference to the parameters.
         """
-        ref_params = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
-        return type(self)(**self.config, **ref_params)
+        kwargs: dict[str, Any] = {pname: pgraph.ref() for pname, pgraph in self.params.items()}
+        kwargs.update(self.config)
+        return type(self)(**kwargs)
 
     def __repr__(self) -> str:
         config_repr = ", ".join(f"{k}={v}" for k, v in self.config.items())
@@ -348,6 +350,7 @@ class CategoricalLayer(InputLayer):
     @property
     def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 
@@ -421,7 +424,7 @@ class BinomialLayer(InputLayer):
         return (self.num_output_units,)
 
     @property
-    def config(self) -> dict:
+    def config(self) -> dict[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,
@@ -431,6 +434,7 @@ class BinomialLayer(InputLayer):
     @property
     def params(self) -> Mapping[str, Parameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 
@@ -688,9 +692,9 @@ class KroneckerLayer(ProductLayer):
 
 class SumLayer(Layer):
     r"""The symbolic sum layer. A sum layer computes a matrix-by-vector product
-    $\mathbf{W} \mathbf{x}$, where $\mathbf{W}\in\mathbb{R}^{K_1\times HK_2}$, where $K_1$ is the number
-    of output units, $K_2$ is the number of input units, and $H$ is the arity, i.e., the number of
-    layers that are input to the sum layer.
+    $\mathbf{W} \mathbf{x}$, where $\mathbf{W}\in\mathbb{R}^{K_1\times HK_2}$, where $K_1$ is the
+    number of output units, $K_2$ is the number of input units, and $H$ is the arity, i.e., the
+    number of layers that are input to the sum layer.
     In the product $\mathbf{W} \mathbf{x}$ above, $\mathbf{x}$ is the vector obtained by
     concatenating the outputs of all layers that are input to the sum layer. Note that if the arity
     is exactly 1, then this layer computes a simple linear transformation of an input vector.
