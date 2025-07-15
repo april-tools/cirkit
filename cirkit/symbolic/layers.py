@@ -17,7 +17,7 @@ from cirkit.utils.scope import Scope
 
 
 class LayerOperator(IntEnum):
-    """The avaliable symbolic operators defined over layers."""
+    """The available symbolic operators defined over layers."""
 
     INTEGRATION = auto()
     """The integration operator defined over input layers."""
