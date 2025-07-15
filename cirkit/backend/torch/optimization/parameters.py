@@ -1,5 +1,3 @@
-# pylint: disable=bad-mcs-classmethod-argument
-
 import itertools
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast

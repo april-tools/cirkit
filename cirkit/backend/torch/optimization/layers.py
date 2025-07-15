@@ -1,4 +1,3 @@
-# pylint: disable=bad-mcs-classmethod-argument
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
@@ -15,6 +14,7 @@ from cirkit.backend.torch.optimization.registry import (
     LayerOptApplyFunc,
     LayerOptMatch,
     LayerOptPattern,
+    LayerOptPatternDefn,
     ParameterOptPattern,
 )
 from cirkit.backend.torch.parameters.nodes import TorchKroneckerParameter, TorchMatMulParameter
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
-class SumCollapsePattern(LayerOptPattern):
+class SumCollapsePattern(LayerOptPatternDefn):
     @classmethod
     def is_output(cls) -> bool:
         return False
@@ -42,7 +42,7 @@ class SumCollapsePattern(LayerOptPattern):
         return [{"arity": 1}, {}]
 
 
-class TuckerPattern(LayerOptPattern):
+class TuckerPattern(LayerOptPatternDefn):
     @classmethod
     def is_output(cls) -> bool:
         return False
@@ -60,7 +60,7 @@ class TuckerPattern(LayerOptPattern):
         return [{"arity": 1}, {}]
 
 
-class CandecompPattern(LayerOptPattern):
+class CandecompPattern(LayerOptPatternDefn):
     @classmethod
     def is_output(cls) -> bool:
         return False
@@ -78,7 +78,7 @@ class CandecompPattern(LayerOptPattern):
         return [{"arity": 1}, {}]
 
 
-class DenseKroneckerPattern(LayerOptPattern):
+class DenseKroneckerPattern(LayerOptPatternDefn):
     @classmethod
     def is_output(cls) -> bool:
         return False
@@ -96,7 +96,7 @@ class DenseKroneckerPattern(LayerOptPattern):
         return [{"arity": 1}]
 
 
-class TensorDotKroneckerPattern(LayerOptPattern):
+class TensorDotKroneckerPattern(LayerOptPatternDefn):
     @classmethod
     def is_output(cls) -> bool:
         return False
