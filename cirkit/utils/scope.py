@@ -38,7 +38,7 @@ class Scope(Collection[int], Hashable):
             bool: Whether the variable is in this scope.
         """
         if not isinstance(var, int):
-            return NotImplemented
+            raise NotImplementedError
         return var in self._set
 
     def __iter__(self) -> Iterator[int]:
@@ -79,7 +79,7 @@ class Scope(Collection[int], Hashable):
             bool: Whether self == other.
         """
         if not isinstance(other, Scope):
-            return NotImplemented
+            raise NotImplementedError
         return self._set == other._set
 
     def __lt__(self, other: "Scope") -> bool:
