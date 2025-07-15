@@ -22,11 +22,11 @@ class GraphOptPatternDefn(Generic[TorchModuleT]):
 
     @classmethod
     def config_patterns(cls) -> Sequence[Mapping[str, Any]]:
-        raise NotImplementedError
+        return ()
 
     @classmethod
     def sub_patterns(cls) -> Sequence[Mapping[str, type["GraphOptPatternDefn"]]]:
-        raise NotImplementedError
+        return ()
 
 
 GraphOptPattern = type[GraphOptPatternDefn[TorchModuleT]]

@@ -1,7 +1,7 @@
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from cirkit.backend.registry import CompilerRegistry
-from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPattern, GraphOptPatternDefn
+from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDefn
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.nodes import TorchParameterNode
 
