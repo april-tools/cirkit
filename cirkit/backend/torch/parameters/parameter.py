@@ -157,7 +157,8 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def shape(self) -> tuple[int, ...]:
         r"""The shape of the computed tensor parameter, without considering
         the number of folds. That is, if the number of folds
-        (see [TorchParameter.num_folds][cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
+        (see [TorchParameter.num_folds]
+        [cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
         is F and the shape is (K_1,\ldots,K_n), it means the torch parameter
         computes a tensor of shape (F, K_1,\ldots,K_n).
 

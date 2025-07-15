@@ -1,5 +1,5 @@
 # pylint: disable=bad-mcs-classmethod-argument
-
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 from cirkit.backend.torch.layers import (
@@ -208,12 +208,12 @@ def apply_tensordot_tensordot(
     )
 
 
-DEFAULT_LAYER_FUSE_OPT_RULES: dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
+DEFAULT_LAYER_FUSE_OPT_RULES: Mapping[LayerOptPattern, LayerOptApplyFunc] = {
     SumCollapsePattern: apply_sum_collapse,
     TuckerPattern: apply_tucker,
     CandecompPattern: apply_candecomp,
 }
-DEFAULT_LAYER_SHATTER_OPT_RULES: dict[LayerOptPattern, LayerOptApplyFunc] = {  # type: ignore[misc]
+DEFAULT_LAYER_SHATTER_OPT_RULES: Mapping[LayerOptPattern, LayerOptApplyFunc] = {
     DenseKroneckerPattern: apply_dense_tensordot,
     TensorDotKroneckerPattern: apply_tensordot_tensordot,
 }

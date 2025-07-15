@@ -37,8 +37,6 @@ def plot_region_graph(
              See https://graphviz.org/docs/outputs/ for more.
         orientation: Orientation of the graph. "vertical" puts the root
             node at the top, "horizontal" at left. Defaults to "vertical".
-        node_shape: Default shape for a node in the graph. Defaults to "box".
-            See https://graphviz.org/doc/info/shapes.html for the supported shapes.
         label_font: Font used to render labels. Defaults to "times italic bold".
             See https://graphviz.org/faq/font/ for the available fonts.
         label_size: Size of the font for labels in points. Defaults to "21pt".

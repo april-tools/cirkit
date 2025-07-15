@@ -7,15 +7,12 @@ class Scope(Collection[int], Hashable):
     integers.
     """
 
-    def __init__(self, scope: Iterable[int] | None = None):
+    def __init__(self, scope: Iterable[int] | None = None) -> None:
         """Initializes a scope object.
 
         Args:
             scope: The scope as an iterable of variable non-negative integer IDs.
                 It can be None as to construct an empty scope.
-
-        Returns:
-            Scope: A scope.
         """
         self._set: frozenset[int] = frozenset(scope) if scope is not None else frozenset()
 

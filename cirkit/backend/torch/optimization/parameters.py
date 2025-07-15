@@ -1,6 +1,7 @@
 # pylint: disable=bad-mcs-classmethod-argument
 
 import itertools
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
 from cirkit.backend.torch.optimization.registry import (
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
-class KroneckerOutParameterPattern(ParameterOptPattern):
+class KroneckerOutParameterPattern(ParameterOptPatternDefn):
     @classmethod
     def is_output(cls) -> bool:
         return True
@@ -73,7 +74,7 @@ def _emit_outer_reduce_flatten_parameter(
         tuple(range(outer_dim)) + (len(in_shape1),) + tuple(range(outer_dim + 1, len(in_shape1)))
     )
     # Apply the reduction to the indices, as to get the output indices of the einsum
-    reduce_idx: list[tuple[int, ...]] = (
+    reduce_idx: list[tuple[int] | tuple[int, int]] = (
         list((i,) for i in range(outer_dim))
         + [(outer_dim, len(in_shape1))]
         + list((i,) for i in range(outer_dim + 1, len(in_shape1)))
@@ -110,8 +111,7 @@ def apply_sum_outer_prod_einsum(  # pylint: disable=unused-argument
     return _emit_outer_reduce_flatten_parameter(in_shape1, in_shape2, outer_dim, reduce_dim)
 
 
-# pylint: disable-next=line-too-long
-DEFAULT_PARAMETER_OPT_RULES: dict[ParameterOptPattern, ParameterOptApplyFunc] = {  # type: ignore[misc]
+DEFAULT_PARAMETER_OPT_RULES: Mapping[ParameterOptPattern, ParameterOptApplyFunc] = {
     LogSoftmaxPattern: apply_log_softmax,
     ReduceSumOuterProductPattern: apply_sum_outer_prod_einsum,
 }

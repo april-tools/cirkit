@@ -124,9 +124,9 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
 
         # The registry of optimization rules
         self._optimization_registry = {
-            "parameter": ParameterOptRegistry(DEFAULT_PARAMETER_OPT_RULES),
-            "layer_fuse": LayerOptRegistry(DEFAULT_LAYER_FUSE_OPT_RULES),
-            "layer_shatter": LayerOptRegistry(DEFAULT_LAYER_SHATTER_OPT_RULES),
+            "parameter": ParameterOptRegistry(dict(DEFAULT_PARAMETER_OPT_RULES)),
+            "layer_fuse": LayerOptRegistry(dict(DEFAULT_LAYER_FUSE_OPT_RULES)),
+            "layer_shatter": LayerOptRegistry(dict(DEFAULT_LAYER_SHATTER_OPT_RULES)),
         }
 
     def compile_pipeline(self, sc: Circuit) -> TorchCircuit:

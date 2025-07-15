@@ -2,7 +2,6 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from enum import IntEnum, auto
 from typing import Generic, Protocol
-from typing_extensions import TypeVar
 
 from cirkit.backend.torch.graph.modules import TorchModuleT
 

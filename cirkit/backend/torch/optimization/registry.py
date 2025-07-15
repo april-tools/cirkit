@@ -3,7 +3,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, Protocol
 
 from cirkit.backend.registry import CompilerRegistry
-from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPattern, GraphOptPatternDefn
+from cirkit.backend.torch.graph.optimize import GraphOptMatch, GraphOptPatternDefn
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.nodes import TorchParameterNode
 
@@ -24,13 +24,16 @@ class ParameterOptApplyFunc(Protocol):
 
 class LayerOptPatternDefn(GraphOptPatternDefn[TorchLayer]):
     @classmethod
-    def entries(cls) -> list[type[TorchLayer]]: ...
+    def entries(cls) -> list[type[TorchLayer]]:
+        return NotImplemented
 
     @classmethod
-    def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]: ...
+    def ppatterns(cls) -> list[dict[str, ParameterOptPattern]]:
+        return NotImplemented
 
     @classmethod
-    def cpatterns(cls) -> list[dict[str, Any]]: ...
+    def cpatterns(cls) -> list[dict[str, Any]]:
+        return NotImplemented
 
 
 LayerOptPattern = type[LayerOptPatternDefn]
@@ -47,7 +50,7 @@ class LayerOptMatch(GraphOptMatch[TorchLayer]):
         self._pentries = pentries
 
     @property
-    def pentries(self) -> list[Mapping[str, list[ParameterOptMatch]]]:
+    def pentries(self) -> Sequence[Mapping[str, list[ParameterOptMatch]]]:
         return self._pentries
 
     @cached_property

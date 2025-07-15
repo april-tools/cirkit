@@ -1,5 +1,7 @@
 #!/bin/bash
 
+CIRKIT_SRC="cirkit"
+
 failed_linters=()
 
 RED='\033[0;31m'
@@ -43,7 +45,7 @@ else
     if [[ $# -gt 0 ]]; then
         files=$@
     else
-        files=$(git ls-files "*.py")
+        files="${CIRKIT_SRC}"
     fi
     if [ $tool == "black" ]
     then

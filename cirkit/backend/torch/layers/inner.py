@@ -43,8 +43,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         return *self.config.items(), *pshapes
 
     def __call__(self, x: Tensor) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
+        return super().__call__(x)
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:

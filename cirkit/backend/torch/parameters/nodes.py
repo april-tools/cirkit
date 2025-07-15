@@ -132,8 +132,9 @@ class TorchTensorParameter(TorchParameterInput):
             torch.device: The parameter device.
 
         Raises:
-            ValueError: If the parameter has not been initialized.
-                See the [reset_parameters][cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
+            ValueError: If the parameter has not been initialized. See the
+                [reset_parameters]
+                [cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
                 method.
         """
         if self._ptensor is None:
@@ -206,8 +207,9 @@ class TorchTensorParameter(TorchParameterInput):
             $(K_1,\ldots,K_n)$ is the shape of the tensors within each fold.
 
         Raises:
-            ValueError: If the parameter has not been initialized.
-                See the [reset_parameters][cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
+            ValueError: If the parameter has not been initialized. See the
+                [reset_parameters]
+                [cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
                 method.
         """
         if self._ptensor is None:
@@ -818,9 +820,10 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
     def config(self) -> dict[str, Any]:
         return {"in_stddev1_shape": self.in_shapes[0], "in_stddev2_shape": self.in_shapes[1]}
 
-    def forward(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, K1, C)
-        var2 = torch.square(stddev2)  # (F, K2, C)
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
+        # x1 is the stddev1 and x2 is the stddev2
+        var1 = torch.square(x1)  # (F, K1, C)
+        var2 = torch.square(x2)  # (F, K2, C)
         inv_var1 = torch.reciprocal(var1).unsqueeze(dim=2)  # (F, K1, 1, C)
         inv_var2 = torch.reciprocal(var2).unsqueeze(dim=1)  # (F, 1, K2, C)
         var = torch.reciprocal(inv_var1 + inv_var2)  # (F, K1, K2, C)
@@ -883,20 +886,20 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
             self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim dp1
         )
 
-    def forward(self, coeff1: Tensor, coeff2: Tensor) -> Tensor:
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         fft: Callable[..., Tensor]
         ifft: Callable[..., Tensor]
-        if coeff1.is_complex() or coeff2.is_complex():
+        if x1.is_complex() or x2.is_complex():
             fft = torch.fft.fft
             ifft = torch.fft.ifft
         else:
             fft = torch.fft.rfft
             ifft = torch.fft.irfft
 
-        degp1 = coeff1.shape[-1] + coeff2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
+        degp1 = x1.shape[-1] + x2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
 
-        spec1 = fft(coeff1, n=degp1, dim=-1)  # shape (F, K1, dp1).
-        spec2 = fft(coeff2, n=degp1, dim=-1)  # shape (F, K2, dp1).
+        spec1 = fft(x1, n=degp1, dim=-1)  # shape (F, K1, dp1).
+        spec2 = fft(x2, n=degp1, dim=-1)  # shape (F, K2, dp1).
 
         # shape (F, K1, 1, dp1), (F, 1, K2, dp1) -> (F, K1, K2, dp1) -> (F, K1*K2, dp1).
         spec = torch.flatten(

@@ -1,6 +1,6 @@
 import itertools
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Callable
 
 import torch
 from torch import Tensor, autograd
@@ -47,7 +47,7 @@ class ComplexSafeLog(autograd.Function):
         return torch.nan_to_num(grad_output / x.conj())
 
 
-csafelog = ComplexSafeLog.apply
+csafelog: Callable[[Tensor], Tensor] = ComplexSafeLog.apply
 
 
 def flatten_dims(x: Tensor, /, *, dims: Sequence[int]) -> Tensor:

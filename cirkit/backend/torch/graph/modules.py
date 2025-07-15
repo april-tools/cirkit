@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
-from typing_extensions import Generic
+from typing_extensions import Generic, Self
 
 from torch import Tensor, nn
 
@@ -282,7 +282,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
         """
         return self._address_book
 
-    def subgraph(self, *roots: TorchModuleT) -> "TorchDiAcyclicGraph[TorchModuleT]":
+    def subgraph(self, *roots: TorchModuleT) -> Self:
         """Assuming the computational graph is not a folded one,
         this returns the sub-graph having the given root torch modules as output modules.
 

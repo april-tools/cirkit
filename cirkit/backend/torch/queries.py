@@ -1,6 +1,6 @@
 import functools
 from abc import ABC
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor
