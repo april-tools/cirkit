@@ -44,7 +44,7 @@ def dirichlet_(tensor: Tensor, alpha: float | list[float], *, dim: int = -1) -> 
                 "do not match"
             )
         concentration = Tensor(alpha)
-    dirichlet = distributions.Dirichlet(concentration)  # type: ignore[no-untyped-call]
+    dirichlet = distributions.Dirichlet(concentration)
     samples = dirichlet.sample(torch.Size([d for i, d in enumerate(shape) if i != dim]))
     tensor.copy_(torch.transpose(samples, dim, -1))
     return tensor

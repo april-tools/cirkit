@@ -172,20 +172,22 @@ disable = [
 [tool.mypy]
 python_version = "3.10"
 follow_imports = "silent"
-# https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous
-warn_unused_configs = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#disallow-dynamic-typing
-disallow_any_explicit = false
+# The following is disabled as common use cases (e.g., using np.ndarray) do not
+# consider specifyic generics (e.g., writing np.ndarray[np.float] every time)
+# It can be enabled to doublecheck small parts of code heavily relying on generics
+# disallow_any_generics = true
+disallow_subclassing_any = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#untyped-definitions-and-calls
-disallow_untyped_calls = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
-#check_untyped_defs = true
 disallow_untyped_decorators = true
 # https://mypy.readthedocs.io/en/stable/config_file.html#configuring-warnings
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true
+# https://mypy.readthedocs.io/en/stable/config_file.html#miscellaneous
+warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = ["graphviz.*", "scipy.*"]

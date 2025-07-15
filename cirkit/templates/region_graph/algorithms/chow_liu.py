@@ -123,7 +123,7 @@ def _categorical_mutual_info(
     joint_counts = torch.zeros(
         n_features, n_features, num_categories**2, dtype=torch.long, device=data.device
     )
-    for chunk in data.split(chunk_size):  # type: ignore[no-untyped-call]
+    for chunk in data.split(chunk_size):
         joint_values = chunk.t().unsqueeze(1) * num_categories + chunk.t().unsqueeze(0)
         joint_counts.scatter_add_(-1, joint_values.long(), torch.ones_like(joint_values))
     joint_counts = joint_counts.view(n_features, n_features, num_categories, num_categories)

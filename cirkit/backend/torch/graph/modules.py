@@ -202,7 +202,7 @@ class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
     def lookup(
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchModuleT | None, tuple]]:
-        """Retrive an iterator that iteratively returns a torch module and the tensor inputs to it.
+        """Retrieve an iterator that iteratively returns a torch module and the tensor inputs to it.
 
         Args:
             module_outputs: A list of the outputs of each torch module. This list is expected to
@@ -214,7 +214,7 @@ class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
 
         Returns:
             An iterator of tuples, where the first element is a torch module if we are
-            retriving the inputs to it, and None if we are retrieving the output of the
+            retrieving the inputs to it, and None if we are retrieving the output of the
             whole computational graph (i.e., in the final step of the evaluation).
             The second element is instead a tuple of arguments that are input to the
             torch module (e.g., some input tensors)
@@ -245,7 +245,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
         in_modules: Mapping[TorchModuleT, Sequence[TorchModuleT]],
         outputs: Sequence[TorchModuleT],
         *,
-        fold_idx_info: FoldIndexInfo | None = None,
+        fold_idx_info: FoldIndexInfo[TorchModuleT] | None = None,
     ):
         """Initialize a torch computational graph.
 
@@ -274,7 +274,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
         return self._is_folded
 
     @property
-    def address_book(self) -> AddressBook:
+    def address_book(self) -> AddressBook[TorchModuleT]:
         """Retrieve the address book object of the computational graph.
 
         Returns:
@@ -335,10 +335,12 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
         raise RuntimeError("The address book is malformed")
 
     @abstractmethod
-    def _build_unfold_index_info(self) -> FoldIndexInfo: ...
+    def _build_unfold_index_info(self) -> FoldIndexInfo[TorchModuleT]: ...
 
     @abstractmethod
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook: ...
+    def _build_address_book(
+        self, fold_idx_info: FoldIndexInfo[TorchModuleT]
+    ) -> AddressBook[TorchModuleT]: ...
 
     def __repr__(self) -> str:
         def indent(s: str) -> str:

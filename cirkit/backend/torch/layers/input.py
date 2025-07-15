@@ -427,9 +427,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             logits = torch.log(self.probs())
         else:
             logits = self.logits()
-        dist = distributions.Categorical(logits=logits)  # type: ignore[no-untyped-call]
+        dist = distributions.Categorical(logits=logits)
         # samples: (N, F, K)
-        samples = dist.sample((num_samples,))  # type: ignore[no-untyped-call]
+        samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
 
@@ -533,16 +533,12 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         if self.logits is None:
             assert self.probs is not None
             probs = self.probs().unsqueeze(dim=1)  # (F, 1, K)
-            dist = distributions.Binomial(  # type: ignore[no-untyped-call]
-                self.total_count, probs=probs
-            )
+            dist = distributions.Binomial(self.total_count, probs=probs)
         else:
             logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
-            dist = distributions.Binomial(  # type: ignore[no-untyped-call]
-                self.total_count, logits=logits
-            )
+            dist = distributions.Binomial(self.total_count, logits=logits)
         # (F, B, K)
-        return dist.log_prob(x)  # type: ignore[no-untyped-call]
+        return dist.log_prob(x)
 
     def log_partition_function(self) -> Tensor:
         if self.logits is None:
@@ -558,11 +554,9 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             logits = torch.log(self.probs())
         else:
             logits = self.logits()
-        dist = distributions.Binomial(  # type: ignore[no-untyped-call]
-            self.total_count, logits=logits
-        )
+        dist = distributions.Binomial(self.total_count, logits=logits)
         # samples: (num_samples, F, K)
-        samples = dist.sample((num_samples,))  # type: ignore[no-untyped-call]
+        samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, num_samples)
         return samples
 
@@ -667,9 +661,9 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         mean = self.mean().unsqueeze(dim=1)  # (F, 1, K)
         stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, K)
-        dist = distributions.Normal(loc=mean, scale=stddev)  # type: ignore[no-untyped-call]
+        dist = distributions.Normal(loc=mean, scale=stddev)
         # log_probs: (F, B, K)
-        log_probs = dist.log_prob(x)  # type: ignore[no-untyped-call]
+        log_probs = dist.log_prob(x)
         if self.log_partition is not None:
             log_partition = self.log_partition()  # (F, K)
             log_probs = log_probs + log_partition.unsqueeze(dim=1)
@@ -684,11 +678,9 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return log_partition.unsqueeze(dim=1)  # (F, 1, K)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        dist = distributions.Normal(  # type: ignore[no-untyped-call]
-            loc=self.mean(), scale=self.stddev()
-        )
+        dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
         # samples: (N, F, K)
-        samples = dist.sample((num_samples,))  # type: ignore[no-untyped-call]
+        samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
 

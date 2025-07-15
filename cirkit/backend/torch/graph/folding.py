@@ -19,7 +19,7 @@ def build_unfold_index_info(
     *,
     outputs: Iterable[TorchModuleT],
     incomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
-) -> FoldIndexInfo:
+) -> FoldIndexInfo[TorchModuleT]:
     # The topological ordering of modules
     ordering_ls: list[TorchModuleT] = list(ordering)
 
@@ -69,7 +69,7 @@ def build_folded_graph(
     list[TorchModuleT],
     dict[TorchModuleT, list[TorchModuleT]],
     list[TorchModuleT],
-    FoldIndexInfo,
+    FoldIndexInfo[TorchModuleT],
 ]:
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
@@ -146,7 +146,7 @@ def group_foldable_modules(
     # A dictionary mapping a module fold settings,
     # which uniquely identifies a group of modules that can be folded,
     # into a group of modules.
-    groups: dict[tuple, list[TorchModuleT]] = defaultdict(list)
+    groups: dict[tuple[Any, ...], list[TorchModuleT]] = defaultdict(list)
 
     # For each module, either create a new group or insert it into an existing one
     for m in modules:
@@ -162,7 +162,7 @@ def build_address_book_stacked_entry(
     *,
     num_folds: dict[int, int],
     output: bool = False,
-) -> AddressBookEntry:
+) -> AddressBookEntry[TorchModuleT]:
     # Retrieve the unique fold indices that reference the module inputs
     in_module_ids = list(dict.fromkeys(idx[0] for fi in in_fold_idx for idx in fi))
 
@@ -205,7 +205,7 @@ def build_address_book_entry(
     in_fold_idx: list[list[tuple[int, int]]],
     *,
     num_folds: dict[int, int],
-) -> AddressBookEntry:
+) -> AddressBookEntry[TorchModuleT]:
     # Transpose the index information, since we will build the
     # address book information for each operand independently
     # (this is because the inputs of modules might not be stacked,

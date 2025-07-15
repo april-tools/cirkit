@@ -40,7 +40,7 @@ class CompiledCircuitsMap(Generic[CompiledCircuitT]):
 class LayerCompilationFunc(Protocol):
     """The layer compilation function protocol."""
 
-    def __call__(self, compiler: "AbstractCompiler", sl: Layer) -> Any:
+    def __call__(self, compiler: "AbstractCompiler[CompiledCircuitT]", sl: Layer) -> Any:
         """Compile a symbolic layer, given a compiler.
 
         Args:
@@ -56,7 +56,7 @@ class LayerCompilationFunc(Protocol):
 class ParameterCompilationFunc(Protocol):
     """The parameter node compilation function protocol."""
 
-    def __call__(self, compiler: "AbstractCompiler", p: ParameterNode) -> Any:
+    def __call__(self, compiler: "AbstractCompiler[CompiledCircuitT]", p: ParameterNode) -> Any:
         """Compile a symbolic parameter node, given a compiler.
 
         Args:
@@ -72,7 +72,7 @@ class ParameterCompilationFunc(Protocol):
 class InitializerCompilationFunc(Protocol):
     """The initialization method compilation function protocol."""
 
-    def __call__(self, compiler: "AbstractCompiler", init: Initializer) -> Any:
+    def __call__(self, compiler: "AbstractCompiler[CompiledCircuitT]", init: Initializer) -> Any:
         """Compile a symbolic initializer, given a compiler.
 
         Args:

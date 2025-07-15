@@ -25,7 +25,7 @@ from cirkit.backend.torch.parameters.nodes import (
 )
 
 
-class ParameterAddressBook(AddressBook):
+class ParameterAddressBook(AddressBook[TorchParameterNode]):
     """The address book data structure for the parameter computational graphs.
     See [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter].
     The address book stores a list of
@@ -62,7 +62,9 @@ class ParameterAddressBook(AddressBook):
             yield node, ()
 
     @classmethod
-    def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
+    def from_index_info(
+        cls, fold_idx_info: FoldIndexInfo[TorchParameterNode]
+    ) -> "ParameterAddressBook":
         """Constructs the parameter nodes address book using fold index information.
 
         Args:
@@ -72,7 +74,7 @@ class ParameterAddressBook(AddressBook):
             A parameter nodes address book.
         """
         # The address book entries being built
-        entries: list[AddressBookEntry] = []
+        entries: list[AddressBookEntry[TorchParameterNode]] = []
 
         # A useful dictionary mapping module ids to their number of folds
         num_folds: dict[int, int] = {}
@@ -115,7 +117,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         in_modules: Mapping[TorchParameterNode, Sequence[TorchParameterNode]],
         outputs: Sequence[TorchParameterNode],
         *,
-        fold_idx_info: FoldIndexInfo | None = None,
+        fold_idx_info: FoldIndexInfo[TorchParameterNode] | None = None,
     ):
         """Initialize a torch parameter computational graph.
 
@@ -185,12 +187,14 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         """
         return self.evaluate()
 
-    def _build_unfold_index_info(self) -> FoldIndexInfo:
+    def _build_unfold_index_info(self) -> FoldIndexInfo[TorchParameterNode]:
         return build_unfold_index_info(
             self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
         )
 
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
+    def _build_address_book(
+        self, fold_idx_info: FoldIndexInfo[TorchParameterNode]
+    ) -> ParameterAddressBook:
         return ParameterAddressBook.from_index_info(fold_idx_info)
 
     def extra_repr(self) -> str:

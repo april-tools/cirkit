@@ -73,7 +73,7 @@ class LayerAddressBook(AddressBook[TorchLayer]):
     @classmethod
     def from_index_info(
         cls,
-        fold_idx_info: FoldIndexInfo,
+        fold_idx_info: FoldIndexInfo[TorchLayer],
         *,
         incomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
     ) -> "LayerAddressBook":
@@ -87,7 +87,7 @@ class LayerAddressBook(AddressBook[TorchLayer]):
             A layers address book.
         """
         # The address book entries being built
-        entries: list[AddressBookEntry] = []
+        entries: list[AddressBookEntry[TorchLayer]] = []
 
         # A useful dictionary mapping module ids to their number of folds
         num_folds: dict[int, int] = {}
@@ -131,7 +131,7 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         outputs: Sequence[TorchLayer],
         *,
         properties: StructuralProperties,
-        fold_idx_info: FoldIndexInfo | None = None,
+        fold_idx_info: FoldIndexInfo[TorchLayer] | None = None,
     ) -> None:
         """Initializes a torch circuit.
 
@@ -260,12 +260,12 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             raise ValueError(f"Expected some input 'x', as the circuit has scope '{self._scope}'")
         return self._evaluate_layers(x)
 
-    def _build_unfold_index_info(self) -> FoldIndexInfo:
+    def _build_unfold_index_info(self) -> FoldIndexInfo[TorchLayer]:
         return build_unfold_index_info(
             self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
         )
 
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> LayerAddressBook:
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo[TorchLayer]) -> LayerAddressBook:
         return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
 
     def _evaluate_layers(self, x: Tensor | None) -> Tensor:

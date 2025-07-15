@@ -424,7 +424,7 @@ class BinomialLayer(InputLayer):
         return (self.num_output_units,)
 
     @property
-    def config(self) -> dict:
+    def config(self) -> dict[str, Any]:
         return {
             "scope": self.scope,
             "num_output_units": self.num_output_units,

@@ -13,14 +13,9 @@ from cirkit.backend.compiler import (
     CompilerLayerRegistry,
     CompilerParameterRegistry,
 )
-from cirkit.backend.registry import CompilerRegistry
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
-from cirkit.backend.torch.graph.optimize import (
-    GraphOptPattern,
-    match_optimization_patterns,
-    optimize_graph,
-)
+from cirkit.backend.torch.graph.optimize import match_optimization_patterns, optimize_graph
 from cirkit.backend.torch.initializers import foldwise_initializer_
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.backend.torch.layers.input import TorchConstantLayer
@@ -122,12 +117,14 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         # The state of the compiler
         self._state = TorchCompilerState()
 
-        # The registry of optimization rules
-        self._optimization_registry = {
-            "parameter": ParameterOptRegistry(dict(DEFAULT_PARAMETER_OPT_RULES)),
-            "layer_fuse": LayerOptRegistry(dict(DEFAULT_LAYER_FUSE_OPT_RULES)),
-            "layer_shatter": LayerOptRegistry(dict(DEFAULT_LAYER_SHATTER_OPT_RULES)),
+        # The registries of optimization rules
+        self._layer_optimization_registry = {
+            "fuse": LayerOptRegistry(dict(DEFAULT_LAYER_FUSE_OPT_RULES)),
+            "shatter": LayerOptRegistry(dict(DEFAULT_LAYER_SHATTER_OPT_RULES)),
         }
+        self._parameter_optimization_registry = ParameterOptRegistry(
+            dict(DEFAULT_PARAMETER_OPT_RULES)
+        )
 
     def compile_pipeline(self, sc: Circuit) -> TorchCircuit:
         # Compile the circuits following the topological ordering of the pipeline.
@@ -190,11 +187,22 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         rule = self.retrieve_initializer_rule(signature)
         return cast(Callable[[Tensor], Tensor], rule(self, initializer))
 
-    def retrieve_optimization_registry(self, kind: str) -> CompilerRegistry:
-        return cast(CompilerRegistry, self._optimization_registry[kind])
+    def retrieve_layer_optimization_registry(self, kind: str) -> LayerOptRegistry:
+        return self._layer_optimization_registry[kind]
 
-    def retrieve_optimization_rule(self, kind: str, pattern: GraphOptPattern) -> Callable:
-        registry = self.retrieve_optimization_registry(kind)
+    def retrieve_parameter_optimization_registry(self) -> ParameterOptRegistry:
+        return self._parameter_optimization_registry
+
+    def retrieve_layer_optimization_rule(
+        self, kind: str, pattern: LayerOptPattern
+    ) -> LayerOptApplyFunc:
+        registry = self.retrieve_layer_optimization_registry(kind)
+        return registry.retrieve_rule(pattern)
+
+    def retrieve_parameter_optimization_rule(
+        self, pattern: ParameterOptPattern
+    ) -> ParameterOptApplyFunc:
+        registry = self.retrieve_parameter_optimization_registry()
         return registry.retrieve_rule(pattern)
 
     def _compile_parameter_node(self, node: ParameterNode) -> TorchParameterNode:
@@ -284,10 +292,9 @@ def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> 
     # Retrieve the class of the folded layer, as well as the configuration attributes
     fold_layer_cls = type(layers[0])
     assert all(isinstance(l, fold_layer_cls) for l in layers)
-    fold_layer_conf = layers[0].config
 
     # If we are folding input layers, then concatenate the variables scope index tensors
-    kwargs: dict[str, Any] = {}
+    kwargs: dict[str, Any] = dict(layers[0].config)
     if issubclass(fold_layer_cls, TorchInputLayer):
         if not issubclass(fold_layer_cls, TorchConstantLayer):
             kwargs["scope_idx"] = torch.cat([cast(TorchInputLayer, l).scope_idx for l in layers])
@@ -437,13 +444,12 @@ def _optimize_parameter_nodes(
     compiler: TorchCompiler, cc: TorchCircuit
 ) -> tuple[TorchCircuit, bool]:
     def match_optimizer(match: ParameterOptMatch) -> tuple[TorchParameterNode, ...]:
-        rule = compiler.retrieve_optimization_rule("parameter", match.pattern)
-        func = cast(ParameterOptApplyFunc, rule)
-        return func(compiler, match)
+        rule = compiler.retrieve_parameter_optimization_rule(match.pattern)
+        return rule(compiler, match)
 
     # Loop through all the layers
     has_been_optimized = False
-    patterns = compiler.retrieve_optimization_registry("parameter").signatures
+    patterns = compiler.retrieve_parameter_optimization_registry().signatures
     for layer in cc.layers:
         # Retrieve the parameter computational graphs of the layer
         for pname, pgraph in layer.params.items():
@@ -481,16 +487,14 @@ def _optimize_layers(
     compiler: TorchCompiler, cc: TorchCircuit, *, shatter: bool = False
 ) -> tuple[TorchCircuit, bool]:
     def match_optimizer_shatter(match: LayerOptMatch) -> tuple[TorchLayer, ...]:
-        rule = compiler.retrieve_optimization_rule("layer_shatter", match.pattern)
-        func = cast(LayerOptApplyFunc, rule)
-        return func(compiler, match)
+        rule = compiler.retrieve_layer_optimization_rule("shatter", match.pattern)
+        return rule(compiler, match)
 
     def match_optimizer_fuse(match: LayerOptMatch) -> tuple[TorchLayer, ...]:
-        rule = compiler.retrieve_optimization_rule("layer_fuse", match.pattern)
-        func = cast(LayerOptApplyFunc, rule)
-        return func(compiler, match)
+        rule = compiler.retrieve_layer_optimization_rule("fuse", match.pattern)
+        return rule(compiler, match)
 
-    registry = compiler.retrieve_optimization_registry("layer_shatter" if shatter else "layer_fuse")
+    registry = compiler.retrieve_layer_optimization_registry("shatter" if shatter else "fuse")
     match_optimizer = match_optimizer_shatter if shatter else match_optimizer_fuse
     optimize_result = optimize_graph(
         cc.topological_ordering(),
@@ -544,8 +548,8 @@ def _match_layer_pattern(
     incomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
     outcomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
 ) -> LayerOptMatch | None:
-    ppatterns = pattern.ppatterns()
-    cpatterns = pattern.cpatterns()
+    parameter_patterns = pattern.sub_patterns()
+    config_patterns = pattern.config_patterns()
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
     matched_layers = []
@@ -565,13 +569,13 @@ def _match_layer_pattern(
             return None
 
         # Second, attempt to match the configuration patterns for the layer
-        for cname, cvalue in cpatterns[lid].items():
+        for cname, cvalue in config_patterns[lid].items():
             if layer.config[cname] != cvalue:
                 return None
 
         # Third, attempt to match the patterns specified for its parameters
         lpmatches = {}
-        for pname, ppattern in ppatterns[lid].items():
+        for pname, ppattern in parameter_patterns[lid].items():
             pgraph = layer.params[pname]
             matches, _ = match_optimization_patterns(
                 pgraph.topological_ordering(),

@@ -51,10 +51,10 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuitT]):
         self._compiler = retrieve_compiler(backend, **backend_kwargs)
 
         # The token used to restore the pipeline context
-        self._token: Token[PipelineContext] | None = None
+        self._token: Token[PipelineContext[CompiledCircuitT]] | None = None
 
     @classmethod
-    def from_default_backend(cls) -> "PipelineContext":
+    def from_default_backend(cls) -> "PipelineContext[CompiledCircuitT]":
         """Construts a pipeline context from the default backend.
             The default backend is 'torch'.
 
@@ -75,7 +75,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuitT]):
         """
         return self._compiler.get_compiled_circuit(sc)
 
-    def __enter__(self) -> "PipelineContext":
+    def __enter__(self) -> "PipelineContext[CompiledCircuitT]":
         """Enters a pipeline context.
 
         Returns:
@@ -301,7 +301,9 @@ def compile(sc: Circuit, ctx: PipelineContext[CompiledCircuitT] | None = None) -
     return ctx.compile(sc)
 
 
-def concatenate(*cc: CompiledCircuitT, ctx: PipelineContext | None = None) -> CompiledCircuitT:
+def concatenate(
+    *cc: CompiledCircuitT, ctx: PipelineContext[CompiledCircuitT] | None = None
+) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.concatenate(*cc)
@@ -310,7 +312,7 @@ def concatenate(*cc: CompiledCircuitT, ctx: PipelineContext | None = None) -> Co
 def integrate(
     cc: CompiledCircuitT,
     scope: Scope | None = None,
-    ctx: PipelineContext | None = None,
+    ctx: PipelineContext[CompiledCircuitT] | None = None,
 ) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
@@ -318,7 +320,9 @@ def integrate(
 
 
 def multiply(
-    cc1: CompiledCircuitT, cc2: CompiledCircuitT, ctx: PipelineContext | None = None
+    cc1: CompiledCircuitT,
+    cc2: CompiledCircuitT,
+    ctx: PipelineContext[CompiledCircuitT] | None = None,
 ) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
@@ -326,14 +330,16 @@ def multiply(
 
 
 def differentiate(
-    cc: CompiledCircuitT, ctx: PipelineContext | None = None, *, order: int = 1
+    cc: CompiledCircuitT, ctx: PipelineContext[CompiledCircuitT] | None = None, *, order: int = 1
 ) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.differentiate(cc, order=order)
 
 
-def conjugate(cc: CompiledCircuitT, ctx: PipelineContext | None = None) -> CompiledCircuitT:
+def conjugate(
+    cc: CompiledCircuitT, ctx: PipelineContext[CompiledCircuitT] | None = None
+) -> CompiledCircuitT:
     if ctx is None:
         ctx = _PIPELINE_CONTEXT.get()
     return ctx.conjugate(cc)

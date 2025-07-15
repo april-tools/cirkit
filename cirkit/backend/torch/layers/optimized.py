@@ -187,11 +187,8 @@ class TorchCPTLayer(TorchInnerLayer):
         d = x.shape[3]
 
         # mixing_distribution: (F, O, K)
-        mixing_distribution = torch.distributions.Categorical(
-            probs=weight  # type: ignore[no-untyped-call]
-        )
-
-        mixing_samples = mixing_distribution.sample((num_samples,))  # type: ignore[no-untyped-call]
+        mixing_distribution = torch.distributions.Categorical(probs=weight)
+        mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
         mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
 
