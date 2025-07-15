@@ -40,8 +40,8 @@ class TorchInputLayer(TorchLayer, ABC):
             raise ValueError(f"The scope index must be a matrix, but found shape {scope_idx.shape}")
         num_folds, num_variables = scope_idx.shape
         super().__init__(
-            num_variables,
-            num_output_units,
+            num_input_units=num_variables,
+            num_output_units=num_output_units,
             num_folds=num_folds,
             semiring=semiring,
         )

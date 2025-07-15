@@ -283,6 +283,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: TorchCircuit) -> TorchCircuit:
 def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> TorchLayer:
     # Retrieve the class of the folded layer, as well as the configuration attributes
     fold_layer_cls = type(layers[0])
+    assert all(isinstance(l, fold_layer_cls) for l in layers)
     fold_layer_conf = layers[0].config
 
     # If we are folding input layers, then concatenate the variables scope index tensors
@@ -305,23 +306,15 @@ def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> 
             layer_submodules[n].append(sub_l)
 
     # Fold the parameters, if the layers have any
-    fold_layer_parameters: dict[str, TorchParameter] = {
-        n: _fold_parameters(compiler, ps) for n, ps in layer_params.items()
-    }
+    kwargs.update((n, _fold_parameters(compiler, ps)) for n, ps in layer_params.items())
 
     # Fold all sub-module layers, if the layers have any
-    fold_layer_submodules: dict[str, TorchLayer] = {
-        n: _fold_layers_group(ls, compiler=compiler) for n, ls in layer_submodules.items()
-    }
+    kwargs.update(
+        (n, _fold_layers_group(ls, compiler=compiler)) for n, ls in layer_submodules.items()
+    )
 
     # Instantiate a new folded layer, using the folded layer configuration and the folded parameters
-    return fold_layer_cls(
-        **fold_layer_conf,
-        **fold_layer_submodules,
-        **fold_layer_parameters,
-        semiring=compiler.semiring,
-        **kwargs,
-    )
+    return fold_layer_cls(semiring=compiler.semiring, **kwargs)
 
 
 def _fold_parameters(

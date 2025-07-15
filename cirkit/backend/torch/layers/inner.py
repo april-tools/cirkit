@@ -34,7 +34,11 @@ class TorchInnerLayer(TorchLayer, ABC):
             num_folds: The number of channels.
         """
         super().__init__(
-            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            semiring=semiring,
+            num_folds=num_folds,
         )
 
     @property
