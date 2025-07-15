@@ -427,8 +427,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             logits = torch.log(self.probs())
         else:
             logits = self.logits()
-        dist = distributions.Categorical(logits=logits)
-        samples = dist.sample((num_samples,))  # (N, F, K)
+        dist = distributions.Categorical(logits=logits)  # type: ignore[no-untyped-call]
+        # samples: (N, F, K)
+        samples = dist.sample((num_samples,))  # type: ignore[no-untyped-call]
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
 
@@ -529,23 +530,39 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Binomial should be discrete
-        if self.logits is not None:
-            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
-            dist = distributions.Binomial(self.total_count, logits=logits)
-        else:
+        if self.logits is None:
+            assert self.probs is not None
             probs = self.probs().unsqueeze(dim=1)  # (F, 1, K)
-            dist = distributions.Binomial(self.total_count, probs=probs)
-        x = dist.log_prob(x)  # (F, B, K)
-        return x
+            dist = distributions.Binomial(  # type: ignore[no-untyped-call]
+                self.total_count, probs=probs
+            )
+        else:
+            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
+            dist = distributions.Binomial(  # type: ignore[no-untyped-call]
+                self.total_count, logits=logits
+            )
+        # (F, B, K)
+        return dist.log_prob(x)  # type: ignore[no-untyped-call]
 
     def log_partition_function(self) -> Tensor:
-        device = self.logits.device if self.logits is not None else self.probs.device
+        if self.logits is None:
+            assert self.probs is not None
+            device = self.probs.device
+        else:
+            device = self.logits.device
         return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
-        dist = distributions.Binomial(self.total_count, logits=logits)
-        samples = dist.sample((num_samples,))  # (num_samples, F, K)
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
+        dist = distributions.Binomial(  # type: ignore[no-untyped-call]
+            self.total_count, logits=logits
+        )
+        # samples: (num_samples, F, K)
+        samples = dist.sample((num_samples,))  # type: ignore[no-untyped-call]
         samples = samples.permute(1, 2, 0)  # (F, K, num_samples)
         return samples
 
@@ -650,11 +667,13 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         mean = self.mean().unsqueeze(dim=1)  # (F, 1, K)
         stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, K)
-        x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, K)
+        dist = distributions.Normal(loc=mean, scale=stddev)  # type: ignore[no-untyped-call]
+        # log_probs: (F, B, K)
+        log_probs = dist.log_prob(x)  # type: ignore[no-untyped-call]
         if self.log_partition is not None:
             log_partition = self.log_partition()  # (F, K)
-            x = x + log_partition.unsqueeze(dim=1)
-        return x
+            log_probs = log_probs + log_partition.unsqueeze(dim=1)
+        return log_probs
 
     def log_partition_function(self) -> Tensor:
         if self.log_partition is None:
@@ -665,8 +684,11 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return log_partition.unsqueeze(dim=1)  # (F, 1, K)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
-        samples = dist.sample((num_samples,))  # (N, F, K)
+        dist = distributions.Normal(  # type: ignore[no-untyped-call]
+            loc=self.mean(), scale=self.stddev()
+        )
+        # samples: (N, F, K)
+        samples = dist.sample((num_samples,))  # type: ignore[no-untyped-call]
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
 

@@ -85,14 +85,13 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuitT]):
         self._token = _PIPELINE_CONTEXT.set(self)
         return self
 
-    def __exit__(
+    def __exit__(  # pylint: disable=useless-return
         self,
         __exc_type: type[BaseException] | None,
         __exc_value: BaseException | None,
         __traceback: TracebackType | None,
     ) -> bool | None:
         """Exit a pipeline context."""
-        # pylint: disable-next=assignment-from-none
         self._op_registry.__exit__(__exc_type, __exc_value, __traceback)
         assert self._token is not None
         _PIPELINE_CONTEXT.reset(self._token)
