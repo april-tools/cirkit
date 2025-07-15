@@ -45,6 +45,7 @@ class TorchInputLayer(TorchLayer, ABC):
             num_folds=num_folds,
             semiring=semiring,
         )
+        self._scope_idx: Tensor
         self.register_buffer("_scope_idx", scope_idx)
 
     @property
@@ -391,6 +392,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     @property
     def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 
@@ -400,13 +402,18 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         # x: (F, B, 1) -> (F, B)
         x = x.squeeze(dim=2)
         # logits: (F, K, N)
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
         idx_fold = torch.arange(self.num_folds, device=logits.device)
         x = logits[idx_fold[:, None], :, x]
         return x
 
     def log_partition_function(self) -> Tensor:
         if self.logits is None:
+            assert self.probs is not None
             return torch.zeros(
                 size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
             )
@@ -414,7 +421,12 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        # logits: (F, K, N)
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
         dist = distributions.Categorical(logits=logits)
         samples = dist.sample((num_samples,))  # (N, F, K)
         samples = samples.permute(1, 2, 0)  # (F, K, N)
@@ -510,6 +522,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
     @property
     def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 
