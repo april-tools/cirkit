@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import numpy as np
 import torch
-from torch import Tensor
+from torch import Tensor, distributions
 
 InitializerFunc = Callable[[Tensor], Tensor]
 
@@ -44,7 +44,7 @@ def dirichlet_(tensor: Tensor, alpha: float | list[float], *, dim: int = -1) -> 
                 "do not match"
             )
         concentration = Tensor(alpha)
-    dirichlet = torch.distributions.Dirichlet(concentration)
+    dirichlet = distributions.Dirichlet(concentration)
     samples = dirichlet.sample(torch.Size([d for i, d in enumerate(shape) if i != dim]))
     tensor.copy_(torch.transpose(samples, dim, -1))
     return tensor

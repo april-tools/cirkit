@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from torch import Tensor, distributions
 
-from cirkit.backend.torch.layers import TorchLayer
+from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSemiring
 
@@ -40,11 +40,12 @@ class TorchInputLayer(TorchLayer, ABC):
             raise ValueError(f"The scope index must be a matrix, but found shape {scope_idx.shape}")
         num_folds, num_variables = scope_idx.shape
         super().__init__(
-            num_variables,
-            num_output_units,
+            num_input_units=num_variables,
+            num_output_units=num_output_units,
             num_folds=num_folds,
             semiring=semiring,
         )
+        self._scope_idx: Tensor
         self.register_buffer("_scope_idx", scope_idx)
 
     @property
@@ -67,8 +68,7 @@ class TorchInputLayer(TorchLayer, ABC):
 
     @property
     @abstractmethod
-    def config(self) -> Mapping[str, Any]:
-        ...
+    def config(self) -> Mapping[str, Any]: ...
 
     @property
     def params(self) -> Mapping[str, TorchParameter]:
@@ -127,8 +127,7 @@ class TorchInputFunctionLayer(TorchInputLayer):
     """An input layer encoding functions defined over a non-empty set of variables."""
 
     def __call__(self, x: Tensor) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
+        return super().__call__(x)
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
@@ -169,8 +168,7 @@ class TorchConstantLayer(TorchInputLayer, ABC):
         )
 
     def __call__(self, batch_size: int) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(batch_size)  # type: ignore[no-any-return,misc]
+        return super().__call__(batch_size)
 
     @abstractmethod
     def forward(self, batch_size: int) -> Tensor:
@@ -325,9 +323,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
 
         Args:
             scope_idx: A tensor of shape $(F, D)$, where $F$ is the number of folds, and
-                $D$ is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape $(D,)$ can be specified, which will be interpreted
-                as a tensor of shape $(1, D)$, i.e., with $F = 1$.
+                $D$ is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape $(D,)$ can be specified, which will be
+                interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             num_categories: The number of categories for Categorical distribution.
             probs: The probabilities parameter of shape $(F, K, N)$, where $K$ is the number of
@@ -356,7 +354,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             semiring=semiring,
         )
         self.num_categories = num_categories
-        if not ((logits is None) ^ (probs is None)):
+        if not (logits is None) ^ (probs is None):
             raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
         if logits is None:
             assert probs is not None
@@ -394,6 +392,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
     @property
     def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 
@@ -403,13 +402,18 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         # x: (F, B, 1) -> (F, B)
         x = x.squeeze(dim=2)
         # logits: (F, K, N)
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
         idx_fold = torch.arange(self.num_folds, device=logits.device)
         x = logits[idx_fold[:, None], :, x]
         return x
 
     def log_partition_function(self) -> Tensor:
         if self.logits is None:
+            assert self.probs is not None
             return torch.zeros(
                 size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
             )
@@ -417,9 +421,15 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        # logits: (F, K, N)
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
         dist = distributions.Categorical(logits=logits)
-        samples = dist.sample((num_samples,))  # (N, F, K)
+        # samples: (N, F, K)
+        samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
 
@@ -446,9 +456,9 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
 
         Args:
             scope_idx: A tensor of shape $(F, D)$, where $F$ is the number of folds, and
-                $D$ is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape $(D,)$ can be specified, which will be interpreted
-                as a tensor of shape $(1, D)$, i.e., with $F = 1$.
+                $D$ is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape $(D,)$ can be specified, which will be
+                interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             total_count: The number of trials.
             probs: The probabilities parameter of shape $(F, K)$, where $K$ is the number of
@@ -475,7 +485,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             semiring=semiring,
         )
         self.total_count = total_count
-        if not ((logits is None) ^ (probs is None)):
+        if not (logits is None) ^ (probs is None):
             raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
         if logits is None:
             assert probs is not None
@@ -485,13 +495,12 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
                     f"and shape {self._probs_logits_shape} for 'probs', found"
                     f"{probs.num_folds} and {probs.shape}, respectively"
                 )
-        else:
-            if not self._valid_parameter_shape(logits):
-                raise ValueError(
-                    f"Expected number of folds {self.num_folds} "
-                    f"and shape {self._probs_logits_shape} for 'logits', found"
-                    f"{logits.num_folds} and {logits.shape}, respectively"
-                )
+        elif not self._valid_parameter_shape(logits):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._probs_logits_shape} for 'logits', found"
+                f"{logits.num_folds} and {logits.shape}, respectively"
+            )
         self.probs = probs
         self.logits = logits
 
@@ -514,29 +523,40 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
     @property
     def params(self) -> Mapping[str, TorchParameter]:
         if self.logits is None:
+            assert self.probs is not None
             return {"probs": self.probs}
         return {"logits": self.logits}
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         if x.is_floating_point():
             x = x.long()  # The input to Binomial should be discrete
-        if self.logits is not None:
-            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
-            dist = distributions.Binomial(self.total_count, logits=logits)
-        else:
+        if self.logits is None:
+            assert self.probs is not None
             probs = self.probs().unsqueeze(dim=1)  # (F, 1, K)
             dist = distributions.Binomial(self.total_count, probs=probs)
-        x = dist.log_prob(x)  # (F, B, K)
-        return x
+        else:
+            logits = self.logits().unsqueeze(dim=1)  # (F, 1, K)
+            dist = distributions.Binomial(self.total_count, logits=logits)
+        # (F, B, K)
+        return dist.log_prob(x)
 
     def log_partition_function(self) -> Tensor:
-        device = self.logits.device if self.logits is not None else self.probs.device
+        if self.logits is None:
+            assert self.probs is not None
+            device = self.probs.device
+        else:
+            device = self.logits.device
         return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
         dist = distributions.Binomial(self.total_count, logits=logits)
-        samples = dist.sample((num_samples,))  # (num_samples, F, K)
+        # samples: (num_samples, F, K)
+        samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, num_samples)
         return samples
 
@@ -559,9 +579,9 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
         Args:
             scope_idx: A tensor of shape $(F, D)$, where $F$ is the number of folds, and
-                $D$ is the number of variables on which the input layers in each fold are defined on.
-                Alternatively, a tensor of shape $(D,)$ can be specified, which will be interpreted
-                as a tensor of shape $(1, D)$, i.e., with $F = 1$.
+                $D$ is the number of variables on which the input layers in each fold are defined
+                on. Alternatively, a tensor of shape $(D,)$ can be specified, which will be
+                interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             mean: The mean parameter, having shape $(F, K)$, where $K$ is the number of
                 output units.
@@ -641,11 +661,13 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
         mean = self.mean().unsqueeze(dim=1)  # (F, 1, K)
         stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, K)
-        x = distributions.Normal(loc=mean, scale=stddev).log_prob(x)  # (F, B, K)
+        dist = distributions.Normal(loc=mean, scale=stddev)
+        # log_probs: (F, B, K)
+        log_probs = dist.log_prob(x)
         if self.log_partition is not None:
             log_partition = self.log_partition()  # (F, K)
-            x = x + log_partition.unsqueeze(dim=1)
-        return x
+            log_probs = log_probs + log_partition.unsqueeze(dim=1)
+        return log_probs
 
     def log_partition_function(self) -> Tensor:
         if self.log_partition is None:
@@ -657,7 +679,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
 
     def sample(self, num_samples: int = 1) -> Tensor:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
-        samples = dist.sample((num_samples,))  # (N, F, K)
+        # samples: (N, F, K)
+        samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
 
@@ -810,8 +833,8 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
                 interpreted as a tensor of shape $(1, D)$, i.e., with $F = 1$.
             num_output_units: The number of output units.
             degree: The degree of polynomial.
-            coeff: The coefficient parameter, having shape $(F, K, \mathsf{degree} + 1)$, where $K$ is the number
-                of output units.
+            coeff: The coefficient parameter, having shape $(F, K, \mathsf{degree} + 1)$,
+                where $K$ is the number of output units.
 
         Raises:
             ValueError: If the scope contains more than one variable.

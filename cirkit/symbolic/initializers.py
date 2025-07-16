@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from numbers import Number
 from typing import Any
 
 import numpy as np
@@ -48,7 +47,7 @@ class ConstantTensorInitializer(Initializer):
     """A symbolic constant initializer, which initializes all the entries of a tensor with the
     same value, which can be either a scalar or a Numpy array of the same shape."""
 
-    def __init__(self, value: Number | np.ndarray) -> None:
+    def __init__(self, value: int | float | complex | np.number | np.ndarray) -> None:
         """Initializes a constant tensor initializer.
 
         Args:
@@ -58,7 +57,7 @@ class ConstantTensorInitializer(Initializer):
         Raises:
             ValueError: If the initiaization value is not of the allowed types.
         """
-        if not isinstance(value, (Number, np.ndarray)):
+        if not isinstance(value, (int, float, complex, np.number, np.ndarray)):
             raise ValueError("The value must be either a number or a Numpy array")
         self.value = value
 
@@ -67,7 +66,7 @@ class ConstantTensorInitializer(Initializer):
         return {"value": self.value}
 
     def allows_shape(self, shape: tuple[int, ...]) -> bool:
-        if isinstance(self.value, Number):
+        if isinstance(self.value, (int, float, complex, np.number)):
             return True
         assert isinstance(self.value, np.ndarray)
         try:

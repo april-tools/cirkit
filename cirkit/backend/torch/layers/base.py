@@ -35,7 +35,7 @@ class TorchLayer(AbstractTorchModule, ABC):
         Raises:
             ValueError: If the number of input units is negative.
             ValueError: If the number of output units is not positive.
-            VAlueError: If the arity is not positive.
+            ValueError: If the arity is not positive.
         """
         if num_input_units < 0:
             raise ValueError("The number of input units must be non-negative")

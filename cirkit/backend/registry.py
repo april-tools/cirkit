@@ -28,8 +28,7 @@ class CompilerRegistry(Generic[RegistrySign, RegistryFunc], ABC):
 
     @classmethod
     @abstractmethod
-    def _validate_rule_function(cls, func: RegistryFunc) -> bool:
-        ...
+    def _validate_rule_function(cls, func: RegistryFunc) -> bool: ...
 
     @classmethod
     def _retrieve_signature(cls, func: RegistryFunc) -> RegistrySign:

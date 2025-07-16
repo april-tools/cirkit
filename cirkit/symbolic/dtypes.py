@@ -1,5 +1,4 @@
 from enum import IntEnum, auto
-from numbers import Number
 
 import numpy as np
 
@@ -15,7 +14,7 @@ class DataType(IntEnum):
     """The complex numbers data type."""
 
 
-def dtype_value(x: Number | np.ndarray) -> DataType:
+def dtype_value(x: int | float | complex | np.number | np.ndarray) -> DataType:
     """Given a number or Numpy array, return its symbolic data type.
 
     Args:

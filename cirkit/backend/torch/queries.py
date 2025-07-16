@@ -1,6 +1,6 @@
 import functools
 from abc import ABC
-from collections.abc import Iterable
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor
@@ -13,8 +13,7 @@ from cirkit.utils.scope import Scope
 class Query(ABC):
     """An object used to run queries of circuits compiled using the torch backend."""
 
-    def __init__(self) -> None:
-        ...
+    def __init__(self) -> None: ...
 
 
 class IntegrateQuery(Query):
@@ -46,7 +45,7 @@ class IntegrateQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, x: Tensor, *, integrate_vars: Tensor | Scope | Iterable[Scope]) -> Tensor:
+    def __call__(self, x: Tensor, *, integrate_vars: Tensor | Scope | Sequence[Scope]) -> Tensor:
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
@@ -61,7 +60,7 @@ class IntegrateQuery(Query):
                         marginalised out and False elsewhere.
                     2. Scope, in this case the same integration mask is applied for all entries
                         of the batch
-                    3. List of Scopes, where the length of the list must be either 1 or B. If
+                    3. Sequence of Scopes, where the length of the list must be either 1 or B. If
                         the list has length 1, behaves as above.
         Returns:
             The result of the integration query, given as a tensor of shape $(B, O, K)$,
@@ -119,26 +118,23 @@ class IntegrateQuery(Query):
             return output
         if layer.num_variables > 1:
             raise NotImplementedError("Integration of multivariate input layers is not supported")
-        # integrate_vars_mask is a boolean tensor of dim (B, N)
-        # where N is the number of variables in the scope of the whole circuit.
-        #
-        # layer.scope_idx contains a subset of the variable_idxs of the scope
-        # but may be a reshaped tensor; the shape and order of the variables may be different.
-        #
-        # as such, we need to use the idxs in layer.scope_idx to lookup the values from
-        # the integrate_vars_mask - this will return the correct shape and values.
-        #
-        # if integrate_vars_mask was a vector, we could do integrate_vars_mask[layer.scope_idx]
-        # the vmap below applies the above across the B dimension
+        # Some information:
+        # - integrate_vars_mask is a boolean tensor of dim (B, N)
+        #   where N is the number of variables in the scope of the whole circuit.
+        # - layer.scope_idx contains a subset of the variable_idxs of the scope
+        #   but may be a reshaped tensor; the shape and order of the variables may be different.
+        # As such, we need to use the idxs in layer.scope_idx to look-up the values from
+        # the integrate_vars_mask. This will return the correct shape and values.
+        # Note that, if integrate_vars_mask was a vector, we could do
+        # integrate_vars_mask[layer.scope_idx] the vmap below applies the above across
+        # the batch (B) dimension.
 
         # integration_mask has dimension (B, F, Ko)
         integration_mask = torch.vmap(lambda x: x[layer.scope_idx])(integrate_vars_mask)
         # permute to match integration_output: integration_mask has dimension (F, B, Ko)
         integration_mask = integration_mask.permute([1, 0, 2])
-
         if not torch.any(integration_mask).item():
             return output
-
         integration_output = layer.integrate()
         # Use the integration mask to select which output should be the result of
         # an integration operation, and which should not be
@@ -147,7 +143,9 @@ class IntegrateQuery(Query):
         return torch.where(integration_mask, integration_output, output)
 
     @staticmethod
-    def scopes_to_mask(circuit: TorchCircuit, batch_integrate_vars: Scope | list[Scope]):
+    def scopes_to_mask(
+        circuit: TorchCircuit, batch_integrate_vars: Scope | Sequence[Scope]
+    ) -> Tensor:
         """Accepts a batch of scopes and returns a boolean mask as a tensor with
         True in positions of specified scope indices and False otherwise.
         """
@@ -155,7 +153,7 @@ class IntegrateQuery(Query):
         if isinstance(batch_integrate_vars, Scope):
             batch_integrate_vars = [batch_integrate_vars]
 
-        batch_size = len(tuple(batch_integrate_vars))
+        batch_size = len(batch_integrate_vars)
         # There are cases where the circuit.scope may change,
         # e.g. we may marginalise out X_1 and the length of the scope may be smaller
         # but the actual scope will not have been shifted.
@@ -183,7 +181,6 @@ class IntegrateQuery(Query):
             )
 
         mask[batch_idxs, rv_idxs] = True
-
         return mask
 
 

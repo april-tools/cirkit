@@ -1,78 +1,107 @@
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum, auto
-from typing import Generic, Protocol
+from functools import cached_property
+from typing import Any, Generic, Protocol
 
-from cirkit.backend.torch.graph.modules import TorchModule
+from cirkit.backend.torch.graph.modules import TorchModuleT
 
 
 class OptMatchStrategy(IntEnum):
     LARGEST_MATCH = auto()
 
 
-class GraphOptPatternDefn(Generic[TorchModule]):
+class GraphOptPatternDefn(Generic[TorchModuleT]):
     @classmethod
     def is_output(cls) -> bool:
         return False
 
     @classmethod
-    def entries(cls) -> list[type[TorchModule]]:
-        ...
+    def entries(cls) -> Sequence[type[TorchModuleT]]:
+        raise NotImplementedError
+
+    @classmethod
+    def config_patterns(cls) -> Sequence[Mapping[str, Any]]:
+        return ()
+
+    @classmethod
+    def sub_patterns(cls) -> Sequence[Mapping[str, type["GraphOptPatternDefn"]]]:
+        return ()
 
 
-GraphOptPattern = type[GraphOptPatternDefn[TorchModule]]
+GraphOptPattern = type[GraphOptPatternDefn[TorchModuleT]]
 
 
-class GraphOptMatch(Generic[TorchModule]):
-    def __init__(self, pattern: GraphOptPattern[TorchModule], entries: list[TorchModule]):
+class GraphOptMatch(Generic[TorchModuleT]):
+    def __init__(
+        self,
+        pattern: GraphOptPattern[TorchModuleT],
+        entries: Sequence[TorchModuleT],
+        sub_entries: Sequence[Mapping[str, Sequence["GraphOptMatch"]]] | None = None,
+    ):
         self._pattern = pattern
         self._entries = entries
+        self._sub_entries = sub_entries if sub_entries is not None else ()
 
     @property
-    def pattern(self) -> GraphOptPattern[TorchModule]:
+    def pattern(self) -> GraphOptPattern[TorchModuleT]:
         return self._pattern
 
     @property
-    def entries(self) -> list[TorchModule]:
+    def entries(self) -> Sequence[TorchModuleT]:
         return self._entries
 
     @property
+    def sub_entries(self) -> Sequence[Mapping[str, Sequence["GraphOptMatch"]]]:
+        return self._sub_entries
+
+    @cached_property
     def size(self) -> int:
-        return len(self._entries)
+        size = len(self._entries)
+        for sub_entry in self.sub_entries:
+            for matches in sub_entry.values():
+                size += sum(match.size for match in matches)
+        return size
 
 
-class PatternMatcherFunc(Protocol):
+class PatternMatcherFunc(Protocol[TorchModuleT]):
     def __call__(
         self,
-        module: TorchModule,
-        pattern: GraphOptPattern[TorchModule],
+        module: TorchModuleT,
+        pattern: GraphOptPattern[TorchModuleT],
+        /,
         *,
-        incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-        outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    ) -> GraphOptMatch[TorchModule] | None:
-        ...
+        incomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+        outcomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    ) -> GraphOptMatch[TorchModuleT] | None: ...
 
 
-class MatchOptimizerFunc(Protocol):
+class MatchOptimizerFunc(Protocol[TorchModuleT]):
     def __call__(
         self,
-        match: GraphOptMatch[TorchModule],
-    ) -> tuple[TorchModule, ...]:
-        ...
+        match: GraphOptMatch[TorchModuleT],
+    ) -> tuple[TorchModuleT, ...]: ...
 
 
 def optimize_graph(
-    ordering: Iterable[TorchModule],
-    outputs: Iterable[TorchModule],
-    patterns: Iterable[GraphOptPattern],
+    ordering: Iterable[TorchModuleT],
+    outputs: Iterable[TorchModuleT],
+    patterns: Iterable[GraphOptPattern[TorchModuleT]],
     *,
-    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    pattern_matcher_fn: PatternMatcherFunc,
-    match_optimizer_fn: MatchOptimizerFunc,
+    incomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    outcomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    pattern_matcher_fn: PatternMatcherFunc[TorchModuleT],
+    match_optimizer_fn: MatchOptimizerFunc[TorchModuleT],
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-) -> tuple[list[TorchModule], dict[TorchModule, list[TorchModule]], list[TorchModule],] | None:
-    # TODO: generalize this as to cover patterns with multiply entry or exit points? (much more difficult)
+) -> (
+    tuple[
+        list[TorchModuleT],
+        dict[TorchModuleT, list[TorchModuleT]],
+        list[TorchModuleT],
+    ]
+    | None
+):
+    # TODO: generalize this as to cover patterns with multiply entry or exit points?
 
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
     outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
@@ -95,38 +124,39 @@ def optimize_graph(
         return None
 
     # Run the matched optimization rules and collect the optimized modules
-    match_opt_modules: dict[GraphOptMatch, tuple[TorchModule, ...]] = {}
+    match_opt_modules: dict[GraphOptMatch[TorchModuleT], tuple[TorchModuleT, ...]] = {}
     for match in matches:
         match_opt_modules[match] = match_optimizer_fn(match)
 
     # The list of optimized layer and the inputs of each optimized module
-    modules: list[TorchModule] = []
-    in_modules: dict[TorchModule, list[TorchModule]] = {}
+    modules: list[TorchModuleT] = []
+    in_modules: dict[TorchModuleT, list[TorchModuleT]] = {}
 
     # A map from matches to their entry point unoptimized modules
-    match_entry_points: dict[GraphOptMatch, TorchModule] = {}
+    match_entry_points: dict[GraphOptMatch[TorchModuleT], TorchModuleT] = {}
 
     # A map from matches to their exit point unoptimized modules
-    match_exit_points: dict[GraphOptMatch, TorchModule] = {}
+    match_exit_points: dict[GraphOptMatch[TorchModuleT], TorchModuleT] = {}
 
     # Build the optimize graph by following the topological ordering
     for module in ordering:
-        match = module_matches.get(module, None)
+        optional_match = module_matches.get(module, None)
 
         # Check if the layer does not belong to any matched pattern
         # If so, then just add it to the optimize layer as is
-        if match is None:
+        if optional_match is None:
             modules.append(module)
             in_modules[module] = [
                 match_exit_points[module_matches[mi]] if mi in module_matches else mi
                 for mi in incomings_fn(module)
             ]
             continue
+        match = optional_match
 
-        # If the module belongs to a matched pattern (there can only be a single one by construction),
-        # but it is not the root in that pattern,
-        # then register it as the entry point of the matched sub-computational-graph, if not other entry
-        # point has been registered before.
+        # If the module belongs to a matched pattern (there can only be a single one
+        # by construction), but it is not the root in that pattern,
+        # then register it as the entry point of the matched sub-computational-graph,
+        # if not other entry point has been registered before.
         if match not in match_entry_points:
             match_entry_points[match] = module
 
@@ -157,20 +187,20 @@ def optimize_graph(
 
 
 def match_optimization_patterns(
-    ordering: Iterable[TorchModule],
-    outputs: Iterable[TorchModule],
-    patterns: Iterable[GraphOptPattern[TorchModule]],
+    ordering: Iterable[TorchModuleT],
+    outputs: Iterable[TorchModuleT],
+    patterns: Iterable[GraphOptPattern[TorchModuleT]],
     *,
-    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    pattern_matcher_fn: PatternMatcherFunc,
+    incomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    outcomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    pattern_matcher_fn: PatternMatcherFunc[TorchModuleT],
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-) -> tuple[list[GraphOptMatch[TorchModule]], dict[TorchModule, GraphOptMatch[TorchModule]]]:
+) -> tuple[list[GraphOptMatch[TorchModuleT]], dict[TorchModuleT, GraphOptMatch[TorchModuleT]]]:
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
     outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
 
     # A map from modules to the list of found matches they belong to
-    module_matches: dict[TorchModule, list[GraphOptMatch[TorchModule]]] = defaultdict(list)
+    module_matches: dict[TorchModuleT, list[GraphOptMatch[TorchModuleT]]] = defaultdict(list)
 
     # For each given pattern, match it on the graph
     for pattern in patterns:
@@ -199,15 +229,15 @@ def match_optimization_patterns(
 
 
 def _prioritize_optimization_strategy(
-    ordering: Iterable[TorchModule],
-    module_matches: dict[TorchModule, list[GraphOptMatch[TorchModule]]],
+    ordering: Iterable[TorchModuleT],
+    module_matches: dict[TorchModuleT, list[GraphOptMatch[TorchModuleT]]],
     *,
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
     in_place: bool = True,
-) -> dict[TorchModule, GraphOptMatch[TorchModule]]:
+) -> dict[TorchModuleT, GraphOptMatch[TorchModuleT]]:
     if not in_place:
         module_matches = module_matches.copy()
-    prioritized_module_matches: dict[TorchModule, GraphOptMatch[TorchModule]] = {}
+    prioritized_module_matches: dict[TorchModuleT, GraphOptMatch[TorchModuleT]] = {}
 
     # Follow the topological ordering of the computational graph and prune
     # pattern matches, according to the given prioritization strategy
@@ -231,23 +261,23 @@ def _prioritize_optimization_strategy(
 
 
 def _sort_matches_priority(
-    matches: list[GraphOptMatch[TorchModule]],
+    matches: Sequence[GraphOptMatch[TorchModuleT]],
     *,
     strategy: OptMatchStrategy,
-) -> list[GraphOptMatch[TorchModule]]:
+) -> list[GraphOptMatch[TorchModuleT]]:
     if strategy == OptMatchStrategy.LARGEST_MATCH:
         return sorted(matches, key=lambda m: m.size, reverse=True)
     assert False
 
 
 def _match_pattern_graph(
-    modules: Iterable[TorchModule],
-    pattern: GraphOptPattern[TorchModule],
+    modules: Iterable[TorchModuleT],
+    pattern: GraphOptPattern[TorchModuleT],
     *,
-    incomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    outcomings_fn: Callable[[TorchModule], Sequence[TorchModule]],
-    pattern_matcher_fn: PatternMatcherFunc,
-) -> Iterator[GraphOptMatch[TorchModule]]:
+    incomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    outcomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
+    pattern_matcher_fn: PatternMatcherFunc[TorchModuleT],
+) -> Iterator[GraphOptMatch[TorchModuleT]]:
     # Tries to match a pattern by rooting it in all the modules of the computational graph
     optional_matches = map(
         lambda m: pattern_matcher_fn(
@@ -255,4 +285,4 @@ def _match_pattern_graph(
         ),
         modules,
     )
-    return filter(lambda match: match is not None, optional_matches)
+    return (match for match in optional_matches if match is not None)

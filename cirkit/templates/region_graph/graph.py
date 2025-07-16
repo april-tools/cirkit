@@ -2,7 +2,7 @@ import itertools
 import json
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property
 from typing import TypeAlias, TypedDict, cast, final
 
@@ -36,11 +36,9 @@ class RegionGraphJson(TypedDict):
     """The structure of the region graph json file."""
 
     # The regions of RG represented by a mapping from id in str to either a dict or only the scope.
-    regions: dict[str, RegionDict | list[int]]
-
+    regions: dict[str, RegionDict]
     # The list of region node roots str ids in the RG
     roots: list[str]
-
     # The graph of RG represented by a list of partitions.
     graph: list[PartitionDict]
 
@@ -83,13 +81,13 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     def __init__(
         self,
         nodes: Sequence[RegionGraphNode],
-        in_nodes: dict[RegionGraphNode, Sequence[RegionGraphNode]],
+        in_nodes: Mapping[RegionGraphNode, Sequence[RegionGraphNode]],
         outputs: Sequence[RegionGraphNode],
     ) -> None:
         super().__init__(nodes, in_nodes, outputs)
         self._check_structure()
 
-    def _check_structure(self):
+    def _check_structure(self) -> None:
         for node, node_children in self.nodes_inputs.items():
             if isinstance(node, RegionNode):
                 for ptn in node_children:
@@ -146,8 +144,8 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
         return (cast(RegionNode, node) for node in super().inputs)
 
     @property
-    def outputs(self) -> Iterator[RegionNode]:
-        return (cast(RegionNode, node) for node in super().outputs)
+    def outputs(self) -> Sequence[RegionNode]:
+        return [cast(RegionNode, node) for node in super().outputs]
 
     @property
     def region_nodes(self) -> Iterator[RegionNode]:
@@ -208,7 +206,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                 will use the intersection of the scopes of the two RG. Defaults to None.
 
         Returns:
-            bool: Whether self is compatible to other.
+            bool: Whether self is compatible with other.
         """
         # _is_frozen is implicitly tested because is_smooth is set in freeze().
         scope = Scope(scope) if scope is not None else self.scope & other.scope
@@ -228,7 +226,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             ):
                 continue  # Only check partitions not within another partition.
 
-            adj_mat = np.zeros((len(partition1_inputs), len(partition2_inputs)), dtype=np.bool_)
+            adj_mat: np.ndarray[tuple[int, ...], np.dtype[np.bool_]] = np.zeros(
+                (len(partition1_inputs), len(partition2_inputs)), dtype=np.bool_
+            )
             for (i, region1), (j, region2) in itertools.product(
                 enumerate(partition1_inputs), enumerate(partition2_inputs)
             ):
@@ -267,26 +267,26 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
         #       preserve the ordering by file structure. However, the sort_key will be saved when
         #       available and with_meta enabled.
 
-        # ANNOTATE: Specify content for empty container.
-        rg_json: RegionGraphJson = {}
+        # Store the region nodes information
         region_idx: dict[RegionNode, int] = {
             node: idx for idx, node in enumerate(self.region_nodes)
         }
-
-        # Store the region nodes information
-        rg_json["regions"] = {str(idx): list(node.scope) for node, idx in region_idx.items()}
+        regions = {str(idx): RegionDict(scope=list(node.scope)) for node, idx in region_idx.items()}
 
         # Store the roots information
-        rg_json["roots"] = [str(region_idx[rgn]) for rgn in self.outputs]
+        roots = [str(region_idx[rgn]) for rgn in self.outputs]
 
         # Store the partition nodes information
-        rg_json["graph"] = []
+        graph = []
         for partition in self.partition_nodes:
             input_idxs = [region_idx[cast(RegionNode, rgn)] for rgn in self.node_inputs(partition)]
             # partition.outputs is guaranteed to have len==1 by _validate().
             output_idx = region_idx[cast(RegionNode, self.node_outputs(partition)[0])]
-            rg_json["graph"].append({"output": output_idx, "inputs": input_idxs})
+            partd: PartitionDict = {"output": output_idx, "inputs": input_idxs}
+            graph.append(partd)
 
+        # Initialize the region graph json as a typed dict
+        rg_json: RegionGraphJson = {"regions": regions, "roots": roots, "graph": graph}
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(rg_json, f, indent=4)
 
@@ -314,12 +314,12 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         nodes: list[RegionGraphNode] = []
         in_nodes: dict[RegionGraphNode, list[RegionGraphNode]] = defaultdict(list)
-        outputs = []
+        outputs: list[RegionGraphNode] = []
         region_idx: dict[int, RegionNode] = {}
 
         # Load the region nodes
         for idx, rgn_scope in rg_json["regions"].items():
-            rgn = RegionNode(rgn_scope)
+            rgn = RegionNode(rgn_scope["scope"])
             nodes.append(rgn)
             region_idx[int(idx)] = rgn
 
@@ -329,7 +329,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         # Load the partition nodes
         for partitioning in rg_json["graph"]:
-            in_rgns = [region_idx[int(idx)] for idx in partitioning["inputs"]]
+            in_rgns: list[RegionGraphNode] = [
+                region_idx[int(idx)] for idx in partitioning["inputs"]
+            ]
             out_rgn = region_idx[partitioning["output"]]
             ptn = PartitionNode(out_rgn.scope)
             nodes.append(ptn)
@@ -338,6 +340,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         return RegionGraph(nodes, in_nodes, outputs=outputs)
 
+    # TODO: refactor the following method as to simplify its structure (e.g., remove inline methods)
     def build_circuit(
         self,
         *,
@@ -416,7 +419,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             rgn: RegionNode, rgn_partitioning: Sequence[RegionNode]
         ) -> HadamardLayer | SumLayer:
             layer_ins = [node_to_layer[rgn_in] for rgn_in in rgn_partitioning]
-            denses = [
+            denses: list[Layer] = [
                 SumLayer(
                     node_to_layer[rgn_in].num_output_units,
                     num_sum_units,
@@ -523,8 +526,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                     else input_factory
                 )
                 # Input region node
+                input_sl: Layer
                 if factorize_multivariate and len(node.scope) > 1:
-                    factorized_input_sls = [
+                    factorized_input_sls: list[Layer] = [
                         node_input_factory(Scope([sc]), num_input_units) for sc in node.scope
                     ]
                     input_sl = HadamardLayer(num_input_units, arity=len(factorized_input_sls))
@@ -548,6 +552,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
                 if sum_prod_builder_ is not None:
                     sum_prod_builder_(node, self.partition_inputs(ptn))
                     continue
+                assert sum_factory is not None
                 num_units = num_sum_units if region_outputs else num_classes
                 sum_input = node_to_layer[ptn]
                 sum_sl = sum_factory(sum_input.num_output_units, num_units)
@@ -557,17 +562,18 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             else:  # len(node_inputs) > 1:
                 # Region node with multiple partitionings
                 num_units = num_sum_units if region_outputs else num_classes
-                if sum_prod_builder_ is None:
+                mix_ins: list[Layer]
+                if sum_prod_builder_ is not None:
+                    mix_ins = [
+                        sum_prod_builder_(node, self.partition_inputs(ptn)) for ptn in region_inputs
+                    ]
+                else:
+                    assert sum_factory is not None
                     sum_ins = [node_to_layer[ptn] for ptn in region_inputs]
                     mix_ins = [sum_factory(sli.num_output_units, num_units) for sli in sum_ins]
                     layers.extend(mix_ins)
                     for mix_sl, sli in zip(mix_ins, sum_ins):
                         in_layers[mix_sl] = [sli]
-                else:
-                    mix_ins = [
-                        sum_prod_builder_(node, self.partition_inputs(cast(PartitionNode, ptn)))
-                        for ptn in region_inputs
-                    ]
                 mix_sl = SumLayer(
                     num_units,
                     num_units,

@@ -5,7 +5,7 @@ import numpy as np
 from torch import Tensor
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.parameters import mixing_weight_factory
+from cirkit.symbolic.parameters import ParameterFactory, mixing_weight_factory
 from cirkit.templates.region_graph import (
     ChowLiuTree,
     PoonDomingos,
@@ -76,6 +76,15 @@ def image_data(
     Raises:
         ValueError: If one of the arguments is not one of the specified allowed ones.
     """
+    if (
+        not isinstance(image_shape, tuple)
+        or len(image_shape) != 3
+        or any(d <= 0 for d in image_shape)
+    ):
+        raise ValueError(
+            "Expected the image shape to be a tuple of three positive integers,"
+            f" but found {image_shape}"
+        )
     if region_graph not in [
         "quad-tree-2",
         "quad-tree-4",
@@ -96,9 +105,9 @@ def image_data(
         case "quad-graph":
             rg = QuadGraph(image_shape)
         case "random-binary-tree":
-            rg = RandomBinaryTree(np.prod(image_shape))
+            rg = RandomBinaryTree(image_shape[0] * image_shape[1] * image_shape[2])
         case "poon-domingos":
-            delta = max(np.ceil(image_shape[1] / 8), np.ceil(image_shape[2] / 8))
+            delta = int(max(np.ceil(image_shape[1] / 8), np.ceil(image_shape[2] / 8)))
             rg = PoonDomingos(image_shape, delta=delta)
         case _:
             raise ValueError(f"Unknown region graph called {region_graph}")
@@ -129,6 +138,7 @@ def image_data(
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
 
     # Set the nary sum weight factory
+    nary_sum_weight_factory: ParameterFactory
     if use_mixing_weights:
         nary_sum_weight_factory = functools.partial(
             mixing_weight_factory, param_factory=sum_weight_factory

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import graphviz
 
-from cirkit.templates.region_graph.graph import RegionGraph, RegionNode, PartitionNode
+from cirkit.templates.region_graph.graph import PartitionNode, RegionGraph, RegionNode
 
 
 def plot_region_graph(
@@ -24,8 +24,8 @@ def plot_region_graph(
     """Plot the region graph using graphviz.
 
     Args:
-        region_graph (RegionGraph): The region graph to plot.
-        out_path (str | PathLike[str] | None, optional): The output path where the plot is saved.
+        region_graph: The region graph to plot.
+        out_path: The output path where the plot is saved.
             If it is None, the plot is not saved to a file. Defaults to None.
             The Output file format is deduced from the path. Possible formats are:
             {'jp2', 'plain-ext', 'sgi', 'x11', 'pic', 'jpeg', 'imap', 'psd', 'pct',
@@ -35,28 +35,26 @@ def plot_region_graph(
              'xdot1.4', 'cmapx_np', 'dot', 'tiff', 'ps2', 'gd2', 'gv', 'ps', 'jpg',
              'imap_np', 'wbmp', 'vml', 'eps', 'xdot1.2', 'pov', 'pict', 'ismap', 'exr'}.
              See https://graphviz.org/docs/outputs/ for more.
-        orientation (str, optional): Orientation of the graph. "vertical" puts the root
+        orientation: Orientation of the graph. "vertical" puts the root
             node at the top, "horizontal" at left. Defaults to "vertical".
-        node_shape (str, optional): Default shape for a node in the graph. Defaults to "box".
-            See https://graphviz.org/doc/info/shapes.html for the supported shapes.
-        label_font (str, optional): Font used to render labels. Defaults to "times italic bold".
+        label_font: Font used to render labels. Defaults to "times italic bold".
             See https://graphviz.org/faq/font/ for the available fonts.
-        label_size (str, optional): Size of the font for labels in points. Defaults to "21pt".
-        label_color (str, optional): Color for the labels in the nodes. Defaults to "white".
+        label_size: Size of the font for labels in points. Defaults to "21pt".
+        label_color: Color for the labels in the nodes. Defaults to "white".
             See https://graphviz.org/docs/attr-types/color/ for supported color.
-        region_label (str | Callable[[RegionNode], str] | None, optional): Either a string or a function.
+        region_label: Either a string or a function.
             If a function is provided, then it must take as input a region node and returns a string
-            that will be used as label. If None, it defaults to the string representation of the scope of the
-            region node.
-        region_color (str | Callable[[RegionNode], str], optional): Either a string or a function.
+            that will be used as label. If None, it defaults to the string representation of the
+            scope of the region node.
+        region_color: Either a string or a function.
             If a function is provided, then it must take as input a region node and returns a string
             that will be used as color for the region node. Defaults to "#607d8b".
-        partition_label (str | Callable[[PartitionNode], str] | None, optional): Either a string or a
-            function. If a function is provided, then it must take as input a partition node and returns a
-            string that will be used as label. If None, it defaults to an empty string.
-        partition_color (str | Callable[[PartitionNode], str], optional): Either a string or a function.
-            If a function is provided, then it must take as input a partition node and returns a string
-            that will be used as color for the partition node. Defaults to "#ffbd2a".
+        partition_label: Either a string or a
+            function. If a function is provided, then it must take as input a partition node and
+            returns a string that will be used as label. If None, it defaults to an empty string.
+        partition_color: Either a string or a function.
+            If a function is provided, then it must take as input a partition node and returns a
+            string that will be used as color for the partition node. Defaults to "#ffbd2a".
 
     Raises:
         ValueError: The format is not among the supported ones.
@@ -65,11 +63,11 @@ def plot_region_graph(
     Returns:
         graphviz.Digraph: The graphviz object representing the region graph.
     """
-
+    fmt: str
     if out_path is None:
-        fmt: str = "svg"
+        fmt = "svg"
     else:
-        fmt: str = Path(out_path).suffix.replace(".", "")
+        fmt = Path(out_path).suffix.replace(".", "")
         if fmt not in graphviz.FORMATS:
             raise ValueError(f"Supported formats are {graphviz.FORMATS}.")
 
@@ -79,7 +77,7 @@ def plot_region_graph(
     def _default_region_label(rgn: RegionNode) -> str:
         return str(set(rgn.scope))
 
-    def _default_partition_label(rgn: PartitionNode) -> str:
+    def _default_partition_label(_: PartitionNode) -> str:
         return ""
 
     if region_label is None:
@@ -123,13 +121,13 @@ def plot_region_graph(
         for node_in in region_graph.node_inputs(node):
             dot.edge(str(id(node_in)), str(id(node)))
     if out_path is not None:
-        out_path: Path = Path(out_path).with_suffix("")
+        out_dir: Path = Path(out_path).with_suffix("")
 
         if fmt == "dot":
-            with open(out_path, "w", encoding="utf8") as f:
+            with open(out_dir, "w", encoding="utf8") as f:
                 f.write(dot.source)
         else:
             dot.format = fmt
-            dot.render(out_path, cleanup=True)
+            dot.render(out_dir, cleanup=True)
 
     return dot

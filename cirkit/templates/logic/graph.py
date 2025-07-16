@@ -233,8 +233,8 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
     def build_circuit(
         self,
-        literal_input_factory: InputLayerFactory = None,
-        negated_literal_input_factory: InputLayerFactory = None,
+        literal_input_factory: InputLayerFactory | None = None,
+        negated_literal_input_factory: InputLayerFactory | None = None,
         weight_factory: ParameterFactory | None = None,
         enforce_smoothness: bool = True,
     ) -> Circuit:
