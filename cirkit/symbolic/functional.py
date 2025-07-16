@@ -28,7 +28,11 @@ from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
 from cirkit.utils.scope import Scope
 
 
-def concatenate(scs: Sequence[Circuit], *, registry: OperatorRegistry | None = None) -> Circuit:
+def concatenate(
+    scs: Sequence[Circuit],
+    *,
+    registry: OperatorRegistry | None = None,  # pylint: disable=unused-argument
+) -> Circuit:
     """Concatenates a sequence of symbolic circuits. Concatenating circuits means constructing
     another circuit such that its output layers consists of the output layers of each circuit
     (in the given order). This operator does not require the satisfaction of any structural
@@ -72,7 +76,7 @@ def evidence(
     sc: Circuit,
     obs: dict[int, Number | tuple[Number, ...]],
     *,
-    registry: OperatorRegistry | None = None,
+    registry: OperatorRegistry | None = None,  # pylint: disable=unused-argument
 ) -> Circuit:
     """Observe the value of some variables in a symbolic circuit, and represent the given
     evidence as another symbolic circuit.
@@ -97,7 +101,7 @@ def evidence(
     scope = Scope(obs.keys())
     if not scope:
         raise ValueError("There are no variables to observe")
-    elif not scope <= sc.scope:
+    if not scope <= sc.scope:
         raise ValueError("The variables to observe must be a subset of the scope of the circuit")
 
     # Mapping the symbolic circuit layers with blocks of circuit layers
@@ -165,7 +169,7 @@ def integrate(
 
     For example, integrate can be used to compute the partition function in
     probabilistic circuits, e.g., in
-    [the Sum-of-Squares notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb).
+    [the Sum-of-Squares notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb).  # pylint: disable=line-too-long
 
     Formally, given a symbolic circuit $c$ over a set of variables $\mathbf{X}$, integrate
     over a scope $\mathbf{Z}\subseteq\mathbf{X}$ returns another symbolic circuit $c'$ such that
@@ -266,7 +270,7 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: OperatorRegistry | None = 
     The product of circuits can be used to compute expectations (by composing the multiply and
     [integrate][cirkit.symbolic.functional.integrate] operators), or to build squared probabilistic
     circuits, as in
-    [the Sum-of-Squares notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb).
+    [the Sum-of-Squares notebook](https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb).  # pylint: disable=line-too-long
 
     Formally, given two compatible circuits $c_1$, $c_2$ having the same variables scope
     $\mathbf{X}$, multiply returns another circuit $c'$ such that it encodes
@@ -368,9 +372,10 @@ def multiply(sc1: Circuit, sc2: Circuit, *, registry: OperatorRegistry | None = 
             # TODO: generalize product such that it can multiply layers of different arity
             #       this is related to the much more relaxed definition of compatibility between
             #       circuits
-            assert len(l1_inputs) == len(
-                l2_inputs
-            ), f"{l1.arity} {l2.arity} {len(l1_inputs)} {len(l2_inputs)} {l1.__class__} {l2.__class__}"
+            assert len(l1_inputs) == len(l2_inputs), (
+                f"{l1.arity} {l2.arity} {len(l1_inputs)}"
+                f" {len(l2_inputs)} {l1.__class__} {l2.__class__}"
+            )
             # Sort layers based on the scope, such that we can multiply layers with matching scopes
             l1_inputs = sorted(l1_inputs, key=sc1.layer_scope)
             l2_inputs = sorted(l2_inputs, key=sc2.layer_scope)

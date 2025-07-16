@@ -29,11 +29,11 @@ def isclose(
     """
     if isinstance(a, float):
         a = np.array(a)
-    elif isinstance(a, torch.Tensor):  # type: ignore[misc]
+    elif isinstance(a, torch.Tensor):
         a = a.detach().cpu().numpy()
     if isinstance(b, float):
         b = np.array(b)
-    elif isinstance(b, torch.Tensor):  # type: ignore[misc]
+    elif isinstance(b, torch.Tensor):
         b = b.detach().cpu().numpy()
     return np.isclose(a, b, rtol=rtol, atol=atol)
 

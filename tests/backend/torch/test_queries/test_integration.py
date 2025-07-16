@@ -135,7 +135,7 @@ def test_query_marginalize_batch_broadcast_monotonic_pc_categorical(
 )
 def test_query_marginalize_batch_fails_on_out_of_scope(
     input_tensor, semiring="sum-product", fold=True, optimize=True
-):
+) -> None:
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
@@ -215,7 +215,7 @@ def test_marginalize_batch_fails_on_wrong_batch_size(
 
 def test_marginalize_batch_fails_on_wrong_tensor_dtype(
     semiring="sum-product", fold=True, optimize=True
-):
+) -> None:
     # Check that passing a single mask results in broadcasting
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the

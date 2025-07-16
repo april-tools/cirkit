@@ -1,11 +1,14 @@
+# pylint: disable=unused-argument
+
 import functools
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 from torch import nn
 
-from cirkit.backend.compiler import InitializerCompilationFunc, InitializerCompilationSign
+from cirkit.backend.compiler import InitializerCompilationSign
 from cirkit.backend.torch.initializers import InitializerFunc, copy_from_ndarray_, dirichlet_
 from cirkit.symbolic.initializers import (
     ConstantTensorInitializer,
@@ -45,7 +48,9 @@ def compile_dirichlet_initializer(
     return functools.partial(dirichlet_, alpha=init.alpha, dim=axis)
 
 
-DEFAULT_INITIALIZER_COMPILATION_RULES: dict[InitializerCompilationSign, InitializerCompilationFunc] = {  # type: ignore[misc]
+DEFAULT_INITIALIZER_COMPILATION_RULES: dict[
+    InitializerCompilationSign, Callable[..., InitializerFunc]
+] = {
     ConstantTensorInitializer: compile_constant_tensor_initializer,
     UniformInitializer: compile_uniform_initializer,
     NormalInitializer: compile_normal_initializer,

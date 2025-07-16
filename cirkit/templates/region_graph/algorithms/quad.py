@@ -1,5 +1,6 @@
 import itertools
 from collections import defaultdict
+from typing import cast
 
 from cirkit.templates.region_graph.algorithms.utils import HypercubeToScope
 from cirkit.templates.region_graph.graph import (
@@ -106,7 +107,7 @@ def _QuadBuilder(
         nodes.append(rgn)
         nodes.append(ptn)
         in_nodes[rgn] = [ptn]
-        in_nodes[ptn] = rgn_in
+        in_nodes[ptn] = cast(list[RegionGraphNode], rgn_in)
         return rgn
 
     def merge_4_regions_tree_(rgn_in: list[RegionNode], *, num_patch_splits: int) -> RegionNode:

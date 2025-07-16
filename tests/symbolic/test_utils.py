@@ -1,4 +1,5 @@
 import itertools
+from typing import cast
 
 import numpy as np
 
@@ -14,9 +15,11 @@ from cirkit.symbolic.layers import (
     EmbeddingLayer,
     GaussianLayer,
     HadamardLayer,
+    InputLayer,
     KroneckerLayer,
     Layer,
     PolynomialLayer,
+    ProductLayer,
     SumLayer,
 )
 from cirkit.symbolic.parameters import (
@@ -36,8 +39,9 @@ def build_bivariate_monotonic_structured_cpt_pc(
     product_layer: str = "hadamard",
     parameterize: bool = True,
     normalized: bool = True,
-):
+) -> Circuit:
     # Build input layers
+    input_layers: dict[tuple[int], InputLayer]
     if input_layer == "bernoulli":
         if parameterize:
             if normalized:
@@ -109,25 +113,26 @@ def build_bivariate_monotonic_structured_cpt_pc(
     }
 
     # Build hadamard product layer
+    product_layer_cls: type[ProductLayer]
     if product_layer == "hadamard":
         product_layer_cls = HadamardLayer
     elif product_layer == "kronecker":
         product_layer_cls = KroneckerLayer
     else:
         raise NotImplementedError()
-    product_layer = product_layer_cls(num_input_units=num_units, arity=2)
+    product = product_layer_cls(num_input_units=num_units, arity=2)
 
     # Set the connections between layers
     in_layers: dict[Layer, list[Layer]] = {
         dense_layers[(0,)]: [input_layers[(0,)]],
         dense_layers[(1,)]: [input_layers[(1,)]],
-        product_layer: [dense_layers[(0,)], dense_layers[(1,)]],
-        dense_layers[(0, 1)]: [product_layer],
+        product: [dense_layers[(0,)], dense_layers[(1,)]],
+        dense_layers[(0, 1)]: [product],
     }
 
     # Build the symbolic circuit
     circuit = Circuit(
-        layers=list(itertools.chain(input_layers.values(), [product_layer], dense_layers.values())),
+        layers=list(itertools.chain(input_layers.values(), [product], dense_layers.values())),
         in_layers=in_layers,
         outputs=[dense_layers[(0, 1)]],
     )
@@ -146,8 +151,9 @@ def build_multivariate_monotonic_structured_cpt_pc(
     product_layer: str = "hadamard",
     parameterize: bool = True,
     normalized: bool = True,
-):
+) -> Circuit:
     # Build input layers
+    input_layers: dict[tuple[int], InputLayer]
     if input_layer == "bernoulli":
         if parameterize:
             if normalized:
@@ -244,6 +250,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
     }
 
     # Build product layers
+    product_layer_cls: type[ProductLayer]
     if product_layer == "hadamard":
         product_layer_cls = HadamardLayer
     elif product_layer == "kronecker":
@@ -285,7 +292,7 @@ def build_multivariate_monotonic_structured_cpt_pc(
 
 def build_monotonic_structured_categorical_cpt_pc(
     return_ground_truth: bool = False,
-) -> Circuit | tuple[Circuit, dict[str, dict[tuple[int, ...], float]], float]:
+) -> Circuit | tuple[Circuit, dict[str, dict[tuple[int | None, ...], float]], float]:
     # The probabilities of Bernoulli layers
     bernoulli_probs: dict[tuple[int, ...], np.ndarray] = {
         (0,): np.array([[0.5, 0.5], [0.4, 0.6]]),
@@ -310,12 +317,15 @@ def build_monotonic_structured_categorical_cpt_pc(
 
     for sl in circuit.inputs:
         assert isinstance(sl, CategoricalLayer)
-        next(sl.probs.inputs).initializer = ConstantTensorInitializer(
+        assert sl.probs is not None
+        sl_probs_inputs = list(sl.probs.inputs)
+        cast(TensorParameter, sl_probs_inputs[0]).initializer = ConstantTensorInitializer(
             bernoulli_probs[tuple(sl.scope)]
         )
     for sl in circuit.sum_layers:
         assert isinstance(sl, SumLayer)
-        next(sl.weight.inputs).initializer = ConstantTensorInitializer(
+        sl_weight_inputs = list(sl.weight.inputs)
+        cast(TensorParameter, sl_weight_inputs[0]).initializer = ConstantTensorInitializer(
             dense_weights[tuple(circuit.layer_scope(sl))]
         )
 
@@ -399,7 +409,7 @@ def build_monotonic_structured_categorical_cpt_pc(
     #   - (0, 1, 2, 3, 4): [69 * 4 + 21 * 2] = 318.0
 
     # The ground truth outputs we expect and the partition function
-    gt_outputs: dict[str, dict[tuple[int, ...] : float]] = {
+    gt_outputs: dict[str, dict[tuple[int | None, ...], float]] = {
         "evi": {(0, 0, 0, 0, 0): 0.7626, (1, 0, 1, 1, 0): 3.2266},
         "mar": {(1, 0, 1, 1, None): 16.845},
     }
@@ -409,7 +419,7 @@ def build_monotonic_structured_categorical_cpt_pc(
 
 def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
     return_ground_truth: bool = False,
-) -> Circuit | tuple[Circuit, dict[str, dict[tuple[int, ...], float]], float]:
+) -> Circuit | tuple[Circuit, dict[str, dict[tuple[float | None, ...], float]], float]:
     # The mean and standard deviations of Gaussian layers
     gaussian_mean_stddev: dict[tuple[int, ...], tuple[np.ndarray, np.ndarray]] = {
         (0,): (np.array([0.0, 0.5]), np.array([1.0, 0.5])),
@@ -430,15 +440,18 @@ def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
 
     for sl in circuit.inputs:
         assert isinstance(sl, GaussianLayer)
-        next(sl.mean.inputs).initializer = ConstantTensorInitializer(
+        sl_mean_inputs = list(sl.mean.inputs)
+        cast(TensorParameter, sl_mean_inputs[0]).initializer = ConstantTensorInitializer(
             gaussian_mean_stddev[tuple(sl.scope)][0]
         )
-        next(sl.stddev.inputs).initializer = ConstantTensorInitializer(
+        sl_stddev_inputs = list(sl.stddev.inputs)
+        cast(TensorParameter, sl_stddev_inputs[0]).initializer = ConstantTensorInitializer(
             gaussian_mean_stddev[tuple(sl.scope)][1]
         )
     for sl in circuit.sum_layers:
         assert isinstance(sl, SumLayer)
-        next(sl.weight.inputs).initializer = ConstantTensorInitializer(
+        sl_weight_inputs = list(sl.weight.inputs)
+        cast(TensorParameter, sl_weight_inputs[0]).initializer = ConstantTensorInitializer(
             dense_weights[tuple(circuit.layer_scope(sl))]
         )
 
@@ -482,7 +495,7 @@ def build_monotonic_bivariate_gaussian_hadamard_dense_pc(
     #   - (0, 1): [1 * 14 + 2 * 15] = [44]
 
     # The ground truth outputs we expect and the partition function
-    gt_outputs: dict[str, dict[tuple[int, ...] : float]] = {
+    gt_outputs: dict[str, dict[tuple[float | None, ...], float]] = {
         "evi": {(0.3, 1.2): 3.744904862456293},
         "mar": {(0.3, None): 23.528960785605985},
     }

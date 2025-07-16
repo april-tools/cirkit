@@ -241,7 +241,7 @@ def test_symop_multiply_integrate_circuits(num_units: int, input_layer: str):
     "num_units,input_layer",
     itertools.product([1, 3], ["bernoulli", "gaussian", "polynomial"]),
 )
-def test_symop_conjugate_circuit(num_units: int, input_layer: str):
+def test_symop_conjugate_circuit(num_units: int, input_layer: str) -> None:
     sc1 = build_multivariate_monotonic_structured_cpt_pc(
         num_units=num_units, input_layer=input_layer
     )
@@ -283,7 +283,7 @@ def test_symop_differentiate_circuit(num_units: int) -> None:
     assert diff_sc.is_structured_decomposable
     assert not diff_sc.is_omni_compatible
     sc_inputs = list(sc.inputs)
-    diff_inputs = list(diff_sc.inputs)
+    diff_inputs: list[PolynomialLayer] = list(diff_sc.inputs)
     sc_inner = list(sc.inner_layers)
     diff_inner = list(diff_sc.inner_layers)
     assert len(diff_inputs) == len(sc_inputs) * 2  # diff and self

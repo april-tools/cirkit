@@ -25,7 +25,6 @@ def test_serialization_save_load_statedict(semiring: str, fold: bool, optimize: 
 
     state_dict_filepath = tempfile.NamedTemporaryFile().name
     torch.save(tc.state_dict(), state_dict_filepath)
-    del tc
     tc: TorchCircuit = compiler.compile(sc)
     tc.load_state_dict(torch.load(state_dict_filepath, weights_only=True))
     checkpoint_scores = tc(worlds)

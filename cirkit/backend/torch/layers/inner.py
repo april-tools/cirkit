@@ -34,7 +34,11 @@ class TorchInnerLayer(TorchLayer, ABC):
             num_folds: The number of channels.
         """
         super().__init__(
-            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
+            num_input_units=num_input_units,
+            num_output_units=num_output_units,
+            arity=arity,
+            semiring=semiring,
+            num_folds=num_folds,
         )
 
     @property
@@ -43,8 +47,7 @@ class TorchInnerLayer(TorchLayer, ABC):
         return *self.config.items(), *pshapes
 
     def __call__(self, x: Tensor) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
+        return super().__call__(x)
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:

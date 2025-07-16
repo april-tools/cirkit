@@ -5,7 +5,7 @@ import einops as E
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.layers import TorchInnerLayer
+from cirkit.backend.torch.layers.inner import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
 
@@ -188,7 +188,6 @@ class TorchCPTLayer(TorchInnerLayer):
 
         # mixing_distribution: (F, O, K)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
-
         mixing_samples = mixing_distribution.sample((num_samples,))
         mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
         mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)

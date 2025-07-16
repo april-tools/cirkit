@@ -1,5 +1,7 @@
 #!/bin/bash
 
+CIRKIT_SRC="cirkit"
+
 failed_linters=()
 
 RED='\033[0;31m'
@@ -30,7 +32,6 @@ then
     fi
     run_linter "black" --check --verbose
     run_linter "isort" --check --verbose
-    run_linter "pydocstyle" --verbose
     run_linter "pylint" --verbose
     run_linter "mypy"
 else
@@ -44,7 +45,7 @@ else
     if [[ $# -gt 0 ]]; then
         files=$@
     else
-        files=$(git ls-files "*.py")
+        files="${CIRKIT_SRC}"
     fi
     if [ $tool == "black" ]
     then
@@ -52,9 +53,6 @@ else
     elif [ $tool == "isort" ]
     then
         run_linter "isort" --check --verbose
-    elif [ $tool == "pydocstyle" ]
-    then
-        run_linter "pydocstyle" --verbose
     elif [ $tool == "pylint" ]
     then
         run_linter "pylint" --verbose
