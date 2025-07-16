@@ -241,12 +241,16 @@ def tabular_data(
                 raise ValueError(f"You must pass `data=` if you ask for `chow-liu-tree`.")
             rg = ChowLiuTree(
                 data=data,
-                input_type=input_layers["name"]
-                if isinstance(input_layers, dict)
-                else [input_layers["name"] for input_layers in input_layers],
-                num_categories=input_layers["args"]["num_categories"]
-                if isinstance(input_layers, dict) and input_layers["name"] == "categorical"
-                else None,
+                input_type=(
+                    input_layers["name"]
+                    if isinstance(input_layers, dict)
+                    else [input_layers["name"] for input_layers in input_layers]
+                ),
+                num_categories=(
+                    input_layers["args"]["num_categories"]
+                    if isinstance(input_layers, dict) and input_layers["name"] == "categorical"
+                    else None
+                ),
                 as_region_graph=True,
             )
         case _:
