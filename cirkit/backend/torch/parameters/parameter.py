@@ -1,5 +1,4 @@
-from collections import ChainMap
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Union
 
@@ -26,7 +25,7 @@ from cirkit.backend.torch.parameters.nodes import (
 )
 
 
-class ParameterAddressBook(AddressBook):
+class ParameterAddressBook(AddressBook[TorchParameterNode]):
     """The address book data structure for the parameter computational graphs.
     See [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter].
     The address book stores a list of
@@ -63,7 +62,9 @@ class ParameterAddressBook(AddressBook):
             yield node, ()
 
     @classmethod
-    def from_index_info(cls, fold_idx_info: FoldIndexInfo) -> "ParameterAddressBook":
+    def from_index_info(
+        cls, fold_idx_info: FoldIndexInfo[TorchParameterNode]
+    ) -> "ParameterAddressBook":
         """Constructs the parameter nodes address book using fold index information.
 
         Args:
@@ -73,7 +74,7 @@ class ParameterAddressBook(AddressBook):
             A parameter nodes address book.
         """
         # The address book entries being built
-        entries: list[AddressBookEntry] = []
+        entries: list[AddressBookEntry[TorchParameterNode]] = []
 
         # A useful dictionary mapping module ids to their number of folds
         num_folds: dict[int, int] = {}
@@ -113,10 +114,10 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def __init__(
         self,
         modules: Sequence[TorchParameterNode],
-        in_modules: dict[TorchParameterNode, Sequence[TorchParameterNode]],
+        in_modules: Mapping[TorchParameterNode, Sequence[TorchParameterNode]],
         outputs: Sequence[TorchParameterNode],
         *,
-        fold_idx_info: FoldIndexInfo | None = None,
+        fold_idx_info: FoldIndexInfo[TorchParameterNode] | None = None,
     ):
         """Initialize a torch parameter computational graph.
 
@@ -158,7 +159,8 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
     def shape(self) -> tuple[int, ...]:
         r"""The shape of the computed tensor parameter, without considering
         the number of folds. That is, if the number of folds
-        (see [TorchParameter.num_folds][cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
+        (see [TorchParameter.num_folds]
+        [cirkit.backend.torch.parameters.parameter.TorchParameter.num_folds])
         is F and the shape is (K_1,\ldots,K_n), it means the torch parameter
         computes a tensor of shape (F, K_1,\ldots,K_n).
 
@@ -173,8 +175,7 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
             p.reset_parameters()
 
     def __call__(self) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
+        return super().__call__()
 
     def forward(self) -> Tensor:
         r"""Evaluate the parameter computational graph.
@@ -186,12 +187,14 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
         """
         return self.evaluate()
 
-    def _build_unfold_index_info(self) -> FoldIndexInfo:
+    def _build_unfold_index_info(self) -> FoldIndexInfo[TorchParameterNode]:
         return build_unfold_index_info(
             self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
         )
 
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> AddressBook:
+    def _build_address_book(
+        self, fold_idx_info: FoldIndexInfo[TorchParameterNode]
+    ) -> ParameterAddressBook:
         return ParameterAddressBook.from_index_info(fold_idx_info)
 
     def extra_repr(self) -> str:
@@ -248,13 +251,15 @@ class TorchParameter(TorchDiAcyclicGraph[TorchParameterNode]):
                 to the outputs given by the parameter input nodes or parameters.
         """
         assert n.num_folds == 1
-        ps = tuple(
+        p_graphs = tuple(
             TorchParameter.from_input(p) if isinstance(p, TorchParameterInput) else p for p in ps
         )
-        assert all(len(p.outputs) == 1 for p in ps)
-        p_nodes = list(chain.from_iterable(p.nodes for p in ps)) + [n]
-        in_nodes = dict(ChainMap(*(p.nodes_inputs for p in ps)))
-        in_nodes[n] = list(p.outputs[0] for p in ps)
+        assert all(len(p.outputs) == 1 for p in p_graphs)
+        p_nodes = list(chain.from_iterable(p.nodes for p in p_graphs)) + [n]
+        in_nodes: dict[TorchParameterNode, Sequence[TorchParameterNode]] = dict(
+            (k, v) for g in p_graphs for (k, v) in g.nodes_inputs.items()
+        )
+        in_nodes[n] = list(p.outputs[0] for p in p_graphs)
         return TorchParameter(p_nodes, in_nodes, [n])
 
     @classmethod

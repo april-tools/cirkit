@@ -1,8 +1,11 @@
+# pylint: disable=unused-argument
+
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import torch
 
-from cirkit.backend.compiler import ParameterCompilationFunc, ParameterCompilationSign
+from cirkit.backend.compiler import ParameterCompilationSign
 from cirkit.backend.torch.parameters.nodes import (
     TorchClampParameter,
     TorchConjugateParameter,
@@ -18,6 +21,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchMixingWeightParameter,
     TorchOuterProductParameter,
     TorchOuterSumParameter,
+    TorchParameterNode,
     TorchPointerParameter,
     TorchPolynomialDifferential,
     TorchPolynomialProduct,
@@ -75,7 +79,8 @@ def _retrieve_dtype(dtype: DataType) -> torch.dtype:
     if dtype == DataType.COMPLEX:
         return default_float_dtype.to_complex()
     raise ValueError(
-        f"Cannot determine the torch.dtype to use, current default: {default_float_dtype}, given dtype: {dtype}"
+        f"Cannot determine the torch.dtype to use, current default: {default_float_dtype},"
+        f" given dtype: {dtype}"
     )
 
 
@@ -262,7 +267,9 @@ def compile_polynomial_differential(
     return TorchPolynomialDifferential(*p.in_shapes, order=p.order)
 
 
-DEFAULT_PARAMETER_COMPILATION_RULES: dict[ParameterCompilationSign, ParameterCompilationFunc] = {  # type: ignore[misc]
+DEFAULT_PARAMETER_COMPILATION_RULES: dict[
+    ParameterCompilationSign, Callable[..., TorchParameterNode]
+] = {
     TensorParameter: compile_tensor_parameter,
     ConstantParameter: compile_constant_parameter,
     ReferenceParameter: compile_reference_parameter,

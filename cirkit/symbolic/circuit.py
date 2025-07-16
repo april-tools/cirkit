@@ -195,7 +195,6 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
         Raises:
             ValueError: If the given sequence of layers consists of less than two layers.
         """
-        layers = list(layers)
         in_layers = {}
         if len(layers) <= 1:
             raise ValueError("Expected a composition of at least 2 layers")
@@ -217,7 +216,7 @@ class CircuitBlock(RootedDiAcyclicGraph[Layer]):
                 input layers as inputs.
         """
         layers = [lout, *ls]
-        in_layers = {lout: list(ls)}
+        in_layers: dict[Layer, list[Layer]] = {lout: list(ls)}
         return CircuitBlock(layers, in_layers, lout)
 
 
@@ -461,9 +460,9 @@ class Circuit(DiAcyclicGraph[Layer]):
     @classmethod
     def from_operation(
         cls,
-        blocks: list[CircuitBlock],
-        in_blocks: dict[CircuitBlock, Sequence[CircuitBlock]],
-        output_blocks: list[CircuitBlock],
+        blocks: Sequence[CircuitBlock],
+        in_blocks: Mapping[CircuitBlock, Sequence[CircuitBlock]],
+        output_blocks: Sequence[CircuitBlock],
         *,
         operation: CircuitOperation,
     ) -> "Circuit":
@@ -484,7 +483,7 @@ class Circuit(DiAcyclicGraph[Layer]):
         """
         # Unwrap blocks into layers (as well as their connections)
         layers = [l for b in blocks for l in b.layers]
-        in_layers = defaultdict(list)
+        in_layers: dict[Layer, list[Layer]] = defaultdict(list)
         outputs = [b.output for b in output_blocks]
 
         # Retrieve connections between layers from connections between circuit blocks

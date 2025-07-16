@@ -16,14 +16,6 @@ class TorchParameterNode(AbstractTorchModule, ABC):
     See [TorchParameter][cirkit.backend.torch.parameters.parameter.TorchParameter]
     for more details."""
 
-    def __init__(self, *, num_folds: int = 1):
-        """Initialize a torch parameter node.
-
-        Args:
-            num_folds: The number of folds computed by the node.
-        """
-        super().__init__(num_folds=num_folds)
-
     @property
     @abstractmethod
     def shape(self) -> tuple[int, ...]:
@@ -56,8 +48,7 @@ class TorchParameterNode(AbstractTorchModule, ABC):
         return {}
 
     @torch.no_grad()
-    def reset_parameters(self):
-        ...
+    def reset_parameters(self) -> None: ...
 
 
 class TorchParameterInput(TorchParameterNode, ABC):
@@ -67,8 +58,7 @@ class TorchParameterInput(TorchParameterNode, ABC):
     """
 
     def __call__(self) -> Tensor:
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__()  # type: ignore[no-any-return,misc]
+        return super().__call__()
 
     def extra_repr(self) -> str:
         return f"output-shape: {(self.num_folds, *self.shape)}"
@@ -142,13 +132,14 @@ class TorchTensorParameter(TorchParameterInput):
             torch.device: The parameter device.
 
         Raises:
-            ValueError: If the parameter has not been initialized.
-                See the [reset_parameters][cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
+            ValueError: If the parameter has not been initialized. See the
+                [reset_parameters]
+                [cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
                 method.
         """
         if self._ptensor is None:
             raise ValueError(
-                "The tensor parameter has not been initialized. " "Use reset_parameters() first"
+                "The tensor parameter has not been initialized. Use reset_parameters() first"
             )
         return self._ptensor.device
 
@@ -162,7 +153,7 @@ class TorchTensorParameter(TorchParameterInput):
         return self._requires_grad
 
     @requires_grad.setter
-    def requires_grad(self, value: bool):
+    def requires_grad(self, value: bool) -> None:
         """Set whether the torch parameter requires gradients.
 
         Args:
@@ -216,13 +207,14 @@ class TorchTensorParameter(TorchParameterInput):
             $(K_1,\ldots,K_n)$ is the shape of the tensors within each fold.
 
         Raises:
-            ValueError: If the parameter has not been initialized.
-                See the [reset_parameters][cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
+            ValueError: If the parameter has not been initialized. See the
+                [reset_parameters]
+                [cirkit.backend.torch.parameters.nodes.TorchTensorParameter.reset_parameters]
                 method.
         """
         if self._ptensor is None:
             raise ValueError(
-                "The tensor parameter has not been initialized. " "Use reset_parameters() first"
+                "The tensor parameter has not been initialized. Use reset_parameters() first"
             )
         return self._ptensor
 
@@ -252,6 +244,7 @@ class TorchPointerParameter(TorchParameterInput):
         assert not isinstance(parameter, TorchPointerParameter)
         super().__init__(num_folds=num_folds)
         self._parameter = parameter
+        self._fold_idx: Tensor
         self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
 
     @property
@@ -265,18 +258,14 @@ class TorchPointerParameter(TorchParameterInput):
 
     @property
     def fold_idx(self) -> list[int] | None:
-        if self._fold_idx is None:
-            return None
-        return self._fold_idx.cpu().tolist()
+        return None if self._fold_idx is None else self._fold_idx.cpu().tolist()
 
     def deref(self) -> TorchTensorParameter:
         return self._parameter
 
     def forward(self) -> Tensor:
         x = self._parameter()
-        if self._fold_idx is None:
-            return x
-        return x[self._fold_idx]
+        return x if self._fold_idx is None else x[self._fold_idx]
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
@@ -292,25 +281,12 @@ class TorchParameterOp(TorchParameterNode, ABC):
     def config(self) -> dict[str, Any]:
         return {"in_shapes": self.in_shapes}
 
-    def __call__(self, *xs: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(*xs)  # type: ignore[no-any-return,misc]
-
     def extra_repr(self) -> str:
         return (
             f"input-shapes: {[(self.num_folds, *in_shape) for in_shape in self._in_shapes]}"
             + "\n"
             + f"output-shape: {(self.num_folds, *self.shape)}"
         )
-
-    @abstractmethod
-    def forward(self, *xs: Tensor) -> Tensor:
-        ...
 
 
 class TorchUnaryParameterOp(TorchParameterOp, ABC):
@@ -327,17 +303,10 @@ class TorchUnaryParameterOp(TorchParameterOp, ABC):
         return {"in_shape": self.in_shape}
 
     def __call__(self, x: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x)  # type: ignore[no-any-return,misc]
+        return super().__call__(x)
 
     @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
-        ...
+    def forward(self, x: Tensor) -> Tensor: ...
 
 
 class TorchBinaryParameterOp(TorchParameterOp, ABC):
@@ -361,17 +330,10 @@ class TorchBinaryParameterOp(TorchParameterOp, ABC):
         return {"in_shape1": self.in_shape1, "in_shape2": self.in_shape2}
 
     def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
-        """Get the reparameterized parameters.
-
-        Returns:
-            Tensor: The parameters after reparameterization.
-        """
-        # IGNORE: Idiom for nn.Module.__call__.
-        return super().__call__(x1, x2)  # type: ignore[no-any-return,misc]
+        return super().__call__(x1, x2)
 
     @abstractmethod
-    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        ...
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor: ...
 
 
 class TorchEntrywiseParameterOp(TorchUnaryParameterOp, ABC):
@@ -447,6 +409,7 @@ class TorchIndexParameter(TorchUnaryParameterOp):
         assert all(0 <= i < in_shape[dim] for i in indices)
         super().__init__(in_shape, num_folds=num_folds)
         self.dim = dim
+        self._indices: Tensor
         self.register_buffer("_indices", torch.tensor(indices))
 
     @property
@@ -682,9 +645,6 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
 class TorchConjugateParameter(TorchEntrywiseParameterOp):
     """Conjugate parameterization."""
 
-    def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1) -> None:
-        super().__init__(in_shape, num_folds=num_folds)
-
     def forward(self, x: Tensor) -> Tensor:
         return torch.conj(x)
 
@@ -772,7 +732,7 @@ class TorchFlattenParameter(TorchUnaryParameterOp):
     def shape(self) -> tuple[int, ...]:
         flattened_dim = np.prod(
             [self.in_shapes[0][i] for i in range(self.start_dim, self.end_dim + 1)]
-        )
+        ).item()
         return (
             *self.in_shapes[0][: self.start_dim],
             flattened_dim,
@@ -860,9 +820,10 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
     def config(self) -> dict[str, Any]:
         return {"in_stddev1_shape": self.in_shapes[0], "in_stddev2_shape": self.in_shapes[1]}
 
-    def forward(self, stddev1: Tensor, stddev2: Tensor) -> Tensor:
-        var1 = torch.square(stddev1)  # (F, K1, C)
-        var2 = torch.square(stddev2)  # (F, K2, C)
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
+        # x1 is the stddev1 and x2 is the stddev2
+        var1 = torch.square(x1)  # (F, K1, C)
+        var2 = torch.square(x2)  # (F, K2, C)
         inv_var1 = torch.reciprocal(var1).unsqueeze(dim=2)  # (F, K1, 1, C)
         inv_var2 = torch.reciprocal(var2).unsqueeze(dim=1)  # (F, 1, K2, C)
         var = torch.reciprocal(inv_var1 + inv_var2)  # (F, K1, K2, C)
@@ -925,21 +886,20 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
             self.in_shapes[0][1] + self.in_shapes[1][1] - 1,  # dim dp1
         )
 
-    def forward(self, coeff1: Tensor, coeff2: Tensor) -> Tensor:
-        # TODO: torch typing issue.
-        fft: Callable[..., Tensor]  # type: ignore[misc]
-        ifft: Callable[..., Tensor]  # type: ignore[misc]
-        if coeff1.is_complex() or coeff2.is_complex():
+    def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
+        fft: Callable[..., Tensor]
+        ifft: Callable[..., Tensor]
+        if x1.is_complex() or x2.is_complex():
             fft = torch.fft.fft
             ifft = torch.fft.ifft
         else:
             fft = torch.fft.rfft
             ifft = torch.fft.irfft
 
-        degp1 = coeff1.shape[-1] + coeff2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
+        degp1 = x1.shape[-1] + x2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
 
-        spec1 = fft(coeff1, n=degp1, dim=-1)  # shape (F, K1, dp1).
-        spec2 = fft(coeff2, n=degp1, dim=-1)  # shape (F, K2, dp1).
+        spec1 = fft(x1, n=degp1, dim=-1)  # shape (F, K1, dp1).
+        spec2 = fft(x2, n=degp1, dim=-1)  # shape (F, K2, dp1).
 
         # shape (F, K1, 1, dp1), (F, 1, K2, dp1) -> (F, K1, K2, dp1) -> (F, K1*K2, dp1).
         spec = torch.flatten(
@@ -970,10 +930,10 @@ class TorchPolynomialDifferential(TorchUnaryParameterOp):
         arange = torch.arange(1, degp1).to(x)  # shape (deg,).
         return x[..., 1:] * arange  # a_n x^n -> n a_n x^(n-1), with a_0 disappeared.
 
-    def forward(self, coeff: Tensor) -> Tensor:
-        if coeff.shape[-1] <= self.order:
-            return torch.zeros_like(coeff[..., :1])  # shape (F, K, 1).
+    def forward(self, x: Tensor) -> Tensor:
+        if x.shape[-1] <= self.order:
+            return torch.zeros_like(x[..., :1])  # shape (F, K, 1).
 
         for _ in range(self.order):
-            coeff = self._diff_once(coeff)
-        return coeff  # shape (F, K, dp1-ord).
+            x = self._diff_once(x)
+        return x  # shape (F, K, dp1-ord).

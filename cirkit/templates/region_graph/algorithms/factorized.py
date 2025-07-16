@@ -34,7 +34,7 @@ def FullyFactorized(num_variables: int, *, num_repetitions: int = 1) -> RegionGr
 
     for _ in range(num_repetitions):
         partition_node = PartitionNode(range(num_variables))
-        leaf_nodes = [RegionNode([vid]) for vid in range(num_variables)]
+        leaf_nodes: list[RegionGraphNode] = [RegionNode([vid]) for vid in range(num_variables)]
         in_nodes[partition_node] = leaf_nodes
         in_nodes[root].append(partition_node)
         nodes.extend(leaf_nodes)
