@@ -147,26 +147,30 @@ def _categorical_mutual_info(
 def _heterogeneous_mutual_info(
     data: Tensor, is_categorical_mask: list[bool], normalize: bool = True
 ) -> Tensor:
-    """Computes the mutual information matrix for heterogeneous data (both discrete/categorical data and countinuous).
-    The mutual information among continuous variables is computed as if they were a Multivariate Gaussian.
-    The mutual information among discrete variables is computed using the categorical mutual information defined above.
-    The mutual information between a continuous variable C and discrete variable D is computed using the formula:
+    """Computes the mutual information (MI) matrix for heterogeneous data
+    (both discrete/categorical data and continuous).
+    The MI among continuous variables is computed as if they were a Multivariate Gaussian.
+    The MI among discrete variables is computed using the categorical mutual information defined above.
+    The MI between a continuous variable C and discrete variable D is computed using the formula:
         I(C, D) = H(C) - H(C | D)
-    assuming gaussian distributions p(C|D) for continuous variables when conditioned on discrete variables
-    and gaussian marginals p(c).
+    assuming gaussian distributions p(C|D) for continuous variables when conditioned on discrete
+    variables and gaussian marginals p(c).
 
     Args:
         data (Tensor): The input data over which computing the MI matrix,
             it must be in tabular form (i.e. a matrix).
-        is_categorical_mask (list[bool]): A boolean mask of the same length as the number of columns in `data`, indicating if the column has to be considered categorical.
-        A list of strings indicating the type of each variable whether each column in the data is categorical (True) or continuous (False).
-        normalize (bool): If True, normalizes the mutual information matrix by the entropy of each variable. NMI(X,Y) = 2 * I(X,Y) / (H(X) + H(Y)).
+        is_categorical_mask (list[bool]): A boolean mask of the same length as the number
+            of columns in `data`, indicating if the column has to be considered categorical.
+        A list of strings indicating the type of each variable whether each column in the
+            data is categorical (True) or continuous (False).
+        normalize (bool): If True, normalizes the mutual information matrix by the entropy
+            of each variable. NMI(X,Y) = 2 * I(X,Y) / (H(X) + H(Y)).
 
     Returns:
         The mutual information matrix (main diagonal is 0).
     """
 
-    GAUSSIAN_ENTROPY_EPSILON = 1e-4
+    gaussian_entropy_epsilon = 1e-4
 
     is_categorical = torch.tensor(is_categorical_mask, dtype=torch.bool, device=data.device)
     continuous_subset = torch.where(~is_categorical)[0]
@@ -188,7 +192,7 @@ def _heterogeneous_mutual_info(
 
     def gaussian_entropy(x: Tensor) -> Tensor:
         return 0.5 * (
-            torch.log(2 * torch.pi * torch.var(x, unbiased=False) + GAUSSIAN_ENTROPY_EPSILON) + 1
+            torch.log(2 * torch.pi * torch.var(x, unbiased=False) + gaussian_entropy_epsilon) + 1
         )
 
     # Precomputing number of categories for discrete variables
@@ -197,14 +201,14 @@ def _heterogeneous_mutual_info(
     }
 
     # Precomputing marginals p(D) for every discrete variable
-    p_D = {
+    p_d = {
         d_index: data[:, d_index].long().bincount(minlength=num_categories[d_index]).float()
         / data.shape[0]
         for d_index in discrete_subset.tolist()
     }
 
     # precomputing gaussian entropy H(C) for each continuous variable
-    h_C = {c_index: gaussian_entropy(data[:, c_index]) for c_index in continuous_subset.tolist()}
+    h_c = {c_index: gaussian_entropy(data[:, c_index]) for c_index in continuous_subset.tolist()}
 
     # I(C, D) = H(C) - H(C | D)
     for c_index in continuous_subset.tolist():
@@ -212,7 +216,7 @@ def _heterogeneous_mutual_info(
             # H(C | D) = sum_D{ integral_C{ p(C|D)p(D) log_p(C|D) } } = sum_D{ -H[p(C|D)]p(D) }
 
             # Computing H[p(C|D)] for each category of D
-            h_C_given_D = torch.stack(
+            h_c_given_d = torch.stack(
                 [
                     gaussian_entropy(data[:, c_index][data[:, d_index] == i])
                     for i in range(num_categories[d_index])
@@ -221,7 +225,7 @@ def _heterogeneous_mutual_info(
             )
 
             # I(C, D) = H(C) - H(C | D) = H(C) - sum_D{ H[p(C|D)]p(D) }
-            mi_matrix[c_index, d_index] = h_C[c_index] - torch.sum(h_C_given_D * p_D[d_index])
+            mi_matrix[c_index, d_index] = h_c[c_index] - torch.sum(h_c_given_d * p_d[d_index])
             mi_matrix[d_index, c_index] = mi_matrix[
                 c_index, d_index
             ]  # mutual information is symmetric
@@ -230,10 +234,10 @@ def _heterogeneous_mutual_info(
         # NMI(X, Y) = 2 * I(X, Y) / (H(X) + H(Y))
         entropy = torch.zeros(data.shape[1], dtype=torch.float32, device=data.device)
         entropy[continuous_subset] = torch.tensor(
-            list(h_C.values()), dtype=torch.float32, device=data.device
+            list(h_c.values()), dtype=torch.float32, device=data.device
         )
         entropy[discrete_subset] = torch.tensor(
-            [-(p.log() * p).sum() for p in p_D.values()], dtype=torch.float32, device=data.device
+            [-(p.log() * p).sum() for p in p_d.values()], dtype=torch.float32, device=data.device
         )
         mi_matrix = 2 * mi_matrix / (entropy.unsqueeze(0) + entropy.unsqueeze(1))
 
