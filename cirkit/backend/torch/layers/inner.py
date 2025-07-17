@@ -385,7 +385,7 @@ class TorchSumLayer(TorchInnerLayer):
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             # normalize weight as a probability distribution
-            eps = torch.finfo(weight.dtype)
+            eps = torch.finfo(weight.dtype).eps
             weight = (weight + eps) / (weight + eps).sum(dim=-1)
 
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
