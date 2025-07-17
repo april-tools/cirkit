@@ -246,7 +246,7 @@ def tabular_data(
         case "chow-liu-tree":
             if data is None:
                 raise ValueError(f"You must pass `data=` if you ask for `chow-liu-tree`.")
-            rg = ChowLiuTree(
+            rg_result = ChowLiuTree(
                 data=data,
                 input_type=(
                     input_layers["name"]
@@ -260,8 +260,9 @@ def tabular_data(
                 ),
                 as_region_graph=True,
             )
-            if not isinstance(rg, RegionGraph):
-                raise ValueError(f"Expected a RegionGraph, but got {type(rg).__name__}.")
+            if not isinstance(rg_result, RegionGraph):
+                raise ValueError(f"Expected a RegionGraph, but got {type(rg_result).__name__}.")
+            rg = rg_result
         case _:
             raise ValueError(f"Unknown region graph called {region_graph}")
 
@@ -269,6 +270,7 @@ def tabular_data(
         sum_weight_param = Parameterization(activation="softmax", initialization="normal")
     sum_weight_factory = parameterization_to_factory(sum_weight_param)
 
+    nary_sum_weight_factory: ParameterFactory
     if use_mixing_weights:
         nary_sum_weight_factory = functools.partial(
             mixing_weight_factory, param_factory=sum_weight_factory
