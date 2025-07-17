@@ -12,6 +12,7 @@ from cirkit.templates.region_graph import (
     QuadGraph,
     QuadTree,
     RandomBinaryTree,
+    RegionGraph,
 )
 from cirkit.templates.utils import (
     Parameterization,
@@ -253,6 +254,8 @@ def tabular_data(
                 ),
                 as_region_graph=True,
             )
+            if not isinstance(rg, RegionGraph):
+                raise ValueError(f"Expected a RegionGraph, but got {type(rg).__name__}.")
         case _:
             raise ValueError(f"Unknown region graph called {region_graph}")
 
