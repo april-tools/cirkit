@@ -11,7 +11,7 @@ from cirkit.templates.data_modalities import tabular_data
 
 @pytest.mark.parametrize(
     "n_cat_features,n_num_features,region_graph",
-    itertools.product([0, 1, 3], [0, 1, 3], ["random-binary-tree", "chow-liu-tree"]),
+    itertools.product([0, 1, 2], [0, 1, 3], ["random-binary-tree", "chow-liu-tree"]),
 )
 def test_tabular_data_modality(n_cat_features: int, n_num_features: int, region_graph: str):
 

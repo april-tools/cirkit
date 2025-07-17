@@ -344,7 +344,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     def build_circuit(
         self,
         *,
-        input_factory: InputLayerFactory | list[InputLayerFactory],
+        input_factory: InputLayerFactory | Mapping[Scope, InputLayerFactory],
         sum_product: str | None = None,
         sum_weight_factory: ParameterFactory | None = None,
         nary_sum_weight_factory: ParameterFactory | None = None,
@@ -364,9 +364,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             The factory that constructs the input factory must always be specified.
 
         Args:
-            input_factory: A factory that builds an input layer. If a list is given, then a
-                different input layer is built for each feature. In this case the length should be
-                the same as the number of input variables in the region graph.
+            input_factory: A factory that builds an input layer. If a Mapping between scopes and
+                input layer factories is given, then a different input layer is built for each feature.
+                In this case, an input layer should be specified for each variable/scope.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
             sum_weight_factory: The factory to construct the weights of the sum layers.
                 It can be None, or a parameter factory, i.e., a map
@@ -521,8 +521,8 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             region_outputs = self.region_outputs(node)
             if not region_inputs:
                 node_input_factory = (
-                    input_factory[next(iter(node.scope))]
-                    if isinstance(input_factory, list)
+                    input_factory[node.scope]
+                    if isinstance(input_factory, Mapping)
                     else input_factory
                 )
                 # Input region node

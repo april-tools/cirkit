@@ -1,5 +1,5 @@
 import functools
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 from torch import Tensor
@@ -20,6 +20,7 @@ from cirkit.templates.utils import (
     name_to_input_layer_factory,
     parameterization_to_factory,
 )
+from cirkit.utils.scope import Scope
 
 
 def image_data(
@@ -179,18 +180,18 @@ def tabular_data(
     supporting either a fixed random-binary-tree or a learned Chow–Liu tree.
 
     Args:
-        region_graph (str, default="random-binary-tree"):
+        region_graph:
             Which region graph to use.
             - `"random-binary-tree"`: build a random binary tree over the feature indices.
             - `"chow-liu-tree"`: learn a Chow–Liu tree from data.
-        num_features (int, optional):
+        num_features:
             Number of features (columns) in the dataset.
             **Required** if `region_graph="random-binary-tree"`.
-        data (Tensor, optional):
+        data:
             A Torch tensor of shape `(n_samples, n_features)`.
             **Required** if `region_graph="chow-liu-tree"`, since the tree structure is
                 learned from these samples.
-        input_layers (dict | List[dict]):
+        input_layers:
             Which per-feature distribution to use.
             The provided dictionaries should be of the following form:
             {
@@ -203,18 +204,18 @@ def tabular_data(
                 If a list of dictionaries is provided,
             each feature will have its own input layer (input_layers[i] corresponds
                 to feature i of the data).
-        num_input_units (int):
+        num_input_units:
             Number of parallel input units (e.g. mixtures/components) per feature.
-        sum_product_layer (str):
+        sum_product_layer:
             Which inner sum/product decomposition to use. E.g. `"cp"`, `"cpt"`, or `"tucker"`.
-        num_sum_units (int):
+        num_sum_units:
             Number of sum (or mixing) units in each sum layer.
-        num_classes (int, default=1):
+        num_classes:
             Number of output classes (or root-layer mixtures). Often 1 for pure density estimation.
-        sum_weight_param (Parameterization | None, default=None):
+        sum_weight_param:
             If provided, a `Parameterization` object specifying activation & initialization
             for sum-layer weights.  Defaults internally to a softmax + Normal init.
-        use_mixing_weights (bool, default=True):
+        use_mixing_weights:
             Whether to use “mixing” sum layers (i.e. learn a linear combination of child outputs)
             for nodes of arity >1.  If False, falls back to a matrix-vector product.
 
@@ -278,7 +279,7 @@ def tabular_data(
     else:
         nary_sum_weight_factory = sum_weight_factory
 
-    input_factories: InputLayerFactory | list[InputLayerFactory]
+    input_factories: InputLayerFactory | Mapping[Scope, InputLayerFactory]
     if isinstance(input_layers, dict):
         input_factories = name_to_input_layer_factory(input_layers["name"], **input_layers["args"])
     else:
@@ -287,10 +288,10 @@ def tabular_data(
                 f"Number of provided input layers ({len(input_layers)}) does \
                 not match the number of features ({len(rg.scope)})."
             )
-        input_factories = [
-            name_to_input_layer_factory(input_layer["name"], **input_layer["args"])
-            for input_layer in input_layers
-        ]
+        input_factories = {
+            Scope([i]): name_to_input_layer_factory(input_layer["name"], **input_layer["args"])
+            for i, input_layer in enumerate(input_layers)
+        }
 
     return rg.build_circuit(
         input_factory=input_factories,
