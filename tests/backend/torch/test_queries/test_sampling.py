@@ -37,7 +37,7 @@ def test_query_unconditional_sampling(fold: bool, optimize: bool):
     num_samples = 1_000_000
     query = SamplingQuery(tc)
     # samples: (num_samples, D)
-    samples, _ = query(num_samples=num_samples)
+    _, samples = query(num_samples=num_samples)
     assert samples.shape == (num_samples, tc.num_variables)
 
     # Map samples to indices of the probabilities computed above
@@ -48,3 +48,30 @@ def test_query_unconditional_sampling(fold: bool, optimize: bool):
     _, counts = torch.unique(samples_idx, return_counts=True)
     ratios = counts / num_samples
     assert allclose(ratios, probs, rtol=3e-2)
+
+
+@pytest.mark.parametrize(
+    "fold,optimize",
+    itertools.product([False, True], [False, True]),
+)
+def test_query_conditional_sampling(fold: bool, optimize: bool):
+    compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
+    sc = build_multivariate_monotonic_structured_cpt_pc(
+        num_units=2, input_layer="bernoulli", parameterize=True, normalized=True
+    )
+    tc: TorchCircuit = compiler.compile(sc)
+
+    evidence = torch.randint(0, 1, size=(1, tc.num_variables))
+    evidence_vars = torch.zeros_like(evidence).bool()
+    evidence_vars[:, 0] = True
+
+    # Sample data points unconditionally
+    num_samples = 1_000_000
+    query = SamplingQuery(tc)
+    # samples: (num_samples, D)
+    _, samples = query(
+        num_samples=num_samples,
+        x=evidence,
+        evidence_vars=evidence_vars
+    )
+    assert samples.shape == (num_samples, tc.num_variables)

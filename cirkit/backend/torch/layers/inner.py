@@ -135,11 +135,27 @@ class TorchHadamardLayer(TorchInnerLayer):
     def forward(self, x: Tensor) -> Tensor:
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
-    def sample(self, x: Tensor) -> tuple[Tensor, None]:
-        # Concatenate samples over disjoint variables through a sum
-        # x: (F, H, B, K, N, D)
-        x = torch.sum(x, dim=1)  # (F, B, K, N, D)
-        return x, None
+    # def sample(self, x: Tensor) -> tuple[Tensor, None]:
+    #     # Concatenate samples over disjoint variables through a sum
+    #     # x: (F, H, B, K, N, D)
+    #     x = torch.sum(x, dim=1)  # (F, B, K, N, D)
+    #     return x, None
+
+    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        """Sampling through an Hadamard product layer is the same as a standard
+        forward pass over the layer since the scopes are disjoint.
+
+        Args:
+            x (Tensor): The input to the layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor ranges over all elements in the
+                arity of this layer and the second element is the result of a forward pass on this
+                layer.
+        """
+        out = self(x)
+        idxs = torch.arange(x.size(1)).tile((x.size(0), x.size(2), 1))
+        return idxs, out
 
     def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
         """The maximum of a Hadamard product layer is the same as a standard
@@ -319,30 +335,75 @@ class TorchSumLayer(TorchInnerLayer):
             "fbi,fboi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, K_o).
 
+    # def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    #     weight = self.weight()
+    #     negative = torch.any(weight < 0.0)
+    #     normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+    #     if negative or not normalized:
+    #         raise TypeError("Sampling in sum layers only works with positive weights summing to 1")
+
+    #     # x: (F, H, B, Ki, N, D) -> (F, B, H * Ki, N, D)
+    #     x = x.transpose(1, 2).flatten(2, 3)
+    #     num_samples, d = x.shape[-2], x.shape[-1]
+
+    #     # mixing_distribution: (F, B, Ko, H * Ki)
+    #     mixing_distribution = torch.distributions.Categorical(probs=weight)
+
+    #     # mixing_samples: (N, F, B, Ko) -> (F, B, Ko, N)
+    #     mixing_samples = mixing_distribution.sample((num_samples,))
+    #     mixing_samples = E.rearrange(mixing_samples, "n f b k -> f b k n")
+
+    #     # mixing_indices: (F, B, Ko, N, D)
+    #     mixing_indices = E.repeat(mixing_samples, "f b k n -> f b k n d", d=d)
+
+    #     # x: (F, B, Ko, N, D)
+    #     x = torch.gather(x, dim=2, index=mixing_indices)
+    #     return x, mixing_samples
+
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        r"""Sample from a sum layer based on the weight paramerters.
+
+        The sampled index is given in raveled form. Given the index $i$ it is possible
+        to recover the index of the sampled input element as $i // I$ and
+        the unit of that element as $i mod I$ where $I$ is the number of inputs of this
+        layer (i.e. the number of units of each element that is input to this layer).
+
+        Args:
+            x (Tensor): The input to the layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the raveled index
+                of the sampled input to the layer and the second value is the input weighted
+                by that element value.
+        """
+        # weight: (F, B, K_o, H * Ki)
         weight = self.weight()
         negative = torch.any(weight < 0.0)
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if negative or not normalized:
             raise TypeError("Sampling in sum layers only works with positive weights summing to 1")
 
-        # x: (F, H, B, Ki, N, D) -> (F, B, H * Ki, N, D)
-        x = x.transpose(1, 2).flatten(2, 3)
-        num_samples, d = x.shape[-2], x.shape[-1]
+        # x: (F, H, B, Ki) -> (F, B, H * Ki)
+        x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
 
-        # mixing_distribution: (F, B, Ko, H * Ki)
-        mixing_distribution = torch.distributions.Categorical(probs=weight)
+        # intermediary weighted results are computed in the sum product semiring
+        # since very small products leading to underflow would not be selected
+        # by max anyway
+        x = SumProductSemiring.map_from(x, self.semiring)
+        # weighted_x: (F, B, H * Ki, Ko)
+        weighted_x = self.semiring.map_from(
+            torch.einsum("fbi,fboi->fboi", x, weight), SumProductSemiring
+        )
 
-        # mixing_samples: (N, F, B, Ko) -> (F, B, Ko, N)
-        mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f b k -> f b k n")
+        # sample indexes based on weight
+        dist = torch.distributions.Categorical(probs=weight)
+        idxs = dist.sample((x.size(1),)).squeeze(-2).permute(1, 0, 2)
+        # gather the weighted value
+        # TODO: find a better way rather than squeezing and unsqueezing
+        val = torch.gather(weighted_x, index=idxs.unsqueeze(-1), dim=-1).squeeze(-1)
+        
+        return idxs, val
 
-        # mixing_indices: (F, B, Ko, N, D)
-        mixing_indices = E.repeat(mixing_samples, "f b k n -> f b k n d", d=d)
-
-        # x: (F, B, Ko, N, D)
-        x = torch.gather(x, dim=2, index=mixing_indices)
-        return x, mixing_samples
 
     def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
         r"""The maximum of a sum layer is the computed by weighting the input

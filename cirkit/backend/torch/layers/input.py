@@ -461,11 +461,25 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = self.logits()
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    def sample(self, num_samples: int = 1) -> tuple[Tensor, Tensor]:
+        """Sample from the categorical layer.
+
+        Args:
+            num_samples (int, optional): Number of samples to draw. Defaults to 1.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the sampled 
+                state and the second value is the probability of that state.
+        """
+        # logits: (F, B, K, N)
         logits = torch.log(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Categorical(logits=logits)
-        samples = dist.sample((num_samples,))  # (N, F, B, K)
-        return samples
+        
+        # use the batch dimension as the dimension on which sampling is performed
+        # (N, F, 1, K) -> (F, N, K)
+        idxs = dist.sample((num_samples,)).squeeze(-2).permute(1, 0, 2)
+        val = self.semiring.map_from(dist.log_prob(idxs), LSESumSemiring)
+        return idxs, val
 
     def max(self, x=None) -> tuple[Tensor, Tensor]:
         r"""Retrieves the mode of the categorical layer.
