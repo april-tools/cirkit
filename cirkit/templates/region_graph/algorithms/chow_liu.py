@@ -157,13 +157,13 @@ def _heterogeneous_mutual_info(
     variables and gaussian marginals p(c).
 
     Args:
-        data (Tensor): The input data over which computing the MI matrix,
+        data: The input data over which computing the MI matrix,
             it must be in tabular form (i.e. a matrix).
-        is_categorical_mask (list[bool]): A boolean mask of the same length as the number
+        is_categorical_mask: A boolean mask of the same length as the number
             of columns in `data`, indicating if the column has to be considered categorical.
         A list of strings indicating the type of each variable whether each column in the
             data is categorical (True) or continuous (False).
-        normalize (bool): If True, normalizes the mutual information matrix by the entropy
+        normalize: If True, normalizes the mutual information matrix by the entropy
             of each variable. NMI(X,Y) = 2 * I(X,Y) / (H(X) + H(Y)).
 
     Returns:
