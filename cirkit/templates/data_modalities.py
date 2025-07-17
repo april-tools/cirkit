@@ -15,6 +15,7 @@ from cirkit.templates.region_graph import (
     RegionGraph,
 )
 from cirkit.templates.utils import (
+    InputLayerFactory,
     Parameterization,
     name_to_input_layer_factory,
     parameterization_to_factory,
@@ -264,6 +265,18 @@ def tabular_data(
         case _:
             raise ValueError(f"Unknown region graph called {region_graph}")
 
+    if sum_weight_param is None:
+        sum_weight_param = Parameterization(activation="softmax", initialization="normal")
+    sum_weight_factory = parameterization_to_factory(sum_weight_param)
+
+    if use_mixing_weights:
+        nary_sum_weight_factory = functools.partial(
+            mixing_weight_factory, param_factory=sum_weight_factory
+        )
+    else:
+        nary_sum_weight_factory = sum_weight_factory
+
+    input_factories: InputLayerFactory | list[InputLayerFactory]
     if isinstance(input_layers, dict):
         input_factories = name_to_input_layer_factory(input_layers["name"], **input_layers["args"])
     else:
@@ -276,17 +289,6 @@ def tabular_data(
             name_to_input_layer_factory(input_layer["name"], **input_layer["args"])
             for input_layer in input_layers
         ]
-
-    if sum_weight_param is None:
-        sum_weight_param = Parameterization(activation="softmax", initialization="normal")
-    sum_weight_factory = parameterization_to_factory(sum_weight_param)
-
-    if use_mixing_weights:
-        nary_sum_weight_factory = functools.partial(
-            mixing_weight_factory, param_factory=sum_weight_factory
-        )
-    else:
-        nary_sum_weight_factory = sum_weight_factory
 
     return rg.build_circuit(
         input_factory=input_factories,

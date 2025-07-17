@@ -180,15 +180,18 @@ def _heterogeneous_mutual_info(
 
     # Compute mutual information for continuous variables as they were a Multivariate Gaussian
     if len(continuous_subset) > 1:
-        mi_matrix[continuous_subset.unsqueeze(1), continuous_subset] = -0.5 * torch.log(
-            1 - torch.corrcoef(data[:, continuous_subset].t()).fill_diagonal_(0) ** 2
+        mi_matrix[continuous_subset.unsqueeze(1), continuous_subset] = (
+            -0.5
+            * torch.log(
+                1 - torch.corrcoef(data[:, continuous_subset].t()).fill_diagonal_(0) ** 2
+            ).float()
         )
 
     # Compute mutual information for discrete variables
     if len(discrete_subset) > 1:
         mi_matrix[discrete_subset.unsqueeze(1), discrete_subset] = _categorical_mutual_info(
             data=data[:, discrete_subset].long(), num_categories=None, chunk_size=None
-        )
+        ).float()
 
     def gaussian_entropy(x: Tensor) -> Tensor:
         return 0.5 * (
