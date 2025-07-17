@@ -258,3 +258,26 @@ def test_query_map_marginalized_conditional_circuit(semiring, fold, optimize, nu
     map_query(
         gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}},
     )
+
+@pytest.mark.parametrize(
+    "semiring,fold,optimize,num_units",
+    itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
+)
+def test_query_map_marginalized_conditional_circuit_with_evidence(semiring, fold, optimize, num_units):
+    sc = pgms.deterministic_fully_factorized(3)
+
+    pm = {"sum": list(sc.sum_layers)}
+    c_sc, gf_specs = SF.condition_circuit(sc, gate_functions=pm)
+    c_sc = SF.integrate(sc, Scope([0]))
+
+    ctx = PipelineContext(backend="torch", semiring=semiring, fold=fold, optimize=optimize)
+    ctx.add_gate_function("sum.weight.0", lambda x: x.view(-1, *gf_specs["sum.weight.0"]))
+    tc = ctx.compile(c_sc)
+
+    # compute map and check that its state matches the enumerated one
+    map_query = MAPQuery(tc)
+    map_query(
+        x=torch.tensor([[0, 1], [0, 1]]),
+        evidence_vars=torch.tensor([[False, True], [False, True]]),
+        gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}},
+    )
