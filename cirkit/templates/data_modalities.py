@@ -187,7 +187,8 @@ def tabular_data(
             **Required** if `region_graph="random-binary-tree"`.
         data (Tensor, optional):
             A Torch tensor of shape `(n_samples, n_features)`.
-            **Required** if `region_graph="chow-liu-tree"`, since the tree structure is learned from these samples.
+            **Required** if `region_graph="chow-liu-tree"`, since the tree structure is 
+                learned from these samples.
         input_layers (dict | List[dict]):
             Which per-feature distribution to use.
             The provided dictionaries should be of the following form:
@@ -195,9 +196,12 @@ def tabular_data(
                 'name': <name: str>,
                 'args': <dictionary of arguments: dict>
             }
-            for example: {'name': 'categorical', 'args': {'num_categories': 27}} or {'name': 'gaussian', 'args': {}}
-            If a dict is provided, the same input layer is used for all features. If a list of dictionaries is provided,
-            each feature will have its own input layer (input_layers[i] corresponds to feature i of the data).
+            for example: {'name': 'categorical', 'args': {'num_categories': 27}}
+                or {'name': 'gaussian', 'args': {}}
+            If a dict is provided, the same input layer is used for all features.
+                If a list of dictionaries is provided,
+            each feature will have its own input layer (input_layers[i] corresponds
+                to feature i of the data).
         num_input_units (int):
             Number of parallel input units (e.g. mixtures/components) per feature.
         sum_product_layer (str):
@@ -221,7 +225,8 @@ def tabular_data(
     Raises:
         ValueError:
           - If one of the names of the input layers is not known, or the related arguments.
-          - If the number of input layers (the length of the list) does not match the number of features (`num_features` or inferred from `data`).
+          - If the number of input layers (the length of the list) does not match the number
+                of features (`num_features` or inferred from `data`).
           - If `region_graph="random-binary-tree"` but `num_features` is `None` and `data` is None.
           - If `region_graph="chow-liu-tree"` but `data` is `None`.
           - If `region_graph` is not one of the supported strings.
@@ -264,7 +269,8 @@ def tabular_data(
     else:
         if len(input_layers) != len(rg.scope):
             raise ValueError(
-                f"Number of provided input layers ({len(input_layers)}) does not match the number of features ({rg.num_nodes})."
+                f"Number of provided input layers ({len(input_layers)}) does \
+                not match the number of features ({len(rg.scope)})."
             )
         input_factories = [
             name_to_input_layer_factory(input_layer["name"], **input_layer["args"])
