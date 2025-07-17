@@ -187,7 +187,7 @@ def tabular_data(
             **Required** if `region_graph="random-binary-tree"`.
         data (Tensor, optional):
             A Torch tensor of shape `(n_samples, n_features)`.
-            **Required** if `region_graph="chow-liu-tree"`, since the tree structure is 
+            **Required** if `region_graph="chow-liu-tree"`, since the tree structure is
                 learned from these samples.
         input_layers (dict | List[dict]):
             Which per-feature distribution to use.
