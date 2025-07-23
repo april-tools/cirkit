@@ -534,16 +534,16 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         
         match sum_weight_activation:
             case "none":
-                sum_weight_activation = unitary_weight_factory
+                sum_weight_factory = unitary_weight_factory
             case "softmax":
-                sum_weight_activation = lambda s: Parameter.from_unary(
+                sum_weight_factory = lambda s: Parameter.from_unary(
                     SoftmaxParameter(s),
                     unitary_weight_factory(s)
                 )
             case _:
                 raise ValueError(
                     "The weight layer activation must be one of 'none', 'softmax'."
-                    f"Found {weight_activation}."
+                    f"Found {sum_weight_activation}."
                 )
 
         # remove bottom and top nodes by trimming the graph
@@ -559,9 +559,9 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicCircuitNode, Layer] = {}
 
-        if weight_factory is None:
+        if sum_weight_activation is None:
             # default to unitary weights
-            def weight_factory(n: tuple[int]) -> Parameter:
+            def sum_weight_factory(n: tuple[int]) -> Parameter:
                 return Parameter.from_input(ConstantParameter(*n, value=1.0))
 
         # map each input literal to a symbolic input layer
@@ -599,7 +599,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                         num_units,
                         1 if node == self.output else num_units,
                         arity=len(self.node_inputs(node)),
-                        weight_factory=sum_weight_activation,
+                        weight_factory=sum_weight_factory,
                     )
                     sum_node.metadata["logic"]["source"] = node
 
