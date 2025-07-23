@@ -495,7 +495,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         self,
         input_layer: str = "categorical",
         input_layer_activation: str = "none",
-        weight_activation: str = "none",
+        sum_weight_activation: str = "none",
         enforce_smoothness: bool = True,
         num_units: int = 1,
     ) -> Circuit:
@@ -509,7 +509,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 "categorical", "embedding".
             input_layer_activation: The activation to apply to input layer.
                  It can be either 'none', 'softmax', 'sigmoid', or 'positive-clamp'.
-            weight_activation: The activation applied to weight layers.
+            sum_weight_activation: The activation applied to weight layers.
                 Can be 'none' or 'softmax'.
             enforce_smoothness:
                 Enforces smoothness of the circuit to support efficient marginalization.
@@ -532,11 +532,11 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         def unitary_weight_factory(n: tuple[int]) -> Parameter:
             return Parameter.from_input(ConstantParameter(*n, value=1.0))
         
-        match weight_activation:
+        match sum_weight_activation:
             case "none":
-                weight_factory = unitary_weight_factory
+                sum_weight_activation = unitary_weight_factory
             case "softmax":
-                weight_factory = lambda s: Parameter.from_unary(
+                sum_weight_activation = lambda s: Parameter.from_unary(
                     SoftmaxParameter(s),
                     unitary_weight_factory(s)
                 )
@@ -599,7 +599,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                         num_units,
                         1 if node == self.output else num_units,
                         arity=len(self.node_inputs(node)),
-                        weight_factory=weight_factory,
+                        weight_factory=sum_weight_activation,
                     )
                     sum_node.metadata["logic"]["source"] = node
 
