@@ -25,6 +25,7 @@ from cirkit.symbolic.layers import (
     SumLayer,
 )
 from cirkit.symbolic.parameters import (
+    ParameterOp,
     ConstantParameter,
     GateFunctionParameter,
     Parameter,
@@ -692,28 +693,50 @@ def condition_circuit(
     layers_map: dict[Layer, Layer] = {l: l.copy() for l in sc.layers}
 
     for gf_group, gf_layers in gate_functions.items():
-        # group layers together based on metadata
-        layers_metadata = defaultdict(list)
+        # group parameters together based on metadata
+        # make sure to only consider a parameter once since different layers might be the
+        # result of operations on the same tensor parameter
+        params_metadata = defaultdict(list)
         for l in gf_layers:
             for p_k, p in l.params.items():
-                layers_metadata[(p_k, p.shape)].append(l)
-
+                # visit the parameter graph and register its tensors
+                for pn in p.topological_ordering():
+                    if isinstance(pn, TensorParameter) and pn not in params_metadata[(p_k, pn.shape)]:
+                        params_metadata[(p_k, pn.shape)].append(pn)
+                        
         # construct the gate function spec for each group
         # since parameters with same name from same group might have different
         # shapes we group all the ones with same shape under a common name
-        for g_i, ((p_name, p_shape), g_layers) in enumerate(layers_metadata.items()):
+        params_gf = {}
+        for g_i, ((p_name, p_shape), g_params) in enumerate(params_metadata.items()):
             gf_name = f"{gf_group}.{p_name}.{g_i}"
 
             # the gate function can compute |g_elements| parameters at once
             # all of shape g_shape
-            gate_function_specs[gf_name] = (len(g_layers), *p_shape)
+            gate_function_specs[gf_name] = (len(g_params), *p_shape)
 
-            # Replace the parameter tensor to be externally parameterized by a gate function
-            for i_sl, sl in enumerate(g_layers):
-                # replace layer parameter with gate function
-                gf = GateFunctionParameter(*p_shape, name=gf_name, index=i_sl)
-                layers_map[sl] = sl.copy(params={p_name: Parameter.from_input(gf)})
+            # register the gate function for each parameter
+            for p_i, p in enumerate(g_params):
+                params_gf[p] = GateFunctionParameter(*p_shape, name=gf_name, index=p_i)
 
+        # Build a new layer by replacing the parameter tensor to be externally parameterized
+        # and preserve preserve the other operations on it
+        for sl in gf_layers:
+            # replace layer parameter with gate function
+            layers_map[sl] = sl.copy(
+                params={
+                    param_k: Parameter(
+                        nodes=[params_gf.get(pn, pn) for pn in param._nodes],
+                        in_nodes={
+                            pk: [params_gf.get(pn, pn) for pn in p_inputs]
+                            for pk, p_inputs in param._in_nodes.items()
+                        },
+                        outputs=[params_gf.get(pn, pn) for pn in param._outputs],
+                    )
+                    for param_k, param in sl.params.items()
+                }
+            )
+            
     # Construct the resulting circuit
     # use a shallow copy of the parameters that have not been changed
     layers = [layers_map[l] for l in sc.layers]

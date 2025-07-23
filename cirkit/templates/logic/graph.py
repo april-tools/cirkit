@@ -2,15 +2,15 @@ import itertools
 from abc import ABC
 from collections import deque
 from collections.abc import Iterator, Sequence
-from functools import cache, cached_property
+from functools import cache, cached_property, partial
 from typing import cast
 
 import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import CategoricalLayer, EmbeddingLayer, HadamardLayer, InputLayer, Layer, SumLayer
-from cirkit.symbolic.parameters import ConstantParameter, Parameter, ParameterFactory, IndexParameter
-from cirkit.templates.utils import InputLayerFactory
+from cirkit.symbolic.parameters import ConstantParameter, Parameter, ParameterFactory, IndexParameter, ParameterOp, SoftmaxParameter
+from cirkit.templates.utils import InputLayerFactory, name_to_parameter_activation
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
 from cirkit.utils.scope import Scope
 
@@ -89,7 +89,7 @@ class DisjunctionNode(LogicCircuitNode):
     """A conjunction in the logical circuit."""
 
 
-def categorical_input_layer_factory(scope: Scope, num_units: int) -> tuple[InputLayer, InputLayer]:
+def categorical_input_layer_factory(scope: Scope, num_units: int, activation: ParameterOp | None) -> tuple[InputLayer, InputLayer]:
     """Construct the inputs for a boolean logic circuit literals realized using a
     Categorical Layer constantly parametrized by a tensor [0, 1] for positive
     literals and [1, 0] for negative literals.
@@ -97,6 +97,7 @@ def categorical_input_layer_factory(scope: Scope, num_units: int) -> tuple[Input
     Args:
             scope (Scope): Scope of the inputs.
             num_units (int): Number of units in the inputs.
+            activation: ParameterOp | None: The activation to apply to the layer.
 
     Returns:
         tuple[InputLayer, InputLayer]: A tuple containing the negative literal
@@ -104,7 +105,11 @@ def categorical_input_layer_factory(scope: Scope, num_units: int) -> tuple[Input
     """
     # construct parameter for positive literal
     p_value = np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2)
+    
     positive_param = Parameter.from_input(ConstantParameter(num_units, 2, value=p_value))
+    if activation is not None:
+        positive_param = Parameter.from_unary(activation, positive_param)
+    
     positive_input = CategoricalLayer(
         scope,
         num_categories=2,
@@ -127,7 +132,7 @@ def categorical_input_layer_factory(scope: Scope, num_units: int) -> tuple[Input
     return negative_input, positive_input
 
 
-def embedding_input_layer_factory(scope: Scope, num_units: int) -> tuple[InputLayer, InputLayer]:
+def embedding_input_layer_factory(scope: Scope, num_units: int, activation: ParameterOp | None) -> tuple[InputLayer, InputLayer]:
     """Construct the inputs for a boolean logic circuit literals realized using a
     Embedding Layer constantly parametrized by a tensor [0, 1] for positive
     literals and [0, 0] for negative literals.
@@ -135,6 +140,7 @@ def embedding_input_layer_factory(scope: Scope, num_units: int) -> tuple[InputLa
     Args:
             scope (Scope): Scope of the inputs.
             num_units (int): Number of units in the inputs.
+            activation: ParameterOp | None: The activation to apply to the layer.
 
     Returns:
         tuple[InputLayer, InputLayer]: A tuple containing the negative literal
@@ -143,26 +149,34 @@ def embedding_input_layer_factory(scope: Scope, num_units: int) -> tuple[InputLa
     # construct parameter for positive literal
     # TODO: introduce a slice-wise operation and refactor this to have 1-p for the
     # negative parameterization
+    parameter = Parameter.from_input(ConstantParameter(
+        num_units, 
+        2, 
+        value=np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2))
+    )
+    if activation is not None:
+        parameter = Parameter.from_unary(activation, positive_param)
+    
     positive_input = EmbeddingLayer(
         scope,
         num_output_units=num_units,
         num_states=2,
-        weight=Parameter.from_input(ConstantParameter(
-            num_units, 
-            2, 
-            value=np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2))
-        ),
+        weight=parameter,
     )
 
+    parameter = Parameter.from_input(ConstantParameter(
+        num_units, 
+        2, 
+        value=np.array([[1.0, 0.0] * num_units]).reshape(num_units, 2))
+    )
+    if activation is not None:
+        parameter = Parameter.from_binary(activation, parameter)
+    
     negative_input = EmbeddingLayer(
         scope,
         num_output_units=num_units,
         num_states=2,
-        weight=Parameter.from_input(ConstantParameter(
-            num_units, 
-            2, 
-            value=np.array([[1.0, 0.0] * num_units]).reshape(num_units, 2))
-        ),
+        weight=parameter
     )
         
     return negative_input, positive_input
@@ -480,7 +494,8 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
     def build_circuit(
         self,
         input_layer: str = "categorical",
-        weight_factory: ParameterFactory | None = None,
+        input_layer_activation: str = "none",
+        weight_activation: str = "none",
         enforce_smoothness: bool = True,
         num_units: int = 1,
     ) -> Circuit:
@@ -492,11 +507,10 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         Args:
             input_layer: How to parameterize the input layers. Can be:
                 "categorical", "embedding".
-            weight_factory: The factory to construct the weight of sum layers.
-                It can be None, or a parameter factory, i.e., a map from a shape to
-                a symbolic parameter.
-                If None is used, the default weight factory uses non-trainable unitary
-                parameters, which instantiate a regular boolean logic graph.
+            input_layer_activation: The activation to apply to input layer.
+                 It can be either 'none', 'softmax', 'sigmoid', or 'positive-clamp'.
+            weight_activation: The activation applied to weight layers.
+                Can be 'none' or 'softmax'.
             enforce_smoothness:
                 Enforces smoothness of the circuit to support efficient marginalization.
             num_units: Number of units. Defaults to 1 for deterministic circuit.
@@ -513,6 +527,23 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 raise ValueError(
                     "The input layer must be one of 'categorical', 'embedding'."
                     f"Found {input_layer}."
+                )
+                
+        def unitary_weight_factory(n: tuple[int]) -> Parameter:
+            return Parameter.from_input(ConstantParameter(*n, value=1.0))
+        
+        match weight_activation:
+            case "none":
+                weight_factory = unitary_weight_factory
+            case "softmax":
+                weight_factory = lambda s: Parameter.from_unary(
+                    SoftmaxParameter(s),
+                    unitary_weight_factory(s)
+                )
+            case _:
+                raise ValueError(
+                    "The weight layer activation must be one of 'none', 'softmax'."
+                    f"Found {weight_activation}."
                 )
 
         # remove bottom and top nodes by trimming the graph
@@ -534,8 +565,16 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                 return Parameter.from_input(ConstantParameter(*n, value=1.0))
 
         # map each input literal to a symbolic input layer
+        i_act = name_to_parameter_activation(input_layer_activation)
+        if i_act is not None:
+            i_act = i_act((num_units, 2))
+
         literal_to_input = {
-            i.literal: literal_input_factory(Scope([i.literal]), num_units=num_units)
+            i.literal: literal_input_factory(
+                scope=Scope([i.literal]),
+                num_units=num_units,
+                activation=i_act
+            )
             for i in self.positive_literals
         }
         

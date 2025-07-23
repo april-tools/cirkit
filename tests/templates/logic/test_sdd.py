@@ -1,5 +1,6 @@
 import itertools
 import tempfile
+from functools import partial
 
 import pytest
 from tests.floats import allclose
@@ -100,26 +101,26 @@ def test_model_counting_sdd(fold, optimize, input_layer):
     itertools.product([False, True], [False, True], ["categorical", "embedding"]),
 )
 def test_conditional_sdd_circuit(fold, optimize, input_layer):
-    ctx = PipelineContext(optimize=optimize, fold=fold)
     
     sdd_c = SDD.from_string(SDD_s)
-    s_c = sdd_c.build_circuit()
-    cond_s_c = SF.condition_circuit(s_c, gate_functions={ 
+    s_c = sdd_c.build_circuit(input_layer_activation="softmax", weight_activation="softmax")
+    cond_s_c, gf_specs = SF.condition_circuit(s_c, gate_functions={ 
         "sum": list(s_c.sum_layers),
         "input": list(s_c.input_layers),
     })
-    pass
     
-    # s_c = sdd_c.build_circuit(input_layer=input_layer)
-    # t_c = ctx.compile(s_c)
+    ctx = PipelineContext(optimize=optimize, fold=fold)
+    def f(shape, x): return x.view(-1, *shape)
+    for k, shape in gf_specs.items():
+        ctx.add_gate_function(k, partial(f, shape))
+    
+    t_c = ctx.compile(cond_s_c)
 
-    # # model checking
-    # worlds = torch.tensor(
-    #     list(itertools.product([0, 1], repeat=s_c.num_variables)), dtype=torch.long
-    # )
-    # gt = worlds[:, 0] & ((1 - worlds[:, 1]) | worlds[:, 2])
+    # model checking
+    worlds = torch.tensor(
+        list(itertools.product([0, 1], repeat=s_c.num_variables)), dtype=torch.long
+    )
+    gt = worlds[:, 0] & ((1 - worlds[:, 1]) | worlds[:, 2])
     
-    # # model counting by integrating all variables
-    # mc_s_c = SF.integrate(s_c)
-    # mc_t_c = ctx.compile(mc_s_c)
-    # assert mc_t_c().item() == gt.sum()
+    params = { k: {"x" : torch.rand(1, *shape)} for k, shape in gf_specs.items()}
+    t_c(worlds, gate_function_kwargs=params)
