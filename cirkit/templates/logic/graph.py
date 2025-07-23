@@ -8,7 +8,7 @@ from typing import cast
 import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import CategoricalLayer, EmbeddingLayer, HadamardLayer, InputLayer, Layer, SumLayer
+from cirkit.symbolic.layers import CategoricalLayer, EmbeddingLayer, HadamardLayer, InputLayer, Layer, SumLayer, ConstantValueLayer
 from cirkit.symbolic.parameters import ConstantParameter, Parameter, ParameterFactory, IndexParameter, ParameterOp, SoftmaxParameter
 from cirkit.templates.utils import InputLayerFactory, name_to_parameter_activation
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
@@ -107,14 +107,11 @@ def categorical_input_layer_factory(scope: Scope, num_units: int, activation: Pa
     p_value = np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2)
     
     positive_param = Parameter.from_input(ConstantParameter(num_units, 2, value=p_value))
-    if activation is not None:
-        positive_param = Parameter.from_unary(activation, positive_param)
-    
     positive_input = CategoricalLayer(
         scope,
         num_categories=2,
         num_output_units=num_units,
-        probs=positive_param,
+        probs=positive_param if activation is None else Parameter.from_unary(activation, positive_param),
     )
 
     # negative parameter is constructed reindexing the positive one
@@ -126,7 +123,7 @@ def categorical_input_layer_factory(scope: Scope, num_units: int, activation: Pa
         scope,
         num_categories=2,
         num_output_units=num_units,
-        probs=negative_parameter,
+        probs=negative_parameter if activation is None else Parameter.from_unary(activation, negative_parameter),
     )
         
     return negative_input, positive_input
@@ -155,7 +152,7 @@ def embedding_input_layer_factory(scope: Scope, num_units: int, activation: Para
         value=np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2))
     )
     if activation is not None:
-        parameter = Parameter.from_unary(activation, positive_param)
+        parameter = Parameter.from_unary(activation, parameter)
     
     positive_input = EmbeddingLayer(
         scope,
@@ -606,5 +603,13 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                     in_layers[sum_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = sum_node
 
+        # introduce final sum if output of circuit is a conjunction and more than one units is used
+        if num_units > 1 and isinstance(self.output, ConjunctionNode):
+            outsum = SumLayer(num_units, 1, arity=1, weight_factory=sum_weight_factory)
+            in_layers[outsum] = [node_to_layer[self.output],]
+            outputs = [outsum,]
+        else:
+            outputs = [node_to_layer[self.output],]
+
         layers = list(set(itertools.chain(*in_layers.values())).union(in_layers.keys()))
-        return Circuit(layers, in_layers, [node_to_layer[self.output]])
+        return Circuit(layers, in_layers, outputs)

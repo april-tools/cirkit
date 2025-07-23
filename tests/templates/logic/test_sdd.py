@@ -50,6 +50,39 @@ def test_compile_sdd(fold, optimize, input_layer):
     mc_t_c = ctx.compile(mc_s_c)
     assert mc_t_c().item() == gt.sum()
 
+@pytest.mark.parametrize(
+    "fold,optimize,input_layer,num_units",
+    itertools.product([False, True], [False, True], ["categorical", "embedding"], [2, 10, 100]),
+)
+def test_overparameterized_sdd(fold, optimize, input_layer, num_units):
+    ctx = PipelineContext(optimize=optimize, fold=fold)
+    
+    sdd_c = SDD.from_string(SDD_s)
+    # construct circuit without enforcing smoothness
+    s_c = sdd_c.build_circuit(enforce_smoothness=False, input_layer=input_layer, num_units=num_units)
+    t_c = ctx.compile(s_c)
+
+    assert t_c.properties.decomposable
+    assert not t_c.properties.smooth
+
+    sdd_c = SDD.from_string(SDD_s)
+    # construct circuit and enforce smoothness
+    s_c = sdd_c.build_circuit(input_layer=input_layer, num_units=num_units)
+    t_c = ctx.compile(s_c)
+
+    assert t_c.properties.decomposable
+    assert t_c.properties.smooth
+    assert t_c.properties.structured_decomposable
+    
+    pf_c = ctx.compile(SF.integrate(s_c))
+    pf = pf_c()
+
+    # model checking
+    worlds = torch.tensor(
+        list(itertools.product([0, 1], repeat=s_c.num_variables)), dtype=torch.long
+    )
+    gt = worlds[:, 0] & ((1 - worlds[:, 1]) | worlds[:, 2])
+    assert allclose(t_c(worlds).flatten().nonzero(), gt.flatten().nonzero())
 
 @pytest.mark.parametrize(
     "fold,optimize,input_layer",
@@ -101,12 +134,13 @@ def test_model_counting_sdd(fold, optimize, input_layer):
     itertools.product([False, True], [False, True], ["categorical", "embedding"]),
 )
 def test_conditional_sdd_circuit(fold, optimize, input_layer):
-    
     sdd_c = SDD.from_string(SDD_s)
-    s_c = sdd_c.build_circuit(input_layer_activation="softmax", weight_activation="softmax")
+    s_c = sdd_c.build_circuit(
+        input_layer=input_layer,
+        sum_weight_activation="softmax"
+    )
     cond_s_c, gf_specs = SF.condition_circuit(s_c, gate_functions={ 
-        "sum": list(s_c.sum_layers),
-        "input": list(s_c.input_layers),
+        "sum": list(s_c.sum_layers)
     })
     
     ctx = PipelineContext(optimize=optimize, fold=fold)
@@ -120,7 +154,6 @@ def test_conditional_sdd_circuit(fold, optimize, input_layer):
     worlds = torch.tensor(
         list(itertools.product([0, 1], repeat=s_c.num_variables)), dtype=torch.long
     )
-    gt = worlds[:, 0] & ((1 - worlds[:, 1]) | worlds[:, 2])
-    
-    params = { k: {"x" : torch.rand(1, *shape)} for k, shape in gf_specs.items()}
-    t_c(worlds, gate_function_kwargs=params)
+    gt = worlds[:, 0] & ((1 - worlds[:, 1]) | worlds[:, 2])   
+    params = { k: {"x" : torch.ones(1, *shape)} for k, shape in gf_specs.items()}
+    assert (t_c(worlds, gate_function_kwargs=params).flatten().nonzero() == gt.nonzero()).all()
