@@ -509,7 +509,7 @@ class TorchIndexParameter(TorchUnaryParameterOp):
     @property
     def config(self) -> dict[str, Any]:
         config = super().config
-        config["indices"] = self.indices
+        config["indices"] = tuple(self.indices)
         config["dim"] = self.dim
         return config
 
@@ -522,7 +522,8 @@ class TorchIndexParameter(TorchUnaryParameterOp):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        return x[:, :, self.indices]
+        # take into account fold and batch dimensions when using dim
+        return torch.index_select(x, self.dim + 2, self._indices)
 
 
 class TorchSumParameter(TorchBinaryParameterOp):
