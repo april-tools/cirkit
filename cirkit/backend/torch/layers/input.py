@@ -446,7 +446,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         # x: (F, B, 1) -> (F, B)
         x = x.squeeze(dim=2)
         # logits: (F, B, K, N)
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        logits = probs_to_logits(self.probs()) if self.logits is None else self.logits()
 
         idx_fold = torch.arange(self.num_folds, device=logits.device)
         idx_batch = torch.arange(logits.shape[1], device=logits.device)
@@ -472,7 +472,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
                 state and the second value is the probability of that state.
         """
         # logits: (F, B, K, N)
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        logits = probs_to_logits(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Categorical(logits=logits)
         
         # use the batch dimension as the dimension on which sampling is performed
@@ -607,7 +607,7 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
 
     def sample(self, num_samples: int = 1) -> Tensor:
-        logits = torch.log(self.probs()) if self.logits is None else self.logits()
+        logits = probs_to_logits(self.probs()) if self.logits is None else self.logits()
         dist = distributions.Binomial(self.total_count, logits=logits)
         samples = dist.sample((num_samples,))  # (N, F, B, K)
         return samples
