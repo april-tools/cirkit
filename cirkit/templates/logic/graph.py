@@ -567,12 +567,12 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
             i_act = i_act((num_units, 2))
 
         literal_to_input = {
-            i.literal: literal_input_factory(
-                scope=Scope([i.literal]),
+            l: literal_input_factory(
+                scope=Scope([l]),
                 num_units=num_units,
                 activation=i_act
             )
-            for i in self.positive_literals
+            for l in range(self.num_variables)
         }
         
         for node in self.topological_ordering():

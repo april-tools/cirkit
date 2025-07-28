@@ -9,6 +9,7 @@ from torch.distributions.utils import probs_to_logits
 from cirkit.backend.torch.layers import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSemiring
+from cirkit.backend.torch.utils import safelog
 
 
 class TorchInputLayer(TorchLayer, ABC):
@@ -446,7 +447,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         # x: (F, B, 1) -> (F, B)
         x = x.squeeze(dim=2)
         # logits: (F, B, K, N)
-        logits = probs_to_logits(self.probs()) if self.logits is None else self.logits()
+        logits = safelog(self.probs()) if self.logits is None else self.logits()
 
         idx_fold = torch.arange(self.num_folds, device=logits.device)
         idx_batch = torch.arange(logits.shape[1], device=logits.device)
