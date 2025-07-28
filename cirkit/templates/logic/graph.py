@@ -274,7 +274,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         Returns:
             int: The number of literals.
         """
-        return len({i.literal for i in self.inputs if isinstance(i, LogicInputNode)})
+        return max(i.literal for i in self.inputs if isinstance(i, LogicInputNode)) + 1
 
     @cache
     def node_scope(self, node: LogicCircuitNode) -> Scope:
