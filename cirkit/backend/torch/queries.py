@@ -1,12 +1,19 @@
 import functools
 from abc import ABC
 from collections.abc import Sequence
+from typing import Any, Mapping
 
 import torch
 from torch import Tensor
 
 from cirkit.backend.torch.circuits import TorchCircuit
-from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
+from cirkit.backend.torch.layers import (
+    TorchHadamardLayer,
+    TorchInnerLayer,
+    TorchInputLayer,
+    TorchLayer,
+    TorchSumLayer,
+)
 from cirkit.utils.scope import Scope
 
 
@@ -45,7 +52,13 @@ class IntegrateQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, x: Tensor, *, integrate_vars: Tensor | Scope | Sequence[Scope]) -> Tensor:
+    def __call__(
+        self,
+        x: Tensor,
+        *,
+        integrate_vars: Tensor | Scope | Sequence[Scope],
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Tensor:
         """Solve an integration query, given an input batch and the variables to integrate.
 
         Args:
@@ -99,6 +112,9 @@ class IntegrateQuery(Query):
                 "want to broadcast. Found #inputs = "
                 f"{x.shape[0]} != {integrate_vars_mask.shape[0]} = len(integrate_vars)"
             )
+
+        # Memoize the gate functions before evaluating the circuit
+        self._circuit._memoize_gate_functions(gate_function_kwargs)
 
         output = self._circuit.evaluate(
             x,
@@ -184,92 +200,269 @@ class IntegrateQuery(Query):
         return mask
 
 
-class SamplingQuery(Query):
-    """The sampling query object."""
+class MAPQuery(Query):
+    """Compute the MAP state of the circuit, optionally using evidence."""
 
     def __init__(self, circuit: TorchCircuit) -> None:
-        """Initialize a sampling query object. Currently, only sampling from the joint distribution
-            is supported, i.e., sampling won't work in the case of circuits obtained by
-            marginalization, or by observing evidence. Conditional sampling is currently not
-            implemented.
+        """Initialize a MAP query object.
+
+        Args:
+            circuit: The circuit used to compute the MAP.
+
+        Raises:
+            ValueError: If the circuit is not smooth or not decomposable.
+        """
+        if not circuit.properties.smooth or not circuit.properties.decomposable:
+            raise ValueError(
+                f"MAP is supported by smooth and decomposable circuits, "
+                f"found {circuit.properties}"
+            )
+        super().__init__()
+        self._circuit = circuit
+
+    def __call__(
+        self,
+        *,
+        x: Tensor | None = None,
+        evidence_vars: Tensor | None = None,
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        """Solve a map query, optionally using an input evidence.
+
+        Args:
+            x: The input evidence of shape $(B, D)$, where $B$ is the batch size,
+                and $D$ is the number of variables.
+            evidence_vars: The variables to include in the evidence. It must be a subset of the
+                variables on which the circuit given in the constructor is defined on.
+                It must be a Tensor of shape (B, D) where B is the batch size and D is the number of
+                variables in the scope of the circuit. Its dtype should be torch.bool and have True
+                in the positions of random variables that are in the evidence and False elsewhere.
+            gate_function_kwargs: The arguments to pass to each gate function if the circuit is
+                conditionally parameterized.
+        Returns:
+            The result of the map query, given as a tuple where the first element is the MAP value
+            for each state and the second value is the state with shape $(B, D)$.
+        """
+        if (x is None) ^ (evidence_vars is None):
+            assert ValueError("Both evidence and the evidence variables must be provided.")
+
+        # Memoize the gate functions before evaluating the circuit
+        self._circuit._memoize_gate_functions(gate_function_kwargs)
+        if gate_function_kwargs is not None:
+            # retrieve the batch size from the gate function so that we produce
+            # one state for each batched parameter
+            batch_size = list(list(gate_function_kwargs.values())[0].values())[0].size(0)
+        else:
+            if x is None:
+                batch_size = 1
+            else:
+                batch_size = x.size(0)
+
+        if self._circuit.symbolic_operation:
+            circuit_scope = self._circuit.symbolic_operation.operands[0].scope
+        else:
+            circuit_scope = self._circuit.scope
+
+        # prepare the evidence vector by replacing non-evidence variables with
+        # the mode of each input
+        if x is None:
+            # if the circuit is the result of some operation then work on the original scope size
+            num_variables = max(circuit_scope) + 1
+
+            # it no variables in the circuit, check if the circuit is the result
+            # of an operation and retrieve the variables from there
+            if num_variables == 0:
+                if "scope" in self._circuit.symbolic_operation.metadata:
+                    num_variables = len(self._circuit.symbolic_operation.metadata["scope"])
+                else:
+                    raise ValueError("The circuit does not have variables.")
+
+            state = torch.full(
+                (batch_size, num_variables), 0, dtype=torch.long, device=self._circuit.device
+            )
+            evidence_vars = state.clone().to(torch.bool)
+        else:
+            x = x.to(self._circuit.device)
+            
+            # adjust scope if it does not match the one of the circuit in case a marginalized
+            # circuit is being used
+            if x.shape[1] != len(circuit_scope):
+                state = torch.zeros((x.shape[0], len(circuit_scope)), dtype=torch.long, device=self._circuit.device)
+                state[:, list(self._circuit.scope)] = x
+
+                evidence_vars_adapted = torch.full_like(state, False, dtype=bool, device=self._circuit.device)
+                evidence_vars_adapted[:, list(self._circuit.scope)] = evidence_vars
+                evidence_vars = evidence_vars_adapted
+            else:
+                state = x.clone()
+            
+            if state.size(0) == 1:
+                state = state.tile((batch_size, 1))
+            elif state.size(0) != batch_size:
+                raise ValueError(
+                    f"The evidence has batch dimension {state.size(0)} but {batch_size} is required."
+                )
+
+        map, state = self._circuit.backtrack(
+            x=state.to(self._circuit.device),
+            module_fn=functools.partial(
+                MAPQuery._layer_fn, evidence_vars=evidence_vars.to(self._circuit.device)
+            ),
+        )
+
+        # mantain only elements in the scope of this circuit in case some variables have been
+        # marginalized
+        state = state[:, list(self._circuit._scope)]
+        
+        return map, state
+
+    @staticmethod
+    def _layer_fn(layer: TorchLayer, x: Tensor, *, evidence_vars: Tensor) -> tuple[Tensor, Tensor]:
+        """Evaluate the layer in the usual feedforward sense using its maximizer semantics.
+
+        Args:
+            layer (TorchLayer): The layer for the forward pass.
+            x (Tensor): The input to the layer.
+            evidence_vars (Tensor): A tensor that indicates which variables are set
+                as evidence.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple which contains the input that maximizes the layer
+                and its output. In the case of inner layers, the maximizer input is the same
+                as x. In the case of input layer, it is the variable that maximizes
+                the input distribution.
+        """
+        if isinstance(layer, TorchInputLayer):
+            # compute the input layer maximizer
+            idx, output = layer.max(x)
+
+            # if layer is not a constant layer expand batch sizes if needed
+            if evidence_vars.any() and layer.num_variables > 0:
+                is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2)
+                if is_evidence.any():
+                    ff_output = layer(x)
+
+                    # expand output and idx if needed
+                    output = output.expand_as(ff_output)
+                    idx = idx.expand_as(ff_output).clone()
+
+                    output = torch.where(is_evidence, ff_output, output)
+                    idx = torch.where(is_evidence, x, idx)
+        else:
+            # if it is not an input layer then evaluate in feedforward way
+            idx, output = layer.max(x)
+
+        return idx, output
+
+
+class SamplingQuery(Query):
+    """Sample from the circuit, optionally using evidence."""
+
+    def __init__(self, circuit: TorchCircuit) -> None:
+        """Initialize a sampling query object.
 
         Args:
             circuit: The circuit to sample from.
 
         Raises:
-            ValueError: If the circuit to sample from is not normalised.
+            ValueError: If the circuit is not smooth or not decomposable.
         """
         if not circuit.properties.smooth or not circuit.properties.decomposable:
             raise ValueError(
-                f"The circuit to sample from must be smooth and decomposable, "
-                f"but found {circuit.properties}"
+                f"MAP is supported by smooth and decomposable circuits, "
+                f"found {circuit.properties}"
             )
-        # TODO: add a check to verify the circuit is monotonic and normalized?
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, num_samples: int = 1) -> tuple[Tensor, list[Tensor]]:
-        """Sample a number of data points.
+    def __call__(
+        self,
+        *,
+        num_samples: int = 1,
+        x: Tensor | None = None,
+        evidence_vars: Tensor | None = None
+    ) -> tuple[Tensor, Tensor]:
+        """Sample from the circuit, optionally using an input evidence.
 
         Args:
-            num_samples: The number of samples to return.
-
-        Return:
-            A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
-            variables the circuit is defined on, and (ii) the samples of the finitely-discrete
-            latent variables associated to the sum units. The samples (i) are returned as a
-            tensor of shape (num_samples, num_variables).
-
-        Raises:
-            ValueError: if the number of samples is not a positive number.
+            x: The input evidence of shape $(B, D)$, where $B$ is the batch size,
+                and $D$ is the number of variables.
+            evidence_vars: The variables to include in the evidence. It must be a subset of the
+                variables on which the circuit given in the constructor is defined on.
+                It must be a Tensor of shape (B, D) where B is the batch size and D is the number of
+                variables in the scope of the circuit. Its dtype should be torch.bool and have True
+                in the positions of random variables that are in the evidence and False elsewhere.
+        Returns:
+            The result of the sampling query, given as a tuple where the first element is the probability of
+            the sample value and the second value is the sample with shape $(B, D)$.
         """
-        if num_samples <= 0:
-            raise ValueError("The number of samples must be a positive number")
+        if (x is None) ^ (evidence_vars is None):
+            assert ValueError("Both evidence and the evidence variables must be provided.")
 
-        mixture_samples: list[Tensor] = []
-        # samples: (O, K, num_samples, D)
-        samples = self._circuit.evaluate(
+        if self._circuit.symbolic_operation:
+            circuit_scope = self._circuit.symbolic_operation.operands[0].scope
+        else:
+            circuit_scope = self._circuit.scope
+
+        if x is None:
+            # if the circuit is the result of some operation then work on the original scope size
+            num_variables = max(circuit_scope) + 1
+            state = torch.full(
+                (num_samples, num_variables), 0, dtype=torch.long, device=self._circuit.device
+            )
+            evidence_vars = state.clone().to(torch.bool)
+        else:
+            x = x.to(self._circuit.device)
+            state = x.clone()
+
+            if state.size(0) != 1:
+                raise ValueError("Only one tensor can be provided as evidence.")
+            
+            state = state.tile((num_samples, 1))
+            evidence_vars = evidence_vars.tile((num_samples, 1))
+            
+        samples_p, state = self._circuit.backtrack(
+            x=state,
             module_fn=functools.partial(
-                self._layer_fn,
+                SamplingQuery._layer_fn, 
                 num_samples=num_samples,
-                mixture_samples=mixture_samples,
+                evidence_vars=evidence_vars
             ),
         )
-        # samples: (num_samples, O, K, D)
-        samples = samples.permute(2, 0, 1, 3)
-        # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
-        samples = samples[:, 0, 0]  # (num_samples, D)
-        return samples, mixture_samples
+        
+        return samples_p, state
 
-    def _layer_fn(
-        self, layer: TorchLayer, *inputs: Tensor, num_samples: int, mixture_samples: list[Tensor]
-    ) -> Tensor:
-        # Sample from an input layer
-        if not inputs:
-            assert isinstance(layer, TorchInputLayer)
-            samples = layer.sample(num_samples)
-            samples = self._pad_samples(samples, layer.scope_idx)
-            mixture_samples.append(samples)
-            return samples
+    @staticmethod
+    def _layer_fn(layer: TorchLayer, x: Tensor, *, num_samples: int, evidence_vars: Tensor) -> tuple[Tensor, Tensor]:
+        """Evaluate the layer in the usual feedforward way by randomly sampling.
 
-        # Sample through an inner layer
-        assert isinstance(layer, TorchInnerLayer)
-        samples, mix_samples = layer.sample(*inputs)
-        if mix_samples is not None:
-            mixture_samples.append(mix_samples)
-        return samples
+        Args:
+            layer (TorchLayer): The layer for the forward pass.
+            x (Tensor): The input to the layer.
+            evidence_vars (Tensor): A tensor that indicates which variables are set
+                as evidence.
 
-    def _pad_samples(self, samples: Tensor, scope_idx: Tensor) -> Tensor:
-        """Pads univariate samples to the size of the scope of the circuit (output dimension)
-        according to scope for compatibility in downstream inner nodes.
+        Returns:
+            tuple[Tensor, Tensor]: A tuple which contains the input sampled the layer
+                and its layer output.
         """
-        if scope_idx.shape[1] != 1:
-            raise NotImplementedError("Padding is only implemented for univariate samples")
+        if isinstance(layer, TorchInputLayer):
+            # sample from input layer maximizer
+            idx, output = layer.sample(num_samples)
 
-        # padded_samples: (F, K, num_samples, D)
-        padded_samples = torch.zeros(
-            (*samples.shape, len(self._circuit.scope)), device=samples.device, dtype=samples.dtype
-        )
-        fold_idx = torch.arange(samples.shape[0], device=samples.device)
-        padded_samples[fold_idx, :, :, scope_idx.squeeze(dim=1)] = samples
-        return padded_samples
+            # if layer is not a constant layer expand batch sizes if needed
+            if evidence_vars.any() and layer.num_variables > 0:
+                is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2)
+                if is_evidence.any():
+                    ff_output = layer(x)
+
+                    # expand output and idx if needed
+                    output = output.expand_as(ff_output)
+                    idx = idx.expand_as(ff_output).clone()
+
+                    output = torch.where(is_evidence, ff_output, output)
+                    idx = torch.where(is_evidence, x, idx)
+        else:
+            idx, output = layer.sample(x)
+
+        return idx, output

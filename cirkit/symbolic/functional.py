@@ -1,8 +1,9 @@
 import heapq
 import itertools
-from collections.abc import Iterable, Sequence
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from numbers import Number
-from typing import NamedTuple
+from typing import Iterable, NamedTuple, TypeVar
 
 import numpy as np
 
@@ -23,8 +24,15 @@ from cirkit.symbolic.layers import (
     ProductLayer,
     SumLayer,
 )
-from cirkit.symbolic.parameters import ConstantParameter, Parameter
+from cirkit.symbolic.parameters import (
+    ParameterOp,
+    ConstantParameter,
+    GateFunctionParameter,
+    Parameter,
+    TensorParameter,
+)
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry
+from cirkit.utils.conditional import GateFunctionParameterSpecs, GateFunctionSpecs
 from cirkit.utils.scope import Scope
 
 
@@ -649,3 +657,99 @@ def conjugate(
         output_blocks,
         operation=CircuitOperation(operator=CircuitOperator.CONJUGATION, operands=(sc,)),
     )
+
+
+def condition_circuit(
+    sc: Circuit, *, gate_functions: GateFunctionSpecs
+) -> tuple[Circuit, GateFunctionParameterSpecs]:
+    """Parameterize some layers of a symbolic circuit by means of externally-provided gate functions.
+
+    Args:
+        sc: The symbolic circuit.
+        gate_functions: A mapping from a gate function identifier to the
+            list of layers it will parametrize.
+
+    Returns:
+        tuple[Circuit, GateFunctionParameterSpecs]: A pair where the first element is a new symbolic
+            circuit whose tensor parameters have been substituted by the symbolic information that
+            the value of those parameters will come from an externally defined model. The second
+            element is a map from a gate function name to a parameter group specification.
+            The parameter group specification is the shapes that must be computed for that parameter.
+            Groups are constructed by collating together parameters with the same shape.
+
+    Raises:
+        ValueError: If the provided gate functions are not defined on pairwise mutually disjoint
+            sets of layers.
+    """
+    if sc.operation is not None:
+        raise ValueError("The circuit to parameterize must not be the output of a circuit operator")
+
+    # the layers specified in the gate function specification all be mutually disjoint
+    if any(
+        len(set(l1).intersection(l2)) != 0
+        for l1, l2 in itertools.combinations(gate_functions.values(), 2)
+    ):
+        raise ValueError("The gate functions must parametrize mutually disjoint set of layers.")
+
+    # group all parameters from the same gate function together so that they can be computed
+    # in folded fashion and upacked later
+    # make sure that all elements within a group are compatible (same parameter type and shape)
+    gate_function_specs: GateFunctionParameterSpecs = {}
+    layers_map: dict[Layer, Layer] = {l: l.copy() for l in sc.layers}
+
+    for gf_group, gf_layers in gate_functions.items():
+        # group parameters together based on metadata
+        # make sure to only consider a parameter once since different layers might be the
+        # result of operations on the same tensor parameter
+        params_metadata = defaultdict(list)
+        for l in gf_layers:
+            for p_k, p in l.params.items():
+                # visit the parameter graph and register its tensors
+                for pn in p.topological_ordering():
+                    if isinstance(pn, TensorParameter) and pn not in params_metadata[(p_k, pn.shape)]:
+                        params_metadata[(p_k, pn.shape)].append(pn)
+                        
+        # construct the gate function spec for each group
+        # since parameters with same name from same group might have different
+        # shapes we group all the ones with same shape under a common name
+        params_gf = {}
+        for g_i, ((p_name, p_shape), g_params) in enumerate(params_metadata.items()):
+            gf_name = f"{gf_group}.{p_name}.{g_i}"
+
+            # the gate function can compute |g_elements| parameters at once
+            # all of shape g_shape
+            gate_function_specs[gf_name] = (len(g_params), *p_shape)
+
+            # register the gate function for each parameter
+            for p_i, p in enumerate(g_params):
+                params_gf[p] = GateFunctionParameter(*p_shape, name=gf_name, index=p_i)
+
+        # Build a new layer by replacing the parameter tensor to be externally parameterized
+        # and preserve preserve the other operations on it
+        for sl in gf_layers:
+            # replace layer parameter with gate function
+            layers_map[sl] = sl.copy(
+                params={
+                    param_k: Parameter(
+                        nodes=[params_gf.get(pn, pn) for pn in param._nodes],
+                        in_nodes={
+                            pk: [params_gf.get(pn, pn) for pn in p_inputs]
+                            for pk, p_inputs in param._in_nodes.items()
+                        },
+                        outputs=[params_gf.get(pn, pn) for pn in param._outputs],
+                    )
+                    for param_k, param in sl.params.items()
+                }
+            )
+            
+    # Construct the resulting circuit
+    # use a shallow copy of the parameters that have not been changed
+    layers = [layers_map[l] for l in sc.layers]
+    in_layers = {
+        sl: [layers_map[prev_sli] for prev_sli in sc.layer_inputs(prev_sl)]
+        for prev_sl, sl in layers_map.items()
+    }
+    output_layers = [layers_map[prev_sli] for prev_sli in sc.outputs]
+    sc = Circuit(layers, in_layers=in_layers, outputs=output_layers)
+
+    return sc, gate_function_specs

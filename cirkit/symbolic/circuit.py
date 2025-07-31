@@ -14,6 +14,7 @@ from cirkit.utils.algorithms import (
     subgraph,
     topological_ordering,
 )
+from cirkit.utils.conditional import GateFunctionParameterSpecs
 from cirkit.utils.scope import Scope
 
 
@@ -356,6 +357,15 @@ class Circuit(DiAcyclicGraph[Layer]):
         return (sl for sl in self.layers if isinstance(sl, (SumLayer, ProductLayer)))
 
     @property
+    def input_layers(self) -> Iterator[InputLayer]:
+        """Retrieves an iterator over input layers.
+
+        Returns:
+            Iterator[SumLayer]:
+        """
+        return (sl for sl in self.layers if isinstance(sl, InputLayer))
+
+    @property
     def sum_layers(self) -> Iterator[SumLayer]:
         """Retrieves an iterator over sum layers.
 
@@ -384,6 +394,15 @@ class Circuit(DiAcyclicGraph[Layer]):
         """
         layers, in_layers = subgraph(outputs, self.layer_inputs)
         return Circuit(layers, in_layers, outputs=outputs)
+
+    @property
+    def gate_function_specs(self) -> GateFunctionParameterSpecs | None:
+        """Retrieve the gate function specifications, if any.
+
+        Returns:
+            The gate function specifications or None if the circuit is not a conditional circuit.
+        """
+        return self._gate_function_specs
 
     ##################################### Structural properties ####################################
 

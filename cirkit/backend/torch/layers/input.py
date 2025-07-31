@@ -4,10 +4,12 @@ from typing import Any
 
 import torch
 from torch import Tensor, distributions
+from torch.distributions.utils import probs_to_logits
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import LSESumSemiring, Semiring, SumProductSemiring
+from cirkit.backend.torch.utils import safelog
 
 
 class TorchInputLayer(TorchLayer, ABC):
@@ -106,6 +108,22 @@ class TorchInputLayer(TorchLayer, ABC):
             TypeError: If sampling is not supported by the layer.
         """
         raise TypeError(f"Sampling is not supported for layers of type {type(self)}")
+
+    def max(self, x: Any = None) -> tuple[Tensor, Tensor]:
+        """If the input layer encodes a probability distribution then return the state
+        that maximizes the variable along side its mode.
+
+        Args:
+            x: Optional input to compute the layer maximizer. Defaults to None.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first element is the maximum state
+                and the second element is the mode of the input.
+
+        Raises:
+            TypeError: If max is not supported by the layer.
+        """
+        raise TypeError(f"Max is not supported for layers of type {type(self)}")
 
     def extra_repr(self) -> str:
         return (
@@ -235,6 +253,10 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
             )
         self.weight = weight
 
+        # prepare max and argmaxing functions across folds and batches
+        self._max_fn = torch.vmap(torch.vmap(lambda x: torch.amax(x, dim=-1)))
+        self._argmax_fn = torch.vmap(torch.vmap(lambda x: torch.argmax(x, dim=-1)))
+
     def _valid_weight_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
             return False
@@ -259,11 +281,29 @@ class TorchEmbeddingLayer(TorchInputFunctionLayer):
         if x.is_floating_point():
             x = x.long()  # The input to Embedding should be discrete
         x = x.squeeze(dim=2)  # (F, B)
-        weight = self.weight()
+        weight = self.weight()  # (F, B, K, N)
+
+        # for each fold and batch retrieve the corresponding state
         idx_fold = torch.arange(self.num_folds, device=weight.device)
-        x = weight[idx_fold[:, None], :, x]
+        idx_batch = torch.arange(weight.shape[1], device=weight.device)
+        x = weight[idx_fold[:, None], idx_batch[:, None], :, x]
         x = self.semiring.map_from(x, SumProductSemiring)
         return x  # (F, B, K)
+
+    def max(self, x=None) -> tuple[Tensor, Tensor]:
+        r"""Retrieves the maximum of the embedding layer which is the state
+        with maximum value.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the state
+                with maximum value and the second value is the maximum value
+                of the embedding.
+        """
+        # weight: (F, B, K, N)
+        params = self.weight()
+        m = self._max_fn(params)
+        m_state = self._argmax_fn(params)
+        return m_state, m
 
 
 class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
@@ -361,17 +401,21 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             if not self._valid_parameter_shape(probs):
                 raise ValueError(
                     f"Expected number of folds {self.num_folds} "
-                    f"and shape {self._probs_logits_shape} for 'probs', found"
+                    f"and shape {self._probs_logits_shape} for 'probs', found "
                     f"{probs.num_folds} and {probs.shape}, respectively"
                 )
         elif not self._valid_parameter_shape(logits):
             raise ValueError(
                 f"Expected number of folds {self.num_folds} "
-                f"and shape {self._probs_logits_shape} for 'logits', found"
+                f"and shape {self._probs_logits_shape} for 'logits', found "
                 f"{logits.num_folds} and {logits.shape}, respectively"
             )
         self.probs = probs
         self.logits = logits
+
+        # prepare max and argmaxing functions across folds and batches
+        self._max_fn = torch.vmap(torch.vmap(lambda x: torch.amax(x, dim=-1)))
+        self._argmax_fn = torch.vmap(torch.vmap(lambda x: torch.argmax(x, dim=-1)))
 
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
@@ -401,15 +445,17 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             x = x.long()  # The input to Categorical should be discrete
         # x: (F, B, 1) -> (F, B)
         x = x.squeeze(dim=2)
-        # logits: (F, K, N)
+        # logits: (F, B, K, N)
         if self.logits is None:
             assert self.probs is not None
-            logits = torch.log(self.probs())
+            logits = safelog(self.probs())
         else:
             logits = self.logits()
+
         idx_fold = torch.arange(self.num_folds, device=logits.device)
-        x = logits[idx_fold[:, None], :, x]
-        return x
+        idx_batch = torch.arange(logits.shape[1], device=logits.device)
+        x = logits[idx_fold[:, None], idx_batch, :, x]
+        return x  # (F, B, K)
 
     def log_partition_function(self) -> Tensor:
         if self.logits is None:
@@ -420,18 +466,46 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = self.logits()
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    def sample(self, num_samples: int = 1) -> tuple[Tensor, Tensor]:
         # logits: (F, K, N)
         if self.logits is None:
             assert self.probs is not None
-            logits = torch.log(self.probs())
+            """Sample from the categorical layer.
+
+        Args:
+            num_samples (int, optional): Number of samples to draw. Defaults to 1.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the sampled 
+                state and the second value is the probability of that state.
+        """
+        # logits: (F, B, K, N)
+        if self.logits is None:
+            assert self.probs is not None
+            logits = safelog(self.probs())
         else:
             logits = self.logits()
         dist = distributions.Categorical(logits=logits)
-        # samples: (N, F, K)
-        samples = dist.sample((num_samples,))
-        samples = samples.permute(1, 2, 0)  # (F, K, N)
-        return samples
+        
+        # use the batch dimension as the dimension on which sampling is performed
+        # (N, F, 1, K) -> (F, N, K)
+        idxs = dist.sample((num_samples,)).squeeze(-2).permute(1, 0, 2)
+        val = self.semiring.map_from(dist.log_prob(idxs), LSESumSemiring)
+        return idxs, val
+
+    def max(self, x=None) -> tuple[Tensor, Tensor]:
+        r"""Retrieves the mode of the categorical layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the state
+                with maximum probability and the second value is the mode
+                of the distribution.
+        """
+        # logits: (F, B, K, N)
+        params = self.probs() if self.logits is None else self.logits()
+        m = self._max_fn(params)
+        m_state = self._argmax_fn(params)
+        return m_state, m
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
@@ -585,7 +659,7 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             num_output_units: The number of output units.
             mean: The mean parameter, having shape $(F, K)$, where $K$ is the number of
                 output units.
-            stddev: The standard deviation parameter, having shape $(F, K$, where $K$ is the
+            stddev: The standard deviation parameter, having shape $(F, K)$, where $K$ is the
                 number of output units.
             log_partition: An optional parameter of shape $(F, K$, encoding the log-partition.
                 function. If this is not None, then the Gaussian layer encodes unnormalized
@@ -659,14 +733,14 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return params
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
-        mean = self.mean().unsqueeze(dim=1)  # (F, 1, K)
-        stddev = self.stddev().unsqueeze(dim=1)  # (F, 1, K)
+        mean = self.mean() # (F, B, K)
+        stddev = self.stddev() # (F, B, K)
         dist = distributions.Normal(loc=mean, scale=stddev)
         # log_probs: (F, B, K)
         log_probs = dist.log_prob(x)
         if self.log_partition is not None:
-            log_partition = self.log_partition()  # (F, K)
-            log_probs = log_probs + log_partition.unsqueeze(dim=1)
+            log_partition = self.log_partition()  # (F, B, K)
+            log_probs = log_probs + log_partition
         return log_probs
 
     def log_partition_function(self) -> Tensor:
@@ -674,14 +748,11 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             return torch.zeros(
                 size=(self.num_folds, 1, self.num_output_units), device=self.mean.device
             )
-        log_partition = self.log_partition()  # (F, K)
-        return log_partition.unsqueeze(dim=1)  # (F, 1, K)
+        return self.log_partition()  # (F, B, K)
 
     def sample(self, num_samples: int = 1) -> Tensor:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
-        # samples: (N, F, K)
-        samples = dist.sample((num_samples,))
-        samples = samples.permute(1, 2, 0)  # (F, K, N)
+        samples = dist.sample((num_samples,))  # (N, F, B, K)
         return samples
 
 
@@ -720,6 +791,7 @@ class TorchConstantValueLayer(TorchConstantLayer):
                 f"The value must have number of folds {self.num_folds}, "
                 f"but found {value.num_folds}"
             )
+
         if value.shape != (num_output_units,):
             raise ValueError(
                 f"The shape of the value must be ({num_output_units},), " f"but found {value.shape}"
@@ -737,10 +809,18 @@ class TorchConstantValueLayer(TorchConstantLayer):
         return {"value": self.value}
 
     def forward(self, batch_size: int) -> Tensor:
-        value = self.value()  # (F, Ko)
-        # value: (F, B, Ko)
-        value = value.unsqueeze(dim=1).expand(value.shape[0], batch_size, value.shape[1])
+        value = self.value()  # (F, B, Ko)
+
+        if value.shape[1] == 1 and batch_size != 1:
+            # expand value to the requested batch size
+            value = value.expand(-1, batch_size, *tuple(value.shape[2:]))
+
         return self.semiring.map_from(value, self._source_semiring)
+
+    def max(self, x: int):
+        m = self(x)  # (F, B, Ko)
+        m_state = torch.zeros_like(m)
+        return m_state, m
 
 
 class TorchEvidenceLayer(TorchConstantLayer):
@@ -798,18 +878,28 @@ class TorchEvidenceLayer(TorchConstantLayer):
         return {"layer": self.layer}
 
     def forward(self, batch_size: int) -> Tensor:
-        obs = self.observation()  # (F, D)
-        obs = obs.unsqueeze(dim=1)  # (F, 1, D)
-        x = self.layer(obs)  # (F, 1, K)
-        return x.expand(x.shape[0], batch_size, x.shape[2])
+        obs = self.observation()  # (F, B, D)
+
+        if obs.shape[1] != 1 and obs.shape[1] != batch_size:
+            raise ValueError(
+                f"The batch size of the observation ({obs.shape[1]})"
+                f"does not match batch_size {batch_size}."
+            )
+
+        x = self.layer(obs)
+
+        if x.shape[1] == 1:
+            x = x.expand(x.shape[0], batch_size, x.shape[2])
+
+        return x
 
     def sample(self, num_samples: int = 1) -> Tensor:
         if self.num_variables != 1:
             raise NotImplementedError("Sampling a multivariate Evidence layer is not implemented")
         # Sampling an evidence layer translates to return the given observation
         obs = self.observation()  # (F, D=1)
-        obs = obs.unsqueeze(dim=-1)  # (F, 1, 1)
-        return obs.expand(size=(-1, -1, self.num_output_units, num_samples))
+        obs = obs.unsqueeze(dim=-1).unsqueeze(dim=-1)  # (N, F, 1, 1)
+        return obs.expand(size=(num_samples, -1, -1, self.num_output_units))
 
 
 class TorchPolynomialLayer(TorchInputFunctionLayer):
@@ -871,7 +961,7 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
         r"""Evaluate polynomial given coefficients and point, with the shape for PolynomialLayer.
 
         Args:
-            coeff: The coefficients of the polynomial, shape $(F, K_o, \mathsf{degree} + 1)$.
+            coeff: The coefficients of the polynomial, shape $(F, B, K_o, \mathsf{degree} + 1)$.
             x: The point of the variable, shape $(F, H, B, K_i)$, where $H=K_i=1$.
 
         Returns:
@@ -882,10 +972,10 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
 
         # TODO: iterating over dim=2 is inefficient
         for a_n in reversed(
-            coeff.unbind(dim=2)
+            coeff.unbind(dim=3)
         ):  # Reverse iterator of the degree axis, shape (F, Ko).
             # a_n shape (F, Ko) -> (F, 1, Ko).
-            y = torch.addcmul(a_n.unsqueeze(dim=1), x, y)  # y = a_n + x * y, by Horner's method.
+            y = torch.addcmul(a_n, x, y)  # y = a_n + x * y, by Horner's method.
         return y  # shape (F, B, Ko).
 
     @property

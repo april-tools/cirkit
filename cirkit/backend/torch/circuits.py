@@ -1,4 +1,7 @@
+from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -13,8 +16,15 @@ from cirkit.backend.torch.graph.modules import (
     FoldIndexInfo,
     TorchDiAcyclicGraph,
 )
-from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
-from cirkit.symbolic.circuit import StructuralProperties
+from cirkit.backend.torch.layers import (
+    TorchHadamardLayer,
+    TorchInputLayer,
+    TorchLayer,
+    TorchSumLayer,
+)
+from cirkit.backend.torch.utils import CachedGateFunctionEval
+from cirkit.symbolic.circuit import CircuitOperation, StructuralProperties
+from cirkit.utils.conditional import GateFunctionParameterSpecs
 from cirkit.utils.scope import Scope
 
 
@@ -26,6 +36,81 @@ class LayerAddressBook(AddressBook[TorchLayer]):
     where each entry stores the information needed to gather the inputs to each (possibly folded)
     circuit layer.
     """
+
+    def backtrack(self, state, module_idxs: list[Tensor]) -> Tensor:
+        # entry queue holds a tuple of the form:
+        # (module address book id, idxs of module, previous module address book id)
+        entry_queue = deque([(len(self._entries) - 1, None, None, None)])
+        while entry_queue:
+            entry_id, p_fold_idx, p_batch_idx, p_unit_idx = entry_queue.popleft()
+
+            entry = self._entries[entry_id]
+            module = entry.module
+            in_module_ids = entry.in_module_ids
+
+            if in_module_ids:
+                in_modules_ids_h = in_module_ids[0]
+
+                if module is None:
+                    entry_queue.extend(
+                        [
+                            (
+                                next_m_id,
+                                0,
+                                torch.arange(state.size(0), device=state.device),
+                                0,
+                            )
+                            for next_m_id in in_modules_ids_h
+                        ]
+                    )
+                    continue
+
+                match module:
+                    case TorchSumLayer():
+                        in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][p_fold_idx]
+
+                        # retrieve arity and unit indexes by unraveling each batch
+                        raveled_idxs = module_idxs[entry_id][p_fold_idx, p_batch_idx, p_unit_idx]
+                        arity_idxs, unit_idxs = torch.unravel_index(
+                            raveled_idxs, (module.arity, module.num_input_units)
+                        )
+
+                        for arity_i, (next_module_id, fold_idx) in enumerate(in_fold_info):
+                            batch_idxs_at_arity = arity_idxs == arity_i
+
+                            if batch_idxs_at_arity.any():
+                                # specify which states are interested in the input module i
+                                # and for each state which unit they are interested in
+                                entry_queue.append(
+                                    (
+                                        next_module_id,
+                                        fold_idx,
+                                        p_batch_idx[batch_idxs_at_arity],
+                                        unit_idxs[batch_idxs_at_arity],
+                                    )
+                                )
+
+                        continue
+                    case _:
+                        in_fold_info = self._fold_idx_info.in_fold_idx[entry_id][p_fold_idx]
+                        # for product layers we visit all the children
+                        for next_module_id, fold_idx in in_fold_info:
+                            entry_queue.append((next_module_id, fold_idx, p_batch_idx, p_unit_idx))
+                        continue
+            # catch the case where we are at an input unit
+            elif module is not None:
+                assert isinstance(module, TorchInputLayer)
+                # set state
+                input_idxs = module_idxs[entry_id]
+                
+                # check that the module is not a marginalized input
+                # in that case ignore the update of this element
+                if module.scope_idx.nelement() > 0:
+                    state[p_batch_idx, module.scope_idx[p_fold_idx]] = input_idxs[
+                        p_fold_idx, 0 if input_idxs.size(1) == 1 else p_batch_idx, p_unit_idx
+                    ]
+
+        return state
 
     def lookup(
         self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
@@ -42,7 +127,28 @@ class LayerAddressBook(AddressBook[TorchLayer]):
                 if len(in_layer_ids_h) == 1:
                     x = module_outputs[in_layer_ids_h[0]]
                 else:
-                    x = torch.cat([module_outputs[mid] for mid in in_layer_ids_h], dim=0)
+                    # when parameters are batched inputs from constant layers
+                    # might have a batch size of 1 if in_graph is always None
+                    # we have expand those inputs to match the others
+                    module_inputs = [module_outputs[mid] for mid in in_layer_ids_h]
+
+                    # make sure that all inputs have the same batch size
+                    # if they do not, then it must be possible to partition them
+                    # into two group where one group can be broadcast to the other
+                    # group shape
+                    # TODO: check for a more efficient implementation than casting to a set
+                    batch_sizes = sorted([i.size(1) for i in module_inputs])
+                    unique_batch_sizes = len(set(batch_sizes))
+                    if unique_batch_sizes == 2:
+                        # broadcast inputs with singleton batch size
+                        module_inputs = [
+                            i if i.size(1) != 1 else i.expand(-1, batch_sizes[-1], -1)
+                            for i in module_inputs
+                        ]
+                    elif unique_batch_sizes > 2:
+                        raise ValueError("Found an inconsistent batch dimension between units.")
+
+                    x = torch.cat(module_inputs, dim=0)
                 x = x[in_fold_idx_h]
                 yield layer, (x,)
                 continue
@@ -116,7 +222,7 @@ class LayerAddressBook(AddressBook[TorchLayer]):
         )
         entries.append(entry)
 
-        return LayerAddressBook(entries)
+        return LayerAddressBook(entries, fold_idx_info=fold_idx_info)
 
 
 class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
@@ -132,6 +238,8 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         *,
         properties: StructuralProperties,
         fold_idx_info: FoldIndexInfo[TorchLayer] | None = None,
+        gate_function_evals: Mapping[Mapping[str, CachedGateFunctionEval]] | None = None,
+        symbolic_operation: CircuitOperation | None = None,
     ) -> None:
         """Initializes a torch circuit.
 
@@ -143,6 +251,8 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             properties: The structural properties of the circuit.
             fold_idx_info: The folding index information.
                 It can be None if the circuit is not folded.
+            gate_function_evals: A mapping from external gate functions to cached evaluations.
+            symbolic_operation: The symbolic operation that created the circuit, if any.
         """
         super().__init__(
             layers,
@@ -152,6 +262,9 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         )
         self._scope = scope
         self._properties = properties
+        gate_function_evals = {} if gate_function_evals is None else gate_function_evals
+        self._gate_function_evals = gate_function_evals
+        self._symbolic_operation = symbolic_operation
 
     @property
     def scope(self) -> Scope:
@@ -179,6 +292,27 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             The structural properties.
         """
         return self._properties
+
+    @property
+    def device(self) -> torch.device:
+        """Retrieve the device on which the circuit is loaded.
+
+        Returns:
+            torch.device: The device.
+        """
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            return torch.device("cpu")
+
+    @property
+    def symbolic_operation(self) -> CircuitOperation:
+        """Retrieve the symbolic operation that created the circuit.
+
+        Returns:
+            The symbolic operation.
+        """
+        return self._symbolic_operation
 
     @property
     def layers(self) -> Sequence[TorchLayer]:
@@ -229,6 +363,16 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         """
         return self.nodes_outputs
 
+    @property
+    def gate_function_evals(self) -> Mapping[str, CachedGateFunctionEval]:
+        """Return the mapping between a gate function and its evaluation.
+
+        Returns:
+            Mapping[str, CachedGateFunctionEval]: The mapping between a gate
+                function and its evaluation.
+        """
+        return self._gate_function_evals
+
     def reset_parameters(self) -> None:
         """Reset the parameters of the circuit in-place."""
         # For each layer, initialize its parameters, if any
@@ -236,10 +380,28 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             for p in l.params.values():
                 p.reset_parameters()
 
-    def __call__(self, x: Tensor | None = None) -> Tensor:
-        return super().__call__(x)
+    def _build_unfold_index_info(self) -> FoldIndexInfo:
+        return build_unfold_index_info(
+            self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
+        )
 
-    def forward(self, x: Tensor | None = None) -> Tensor:
+    def _build_address_book(self, fold_idx_info: FoldIndexInfo) -> LayerAddressBook:
+        return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
+
+    def _memoize_gate_functions(self, gate_function_kwargs: Mapping[str, Mapping[str, Any]]):
+        for gate_function_id, gate_function_eval in self._gate_function_evals.items():
+            kwargs = gate_function_kwargs.get(gate_function_id, {})
+            # memoize the gate function execution
+            gate_function_eval.memoize(**kwargs)
+
+    def __call__(
+        self, x: Tensor | None = None, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> Tensor:
+        # IGNORE: Idiom for nn.Module.__call__.
+        return super().__call__(x, gate_function_kwargs=gate_function_kwargs)  # type: ignore[no-any-return,misc]
+
+    def forward(
+        self, x: Tensor | None = None, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
         """Evaluate the circuit layers in forward mode, i.e., by evaluating each layer by
         following the topological ordering.
 
@@ -258,17 +420,13 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
         """
         if self._scope and x is None:
             raise ValueError(f"Expected some input 'x', as the circuit has scope '{self._scope}'")
-        return self._evaluate_layers(x)
+        return self._evaluate_layers(x, gate_function_kwargs=gate_function_kwargs)
 
-    def _build_unfold_index_info(self) -> FoldIndexInfo[TorchLayer]:
-        return build_unfold_index_info(
-            self.topological_ordering(), outputs=self.outputs, incomings_fn=self.node_inputs
-        )
-
-    def _build_address_book(self, fold_idx_info: FoldIndexInfo[TorchLayer]) -> LayerAddressBook:
-        return LayerAddressBook.from_index_info(fold_idx_info, incomings_fn=self.layer_inputs)
-
-    def _evaluate_layers(self, x: Tensor | None) -> Tensor:
+    def _evaluate_layers(self, x: Tensor | None, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
+        # Memoize the gate functions.This will be called just before the invocation of the
+        # [evaluate][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph.evaluate] method.
+        self._memoize_gate_functions({} if gate_function_kwargs is None else gate_function_kwargs)
+        
         # Evaluate layers on the given input
         y = self.evaluate(x)  # (O, B, K)
         y = y.transpose(0, 1)  # (B, O, K)
