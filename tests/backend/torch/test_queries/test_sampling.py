@@ -58,8 +58,9 @@ def test_query_unconditional_sampling_gaussian(fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
     
     from cirkit.symbolic.circuit import Circuit, Scope
-    from cirkit.symbolic.layers import GaussianLayer, SumLayer, HadamardLayer
+    from cirkit.symbolic.layers import GaussianLayer, HadamardLayer, SumLayer
     from cirkit.templates import utils
+
     # This parametrizes the mixture weights such that they add up to one.
     weight_factory = utils.parameterization_to_factory(utils.Parameterization(
         activation='softmax',   # Parameterize the sum weights by using a softmax activation

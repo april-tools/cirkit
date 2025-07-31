@@ -3,13 +3,12 @@ import tempfile
 from functools import partial
 
 import pytest
-from tests.floats import allclose
-
 import torch
 
-from cirkit.pipeline import PipelineContext
 import cirkit.symbolic.functional as SF
+from cirkit.pipeline import PipelineContext
 from cirkit.templates.logic import SDD
+from tests.floats import allclose
 
 # A & (~ B | C)
 SDD_s = "L 1 0 1\nL 3 2 2\nL 4 4 3\nL 5 2 -2\nT 6\nD 2 3 2 3 4 5 6\nL 7 0 -1\nF 8\nD 0 1 2 1 2 7 8"

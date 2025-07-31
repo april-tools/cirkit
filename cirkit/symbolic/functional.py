@@ -25,10 +25,10 @@ from cirkit.symbolic.layers import (
     SumLayer,
 )
 from cirkit.symbolic.parameters import (
-    ParameterOp,
     ConstantParameter,
     GateFunctionParameter,
     Parameter,
+    ParameterOp,
     TensorParameter,
 )
 from cirkit.symbolic.registry import OPERATOR_REGISTRY, OperatorRegistry

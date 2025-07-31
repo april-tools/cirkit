@@ -4,7 +4,6 @@ from typing import Any
 
 import torch
 from torch import Tensor, distributions
-from torch.distributions.utils import probs_to_logits
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
@@ -828,11 +827,6 @@ class TorchConstantValueLayer(TorchConstantLayer):
             value = value.expand(-1, batch_size, *tuple(value.shape[2:]))
 
         return self.semiring.map_from(value, self._source_semiring)
-
-    def max(self, x: int):
-        m = self(x)  # (F, B, Ko)
-        m_state = torch.zeros_like(m)
-        return m_state, m
 
 
 class TorchEvidenceLayer(TorchConstantLayer):

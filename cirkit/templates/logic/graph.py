@@ -8,8 +8,23 @@ from typing import cast
 import numpy as np
 
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import CategoricalLayer, EmbeddingLayer, HadamardLayer, InputLayer, Layer, SumLayer, ConstantValueLayer
-from cirkit.symbolic.parameters import ConstantParameter, Parameter, ParameterFactory, IndexParameter, ParameterOp, SoftmaxParameter
+from cirkit.symbolic.layers import (
+    CategoricalLayer,
+    ConstantValueLayer,
+    EmbeddingLayer,
+    HadamardLayer,
+    InputLayer,
+    Layer,
+    SumLayer,
+)
+from cirkit.symbolic.parameters import (
+    ConstantParameter,
+    IndexParameter,
+    Parameter,
+    ParameterFactory,
+    ParameterOp,
+    SoftmaxParameter,
+)
 from cirkit.templates.utils import InputLayerFactory, name_to_parameter_activation
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
 from cirkit.utils.scope import Scope

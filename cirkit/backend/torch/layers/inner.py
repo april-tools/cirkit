@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any
 
-import einops as E
 import torch
 from torch import Tensor
 
