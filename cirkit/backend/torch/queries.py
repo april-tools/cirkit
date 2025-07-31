@@ -283,19 +283,23 @@ class MAPQuery(Query):
             evidence_vars = state.clone().to(torch.bool)
         else:
             x = x.to(self._circuit.device)
-            
+
             # adjust scope if it does not match the one of the circuit in case a marginalized
             # circuit is being used
             if x.shape[1] != len(circuit_scope):
-                state = torch.zeros((x.shape[0], len(circuit_scope)), dtype=torch.long, device=self._circuit.device)
+                state = torch.zeros(
+                    (x.shape[0], len(circuit_scope)), dtype=torch.long, device=self._circuit.device
+                )
                 state[:, list(self._circuit.scope)] = x
 
-                evidence_vars_adapted = torch.full_like(state, False, dtype=bool, device=self._circuit.device)
+                evidence_vars_adapted = torch.full_like(
+                    state, False, dtype=bool, device=self._circuit.device
+                )
                 evidence_vars_adapted[:, list(self._circuit.scope)] = evidence_vars
                 evidence_vars = evidence_vars_adapted
             else:
                 state = x.clone()
-            
+
             if state.size(0) == 1:
                 state = state.tile((batch_size, 1))
             elif state.size(0) != batch_size:
@@ -313,7 +317,7 @@ class MAPQuery(Query):
         # mantain only elements in the scope of this circuit in case some variables have been
         # marginalized
         state = state[:, list(self._circuit._scope)]
-        
+
         return map, state
 
     @staticmethod
@@ -376,11 +380,7 @@ class SamplingQuery(Query):
         self._circuit = circuit
 
     def __call__(
-        self,
-        *,
-        num_samples: int = 1,
-        x: Tensor | None = None,
-        evidence_vars: Tensor | None = None
+        self, *, num_samples: int = 1, x: Tensor | None = None, evidence_vars: Tensor | None = None
     ) -> tuple[Tensor, Tensor]:
         """Sample from the circuit, optionally using an input evidence.
 
@@ -417,23 +417,23 @@ class SamplingQuery(Query):
 
             if state.size(0) != 1:
                 raise ValueError("Only one tensor can be provided as evidence.")
-            
+
             state = state.tile((num_samples, 1))
             evidence_vars = evidence_vars.tile((num_samples, 1))
-            
+
         samples_p, state = self._circuit.backtrack(
             x=state,
             module_fn=functools.partial(
-                SamplingQuery._layer_fn, 
-                num_samples=num_samples,
-                evidence_vars=evidence_vars
+                SamplingQuery._layer_fn, num_samples=num_samples, evidence_vars=evidence_vars
             ),
         )
-        
+
         return samples_p, state
 
     @staticmethod
-    def _layer_fn(layer: TorchLayer, x: Tensor, *, num_samples: int, evidence_vars: Tensor) -> tuple[Tensor, Tensor]:
+    def _layer_fn(
+        layer: TorchLayer, x: Tensor, *, num_samples: int, evidence_vars: Tensor
+    ) -> tuple[Tensor, Tensor]:
         """Evaluate the layer in the usual feedforward way by randomly sampling.
 
         Args:

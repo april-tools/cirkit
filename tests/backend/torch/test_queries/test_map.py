@@ -121,7 +121,7 @@ def test_query_map(semiring: str, fold: bool, optimize: bool, num_units: int):
 def test_query_map_marginalized(semiring: str, fold: bool, optimize: bool, num_units: int):
     sc = pgms.deterministic_fully_factorized(3)
     sc = SF.integrate(sc, Scope([0]))
-    
+
     compiler = TorchCompiler(semiring=semiring, fold=fold, optimize=optimize)
     # The following function computes a circuit where we have computed the
     # partition function and a marginal by hand.
@@ -129,14 +129,13 @@ def test_query_map_marginalized(semiring: str, fold: bool, optimize: bool, num_u
     tc: TorchCircuit = compiler.compile(sc)
 
     # compute the likelihood for all possible assignments
-    worlds = torch.tensor(
-        list(itertools.product([0, 1], repeat=3)), dtype=torch.long
-    )
+    worlds = torch.tensor(list(itertools.product([0, 1], repeat=3)), dtype=torch.long)
     worlds_ll = tc(worlds)
 
     # compute map and check that its state matches the enumerated one
     map_query = MAPQuery(tc)
     map_value, map_state = map_query()
+
 
 @pytest.mark.parametrize(
     "semiring,fold,optimize,num_units",
@@ -238,6 +237,7 @@ def test_query_map_conditional_circuit_with_evidence(semiring, fold, optimize, n
         gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}},
     )
 
+
 @pytest.mark.parametrize(
     "semiring,fold,optimize,num_units",
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
@@ -259,11 +259,14 @@ def test_query_map_marginalized_conditional_circuit(semiring, fold, optimize, nu
         gate_function_kwargs={"sum.weight.0": {"x": torch.rand(2, *gf_specs["sum.weight.0"])}},
     )
 
+
 @pytest.mark.parametrize(
     "semiring,fold,optimize,num_units",
     itertools.product(["lse-sum", "sum-product"], [False, True], [False, True], [1, 20]),
 )
-def test_query_map_marginalized_conditional_circuit_with_evidence(semiring, fold, optimize, num_units):
+def test_query_map_marginalized_conditional_circuit_with_evidence(
+    semiring, fold, optimize, num_units
+):
     sc = pgms.deterministic_fully_factorized(3)
 
     pm = {"sum": list(sc.sum_layers)}

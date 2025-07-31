@@ -706,9 +706,12 @@ def condition_circuit(
             for p_k, p in l.params.items():
                 # visit the parameter graph and register its tensors
                 for pn in p.topological_ordering():
-                    if isinstance(pn, TensorParameter) and pn not in params_metadata[(p_k, pn.shape)]:
+                    if (
+                        isinstance(pn, TensorParameter)
+                        and pn not in params_metadata[(p_k, pn.shape)]
+                    ):
                         params_metadata[(p_k, pn.shape)].append(pn)
-                        
+
         # construct the gate function spec for each group
         # since parameters with same name from same group might have different
         # shapes we group all the ones with same shape under a common name
@@ -741,7 +744,7 @@ def condition_circuit(
                     for param_k, param in sl.params.items()
                 }
             )
-            
+
     # Construct the resulting circuit
     # use a shallow copy of the parameters that have not been changed
     layers = [layers_map[l] for l in sc.layers]

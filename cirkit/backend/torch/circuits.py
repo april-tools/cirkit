@@ -102,7 +102,7 @@ class LayerAddressBook(AddressBook[TorchLayer]):
                 assert isinstance(module, TorchInputLayer)
                 # set state
                 input_idxs = module_idxs[entry_id]
-                
+
                 # check that the module is not a marginalized input
                 # in that case ignore the update of this element
                 if module.scope_idx.nelement() > 0:
@@ -395,13 +395,18 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             gate_function_eval.memoize(**kwargs)
 
     def __call__(
-        self, x: Tensor | None = None, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+        self,
+        x: Tensor | None = None,
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> Tensor:
         # IGNORE: Idiom for nn.Module.__call__.
         return super().__call__(x, gate_function_kwargs=gate_function_kwargs)  # type: ignore[no-any-return,misc]
 
     def forward(
-        self, x: Tensor | None = None, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
+        self,
+        x: Tensor | None = None,
+        gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Tensor:
         """Evaluate the circuit layers in forward mode, i.e., by evaluating each layer by
         following the topological ordering.
 
@@ -422,11 +427,13 @@ class TorchCircuit(TorchDiAcyclicGraph[TorchLayer]):
             raise ValueError(f"Expected some input 'x', as the circuit has scope '{self._scope}'")
         return self._evaluate_layers(x, gate_function_kwargs=gate_function_kwargs)
 
-    def _evaluate_layers(self, x: Tensor | None, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None) -> Tensor:
+    def _evaluate_layers(
+        self, x: Tensor | None, gate_function_kwargs: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> Tensor:
         # Memoize the gate functions.This will be called just before the invocation of the
         # [evaluate][cirkit.backend.torch.graph.modules.TorchDiAcyclicGraph.evaluate] method.
         self._memoize_gate_functions({} if gate_function_kwargs is None else gate_function_kwargs)
-        
+
         # Evaluate layers on the given input
         y = self.evaluate(x)  # (O, B, K)
         y = y.transpose(0, 1)  # (B, O, K)

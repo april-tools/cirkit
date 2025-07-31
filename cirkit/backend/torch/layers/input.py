@@ -472,7 +472,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             num_samples (int, optional): Number of samples to draw. Defaults to 1.
 
         Returns:
-            tuple[Tensor, Tensor]: A tuple where the first tensor is the sampled 
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the sampled
                 state and the second value is the probability of that state.
         """
         # logits: (F, B, K, N)
@@ -482,7 +482,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         else:
             logits = self.logits()
         dist = distributions.Categorical(logits=logits)
-        
+
         # use the batch dimension as the dimension on which sampling is performed
         # (N, F, 1, K) -> (F, N, K)
         idxs = dist.sample((num_samples,)).squeeze(-2).permute(1, 0, 2)
@@ -729,8 +729,8 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return params
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
-        mean = self.mean() # (F, B, K)
-        stddev = self.stddev() # (F, B, K)
+        mean = self.mean()  # (F, B, K)
+        stddev = self.stddev()  # (F, B, K)
         dist = distributions.Normal(loc=mean, scale=stddev)
         # log_probs: (F, B, K)
         log_probs = dist.log_prob(x)
@@ -753,16 +753,15 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             num_samples (int, optional): Number of samples to draw. Defaults to 1.
 
         Returns:
-            tuple[Tensor, Tensor]: A tuple where the first tensor is the sampled 
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the sampled
                 value and the second value is the probability of that value.
         """
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
-        
+
         # use the batch dimension as the dimension on which sampling is performed
         # (N, F, 1, K) -> (F, N, K)
         val = self.semiring.map_from(
-            dist.sample((num_samples,)).squeeze(-2).permute(1, 0, 2),
-            LSESumSemiring
+            dist.sample((num_samples,)).squeeze(-2).permute(1, 0, 2), LSESumSemiring
         )
         return val, val
 

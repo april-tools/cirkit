@@ -50,17 +50,19 @@ class ParameterAddressBook(AddressBook[TorchParameterNode]):
                 batch_sizes = sorted([i.size(1) for i in module_inputs])
                 assert len(set(batch_sizes)) <= 2
                 module_inputs = [
-                    i
-                    if i.size(1) != 1
-                    else i.expand(
-                        -1,
-                        batch_sizes[-1],
-                        *(
-                            [
-                                -1,
-                            ]
-                            * len(i.shape[2:])
-                        ),
+                    (
+                        i
+                        if i.size(1) != 1
+                        else i.expand(
+                            -1,
+                            batch_sizes[-1],
+                            *(
+                                [
+                                    -1,
+                                ]
+                                * len(i.shape[2:])
+                            ),
+                        )
                     )
                     for i in module_inputs
                 ]

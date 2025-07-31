@@ -318,7 +318,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: TorchCircuit) -> TorchCircuit:
         properties=cc.properties,
         fold_idx_info=fold_idx_info,
         gate_function_evals=cc.gate_function_evals,
-        symbolic_operation=cc.symbolic_operation
+        symbolic_operation=cc.symbolic_operation,
     )
 
 

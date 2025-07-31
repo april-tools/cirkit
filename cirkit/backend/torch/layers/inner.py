@@ -355,7 +355,7 @@ class TorchSumLayer(TorchInnerLayer):
         negative = torch.any(weight < 0.0)
         if negative:
             raise TypeError("Sampling in sum layers only works with positive weights.")
-        
+
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             # normalize weight as a probability distribution
@@ -380,7 +380,7 @@ class TorchSumLayer(TorchInnerLayer):
         # gather the weighted value
         # TODO: find a better way rather than squeezing and unsqueezing
         val = torch.gather(weighted_x, index=idxs.unsqueeze(-1), dim=-1).squeeze(-1)
-        
+
         return idxs, val
 
     def max(self, x: Tensor) -> tuple[Tensor, Tensor]:

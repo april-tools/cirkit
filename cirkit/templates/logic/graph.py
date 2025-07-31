@@ -104,7 +104,9 @@ class DisjunctionNode(LogicCircuitNode):
     """A conjunction in the logical circuit."""
 
 
-def categorical_input_layer_factory(scope: Scope, num_units: int, activation: ParameterOp | None) -> tuple[InputLayer, InputLayer]:
+def categorical_input_layer_factory(
+    scope: Scope, num_units: int, activation: ParameterOp | None
+) -> tuple[InputLayer, InputLayer]:
     """Construct the inputs for a boolean logic circuit literals realized using a
     Categorical Layer constantly parametrized by a tensor [0, 1] for positive
     literals and [1, 0] for negative literals.
@@ -120,31 +122,40 @@ def categorical_input_layer_factory(scope: Scope, num_units: int, activation: Pa
     """
     # construct parameter for positive literal
     p_value = np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2)
-    
+
     positive_param = Parameter.from_input(ConstantParameter(num_units, 2, value=p_value))
     positive_input = CategoricalLayer(
         scope,
         num_categories=2,
         num_output_units=num_units,
-        probs=positive_param if activation is None else Parameter.from_unary(activation, positive_param),
+        probs=(
+            positive_param
+            if activation is None
+            else Parameter.from_unary(activation, positive_param)
+        ),
     )
 
     # negative parameter is constructed reindexing the positive one
     negative_parameter = Parameter.from_unary(
-        IndexParameter((num_units, 2), indices=[1, 0], axis=-1),
-        positive_param
+        IndexParameter((num_units, 2), indices=[1, 0], axis=-1), positive_param
     )
     negative_input = CategoricalLayer(
         scope,
         num_categories=2,
         num_output_units=num_units,
-        probs=negative_parameter if activation is None else Parameter.from_unary(activation, negative_parameter),
+        probs=(
+            negative_parameter
+            if activation is None
+            else Parameter.from_unary(activation, negative_parameter)
+        ),
     )
-        
+
     return negative_input, positive_input
 
 
-def embedding_input_layer_factory(scope: Scope, num_units: int, activation: ParameterOp | None) -> tuple[InputLayer, InputLayer]:
+def embedding_input_layer_factory(
+    scope: Scope, num_units: int, activation: ParameterOp | None
+) -> tuple[InputLayer, InputLayer]:
     """Construct the inputs for a boolean logic circuit literals realized using a
     Embedding Layer constantly parametrized by a tensor [0, 1] for positive
     literals and [0, 0] for negative literals.
@@ -161,14 +172,14 @@ def embedding_input_layer_factory(scope: Scope, num_units: int, activation: Para
     # construct parameter for positive literal
     # TODO: introduce a slice-wise operation and refactor this to have 1-p for the
     # negative parameterization
-    parameter = Parameter.from_input(ConstantParameter(
-        num_units, 
-        2, 
-        value=np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2))
+    parameter = Parameter.from_input(
+        ConstantParameter(
+            num_units, 2, value=np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2)
+        )
     )
     if activation is not None:
         parameter = Parameter.from_unary(activation, parameter)
-    
+
     positive_input = EmbeddingLayer(
         scope,
         num_output_units=num_units,
@@ -176,21 +187,18 @@ def embedding_input_layer_factory(scope: Scope, num_units: int, activation: Para
         weight=parameter,
     )
 
-    parameter = Parameter.from_input(ConstantParameter(
-        num_units, 
-        2, 
-        value=np.array([[1.0, 0.0] * num_units]).reshape(num_units, 2))
+    parameter = Parameter.from_input(
+        ConstantParameter(
+            num_units, 2, value=np.array([[1.0, 0.0] * num_units]).reshape(num_units, 2)
+        )
     )
     if activation is not None:
         parameter = Parameter.from_binary(activation, parameter)
-    
+
     negative_input = EmbeddingLayer(
-        scope,
-        num_output_units=num_units,
-        num_states=2,
-        weight=parameter
+        scope, num_output_units=num_units, num_states=2, weight=parameter
     )
-        
+
     return negative_input, positive_input
 
 
@@ -540,17 +548,16 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
                     "The input layer must be one of 'categorical', 'embedding'."
                     f"Found {input_layer}."
                 )
-                
+
         def unitary_weight_factory(n: tuple[int]) -> Parameter:
             return Parameter.from_input(ConstantParameter(*n, value=1.0))
-        
+
         match sum_weight_activation:
             case "none":
                 sum_weight_factory = unitary_weight_factory
             case "softmax":
                 sum_weight_factory = lambda s: Parameter.from_unary(
-                    SoftmaxParameter(s),
-                    unitary_weight_factory(s)
+                    SoftmaxParameter(s), unitary_weight_factory(s)
                 )
             case _:
                 raise ValueError(
@@ -582,14 +589,10 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
             i_act = i_act((num_units, 2))
 
         literal_to_input = {
-            l: literal_input_factory(
-                scope=Scope([l]),
-                num_units=num_units,
-                activation=i_act
-            )
+            l: literal_input_factory(scope=Scope([l]), num_units=num_units, activation=i_act)
             for l in range(self.num_variables)
         }
-        
+
         for node in self.topological_ordering():
             match node:
                 case LiteralNode():
@@ -621,10 +624,16 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         # introduce final sum if output of circuit is a conjunction and more than one units is used
         if num_units > 1 and isinstance(self.output, ConjunctionNode):
             outsum = SumLayer(num_units, 1, arity=1, weight_factory=sum_weight_factory)
-            in_layers[outsum] = [node_to_layer[self.output],]
-            outputs = [outsum,]
+            in_layers[outsum] = [
+                node_to_layer[self.output],
+            ]
+            outputs = [
+                outsum,
+            ]
         else:
-            outputs = [node_to_layer[self.output],]
+            outputs = [
+                node_to_layer[self.output],
+            ]
 
         layers = list(set(itertools.chain(*in_layers.values())).union(in_layers.keys()))
         return Circuit(layers, in_layers, outputs)

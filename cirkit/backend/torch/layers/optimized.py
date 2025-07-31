@@ -177,7 +177,7 @@ class TorchCPTLayer(TorchInnerLayer):
     def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
         # x: (F, B, Ki)
         x = self.semiring.prod(x, dim=1, keepdim=False)
-        
+
         # weight: (F, B, K_o, Ki)
         weight = self.weight()
 
@@ -213,7 +213,7 @@ class TorchCPTLayer(TorchInnerLayer):
         negative = torch.any(weight < 0.0)
         if negative:
             raise TypeError("Sampling in sum layers only works with positive weights.")
-        
+
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             # normalize weight as a probability distribution
@@ -222,7 +222,7 @@ class TorchCPTLayer(TorchInnerLayer):
 
         # x: (F, B, Ki)
         x = self.semiring.prod(x, dim=1, keepdim=False)
-        
+
         # weight: (F, B, K_o, Ki)
         weight = self.weight()
 

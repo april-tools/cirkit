@@ -56,21 +56,23 @@ def test_query_unconditional_sampling(fold: bool, optimize: bool):
 )
 def test_query_unconditional_sampling_gaussian(fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
-    
+
     from cirkit.symbolic.circuit import Circuit, Scope
     from cirkit.symbolic.layers import GaussianLayer, HadamardLayer, SumLayer
     from cirkit.templates import utils
 
     # This parametrizes the mixture weights such that they add up to one.
-    weight_factory = utils.parameterization_to_factory(utils.Parameterization(
-        activation='softmax',   # Parameterize the sum weights by using a softmax activation
-        initialization='uniform' # Initialize the sum weights by sampling from a standard normal distribution
-    ))
+    weight_factory = utils.parameterization_to_factory(
+        utils.Parameterization(
+            activation="softmax",  # Parameterize the sum weights by using a softmax activation
+            initialization="uniform",  # Initialize the sum weights by sampling from a standard normal distribution
+        )
+    )
 
     # We introduce one more mixture than in the original model
     # Again, SGD/Adam is not the best way to fit a (shallow) Gaussian mixture model
-    units = 2+1 
-    
+    units = 2 + 1
+
     g0 = GaussianLayer(Scope((0,)), units)
     g1 = GaussianLayer(Scope((1,)), units)
     prod = HadamardLayer(num_input_units=units, arity=2)
@@ -84,9 +86,9 @@ def test_query_unconditional_sampling_gaussian(fold: bool, optimize: bool):
             prod: [g0, g1],
             sl: [prod],
         },
-        outputs=[sl]  # Nodes that are returned by the circuit
+        outputs=[sl],  # Nodes that are returned by the circuit
     )
-    
+
     tc: TorchCircuit = compiler.compile(sc)
 
     # Sample data points unconditionally
@@ -115,9 +117,5 @@ def test_query_conditional_sampling(fold: bool, optimize: bool):
     num_samples = 1_000_000
     query = SamplingQuery(tc)
     # samples: (num_samples, D)
-    _, samples = query(
-        num_samples=num_samples,
-        x=evidence,
-        evidence_vars=evidence_vars
-    )
+    _, samples = query(num_samples=num_samples, x=evidence, evidence_vars=evidence_vars)
     assert samples.shape == (num_samples, tc.num_variables)
