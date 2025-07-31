@@ -467,10 +467,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         return torch.sum(torch.logsumexp(logits, dim=3), dim=2).unsqueeze(dim=1)
 
     def sample(self, num_samples: int = 1) -> tuple[Tensor, Tensor]:
-        # logits: (F, K, N)
-        if self.logits is None:
-            assert self.probs is not None
-            """Sample from the categorical layer.
+        """Sample from the categorical layer.
 
         Args:
             num_samples (int, optional): Number of samples to draw. Defaults to 1.
@@ -750,10 +747,25 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
             )
         return self.log_partition()  # (F, B, K)
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    def sample(self, num_samples: int = 1) -> tuple[Tensor, Tensor]:
+        """Sample from the gaussian layer.
+
+        Args:
+            num_samples (int, optional): Number of samples to draw. Defaults to 1.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the sampled 
+                value and the second value is the probability of that value.
+        """
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
-        samples = dist.sample((num_samples,))  # (N, F, B, K)
-        return samples
+        
+        # use the batch dimension as the dimension on which sampling is performed
+        # (N, F, 1, K) -> (F, N, K)
+        val = self.semiring.map_from(
+            dist.sample((num_samples,)).squeeze(-2).permute(1, 0, 2),
+            LSESumSemiring
+        )
+        return val, val
 
 
 class TorchConstantValueLayer(TorchConstantLayer):

@@ -54,6 +54,51 @@ def test_query_unconditional_sampling(fold: bool, optimize: bool):
     "fold,optimize",
     itertools.product([False, True], [False, True]),
 )
+def test_query_unconditional_sampling_gaussian(fold: bool, optimize: bool):
+    compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
+    
+    from cirkit.symbolic.circuit import Circuit, Scope
+    from cirkit.symbolic.layers import GaussianLayer, SumLayer, HadamardLayer
+    from cirkit.templates import utils
+    # This parametrizes the mixture weights such that they add up to one.
+    weight_factory = utils.parameterization_to_factory(utils.Parameterization(
+        activation='softmax',   # Parameterize the sum weights by using a softmax activation
+        initialization='uniform' # Initialize the sum weights by sampling from a standard normal distribution
+    ))
+
+    # We introduce one more mixture than in the original model
+    # Again, SGD/Adam is not the best way to fit a (shallow) Gaussian mixture model
+    units = 2+1 
+    
+    g0 = GaussianLayer(Scope((0,)), units)
+    g1 = GaussianLayer(Scope((1,)), units)
+    prod = HadamardLayer(num_input_units=units, arity=2)
+    sl = SumLayer(units, 1, 1, weight_factory=weight_factory)
+
+    sc = Circuit(
+        layers=[g0, g1, prod, sl],  # Layers that appear in the circuit (i.e. nodes in the graph)
+        in_layers={  # Connections between layers (i.e. edges in the graph as an adjacency list)
+            g0: [],
+            g1: [],
+            prod: [g0, g1],
+            sl: [prod],
+        },
+        outputs=[sl]  # Nodes that are returned by the circuit
+    )
+    
+    tc: TorchCircuit = compiler.compile(sc)
+
+    # Sample data points unconditionally
+    num_samples = 1_000_000
+    query = SamplingQuery(tc)
+    # samples: (num_samples, D)
+    _, samples = query(num_samples=num_samples)
+
+
+@pytest.mark.parametrize(
+    "fold,optimize",
+    itertools.product([False, True], [False, True]),
+)
 def test_query_conditional_sampling(fold: bool, optimize: bool):
     compiler = TorchCompiler(semiring="lse-sum", fold=fold, optimize=optimize)
     sc = build_multivariate_monotonic_structured_cpt_pc(

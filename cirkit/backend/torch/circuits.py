@@ -108,7 +108,7 @@ class LayerAddressBook(AddressBook[TorchLayer]):
                 if module.scope_idx.nelement() > 0:
                     state[p_batch_idx, module.scope_idx[p_fold_idx]] = input_idxs[
                         p_fold_idx, 0 if input_idxs.size(1) == 1 else p_batch_idx, p_unit_idx
-                    ]
+                    ].to(state.dtype)
 
         return state
 
