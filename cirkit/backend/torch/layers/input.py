@@ -810,8 +810,21 @@ class TorchDiscretizedLogisticLayer(TorchExpFamilyLayer):
         Computes the log-likelihood of the discretized logistic distribution:
             ll(x) = log(cdf(x + 0.5) - cdf(x - 0.5))
             where cdf(x) = 1 / (1 + exp(-(x - loc)/scale))
+        Check https://en.wikipedia.org/wiki/Logistic_distribution for more details on the logistic distribution.
 
-        Check https://en.wikipedia.org/wiki/Logistic_distribution for more details.
+        This is a full derivation of the function:
+            ll(x) = log(cdf(x + 0.5) - cdf(x - 0.5))
+            = log{1 / (1 + exp(-(x + 0.5 - loc)/scale)) - 1 / (1 + exp(-(x - 0.5 - loc)/scale))}
+            = log{[(1 + exp(-(x - 0.5 - loc)/scale)) - (1 + exp(-(x + 0.5 - loc)/scale))] / (1 + exp(-(x + 0.5 - loc)/scale)) * (1 + exp(-(x - 0.5 - loc)/scale))}
+            = log{[ exp(-(x - 0.5 - loc)/scale) - exp(-(x + 0.5 - loc)/scale) ]}    - log{1 + exp(-(x + 0.5 - loc)/scale)} - log{1 + exp(-(x - 0.5 - loc)/scale)}
+            = log{exp(-(x - 0.5 - loc)/scale)*[ 1 - exp(-(x + 0.5 - loc)/scale + (x - 0.5 - loc)/scale)]}    - log{1 + exp(-(x + 0.5 - loc)/scale)} - log{1 + exp(-(x - 0.5 - loc)/scale)}
+            = -(x - 0.5 - loc)/scale + log{1 - exp(-1/scale)} - log{1 + exp(-(x + 0.5 - loc)/scale)} - log{1 + exp(-(x - 0.5 - loc)/scale)}
+
+            let's set
+                precision = 1 / scale
+                a = (x - 0.5 - loc) * precision
+
+            = -a + log(1 - exp(-precision)) + log(sigmoid((x + 0.5 - loc) * precision)) + log(sigmoid(a))
         """
         precision = 1 / scale
         a = (x - 0.5 - loc) * precision
