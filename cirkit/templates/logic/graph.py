@@ -104,6 +104,10 @@ class DisjunctionNode(LogicCircuitNode):
     """A conjunction in the logical circuit."""
 
 
+class GadgetDisjunctionNode(LogicCircuitNode):
+    """A conjunction in the logical circuit used to smooth the circuit."""
+
+
 def categorical_input_layer_factory(
     scope: Scope, num_units: int, activation: ParameterOp | None
 ) -> tuple[InputLayer, InputLayer]:
@@ -339,9 +343,9 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         }
 
         # create smoothing disjunctions composed of a literal and its negation
-        smoothing_map: dict[int, DisjunctionNode] = {}
+        smoothing_map: dict[int, GadgetDisjunctionNode] = {}
         for l in self.node_scope(self.output):
-            l_disjunction = DisjunctionNode()
+            l_disjunction = GadgetDisjunctionNode()
             self._in_nodes[l_disjunction] = [
                 literal_map.setdefault((l, True), LiteralNode(l)),
                 literal_map.setdefault((l, False), NegatedLiteralNode(l)),
@@ -609,7 +613,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
 
                     in_layers[product_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = product_node
-                case DisjunctionNode():
+                case DisjunctionNode() | GadgetDisjunctionNode():
                     sum_node = SumLayer(
                         num_units,
                         1 if node == self.output else num_units,
@@ -624,6 +628,7 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         # introduce final sum if output of circuit is a conjunction and more than one units is used
         if num_units > 1 and isinstance(self.output, ConjunctionNode):
             outsum = SumLayer(num_units, 1, arity=1, weight_factory=sum_weight_factory)
+            outsum.metadata["logic"]["source"] = None
             in_layers[outsum] = [
                 node_to_layer[self.output],
             ]
