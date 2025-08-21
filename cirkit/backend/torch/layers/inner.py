@@ -360,8 +360,10 @@ class TorchSumLayer(TorchInnerLayer):
         if not normalized:
             # normalize weight as a probability distribution
             eps = torch.finfo(weight.dtype).eps
-            weight = (weight + eps) / (weight + eps).sum(dim=-1, keepdim=True)
-
+            norm_weight = (weight + eps) / (weight + eps).sum(dim=-1, keepdim=True)
+        else:
+            norm_weight = weight
+        
         # x: (F, H, B, Ki) -> (F, B, H * Ki)
         x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
 
@@ -375,7 +377,7 @@ class TorchSumLayer(TorchInnerLayer):
         )
 
         # sample indexes based on weight
-        dist = torch.distributions.Categorical(probs=weight)
+        dist = torch.distributions.Categorical(probs=norm_weight)
         idxs = dist.sample((x.size(1),)).squeeze(-2).permute(1, 0, 2)
         # gather the weighted value
         # TODO: find a better way rather than squeezing and unsqueezing
