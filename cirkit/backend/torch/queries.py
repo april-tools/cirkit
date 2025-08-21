@@ -458,10 +458,7 @@ class SamplingQuery(Query):
 
                     # expand output and idx if needed
                     output = output.expand_as(ff_output)
-                    idx = idx.expand_as(ff_output).clone()
-
-                    output = torch.where(is_evidence, ff_output, output)
-                    idx = torch.where(is_evidence, x, idx)
+                    idx = x
         else:
             idx, output = layer.sample(x)
 

@@ -582,11 +582,6 @@ class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
         in_layers: dict[Layer, Sequence[Layer]] = {}
         node_to_layer: dict[LogicCircuitNode, Layer] = {}
 
-        if sum_weight_activation is None:
-            # default to unitary weights
-            def sum_weight_factory(n: tuple[int]) -> Parameter:
-                return Parameter.from_input(ConstantParameter(*n, value=1.0))
-
         # map each input literal to a symbolic input layer
         i_act = name_to_parameter_activation(input_layer_activation)
         if i_act is not None:

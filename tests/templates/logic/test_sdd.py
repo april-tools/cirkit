@@ -6,6 +6,7 @@ import pytest
 import torch
 
 import cirkit.symbolic.functional as SF
+from cirkit.backend.torch.queries import SamplingQuery
 from cirkit.pipeline import PipelineContext
 from cirkit.templates.logic import SDD
 from tests.floats import allclose
@@ -161,3 +162,44 @@ def test_conditional_sdd_circuit(fold, optimize, input_layer):
     gt = worlds[:, 0] & ((1 - worlds[:, 1]) | worlds[:, 2])
     params = {k: {"x": torch.ones(1, *shape)} for k, shape in gf_specs.items()}
     assert (t_c(worlds, gate_function_kwargs=params).flatten().nonzero() == gt.nonzero()).all()
+
+
+@pytest.mark.parametrize(
+    "fold,optimize",
+    itertools.product([False, True], [False, True]),
+)
+def test_sample_from_sdd(fold, optimize):
+    ctx = PipelineContext(optimize=optimize, fold=fold)
+
+    sdd_c = SDD.from_string(SDD_s)
+    # construct circuit without enforcing smoothness
+    s_c = sdd_c.build_circuit(input_layer="categorical")
+    t_c = ctx.compile(s_c)
+
+    # first sample without evidence
+    sample_q = SamplingQuery(t_c)
+    _, samples = sample_q(num_samples=10_000)
+    assert t_c(samples).all()
+
+
+@pytest.mark.parametrize(
+    "fold,optimize",
+    itertools.product([False, True], [False, True]),
+)
+def test_conditional_sample_from_sdd(fold, optimize):
+    ctx = PipelineContext(optimize=optimize, fold=fold)
+
+    sdd_c = SDD.from_string(SDD_s)
+    # construct circuit without enforcing smoothness
+    s_c = sdd_c.build_circuit(input_layer="categorical")
+    t_c = ctx.compile(s_c)
+
+    # first sample without evidence
+    sample_q = SamplingQuery(t_c)
+
+    evidence = torch.zeros((1, s_c.num_variables))
+    evidence_vars = torch.zeros((1, s_c.num_variables)).bool()
+    evidence_vars[:, 1] = True
+
+    _, samples = sample_q(num_samples=10_000, x=evidence, evidence_vars=evidence_vars)
+    assert t_c(samples).all()
