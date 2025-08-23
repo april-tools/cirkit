@@ -337,23 +337,20 @@ class MAPQuery(Query):
                 the input distribution.
         """
         if isinstance(layer, TorchInputLayer):
-            # compute the input layer maximizer
-            idx, output = layer.max(x)
+            if layer.num_variables:
+                # compute input layer maximizer
+                max_idx, max_output = layer.max(x)
+                layer_output = layer(x)
 
-            # if layer is not a constant layer expand batch sizes if needed
-            if evidence_vars.any() and layer.num_variables > 0:
                 is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2)
-                if is_evidence.any():
-                    ff_output = layer(x)
-
-                    # expand output and idx if needed
-                    output = output.expand_as(ff_output)
-                    idx = idx.expand_as(ff_output).clone()
-
-                    output = torch.where(is_evidence, ff_output, output)
-                    idx = torch.where(is_evidence, x, idx)
+                
+                idx = torch.where(is_evidence, x, max_idx)
+                output = torch.where(is_evidence, layer_output, max_output)
+            else:
+                # layer has been marginalized
+                output = layer(x)
+                idx = torch.full_like(output, torch.nan)
         else:
-            # if it is not an input layer then evaluate in feedforward way
             idx, output = layer.max(x)
 
         return idx, output
@@ -447,18 +444,19 @@ class SamplingQuery(Query):
                 and its layer output.
         """
         if isinstance(layer, TorchInputLayer):
-            # sample from input layer maximizer
-            idx, output = layer.sample(num_samples)
+            if layer.num_variables:
+                # sample from input layer
+                sample_idx, sampled_output = layer.sample(num_samples)
+                layer_output = layer(x)
 
-            # if layer is not a constant layer expand batch sizes if needed
-            if evidence_vars.any() and layer.num_variables > 0:
                 is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2)
-                if is_evidence.any():
-                    ff_output = layer(x)
-
-                    # expand output and idx if needed
-                    output = output.expand_as(ff_output)
-                    idx = x
+                
+                idx = torch.where(is_evidence, x, sample_idx)
+                output = torch.where(is_evidence, layer_output, sampled_output)
+            else:
+                # layer has been marginalized
+                output = layer(x)
+                idx = torch.full_like(output, torch.nan)
         else:
             idx, output = layer.sample(x)
 
