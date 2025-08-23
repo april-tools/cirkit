@@ -447,12 +447,12 @@ class SamplingQuery(Query):
             if layer.num_variables:
                 # sample from input layer
                 sample_idx, sampled_output = layer.sample(num_samples)
-                layer_output = layer(x)
-
                 is_evidence = evidence_vars[:, layer.scope_idx].permute(1, 0, 2)
-                
+                # select evidence state where specified
                 idx = torch.where(is_evidence, x, sample_idx)
-                output = torch.where(is_evidence, layer_output, sampled_output)
+                # when evidence is used, select that layer otherwise marginalize
+                # the variable
+                output = torch.where(is_evidence, layer(x), layer.integrate())
             else:
                 # layer has been marginalized
                 output = layer(x)

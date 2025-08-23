@@ -360,28 +360,24 @@ class TorchSumLayer(TorchInnerLayer):
         if not normalized:
             # normalize weight as a probability distribution
             eps = torch.finfo(weight.dtype).eps
-            norm_weight = (weight + eps) / (weight + eps).sum(dim=-1, keepdim=True)
-        else:
-            norm_weight = weight
+            weight = (weight + eps) / (weight + eps).sum(dim=-1, keepdim=True)
         
-        # x: (F, H, B, Ki) -> (F, B, H * Ki)
-        x = x.permute(0, 2, 1, 3).flatten(start_dim=2)
-
         # intermediary weighted results are computed in the sum product semiring
         # since very small products leading to underflow would not be selected
         # by max anyway
-        x = SumProductSemiring.map_from(x, self.semiring)
-        # weighted_x: (F, B, H * Ki, Ko)
-        weighted_x = self.semiring.map_from(
-            torch.einsum("fbi,fboi->fboi", x, weight), SumProductSemiring
-        )
+        sp_x = SumProductSemiring.map_from(x, self.semiring)
+        # sp_x: (F, H, B, Ki) -> (F, B, H * Ki)
+        sp_x = sp_x.permute(0, 2, 1, 3).flatten(start_dim=2)
 
-        # sample indexes based on weight
-        dist = torch.distributions.Categorical(probs=norm_weight)
-        idxs = dist.sample((x.size(1),)).squeeze(-2).permute(1, 0, 2)
-        # gather the weighted value
-        # TODO: find a better way rather than squeezing and unsqueezing
-        val = torch.gather(weighted_x, index=idxs.unsqueeze(-1), dim=-1).squeeze(-1)
+        # weighted_sp_x: (F, B, Ko, H * Ki)
+        weighted_x = torch.einsum("fbi,fboi->fboi", sp_x, weight)
+
+        # make sure the probs provided are not all zeros
+        dist = torch.distributions.Categorical(probs=weighted_x + torch.finfo(weighted_x.dtype).eps)
+        idxs = dist.sample()
+                
+        # compute the regular layer output by reducing along the last dimension
+        val = self.semiring.map_from(weighted_x.sum(dim=-1), SumProductSemiring)
 
         return idxs, val
 
