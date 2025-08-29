@@ -180,7 +180,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     for n1, n2 in zip(nodes_sc[9:], nodes_c[9:]):
         if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
-        assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
+        assert n2.weight._nodes[0]._ptensor.shape[2:] == (8, 8)
         assert len(sc.layer_scope(n1)) == 1
         scopes[tuple(sc.layer_scope(n1))[0]] += 1
     assert dense_scopes == scopes
@@ -200,7 +200,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     for n1, n2 in zip(nodes_sc[29:], nodes_c[29:]):
         if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
-        assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
+        assert n2.weight._nodes[0]._ptensor.shape[2:] == (8, 8)
         scopes[tuple(sorted(tuple(sc.layer_scope(n1))))] += 1
     assert dense_scopes == scopes
 
@@ -216,7 +216,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     # after the first 37+4=41 layers, 1 mixing layer must follow, whose scope is defined below
     mixing_scope = (0, 1, 3, 4)
     assert mixing_scope == tuple(sorted(tuple(sc.layer_scope(nodes_sc[41]))))
-    assert nodes_c[41].weight._nodes[0]._ptensor.shape == (1, 8, 8 * 2)
+    assert nodes_c[41].weight._nodes[0]._ptensor.shape[2:] == (8, 8 * 2)
 
     # after the first 41+1=42 layers, 4 dense layers must follow, whose scopes are defined below
     # this time though, 2 layers are KxK and 2 1xK
@@ -226,9 +226,9 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
         if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
         if tuple(sorted(tuple(sc.layer_scope(n1)))) == (0, 1, 3, 4):
-            assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
+            assert n2.weight._nodes[0]._ptensor.shape[2:] == (8, 8)
         elif tuple(sorted(tuple(sc.layer_scope(n1)))) in [(6, 7, 8), (2, 5, 8)]:
-            assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
+            assert n2.weight._nodes[0]._ptensor.shape[2:] == (8, 8)
         scopes[tuple(sorted(tuple(sc.layer_scope(n1))))] += 1
     assert dense_scopes == scopes
 
@@ -247,7 +247,7 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
     for n1, n2 in zip(nodes_sc[48:], nodes_c[48:]):
         if not isinstance(n1, SumLayer) or n1.arity != 1:
             break
-        assert n2.weight._nodes[0]._ptensor.shape == (1, 8, 8)
+        assert n2.weight._nodes[0]._ptensor.shape[2:] == (8, 8)
         scopes[tuple(sorted(tuple(sc.layer_scope(n1))))] += 1
     assert dense_scopes == scopes
 
@@ -262,4 +262,4 @@ def test_compile_unoptimized_monotonic_circuit_qg_3x3_cp():
 
     # finally, the circuit ends with a mixing layer
     assert tuple(sc.layer_scope(nodes_sc[-1])) == tuple(range(9))
-    assert nodes_c[-1].weight._nodes[0]._ptensor.shape == (1, 1, 2)
+    assert nodes_c[-1].weight._nodes[0]._ptensor.shape[2:] == (1, 2)

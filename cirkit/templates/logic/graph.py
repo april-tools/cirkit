@@ -1,32 +1,48 @@
 import itertools
 from abc import ABC
+from collections import deque
 from collections.abc import Iterator, Sequence
-from functools import cached_property
+from functools import cache, cached_property, partial
 from typing import cast
 
+import numpy as np
+
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.initializers import ConstantTensorInitializer
-from cirkit.symbolic.layers import HadamardLayer, Layer, SumLayer
-from cirkit.symbolic.parameters import Parameter, ParameterFactory, TensorParameter
-from cirkit.templates.logic.utils import default_literal_input_factory
-from cirkit.templates.utils import InputLayerFactory
+from cirkit.symbolic.layers import (
+    CategoricalLayer,
+    ConstantValueLayer,
+    EmbeddingLayer,
+    HadamardLayer,
+    InputLayer,
+    Layer,
+    SumLayer,
+)
+from cirkit.symbolic.parameters import (
+    ConstantParameter,
+    IndexParameter,
+    Parameter,
+    ParameterFactory,
+    ParameterOp,
+    SoftmaxParameter,
+)
+from cirkit.templates.utils import InputLayerFactory, name_to_parameter_activation
 from cirkit.utils.algorithms import RootedDiAcyclicGraph, graph_nodes_outgoings
 from cirkit.utils.scope import Scope
 
 
-class LogicalCircuitNode(ABC):
+class LogicCircuitNode(ABC):
     """The abstract base class for nodes in logic circuits."""
 
 
-class TopNode(LogicalCircuitNode):
+class TopNode(LogicCircuitNode):
     """The top node representing True in the logic circuit."""
 
 
-class BottomNode(LogicalCircuitNode):
+class BottomNode(LogicCircuitNode):
     """The bottom node representing False in the logic circuit."""
 
 
-class LogicalInputNode(LogicalCircuitNode):
+class LogicInputNode(LogicCircuitNode):
     """The abstract base class for input nodes in logic circuits."""
 
     def __init__(self, literal: int) -> None:
@@ -56,106 +72,243 @@ class LogicalInputNode(LogicalCircuitNode):
         return f"{type(self).__name__}@0x{id(self):x}({self.literal})"
 
 
-class LiteralNode(LogicalInputNode):
+class LiteralNode(LogicInputNode):
     """A literal in the logical circuit."""
 
+    def __repr__(self) -> str:
+        """Generate the repr string of the literal.
 
-class NegatedLiteralNode(LogicalInputNode):
+        Returns:
+            str: The str representation of the node.
+        """
+        return str(self.literal)
+
+
+class NegatedLiteralNode(LogicInputNode):
     """A negated literal in the logical circuit."""
 
+    def __repr__(self) -> str:
+        """Generate the repr string of the literal.
 
-class ConjunctionNode(LogicalCircuitNode):
+        Returns:
+            str: The str representation of the node.
+        """
+        return f"¬ {self.literal}"
+
+
+class ConjunctionNode(LogicCircuitNode):
     """A conjunction in the logical circuit."""
 
 
-class DisjunctionNode(LogicalCircuitNode):
+class DisjunctionNode(LogicCircuitNode):
     """A conjunction in the logical circuit."""
 
 
-class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
+class GadgetDisjunctionNode(LogicCircuitNode):
+    """A conjunction in the logical circuit used to smooth the circuit."""
+
+
+def categorical_input_layer_factory(
+    scope: Scope, num_units: int, activation: ParameterOp | None
+) -> tuple[InputLayer, InputLayer]:
+    """Construct the inputs for a boolean logic circuit literals realized using a
+    Categorical Layer constantly parametrized by a tensor [0, 1] for positive
+    literals and [1, 0] for negative literals.
+
+    Args:
+            scope (Scope): Scope of the inputs.
+            num_units (int): Number of units in the inputs.
+            activation: ParameterOp | None: The activation to apply to the layer.
+
+    Returns:
+        tuple[InputLayer, InputLayer]: A tuple containing the negative literal
+            and the positive literal, respectively.
+    """
+    # construct parameter for positive literal
+    p_value = np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2)
+
+    positive_param = Parameter.from_input(ConstantParameter(num_units, 2, value=p_value))
+    positive_input = CategoricalLayer(
+        scope,
+        num_categories=2,
+        num_output_units=num_units,
+        probs=(
+            positive_param
+            if activation is None
+            else Parameter.from_unary(activation, positive_param)
+        ),
+    )
+
+    # negative parameter is constructed reindexing the positive one
+    negative_parameter = Parameter.from_unary(
+        IndexParameter((num_units, 2), indices=[1, 0], axis=-1), positive_param
+    )
+    negative_input = CategoricalLayer(
+        scope,
+        num_categories=2,
+        num_output_units=num_units,
+        probs=(
+            negative_parameter
+            if activation is None
+            else Parameter.from_unary(activation, negative_parameter)
+        ),
+    )
+
+    return negative_input, positive_input
+
+
+def embedding_input_layer_factory(
+    scope: Scope, num_units: int, activation: ParameterOp | None
+) -> tuple[InputLayer, InputLayer]:
+    """Construct the inputs for a boolean logic circuit literals realized using a
+    Embedding Layer constantly parametrized by a tensor [0, 1] for positive
+    literals and [0, 0] for negative literals.
+
+    Args:
+            scope (Scope): Scope of the inputs.
+            num_units (int): Number of units in the inputs.
+            activation: ParameterOp | None: The activation to apply to the layer.
+
+    Returns:
+        tuple[InputLayer, InputLayer]: A tuple containing the negative literal
+            and the positive literal, respectively.
+    """
+    # construct parameter for positive literal
+    # TODO: introduce a slice-wise operation and refactor this to have 1-p for the
+    # negative parameterization
+    parameter = Parameter.from_input(
+        ConstantParameter(
+            num_units, 2, value=np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2)
+        )
+    )
+    if activation is not None:
+        parameter = Parameter.from_unary(activation, parameter)
+
+    positive_input = EmbeddingLayer(
+        scope,
+        num_output_units=num_units,
+        num_states=2,
+        weight=parameter,
+    )
+
+    parameter = Parameter.from_input(
+        ConstantParameter(
+            num_units, 2, value=np.array([[1.0, 0.0] * num_units]).reshape(num_units, 2)
+        )
+    )
+    if activation is not None:
+        parameter = Parameter.from_binary(activation, parameter)
+
+    negative_input = EmbeddingLayer(
+        scope, num_output_units=num_units, num_states=2, weight=parameter
+    )
+
+    return negative_input, positive_input
+
+
+class LogicCircuit(RootedDiAcyclicGraph[LogicCircuitNode]):
     def __init__(
         self,
-        nodes: Sequence[LogicalCircuitNode],
-        in_nodes: dict[LogicalCircuitNode, Sequence[LogicalCircuitNode]],
-        outputs: Sequence[LogicalCircuitNode],
+        nodes: Sequence[LogicCircuitNode],
+        in_nodes: dict[LogicCircuitNode, Sequence[LogicCircuitNode]],
+        outputs: Sequence[LogicCircuitNode],
     ) -> None:
-        """A Logical circuit represented as a rooted acyclic graph.
+        """A Logic circuit represented as a rooted acyclic graph.
 
         Args:
-            nodes (Sequence[LogicalCircuitNode]): The list of nodes in the logic graph.
-            in_nodes (dict[LogicalCircuitNode, Sequence[LogicalCircuitNode]]):
+            nodes (Sequence[LogicCircuitNode]): The list of nodes in the logic graph.
+            in_nodes (dict[LogicCircuitNode, Sequence[LogicCircuitNode]]):
                 A dictionary containing the list of inputs to each layer.
-            outputs (Sequence[LogicalCircuitNode]):
+            outputs (Sequence[LogicCircuitNode]):
                 The output layers of the circuit.
         """
         if len(outputs) != 1:
             assert ValueError("A logic graphs can only have one output!")
         super().__init__(nodes, in_nodes, outputs)
 
-    def prune(self):
-        """Prune the current graph by applying unit propagation.
+    @property
+    def inputs(self) -> Iterator[LogicCircuitNode]:
+        """Returns the inputs of the circuit.
 
-        Prune a graph in place by applying unit propagation to conjunction and disjunctions.
-        See https://en.wikipedia.org/wiki/Unit_propagation.
-        Nodes that are not used as input to other nodes and are not among the output nodes
-        are removed too.
+        Returns:
+            Iterator[LogicCircuitNode]: Input of the circuit.
         """
-        absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
-        null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
-
-        def absorb_node(node):
-            if isinstance(node, (ConjunctionNode, DisjunctionNode)):
-                children = [absorb_node(c) for c in self.node_inputs(node)]
-
-                # if the node contains the absorbing element, then it is replaced
-                # altogether
-                if any(isinstance(c, absorbing_element(node)) for c in children):
-                    return absorbing_element(node)()
-
-            return node
-
-        # apply node absorbion and remove null elements from conjunctions and disjunctions
-        in_nodes = {}
-        for n, children in self._in_nodes.items():
-            absorbed = absorb_node(n)
-
-            if not isinstance(absorbed, (TopNode, BottomNode)):
-                in_nodes[n] = [
-                    c
-                    for c in [absorb_node(c) for c in children]
-                    if not isinstance(c, null_element(n))
-                ]
-
-        # remove nodes that are not used as input to any other node if they are not the output node
-        out_nodes = graph_nodes_outgoings(self.nodes, lambda n: in_nodes.get(n, []))
-        in_nodes = {
-            n: children
-            for n, children in in_nodes.items()
-            if len(out_nodes.get(n, [])) > 0 or n in self._outputs
-        }
-
-        nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
-
-        # re initialize the graph
-        self.__init__(nodes, in_nodes, list(self.outputs))
+        return (cast(LogicCircuitNode, node) for node in super().inputs)
 
     @property
-    def inputs(self) -> Iterator[LogicalCircuitNode]:
-        return (cast(LogicalCircuitNode, node) for node in super().inputs)
+    def outputs(self) -> Iterator[LogicCircuitNode]:
+        """Returns the outputs of the circuit.
+
+        Returns:
+            Iterator[LogicCircuitNode]: Output of the circuit.
+        """
+        return (cast(LogicCircuitNode, node) for node in super().outputs)
 
     @property
-    def outputs(self) -> Iterator[LogicalCircuitNode]:
-        return (cast(LogicalCircuitNode, node) for node in super().outputs)
+    def literals(self) -> Iterator[LogicInputNode]:
+        """Returns the literals in the graph.
+
+        Returns:
+            Iterator[LogicInputNode]: An iterator over all the literals in the graph.
+        """
+        return (
+            cast(LogicCircuitNode, node) for node in self.inputs if isinstance(node, LogicInputNode)
+        )
+
+    @property
+    def positive_literals(self) -> Iterator[LiteralNode]:
+        """Returns the literals in the graph excluding negated literals.
+
+        Returns:
+            Iterator[NegatedLiteralNode]: An iterator over the
+                literals in the graph that are not negated.
+        """
+        return (node for node in self.literals if isinstance(node, LiteralNode))
+
+    @property
+    def negated_literals(self) -> Iterator[NegatedLiteralNode]:
+        """Returns the negated literals in the graph.
+
+        Returns:
+            Iterator[NegatedLiteralNode]: An iterator over the negated
+                literals in the graph.
+        """
+        return (node for node in self.literals if isinstance(node, NegatedLiteralNode))
+
+    @property
+    def disjunctions(self) -> Iterator[DisjunctionNode]:
+        """Returns the disjunctions in the graph.
+
+        Returns:
+            Iterator[DisjunctionNode]: An iterator over the disjunctions in the graph.
+        """
+        return (node for node in self.nodes if isinstance(node, DisjunctionNode))
+
+    @property
+    def conjunctions(self) -> Iterator[ConjunctionNode]:
+        """Returns the conjunctions in the graph.
+
+        Returns:
+            Iterator[ConjunctionNode]: An iterator over the conjunctions in the graph.
+        """
+        return (node for node in self.nodes if isinstance(node, ConjunctionNode))
 
     @cached_property
     def num_variables(self) -> int:
-        return len({i.literal for i in self.inputs if isinstance(i, LogicalInputNode)})
+        """
+        Returns the number of literals in the graph.
 
-    def node_scope(self, node: LogicalCircuitNode) -> Scope:
+        Returns:
+            int: The number of literals.
+        """
+        return max(i.literal for i in self.inputs if isinstance(i, LogicInputNode)) + 1
+
+    @cache
+    def node_scope(self, node: LogicCircuitNode) -> Scope:
         """Compute the scope of a node.
 
         Args:
-            node (LogicalCircuitNode): The node for which the scope is computed.
+            node (LogicCircuitNode): The node for which the scope is computed.
 
         Returns:
             Scope: The scope of the node.
@@ -175,68 +328,200 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         return scope
 
     def smooth(self):
-        """Convert the current graph to a smooth graph in place.
+        """Convert the a logic circuit to a smooth logic circuit in place.
         see https://yoojungchoi.github.io/files/ProbCirc20.pdf and
         https://proceedings.neurips.cc/paper/2019/file/940392f5f32a7ade1cc201767cf83e31-Paper.pdf
         for more information.
 
         Returns:
-            LogicalCircuit: A new logic graph that is smooth.
+            LogicCircuit: A new logic graph that is smooth.
         """
-        literal_map: dict[tuple[int, bool], LogicalCircuitNode] = {
-            (node.literal, isinstance(node, LiteralNode)): node
-            for node in self.nodes
-            if isinstance(node, (LiteralNode, NegatedLiteralNode))
+        # collect all the nodes of literals in the circuit
+        literal_map: dict[tuple[int, bool], LogicCircuitNode] = {
+            **{(l.literal, True): l for l in self.positive_literals},
+            **{(l.literal, False): l for l in self.negated_literals},
         }
-        # smoothing map keeps track of the disjunctions created for smoothing purposes
-        smoothing_map: dict[int, DisjunctionNode] = {}
-        disjunctions = [n for n in self.nodes if isinstance(n, DisjunctionNode)]
 
-        in_nodes = self._in_nodes
+        # create smoothing disjunctions composed of a literal and its negation
+        smoothing_map: dict[int, GadgetDisjunctionNode] = {}
+        for l in self.node_scope(self.output):
+            l_disjunction = GadgetDisjunctionNode()
+            self._in_nodes[l_disjunction] = [
+                literal_map.setdefault((l, True), LiteralNode(l)),
+                literal_map.setdefault((l, False), NegatedLiteralNode(l)),
+            ]
+            smoothing_map[l] = l_disjunction
+
+        disjunctions = list(self.disjunctions)
         for d in disjunctions:
             d_scope = self.node_scope(d)
+            d_children = list(self.node_inputs(d))
 
-            for input_to_d in self.node_inputs(d):
-                to_add_for_smoothing: list[LogicalCircuitNode] = []
-                missing_literals = d_scope.difference(self.node_scope(input_to_d))
+            # if any child of the disjunction does not have the same scope of the
+            # disjunction we replace it with a conjunction containing itself and
+            # the smoorhing disjunctions needed to match the target scope
+            for d_child in d_children:
+                missing_literals = d_scope.difference(self.node_scope(d_child))
 
                 if len(missing_literals) > 0:
-                    for ml in missing_literals:
-                        if ml not in smoothing_map:
-                            # construct a conjunction representing the literal ml
-                            # for smoothing purposes
-                            smooth_ml = DisjunctionNode()
-                            in_nodes[smooth_ml] = [
-                                literal_map.get((ml, True), LiteralNode(ml)),
-                                literal_map.get((ml, False), NegatedLiteralNode(ml)),
-                            ]
-                            smoothing_map[ml] = smooth_ml
-
-                        to_add_for_smoothing.append(smoothing_map[ml])
-
-                    # if input to disjunction is a conjunction or a disjunction
-                    # then directly add to its inputs else create an ad-hoc node
-                    if input_to_d in in_nodes:
-                        in_nodes[input_to_d].extend(to_add_for_smoothing)
+                    if isinstance(d_child, ConjunctionNode):
+                        # if d_child is already a conjunction we direcly add to it
+                        smoothing_conjunction = d_child
                     else:
-                        ad_hoc = ConjunctionNode()
-                        in_nodes[ad_hoc] = to_add_for_smoothing
-                        in_nodes[ad_hoc].append(input_to_d)
+                        # create the conjunction node and place it between the node and its child
+                        smoothing_conjunction = ConjunctionNode()
+                        self._in_nodes[smoothing_conjunction] = [
+                            d_child,
+                        ]
+                        self._in_nodes[d].remove(d_child)
+                        self._in_nodes[d].append(smoothing_conjunction)
+                        self._nodes.append(smoothing_conjunction)
 
-                        # replace input_to_d with the ad-hoc disjunction
-                        in_nodes[d].remove(input_to_d)
-                        # add to the top so that it does not get checked again
-                        in_nodes[d].insert(0, ad_hoc)
+                    for missing_literal in missing_literals:
+                        smoothed_literal = smoothing_map[missing_literal]
+                        self._in_nodes[smoothing_conjunction].append(smoothed_literal)
 
-        nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
-        self.__init__(nodes, in_nodes, self._outputs)
+                        # register the smoothed literal in the graph and its children
+                        # if needed
+                        if smoothed_literal not in self._nodes:
+                            self._nodes.append(smoothed_literal)
+                            for child in self.node_inputs(smoothed_literal):
+                                if child not in self._nodes:
+                                    self._nodes.append(child)
+
+        # filter out unused nodes
+        self._in_nodes = {
+            n: [i for i in n_inputs if i in self._nodes]
+            for n, n_inputs in self._in_nodes.items()
+            if n in self._nodes
+        }
+
+        # re-initialize the relevant parts of the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
+
+    def trim(self):
+        """Prune a graph in place by applying unit propagation to conjunction and disjunctions.
+
+        The resulting logic graph will not contain Top or Bottom nodes.
+        See https://en.wikipedia.org/wiki/Unit_propagation.
+        """
+        # pruning is performed by visiting the graph bottom-up
+        # if a node is a literal, we keep going
+        # if it is a conjunction or a disjunction, we exclude null elements from its children
+        # and replace it by its null element if one of its children is the absorbing element
+
+        for node in filter(
+            lambda n: isinstance(n, (ConjunctionNode, DisjunctionNode)), self.topological_ordering()
+        ):
+            absorbing_element, null_element = (
+                (BottomNode, TopNode)
+                if isinstance(node, ConjunctionNode)
+                else (TopNode, BottomNode)
+            )
+
+            # remove null elements from child
+            self._in_nodes[node] = [
+                c for c in self._in_nodes[node] if not isinstance(c, null_element)
+            ]
+
+            # prune trivial node if absorbing element is within children
+            if any(isinstance(c, absorbing_element) for c in self.node_inputs(node)):
+                del self._in_nodes[node]
+
+                # remove any reference to node
+                self._in_nodes = {
+                    n: [ni for ni in n_inputs if ni != node]
+                    for n, n_inputs in self._in_nodes.items()
+                }
+
+        # re initialize the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
+
+    def compress(self):
+        """The trimming operation might leave nodes unused.
+        We can compress the graph by removing all the nodes that are not reachable
+        from the root node."""
+        on_the_path = set()
+        visited = set()
+        to_visit = deque(self.outputs)
+        while to_visit:
+            node = to_visit.popleft()
+            visited.add(node)
+
+            node_children = self.node_inputs(node)
+            if node in self.literals:
+                # literals are always accepted
+                on_the_path.add(node)
+            elif len(node_children) == 1:
+                # if this node has only one child, then it is a trivial node
+                # we can remove it and attach its parents as parents of the
+                # unique children
+                node_parents = self.node_outputs(node)
+
+                if len(node_parents) == 0:
+                    # we are replacing the root node with its child
+                    self._outputs = [node_children[0]]
+                    self._nodes.remove(node)
+                else:
+                    # the node has parents: connect them to its child
+                    for node_parent in node_parents:
+                        self._in_nodes[node_parent].remove(node)
+                        self._in_nodes[node_parent].append(node_children[0])
+
+                if node_children[0] not in visited:
+                    to_visit.appendleft(node_children[0])
+
+                # remove from nodes
+                self._nodes = [n for n in self._nodes if n != node]
+            elif len(node_children) > 1:
+                on_the_path.add(node)
+
+                # inspect children, if there are some that are
+                # of the same type of this node, we can merge them
+                # on this node and visit this node again
+                for node_child in node_children:
+                    if type(node) is type(node_child):
+                        node_child_descendants = [
+                            d for d in self.node_inputs(node_child) if d not in self._in_nodes[node]
+                        ]
+
+                        self._in_nodes[node].remove(node_child)
+                        self._in_nodes[node].extend(node_child_descendants)
+
+                to_visit.extendleft([c for c in node_children if c not in visited])
+
+            # update graph metadata
+            self._out_nodes = graph_nodes_outgoings(self._nodes, self.node_inputs)
+
+        self._nodes = list(on_the_path)
+        # filter out all nodes that have been compressed
+        self._in_nodes = {
+            n: [i for i in n_inputs if i in self._nodes]
+            for n, n_inputs in self._in_nodes.items()
+            if n in self._nodes
+        }
+
+        # re initialize the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
+
+        self._nodes = list(on_the_path)
+        # filter out all nodes that have been compressed
+        self._in_nodes = {
+            n: [i for i in n_inputs if i in self._nodes]
+            for n, n_inputs in self._in_nodes.items()
+            if n in self._nodes
+        }
+
+        # re initialize the graph
+        self.__init__(self._nodes, self._in_nodes, self._outputs)
 
     def build_circuit(
         self,
-        literal_input_factory: InputLayerFactory | None = None,
-        negated_literal_input_factory: InputLayerFactory | None = None,
-        weight_factory: ParameterFactory | None = None,
+        input_layer: str = "categorical",
+        input_layer_activation: str = "none",
+        sum_weight_activation: str = "none",
         enforce_smoothness: bool = True,
+        num_units: int = 1,
     ) -> Circuit:
         """Construct a symbolic circuit from a logic circuit graph.
         If input factories for literals and their negation are not provided the it
@@ -244,74 +529,111 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         the constant vector [0, 1] for a literal and [1, 0] for its negation.
 
         Args:
-            literal_input_factory: A factory that builds an input layer for literals.
-            negated_literal_input_factory:
-                A factory that builds an input layer for negated literals.
-            weight_factory: The factory to construct the weight of sum layers.
-                It can be None, or a parameter factory, i.e., a map from a shape to
-                a symbolic parameter.
-                If None is used, the default weight factory uses non-trainable unitary
-                parameters, which instantiate a regular boolean logic graph.
+            input_layer: How to parameterize the input layers. Can be:
+                "categorical", "embedding".
+            input_layer_activation: The activation to apply to input layer.
+                 It can be either 'none', 'softmax', 'sigmoid', or 'positive-clamp'.
+            sum_weight_activation: The activation applied to weight layers.
+                Can be 'none' or 'softmax'.
             enforce_smoothness:
                 Enforces smoothness of the circuit to support efficient marginalization.
+            num_units: Number of units. Defaults to 1 for deterministic circuit.
 
         Returns:
             Circuit: A symbolic circuit.
-
-        Raises:
-            ValueError: If only one of literal_input_factory and
-                negated_literal_input_factory are specified.
         """
+        match input_layer:
+            case "categorical":
+                literal_input_factory = categorical_input_layer_factory
+            case "embedding":
+                literal_input_factory = embedding_input_layer_factory
+            case _:
+                raise ValueError(
+                    "The input layer must be one of 'categorical', 'embedding'."
+                    f"Found {input_layer}."
+                )
+
+        def unitary_weight_factory(n: tuple[int]) -> Parameter:
+            return Parameter.from_input(ConstantParameter(*n, value=1.0))
+
+        match sum_weight_activation:
+            case "none":
+                sum_weight_factory = unitary_weight_factory
+            case "softmax":
+                sum_weight_factory = lambda s: Parameter.from_unary(
+                    SoftmaxParameter(s), unitary_weight_factory(s)
+                )
+            case _:
+                raise ValueError(
+                    "The weight layer activation must be one of 'none', 'softmax'."
+                    f"Found {sum_weight_activation}."
+                )
+
+        # remove bottom and top nodes by trimming the graph
+        self.trim()
+
+        # smooth the circuit if required
         if enforce_smoothness:
             self.smooth()
-        self.prune()
+
+        # simplify the circuit by removing trivial and non-reachable nodes
+        self.compress()
 
         in_layers: dict[Layer, Sequence[Layer]] = {}
-        node_to_layer: dict[LogicalCircuitNode, Layer] = {}
-
-        if (literal_input_factory is None) ^ (negated_literal_input_factory is None):
-            raise ValueError(
-                "Either both 'literal_input_factory' and 'negated_literal_input_factory' "
-                "must be provided or none."
-            )
-
-        if literal_input_factory is None and negated_literal_input_factory is None:
-            # default factory is locally imported when needed to avoid circular imports
-            literal_input_factory = default_literal_input_factory(negated=False)
-            negated_literal_input_factory = default_literal_input_factory(negated=True)
-
-        if weight_factory is None:
-            # default to unitary weights
-            def weight_factory(n: tuple[int]) -> Parameter:
-                # locally import numpy to avoid dependency on the whole file
-                initializer = ConstantTensorInitializer(1.0)
-                return Parameter.from_input(TensorParameter(*n, initializer=initializer))
+        node_to_layer: dict[LogicCircuitNode, Layer] = {}
 
         # map each input literal to a symbolic input layer
-        for i in self.inputs:
-            match i:
-                case LiteralNode():
-                    node_to_layer[i] = literal_input_factory(Scope([i.literal]), num_units=1)
-                case NegatedLiteralNode():
-                    node_to_layer[i] = negated_literal_input_factory(
-                        Scope([i.literal]), num_units=1
-                    )
+        i_act = name_to_parameter_activation(input_layer_activation)
+        if i_act is not None:
+            i_act = i_act((num_units, 2))
+
+        literal_to_input = {
+            l: literal_input_factory(scope=Scope([l]), num_units=num_units, activation=i_act)
+            for l in range(self.num_variables)
+        }
 
         for node in self.topological_ordering():
             match node:
+                case LiteralNode():
+                    _, input_node = literal_to_input[node.literal]
+                    input_node.metadata["logic"]["source"] = node
+                    node_to_layer[node] = input_node
+                case NegatedLiteralNode():
+                    input_node, _ = literal_to_input[node.literal]
+                    input_node.metadata["logic"]["source"] = node
+                    node_to_layer[node] = input_node
                 case ConjunctionNode():
-                    product_node = HadamardLayer(1, arity=len(self.node_inputs(node)))
+                    product_node = HadamardLayer(num_units, arity=len(self.node_inputs(node)))
+                    product_node.metadata["logic"]["source"] = node
+
                     in_layers[product_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = product_node
-                case DisjunctionNode():
+                case DisjunctionNode() | GadgetDisjunctionNode():
                     sum_node = SumLayer(
-                        1,
-                        1,
+                        num_units,
+                        1 if node == self.output else num_units,
                         arity=len(self.node_inputs(node)),
-                        weight_factory=weight_factory,
+                        weight_factory=sum_weight_factory,
                     )
+                    sum_node.metadata["logic"]["source"] = node
+
                     in_layers[sum_node] = [node_to_layer[i] for i in self.node_inputs(node)]
                     node_to_layer[node] = sum_node
 
+        # introduce final sum if output of circuit is a conjunction and more than one units is used
+        if num_units > 1 and isinstance(self.output, ConjunctionNode):
+            outsum = SumLayer(num_units, 1, arity=1, weight_factory=sum_weight_factory)
+            outsum.metadata["logic"]["source"] = None
+            in_layers[outsum] = [
+                node_to_layer[self.output],
+            ]
+            outputs = [
+                outsum,
+            ]
+        else:
+            outputs = [
+                node_to_layer[self.output],
+            ]
+
         layers = list(set(itertools.chain(*in_layers.values())).union(in_layers.keys()))
-        return Circuit(layers, in_layers, [node_to_layer[self.output]])
+        return Circuit(layers, in_layers, outputs)

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
@@ -101,6 +102,8 @@ class AddressBookEntry(Generic[TorchModuleT]):
     gathering the input tensors, i.e., if the indexing operation would act as an unsqueezing
     operation that can be much more efficient."""
 
+    fold_index_info: FoldIndexInfo = None
+
 
 class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
     """The address book data structure, sometimes also known as book-keeping.
@@ -110,7 +113,9 @@ class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
     torch module.
     """
 
-    def __init__(self, entries: list[AddressBookEntry[TorchModuleT]]) -> None:
+    def __init__(
+        self, entries: list[AddressBookEntry[TorchModuleT]], fold_idx_info: FoldIndexInfo = None
+    ) -> None:
         """Initializes an address book.
 
         Args:
@@ -123,9 +128,11 @@ class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
                 if it has more than one fold index tensor, or if the fold index tensor
                 is not a 1-dimensional tensor.
         """
+        self._fold_idx_info = fold_idx_info
         if not entries:
             raise ValueError("The list of address book entry must not be empty")
-        last_entry = entries[-1]
+        self._entries = entries
+        last_entry = self._entries[-1]
         if last_entry.module is not None:
             raise ValueError(
                 "The last entry of the address book must not have a module associated to it"
@@ -139,15 +146,18 @@ class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
             raise ValueError("The output fold index tensor should be a 1-dimensional tensor")
         super().__init__()
         self._num_outputs = out_fold_idx.shape[0]
-        self._entry_modules: list[TorchModuleT | None] = [e.module for e in entries]
-        self._entry_in_module_ids: list[list[list[int]]] = [e.in_module_ids for e in entries]
+        self._module_to_entry: Mapping[TorchModuleT, AddressBookEntry[TorchModuleT]] = {
+            e.module: e for e in self._entries
+        }
+        self._entry_modules: list[TorchModuleT | None] = [e.module for e in self._entries]
+        self._entry_in_module_ids: list[list[list[int]]] = [e.in_module_ids for e in self._entries]
         # We register the book-keeping tensor indices as buffers.
         # By doing so they are automatically transferred to the device
         # This reduces CPU-device communications required to transfer these indices
         # TODO: Perhaps this can be made more elegant in the future, if someone
         #  decides to introduce a nn.BufferList container in torch
         self._entry_in_fold_idx_targets: list[list[str]] = []
-        for i, e in enumerate(entries):
+        for i, e in enumerate(self._entries):
             self._entry_in_fold_idx_targets.append([])
             for j, fi in enumerate(e.in_fold_idx):
                 in_fold_idx_target = f"_in_fold_idx_{i}_{j}"
@@ -221,7 +231,7 @@ class AddressBook(nn.Module, Generic[TorchModuleT], ABC):
         """
 
 
-class ModuleEvalFunctional(Protocol):  # pylint: disable=too-few-public-methods
+class ModuleEvalFunction(Protocol):  # pylint: disable=too-few-public-methods
     """The protocol of a function that evaluates a module on some inputs."""
 
     def __call__(self, module: TorchModuleT, *inputs: Tensor) -> Tensor:
@@ -301,7 +311,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
         return self.__class__(nodes, in_nodes, outputs=roots)
 
     def evaluate(
-        self, x: Tensor | None = None, module_fn: ModuleEvalFunctional | None = None
+        self, x: Tensor | None = None, module_fn: ModuleEvalFunction | None = None
     ) -> Tensor:
         """Evaluate the Torch graph by following the topological ordering,
             and by using the address book information to retrieve the inputs to each module.
@@ -333,6 +343,46 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
                 y = module_fn(module, *inputs)
             module_outputs.append(y)
         raise RuntimeError("The address book is malformed")
+
+    def backtrack(
+        self,
+        module_fn: ModuleEvalFunction,
+        x: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        """Evaluate the Torch graph by top-down traversal first,
+            using the address book information to retrieve the outputs of each module,
+            and compute the related state by bottom-up traversal.
+
+        Args:
+            module_fn: A functional over modules used to compute the forward
+                pass on the circuit.
+            x: The input of the Torch computational graph. It can be None.
+
+        Returns:
+            The value computed through the forward and its corresponding state.
+
+        Raises:
+            RuntimeError: If the address book is somehow not well-formed.
+        """
+        # perform forward pass to compute the activations given x and the evaluation
+        # function
+        module_idxs = []
+        module_outputs = []
+        module_inputs = []
+        for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
+            module_inputs.append(inputs)
+            if module is None:
+                (output,) = inputs
+                module_idxs.append(None)
+                module_outputs.append(output)
+                break
+
+            idx, y = module_fn(module, *inputs)
+
+            module_outputs.append(y)
+            module_idxs.append(idx)
+
+        return module_outputs[-1], self._address_book.backtrack(x, module_idxs)
 
     @abstractmethod
     def _build_unfold_index_info(self) -> FoldIndexInfo[TorchModuleT]: ...

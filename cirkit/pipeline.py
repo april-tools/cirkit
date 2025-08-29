@@ -8,6 +8,7 @@ from cirkit.backend.compiler import (
     SUPPORTED_BACKENDS,
     AbstractCompiler,
     CompiledCircuitT,
+    GateFunction,
     InitializerCompilationFunc,
     LayerCompilationFunc,
     ParameterCompilationFunc,
@@ -186,6 +187,27 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuitT]):
             The symbolic circuit associated to the given compiled one.
         """
         return self._compiler.get_symbolic_circuit(cc)
+
+    def add_gate_function(self, name: str, function: GateFunction):
+        """Register an external model implementation to the pipeline context.
+
+        Args:
+            name: The gate function name.
+            function: The gate function object. For example, if using the torch backend, this can be
+                an object of type [torch.nn.Module][torch.nn.Module].
+        """
+        self._compiler.add_gate_function(name, function)
+
+    def get_gate_function(self, name: str) -> GateFunction:
+        """Retrieves the gate function by its name.
+
+        Args:
+            name: The gate function name
+
+        Returns:
+            The external model object.
+        """
+        return self._compiler.get_gate_function(name)
 
     def concatenate(self, *cc: CompiledCircuitT) -> CompiledCircuitT:
         """Circuit concatenation interface for compiled circuits.

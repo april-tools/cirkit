@@ -11,6 +11,7 @@ from cirkit.utils.algorithms import BiMap
 SUPPORTED_BACKENDS = ["torch"]
 
 CompiledCircuitT = TypeVar("CompiledCircuitT")
+GateFunction = TypeVar("GateFunction")
 
 LayerCompilationSign = type[Layer]
 ParameterCompilationSign = type[ParameterNode]
@@ -152,17 +153,24 @@ class CompilerInitializerRegistry(
         return cast(InitializerCompilationSign, ann[args[-1]])
 
 
+CompilerGateFunctionRegistry = dict[str, GateFunction]
+
+
 class AbstractCompiler(ABC, Generic[CompiledCircuitT]):
     def __init__(
         self,
         layers_registry: CompilerLayerRegistry,
         parameters_registry: CompilerParameterRegistry,
         initializers_registry: CompilerInitializerRegistry,
+        gate_function_registry: CompilerGateFunctionRegistry | None = None,
         **flags: Any,
     ) -> None:
         self._layers_registry = layers_registry
         self._parameters_registry = parameters_registry
         self._initializers_registry = initializers_registry
+        self._gate_function_registry = (
+            {} if gate_function_registry is None else gate_function_registry
+        )
         self._flags = flags
         self._compiled_circuits = CompiledCircuitsMap[CompiledCircuitT]()
 
@@ -202,6 +210,12 @@ class AbstractCompiler(ABC, Generic[CompiledCircuitT]):
         self, signature: InitializerCompilationSign
     ) -> InitializerCompilationFunc:
         return self._initializers_registry.retrieve_rule(signature)
+
+    def add_gate_function(self, name: str, gate_function: GateFunction):
+        self._gate_function_registry[name] = gate_function
+
+    def get_gate_function(self, name: str) -> GateFunction:
+        return self._gate_function_registry[name]
 
     def compile(self, sc: Circuit) -> CompiledCircuitT:
         if self.is_compiled(sc):
