@@ -24,9 +24,9 @@ def PoonDomingos(
     r"""Constructs a region graph with the Poon-Domingos structure.
 
     See:
-        Sum-Product Networks: A New Deep Architecture.
-        Hoifung Poon, Pedro Domingos.
-        UAI 2011.
+        - *Sum-Product Networks: A New Deep Architecture* [🔗](https://arxiv.org/abs/1202.3732)  
+          Hoifung Poon and Pedro Domingos.  
+          In Uncertainty in Artificial Intelligence 2011.
 
     Args:
         shape: The image shape $(C, H, W)$, where $H$ is the height, $W$ is the width,
