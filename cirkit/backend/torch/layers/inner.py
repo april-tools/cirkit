@@ -369,15 +369,22 @@ class TorchSumLayer(TorchInnerLayer):
         # sp_x: (F, H, B, Ki) -> (F, B, H * Ki)
         sp_x = sp_x.permute(0, 2, 1, 3).flatten(start_dim=2)
 
-        # weighted_sp_x: (F, B, Ko, H * Ki)
-        weighted_x = torch.einsum("fbi,fboi->fboi", sp_x, weight)
+        # FIXME: Since sampling is not currently supported for batched
+        # parameter, the same weight matrix will be used throughout all
+        # the samples
+        # we can exploit this to make the code less memory intensive
+        weight = weight.squeeze(1) # (F, K_o, H * Ki)
+
+        # apply the weight of the sum unit to each input
+        # without reducing as a sum
+        weighted_x = torch.einsum("fbi,foi->foi", sp_x, weight)
 
         # make sure the probs provided are not all zeros
         dist = torch.distributions.Categorical(probs=weighted_x + torch.finfo(weighted_x.dtype).eps)
-        idxs = dist.sample()
+        idxs = dist.sample((sp_x.size(1),)).permute(1, 0, 2) # (B, F, K_i) -> (F, B, K_i)
                 
         # compute the regular layer output by reducing along the last dimension
-        val = self.semiring.map_from(weighted_x.sum(dim=-1), SumProductSemiring)
+        val = self(x)
 
         return idxs, val
 
