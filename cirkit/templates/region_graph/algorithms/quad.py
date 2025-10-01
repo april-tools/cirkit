@@ -16,6 +16,11 @@ from cirkit.utils.scope import Scope
 def QuadTree(shape: tuple[int, int, int], *, num_patch_splits: int = 2) -> RegionGraph:
     r"""Constructs a Quad Tree region graph.
 
+    See:
+        - *Unifying and understanding overparameterized circuit representations via low-rank tensor decompositions.* [🔗](https://openreview.net/forum?id=1btutFdIya)  
+          Mari, Antonio, Gennaro Vessio, and Antonio Vergari.  
+          In The 6th Workshop on Tractable Probabilistic Modeling. 2023.
+
     Args:
         shape: The image shape $(C, H, W)$, where $H$ is the height, $W$ is the width,
             and $C$ is the number of channels.
@@ -34,6 +39,11 @@ def QuadTree(shape: tuple[int, int, int], *, num_patch_splits: int = 2) -> Regio
 # pylint: disable-next=invalid-name
 def QuadGraph(shape: tuple[int, int, int]) -> RegionGraph:
     r"""Constructs a Quad Graph region graph.
+
+    See:
+        - *Unifying and understanding overparameterized circuit representations via low-rank tensor decompositions.* [🔗](https://openreview.net/forum?id=1btutFdIya)  
+          Mari, Antonio, Gennaro Vessio, and Antonio Vergari.  
+          In The 6th Workshop on Tractable Probabilistic Modeling. 2023.
 
     Args:
         shape: The image shape $(C, H, W)$, where $H$ is the height, $W$ is the width,

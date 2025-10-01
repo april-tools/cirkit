@@ -344,7 +344,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
     def build_circuit(
         self,
         *,
-        input_factory: InputLayerFactory,
+        input_factory: InputLayerFactory | Mapping[Scope, InputLayerFactory],
         sum_product: str | None = None,
         sum_weight_factory: ParameterFactory | None = None,
         nary_sum_weight_factory: ParameterFactory | None = None,
@@ -364,7 +364,9 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             The factory that constructs the input factory must always be specified.
 
         Args:
-            input_factory: A factory that builds an input layer.
+            input_factory: A factory that builds an input layer. If a Mapping between scopes and
+                input layer factories is given, then a different input layer is built for each feature.
+                In this case, an input layer should be specified for each variable/scope.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
             sum_weight_factory: The factory to construct the weights of the sum layers.
                 It can be None, or a parameter factory, i.e., a map
@@ -518,17 +520,22 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
             region_inputs = self.region_inputs(node)
             region_outputs = self.region_outputs(node)
             if not region_inputs:
+                node_input_factory = (
+                    input_factory[node.scope]
+                    if isinstance(input_factory, Mapping)
+                    else input_factory
+                )
                 # Input region node
                 input_sl: Layer
                 if factorize_multivariate and len(node.scope) > 1:
                     factorized_input_sls: list[Layer] = [
-                        input_factory(Scope([sc]), num_input_units) for sc in node.scope
+                        node_input_factory(Scope([sc]), num_input_units) for sc in node.scope
                     ]
                     input_sl = HadamardLayer(num_input_units, arity=len(factorized_input_sls))
                     layers.extend(factorized_input_sls)
                     in_layers[input_sl] = factorized_input_sls
                 else:
-                    input_sl = input_factory(node.scope, num_input_units)
+                    input_sl = node_input_factory(node.scope, num_input_units)
                 num_units = num_sum_units if self.region_outputs(node) else num_classes
                 if sum_factory is None:
                     layers.append(input_sl)
