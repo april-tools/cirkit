@@ -7,7 +7,9 @@ from torch import Tensor, distributions
 InitializerFunc = Callable[[Tensor], Tensor]
 
 
-def foldwise_initializer_(t: Tensor, *, initializers: list[InitializerFunc | None]) -> Tensor:
+def foldwise_initializer_(
+    t: Tensor, *, initializers: list[InitializerFunc | None]
+) -> Tensor:
     for i, initializer_ in enumerate(initializers):
         if initializer_ is not None:
             initializer_(t[i])

@@ -193,7 +193,8 @@ class TorchTensorParameter(TorchParameterInput):
         if self._ptensor is None:
             shape = (self.num_folds, *self._shape)
             self._ptensor = nn.Parameter(
-                torch.empty(*shape, dtype=self._dtype), requires_grad=self._requires_grad
+                torch.empty(*shape, dtype=self._dtype),
+                requires_grad=self._requires_grad,
             )
             self._initializer_(self._ptensor.data)
             return
@@ -220,8 +221,18 @@ class TorchTensorParameter(TorchParameterInput):
 
 
 class TorchPointerParameter(TorchParameterInput):
+    """Reprensents fold based slices of an existing [TorchTensorParameter][cirkit.backend.torch.nodes.TorchTensorParameter].
+    These slices can be:
+    - A single fold index.
+    - A list of potentially non contiguous fold index.
+    - The full tensor.
+    """
+
     def __init__(
-        self, parameter: TorchTensorParameter, *, fold_idx: int | list[int] | None = None
+        self,
+        parameter: TorchTensorParameter,
+        *,
+        fold_idx: int | list[int] | None = None,
     ) -> None:
         if fold_idx is None:
             num_folds = parameter.num_folds
@@ -245,7 +256,9 @@ class TorchPointerParameter(TorchParameterInput):
         super().__init__(num_folds=num_folds)
         self._parameter = parameter
         self._fold_idx: Tensor
-        self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
+        self.register_buffer(
+            "_fold_idx", None if fold_idx is None else torch.tensor(fold_idx)
+        )
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -269,7 +282,17 @@ class TorchPointerParameter(TorchParameterInput):
 
 
 class TorchParameterOp(TorchParameterNode, ABC):
+    """Base abstract class for Parameter node that do computations"""
+
     def __init__(self, *in_shapes: tuple[int, ...], num_folds: int = 1):
+        r"""Initialize the parameter
+
+        Args:
+            *in_shapes (tuple[int,...]): The shapes of each input that the
+            parameter accepts. **Important**: This shape does not include
+            the fold dimension : $(K_1,\dots,K_n)$.
+            num_folds: The number of folds used for all inputs.
+        """
         super().__init__(num_folds=num_folds)
         self._in_shapes = in_shapes
 
@@ -290,7 +313,16 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
 
 class TorchUnaryParameterOp(TorchParameterOp, ABC):
+    """Abstract class for operators with a single input."""
+
     def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1) -> None:
+        r"""Initialize the parameter.
+
+        Args:
+            in_shape: The shape of the input **without** the fold dimension.
+                $(K_1,\dots,K_n)$
+            num_folds: number of fold for the input.
+        """
         super().__init__(in_shape, num_folds=num_folds)
 
     @property
@@ -311,8 +343,22 @@ class TorchUnaryParameterOp(TorchParameterOp, ABC):
 
 class TorchBinaryParameterOp(TorchParameterOp, ABC):
     def __init__(
-        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
+        self,
+        in_shape1: tuple[int, ...],
+        in_shape2: tuple[int, ...],
+        *,
+        num_folds: int = 1,
     ) -> None:
+        r"""Initialize the parameter.
+
+        Args:
+            in_shape1: The shape of the first input **without** the fold dimension.
+                $(K_1,\dots,K_n)$
+            in_shape2: The shape of the second input **without** the fold dimension.
+                $(L_1,\dots,L_n)$
+            num_folds: number of fold for the input.
+        """
+
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
 
     @property
@@ -354,6 +400,15 @@ class TorchReduceParameterOp(TorchUnaryParameterOp, ABC):
         *,
         num_folds: int = 1,
     ) -> None:
+        r"""Initialize the reduce operation using the shapes and dimensions.
+
+        Args:
+            in_shape: Shape of the input vector **without** the fold dimension.
+                $(K_1,\dots,K_n)$.
+            dim: Dimension on which we want to reduce. This dimension index is
+                on the `input_shape`, not the full vector shape including the fold.
+            num_folds: Number of folds for the input vector.
+        """
         dim = dim if dim >= 0 else dim + len(in_shape)
         assert 0 <= dim < len(in_shape)
         super().__init__(in_shape, num_folds=num_folds)
@@ -437,7 +492,11 @@ class TorchIndexParameter(TorchUnaryParameterOp):
 
 class TorchSumParameter(TorchBinaryParameterOp):
     def __init__(
-        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
+        self,
+        in_shape1: tuple[int, ...],
+        in_shape2: tuple[int, ...],
+        *,
+        num_folds: int = 1,
     ) -> None:
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
@@ -454,7 +513,11 @@ class TorchHadamardParameter(TorchBinaryParameterOp):
     """Hadamard product reparameterization."""
 
     def __init__(
-        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
+        self,
+        in_shape1: tuple[int, ...],
+        in_shape2: tuple[int, ...],
+        *,
+        num_folds: int = 1,
     ) -> None:
         assert in_shape1 == in_shape2
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
@@ -471,7 +534,11 @@ class TorchKroneckerParameter(TorchBinaryParameterOp):
     """Kronecker product reparameterization."""
 
     def __init__(
-        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
+        self,
+        in_shape1: tuple[int, ...],
+        in_shape2: tuple[int, ...],
+        *,
+        num_folds: int = 1,
     ) -> None:
         assert len(in_shape1) == len(in_shape2)
         super().__init__(in_shape1, in_shape2, num_folds=num_folds)
@@ -494,6 +561,27 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
         *,
         num_folds: int = 1,
     ) -> None:
+        r"""Initialize the reduce operation using the shapes and dimensions.
+
+        The two inputs need to have the same dimensions except for the one at the index
+        $i$ on which we want to reduce. The parameter `dim` specify $i$, but as the actual
+        computations involve a fold dimension, the value of `dim` will always be shifted by one.
+
+        In the actual computation $i=\text{dim}+1$ to take the fold into account.
+
+        $i_1$ and $i_2$ denotes the same position in the shape (same dimension) but different
+        dimension sizes.
+
+        Args:
+            in_shape1: Shape of the first input vector **without** the fold dimension.
+                $(K_1,\dots,K_{i_1}, \dots, K_n)$.
+            in_shape2: Shape of the second input vector **without** the fold dimension.
+                $(K_1,\dots,K_{i_2}, \dots, K_n)$.
+            dim: Dimension on which we want to reduce. This dimension index is
+                on the `input_shape`, not the full vector shape with the supplementary
+                fold dimension.
+            num_folds: Number of folds for the input vector.
+        """
         assert len(in_shape1) == len(in_shape2)
         dim = dim if dim >= 0 else dim + len(in_shape1)
         assert 0 <= dim < len(in_shape1)
@@ -517,12 +605,12 @@ class TorchOuterProductParameter(TorchBinaryParameterOp):
         return config
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
-        # x1: (F, d1, d2, ..., dk1, ... dn)
-        # x2: (F, d1, d2, ..., dk2, ... dn)
-        x1 = x1.unsqueeze(self.dim + 2)  # (F, d1, d2, ..., dk1, 1, ..., dn)
-        x2 = x2.unsqueeze(self.dim + 1)  # (F, d1, d2, ..., 1, dk1, ...., dn)
-        x = x1 * x2  # (F, d1, d2, ..., dk1, dk2, ..., dn)
-        x = x.view(self.num_folds, *self.shape)  # (F, d1, d2, ..., dk1 * dk2, ..., dn)
+        # x1: (F, K1, K2, ..., Ki1, ... Kn)
+        # x2: (F, K1, K2, ..., Ki2, ... Kn)
+        x1 = x1.unsqueeze(self.dim + 2)  # (F, K1, K2, ..., Ki1, 1, ..., Kn)
+        x2 = x2.unsqueeze(self.dim + 1)  # (F, K1, K2, ..., 1, Ki2, ...., Kn)
+        x = x1 * x2  # (F, K1, K2, ..., Ki1, Ki2, ..., Kn)
+        x = x.view(self.num_folds, *self.shape)  # (F, K1, K2, ..., Ki1 * Ki2, ..., Kn)
         return x
 
 
@@ -688,7 +776,11 @@ class TorchLogSoftmaxParameter(TorchEntrywiseReduceParameterOp):
 
 class TorchMatMulParameter(TorchBinaryParameterOp):
     def __init__(
-        self, in_shape1: tuple[int, ...], in_shape2: tuple[int, ...], *, num_folds: int = 1
+        self,
+        in_shape1: tuple[int, ...],
+        in_shape2: tuple[int, ...],
+        *,
+        num_folds: int = 1,
     ) -> None:
         assert len(in_shape1) == len(in_shape2) == 2
         assert in_shape1[1] == in_shape2[0]
@@ -774,7 +866,11 @@ class TorchGaussianProductMean(TorchParameterOp):
         assert in_mean1_shape == in_stddev1_shape
         assert in_mean2_shape == in_stddev2_shape
         super().__init__(
-            in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape, num_folds=num_folds
+            in_mean1_shape,
+            in_stddev1_shape,
+            in_mean2_shape,
+            in_stddev2_shape,
+            num_folds=num_folds,
         )
 
     @property
@@ -790,7 +886,9 @@ class TorchGaussianProductMean(TorchParameterOp):
             "in_stddev2_shape": self.in_shapes[3],
         }
 
-    def forward(self, mean1: Tensor, stddev1: Tensor, mean2: Tensor, stddev2: Tensor) -> Tensor:
+    def forward(
+        self, mean1: Tensor, stddev1: Tensor, mean2: Tensor, stddev2: Tensor
+    ) -> Tensor:
         var1 = torch.square(stddev1)  # (F, K1, C)
         var2 = torch.square(stddev2)  # (F, K2, C)
         inv_var12 = torch.reciprocal(
@@ -818,7 +916,10 @@ class TorchGaussianProductStddev(TorchBinaryParameterOp):
 
     @property
     def config(self) -> dict[str, Any]:
-        return {"in_stddev1_shape": self.in_shapes[0], "in_stddev2_shape": self.in_shapes[1]}
+        return {
+            "in_stddev1_shape": self.in_shapes[0],
+            "in_stddev2_shape": self.in_shapes[1],
+        }
 
     def forward(self, x1: Tensor, x2: Tensor) -> Tensor:
         # x1 is the stddev1 and x2 is the stddev2
@@ -843,7 +944,11 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         assert in_mean1_shape == in_stddev1_shape
         assert in_mean2_shape == in_stddev2_shape
         super().__init__(
-            in_mean1_shape, in_stddev1_shape, in_mean2_shape, in_stddev2_shape, num_folds=num_folds
+            in_mean1_shape,
+            in_stddev1_shape,
+            in_mean2_shape,
+            in_stddev2_shape,
+            num_folds=num_folds,
         )
         self._log_two_pi = np.log(2.0 * np.pi)
 
@@ -871,7 +976,9 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         var2 = torch.square(stddev2)  # (F, K2, C)
         var12 = var1.unsqueeze(dim=2) + var2.unsqueeze(dim=1)  # (F, K1, K2, C)
         inv_var12 = torch.reciprocal(var12)
-        sq_mahalanobis = torch.square(mean1.unsqueeze(dim=2) - mean2.unsqueeze(dim=1)) * inv_var12
+        sq_mahalanobis = (
+            torch.square(mean1.unsqueeze(dim=2) - mean2.unsqueeze(dim=1)) * inv_var12
+        )
         log_partition = -0.5 * (self._log_two_pi + torch.log(var12) + sq_mahalanobis)
         return log_partition.view(-1, *self.shape)  # (F, K1 * K2, C)
 
@@ -896,7 +1003,9 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
             fft = torch.fft.rfft
             ifft = torch.fft.irfft
 
-        degp1 = x1.shape[-1] + x2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
+        degp1 = (
+            x1.shape[-1] + x2.shape[-1] - 1
+        )  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
 
         spec1 = fft(x1, n=degp1, dim=-1)  # shape (F, K1, dp1).
         spec2 = fft(x2, n=degp1, dim=-1)  # shape (F, K2, dp1).
@@ -910,7 +1019,9 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
 
 
 class TorchPolynomialDifferential(TorchUnaryParameterOp):
-    def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1, order: int = 1) -> None:
+    def __init__(
+        self, in_shape: tuple[int, ...], *, num_folds: int = 1, order: int = 1
+    ) -> None:
         if order <= 0:
             raise ValueError("The order of differentiation must be positive.")
         super().__init__(in_shape, num_folds=num_folds)
@@ -921,7 +1032,9 @@ class TorchPolynomialDifferential(TorchUnaryParameterOp):
         # if dp1>order, i.e., deg>=order, then diff, else const 0.
         return (
             self.in_shapes[0][0],
-            self.in_shapes[0][1] - self.order if self.in_shapes[0][1] > self.order else 1,
+            self.in_shapes[0][1] - self.order
+            if self.in_shapes[0][1] > self.order
+            else 1,
         )
 
     @classmethod
