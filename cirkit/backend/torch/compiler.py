@@ -15,7 +15,10 @@ from cirkit.backend.compiler import (
 )
 from cirkit.backend.torch.circuits import TorchCircuit
 from cirkit.backend.torch.graph.folding import build_folded_graph
-from cirkit.backend.torch.graph.optimize import match_optimization_patterns, optimize_graph
+from cirkit.backend.torch.graph.optimize import (
+    match_optimization_patterns,
+    optimize_graph,
+)
 from cirkit.backend.torch.initializers import foldwise_initializer_
 from cirkit.backend.torch.layers import TorchInputLayer, TorchLayer
 from cirkit.backend.torch.layers.input import TorchConstantLayer
@@ -58,7 +61,9 @@ class TorchCompilerState:
         # A map from symbolic parameter tensors to a tuple containing the compiled parameter tensor,
         # and the slice index, which is 0 if the compiled parameter tensor is unfolded.
         # If the compiled parameter tensor is folded, then the slice index can be non-zero.
-        self._compiled_parameters: dict[TensorParameter, tuple[TorchTensorParameter, int]] = {}
+        self._compiled_parameters: dict[
+            TensorParameter, tuple[TorchTensorParameter, int]
+        ] = {}
 
         # We keep a reverse map from compiled and unfolded parameter tensors
         # to the corresponding symbolic parameter tensors.
@@ -75,7 +80,9 @@ class TorchCompilerState:
         # Retrieve whether a tensor parameter has already been compiled
         return p in self._compiled_parameters
 
-    def retrieve_compiled_parameter(self, p: TensorParameter) -> tuple[TorchTensorParameter, int]:
+    def retrieve_compiled_parameter(
+        self, p: TensorParameter
+    ) -> tuple[TorchTensorParameter, int]:
         # Retrieve the compiled parameter: we return the fold index as well.
         return self._compiled_parameters[p]
 
@@ -84,7 +91,11 @@ class TorchCompilerState:
         return self._symbolic_parameters[p]
 
     def register_compiled_parameter(
-        self, sp: TensorParameter, cp: TorchTensorParameter, *, fold_idx: int | None = None
+        self,
+        sp: TensorParameter,
+        cp: TorchTensorParameter,
+        *,
+        fold_idx: int | None = None,
     ) -> None:
         # Register a link from a symbolic parameter tensor to a compiled parameter tensor.
         if fold_idx is None:
@@ -100,6 +111,10 @@ class TorchCompilerState:
 
 
 class TorchCompiler(AbstractCompiler[TorchCircuit]):
+    """The class responsible of handling the compilation of a symbolic circuit
+    to a pytorch graph.
+    """
+
     def __init__(
         self, semiring: str = "sum-product", fold: bool = False, optimize: bool = False
     ) -> None:
@@ -156,11 +171,28 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         return self._state
 
     def compile_layer(self, layer: Layer) -> TorchLayer:
+        """Retrieve and apply the layer's compilation rule.
+
+        Args:
+            layer (Layer): Symbolic layer to compile.
+
+        Returns:
+            TorchLayer: Compiled layer.
+        """
         signature = type(layer)
         rule = self.retrieve_layer_rule(signature)
         return cast(TorchLayer, rule(self, layer))
 
     def compile_parameter(self, parameter: Parameter) -> TorchParameter:
+        """Compile a symbolic parameter graph.
+        This function will iterate through all the nodes of a `TorchParameter`
+        and compile each one to create the compiler parameter graph.
+        Args:
+            parameter (Parameter): Symbolic parameter graph to compile.
+
+        Returns:
+            TorchParameter: Compiled parameter graph.
+        """
         # A map from symbolic to compiled parameters
         compiled_nodes_map: dict[ParameterNode, TorchParameterNode] = {}
 
@@ -172,7 +204,9 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         for p in parameter.topological_ordering():
             # Compile the parameter node and make the connections
             compiled_p = self._compile_parameter_node(p)
-            in_compiled_nodes = [compiled_nodes_map[pi] for pi in parameter.node_inputs(p)]
+            in_compiled_nodes = [
+                compiled_nodes_map[pi] for pi in parameter.node_inputs(p)
+            ]
             in_nodes[compiled_p] = in_compiled_nodes
             compiled_nodes_map[p] = compiled_p
             nodes.append(compiled_p)
@@ -181,7 +215,17 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         outputs = [compiled_nodes_map[parameter.output]]
         return TorchParameter(nodes, in_nodes, outputs)
 
-    def compile_initializer(self, initializer: Initializer) -> Callable[[Tensor], Tensor]:
+    def compile_initializer(
+        self, initializer: Initializer
+    ) -> Callable[[Tensor], Tensor]:
+        """Return the initialisation function corresponding to a symbolic initializer.
+
+        Args:
+            layer (Initializer): Symbolic initializer.
+
+        Returns:
+            Callable[[Tensor], Tensor]: Initialization function.
+        """
         # Retrieve the rule for the given initializer and compile it
         signature = type(initializer)
         rule = self.retrieve_initializer_rule(signature)
@@ -206,11 +250,29 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         return registry.retrieve_rule(pattern)
 
     def _compile_parameter_node(self, node: ParameterNode) -> TorchParameterNode:
+        """Return the compiled parameter node corresponding to a symbolic parameter node.
+
+        Args:
+            node (ParameterNode): Symbolic parameter node.
+
+        Returns:
+            TorchParameterNode: Compiled parameter node.
+        """
         signature = type(node)
         rule = self.retrieve_parameter_rule(signature)
         return cast(TorchParameterNode, rule(self, node))
 
     def _compile_circuit(self, sc: Circuit) -> TorchCircuit:
+        """Compile a symbolic circuit to Torch using the compiler's parameters
+        In the TorchCompiler, it is possible to enable optimizations and folding
+        which are applied on the compiled circuit
+
+        Args:
+            sc (Circuit): Symbolic circuit to compile
+
+        Returns:
+            TorchCircuit: Compiled circuit with optionnal optimizations and folding
+        """
         # A map from symbolic to compiled layers
         compiled_layers_map: dict[Layer, TorchLayer] = {}
 
@@ -255,6 +317,16 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         return cc
 
     def _post_process_circuit(self, cc: TorchCircuit) -> TorchCircuit:
+        """Apply the post processing steps corresponding to the active flags
+        This compiler can :
+            - optimize the circuit through layer's fusion / splitting
+            - fold the circuit's layers
+        Args:
+            cc (TorchCircuit): Compiled circuit to post process
+
+        Returns:
+            TorchCircuit: Post processed compiled circuit
+        """
         if self.is_optimize_enabled:
             # Optimize the circuit computational graph
             opt_cc = _optimize_circuit(self, cc, max_opt_steps=5)
@@ -269,6 +341,15 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
 
 
 def _fold_circuit(compiler: TorchCompiler, cc: TorchCircuit) -> TorchCircuit:
+    """Apply all possible folding to a compiled circuit.
+
+    Args:
+        compiler (TorchCompiler): Current compiler.
+        cc (TorchCircuit): Compiled circuit we want to fold.
+
+    Returns:
+        TorchCircuit: Final circuit with all possible folding applied.
+    """
     # Fold the layers in the given circuit, by following the layer-wise topological ordering
     layers, in_layers, outputs, fold_idx_info = build_folded_graph(
         cc.layerwise_topological_ordering(),
@@ -288,7 +369,18 @@ def _fold_circuit(compiler: TorchCompiler, cc: TorchCircuit) -> TorchCircuit:
     )
 
 
-def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> TorchLayer:
+def _fold_layers_group(
+    layers: list[TorchLayer], *, compiler: TorchCompiler
+) -> TorchLayer:
+    """Fold a list of layer into a single Torch Layer
+
+    Args:
+        layers (list[TorchLayer]): List of layer to fold.
+        compiler (TorchCompiler): Current compiler.
+
+    Returns:
+        TorchLayer: Final folded layer.
+    """
     # Retrieve the class of the folded layer, as well as the configuration attributes
     fold_layer_cls = type(layers[0])
     assert all(isinstance(l, fold_layer_cls) for l in layers)
@@ -297,7 +389,9 @@ def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> 
     kwargs: dict[str, Any] = dict(layers[0].config)
     if issubclass(fold_layer_cls, TorchInputLayer):
         if not issubclass(fold_layer_cls, TorchConstantLayer):
-            kwargs["scope_idx"] = torch.cat([cast(TorchInputLayer, l).scope_idx for l in layers])
+            kwargs["scope_idx"] = torch.cat(
+                [cast(TorchInputLayer, l).scope_idx for l in layers]
+            )
     else:
         # We are folding sum or product layers, so simply set the number of folds
         kwargs["num_folds"] = sum(l.num_folds for l in layers)
@@ -317,7 +411,8 @@ def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> 
 
     # Fold all sub-module layers, if the layers have any
     kwargs.update(
-        (n, _fold_layers_group(ls, compiler=compiler)) for n, ls in layer_submodules.items()
+        (n, _fold_layers_group(ls, compiler=compiler))
+        for n, ls in layer_submodules.items()
     )
 
     # Instantiate a new folded layer, using the folded layer configuration and the folded parameters
@@ -327,6 +422,15 @@ def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> 
 def _fold_parameters(
     compiler: TorchCompiler, parameters: Sequence[TorchParameter]
 ) -> TorchParameter:
+    """Fold multiple Torch parameter graph into a single folded graph.
+
+    Args:
+        compiler (TorchCompiler): Current compiler.
+        parameters (Sequence[TorchParameter]): Parameter graphs to fold.
+
+    Returns:
+        TorchParameter: the folded parameter graph.
+    """
     # Retrieve:
     # (i)  the parameter nodes and the input to each node;
     # (ii) the layer-wise (aka bottom-up) topological orderings of parameter nodes
@@ -351,12 +455,23 @@ def _fold_parameters(
     )
 
     # Construct the folded parameter's computational graph
-    return TorchParameter(fold_nodes, in_fold_nodes, fold_outputs, fold_idx_info=fold_idx_info)
+    return TorchParameter(
+        fold_nodes, in_fold_nodes, fold_outputs, fold_idx_info=fold_idx_info
+    )
 
 
 def _fold_parameter_nodes_group(
     group: list[TorchParameterNode], *, compiler: TorchCompiler
 ) -> TorchParameterNode:
+    """Fold a list of [TorchParameterNode][cirkit.backend.torch.parameters.nodes.TorchParameterNode].
+
+    Args:
+        group (list[TorchParameterNode]): List of parameter to fold.
+        compiler (TorchCompiler): Current compiler.
+
+    Returns:
+        TorchParameterNode: The folded parameter node.
+    """
     fold_node_cls = type(group[0])
     # Catch the case we are folding tensor parameters
     # That is, we set the number of folds, copy the number of parameters and relevant flags,
@@ -397,7 +512,8 @@ def _fold_parameter_nodes_group(
         in_folded_node = node_pointer.deref()
         in_fold_idx: list[int] = list(
             chain.from_iterable(
-                range(p.num_folds) if p.fold_idx is None else p.fold_idx for p in group_pointers
+                range(p.num_folds) if p.fold_idx is None else p.fold_idx
+                for p in group_pointers
             )
         )
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
@@ -409,6 +525,21 @@ def _fold_parameter_nodes_group(
 def _optimize_circuit(
     compiler: TorchCompiler, cc: TorchCircuit, *, max_opt_steps: int = 5
 ) -> TorchCircuit:
+    """Optimize both the parameters and layers of a circuit.
+
+    The function search and apply optimization on layers and parameters.
+    To avoid collision between optimizations on the same module, the function
+    only apply the most important optimizations based on the default `strategy`.
+    That is why the function will do multiple optimization steps.
+
+    Args:
+        compiler (TorchCompiler): Current compiler containing the optimization registries.
+        cc (TorchCircuit): Compiled circuit to optimize.
+        max_opt_steps (int): Maximum iterations of the optimization procedure.
+
+    Returns:
+        TorchCircuit: The optimized circuit.
+    """
     assert max_opt_steps > 0
 
     # Each optimization step consists of three kinds of optimizations (see below).
@@ -443,6 +574,19 @@ def _optimize_circuit(
 def _optimize_parameter_nodes(
     compiler: TorchCompiler, cc: TorchCircuit
 ) -> tuple[TorchCircuit, bool]:
+    """Optimize the parameter graphs in a Torch circuit.
+
+    Args:
+        compiler: The current Torch compiler containing the optimization
+            registries.
+        cc: The circuit to optimize.
+
+    Returns:
+        tuple[TorchCircuit, bool]: returns :
+            - The optimized Torch circuit.
+            - A boolean variable indicating if an optimization was applied.
+    """
+
     def match_optimizer(match: ParameterOptMatch) -> tuple[TorchParameterNode, ...]:
         rule = compiler.retrieve_parameter_optimization_rule(match.pattern)
         return rule(compiler, match)
@@ -486,6 +630,25 @@ def _optimize_parameter_nodes(
 def _optimize_layers(
     compiler: TorchCompiler, cc: TorchCircuit, *, shatter: bool = False
 ) -> tuple[TorchCircuit, bool]:
+    """Optimize the layers in a Torch circuit, either by fusing or shattering.
+
+    The two possible modes for layer optimization are:
+
+    - Fusion: merge multiple layers into a smaller group of optimized layers.
+    - Shatter: transform a group of layers into a larger group of optimized layers.
+
+    Args:
+        compiler: The current Torch compiler containing the optimization
+            registries.
+        cc: The circuit to optimize.
+        shatter: Set to True to use shattering, False to use fusion.
+
+    Returns:
+        tuple[TorchCircuit, bool]: returns :
+            - The optimized torch circuit.
+            - A boolean variable indicating if an optimization was applied.
+    """
+
     def match_optimizer_shatter(match: LayerOptMatch) -> tuple[TorchLayer, ...]:
         rule = compiler.retrieve_layer_optimization_rule("shatter", match.pattern)
         return rule(compiler, match)
@@ -494,7 +657,9 @@ def _optimize_layers(
         rule = compiler.retrieve_layer_optimization_rule("fuse", match.pattern)
         return rule(compiler, match)
 
-    registry = compiler.retrieve_layer_optimization_registry("shatter" if shatter else "fuse")
+    registry = compiler.retrieve_layer_optimization_registry(
+        "shatter" if shatter else "fuse"
+    )
     match_optimizer = match_optimizer_shatter if shatter else match_optimizer_fuse
     optimize_result = optimize_graph(
         cc.topological_ordering(),
@@ -519,6 +684,19 @@ def _match_parameter_nodes_pattern(
     incomings_fn: Callable[[TorchParameterNode], Sequence[TorchParameterNode]],
     outcomings_fn: Callable[[TorchParameterNode], Sequence[TorchParameterNode]],
 ) -> ParameterOptMatch | None:
+    """Returns a match object if the pattern match the graph rooted at the node.
+
+    Args:
+        node (TorchParameterNode): Starting node to begin the matching.
+        pattern (ParameterOptPattern): Pattern to match.
+        incomings_fn (Callable[[TorchParameterNode], Sequence[TorchParameterNode]]):
+            Function that returns the inputs of the given module.
+        outcomings_fn (Callable[[TorchParameterNode], Sequence[TorchParameterNode]]):
+            Function that returns the outputs of the given module.
+
+    Returns:
+        ParameterOptMatch | None: Match object if the node matches, None otherwise.
+    """
     pattern_entries = pattern.entries()
     num_entries = len(pattern_entries)
     matched_nodes = []
@@ -548,6 +726,19 @@ def _match_layer_pattern(
     incomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
     outcomings_fn: Callable[[TorchLayer], Sequence[TorchLayer]],
 ) -> LayerOptMatch | None:
+    """Returns a match object if the pattern match the graph rooted at the layer.
+
+    Args:
+        layer (TorchLayer): Starting layer to begin the matching.
+        pattern (LayerOptPattern): Pattern to match.
+        incomings_fn (Callable[[TorchLayer], Sequence[TorchLayer]]):
+            Function that returns the inputs of the given module.
+        outcomings_fn (Callable[[TorchLayer], Sequence[TorchLayer]]):
+            Function that returns the outputs of the given module.
+
+    Returns:
+        LayerOptMatch | None:  Match object if the layer matches, None otherwise.
+    """
     parameter_patterns = pattern.sub_patterns()
     config_patterns = pattern.config_patterns()
     pattern_entries = pattern.entries()
