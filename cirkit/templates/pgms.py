@@ -1,8 +1,11 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from cirkit.symbolic.circuit import Circuit
-from cirkit.symbolic.layers import HadamardLayer, Layer, SumLayer
+from cirkit.symbolic.layers import CategoricalLayer, HadamardLayer, Layer, SumLayer
+from cirkit.symbolic.parameters import ConstantParameter, Parameter
 from cirkit.templates.utils import (
     Parameterization,
     name_to_input_layer_factory,
@@ -71,6 +74,77 @@ def fully_factorized(
     prod_sl = HadamardLayer(1, arity=len(input_layers))
 
     return Circuit(input_layers + [prod_sl], in_layers={prod_sl: input_layers}, outputs=[prod_sl])
+
+
+def overparameterized_deep_fully_factorized(num_variables: int, num_units: int) -> Circuit:
+    """Construct a circuit encoding a deep fully-factorized model following
+    a latent interpretation of a circuit.
+
+    Args:
+        num_variables: The number of variables.
+        num_units: The number of units in the circuit.
+    """
+    if num_variables <= 0:
+        raise ValueError("The number of variables should be a positive integer")
+    if num_units <= 0:
+        raise ValueError("The number of units should be a positive integer")
+
+    nodes = []
+    in_nodes = {}
+
+    weight_factory = parameterization_to_factory(
+        Parameterization(activation="softmax", initialization="normal")
+    )
+
+    pos_param_value = np.array([[0.0, 1.0] * num_units]).reshape(num_units, 2)
+    neg_param_value = np.array([[1.0, 0.0] * num_units]).reshape(num_units, 2)
+
+    pos_param = Parameter.from_input(ConstantParameter(num_units, 2, value=pos_param_value))
+    neg_param = Parameter.from_input(ConstantParameter(num_units, 2, value=neg_param_value))
+
+    v_i = 0
+    node = None
+    while v_i < num_variables:
+        pos_v_i = CategoricalLayer(Scope([v_i]), num_units, num_categories=2, probs=pos_param)
+        neg_v_i = CategoricalLayer(Scope([v_i]), num_units, num_categories=2, probs=neg_param)
+
+        nodes.extend([pos_v_i, neg_v_i])
+        if node is None:
+            node = SumLayer(num_units, num_units, 2, weight_factory=weight_factory)
+            nodes.append(node)
+            in_nodes[node] = [pos_v_i, neg_v_i]
+        else:
+            l_child = HadamardLayer(num_units, 2)
+            nodes.append(l_child)
+            in_nodes[l_child] = [pos_v_i, node]
+
+            r_child = HadamardLayer(num_units, 2)
+            nodes.append(r_child)
+            in_nodes[r_child] = [neg_v_i, node]
+
+            node = SumLayer(
+                num_units,
+                1 if v_i == (num_variables - 1) else num_units,
+                2,
+                weight_factory=weight_factory,
+            )
+            nodes.append(node)
+            in_nodes[node] = [l_child, r_child]
+
+        v_i += 1
+
+    s_circuit = Circuit(nodes, in_nodes, outputs=[node])
+    return s_circuit
+
+
+def deterministic_fully_factorized(num_variables: int) -> Circuit:
+    """Construct a deterministic circuit encoding a fully-factorized model following
+    a latent interpretation of a circuit.
+
+    Args:
+        num_variables: The number of variables.
+    """
+    return overparameterized_deep_fully_factorized(num_variables, 1)
 
 
 def hmm(

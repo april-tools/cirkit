@@ -7,7 +7,7 @@ from typing import ClassVar, Protocol, cast
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.utils import csafelog
+from cirkit.backend.torch.utils import csafelog, safelog
 
 Semiring = type["SemiringImpl"]
 
@@ -405,7 +405,7 @@ class LSESumSemiring(SemiringImpl):
         reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
         if not keepdim:
             reduced_max_xs = reduced_max_xs.squeeze(dim)  # To match shape of func_exp_x.
-        return torch.log(func_exp_xs) + reduced_max_xs
+        return safelog(func_exp_xs) + reduced_max_xs
 
 
 @SemiringImpl.register("complex-lse-sum")
@@ -492,7 +492,7 @@ def _(x: Tensor) -> Tensor:
 
 @LSESumSemiring.register_map_from(SumProductSemiring)
 def _(x: Tensor) -> Tensor:
-    return torch.log(x)
+    return safelog(x)
 
 
 @LSESumSemiring.register_map_from(ComplexLSESumSemiring)

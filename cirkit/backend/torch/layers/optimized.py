@@ -1,13 +1,12 @@
 from collections.abc import Mapping
 from typing import Any
 
-import einops as E
 import torch
 from torch import Tensor
 
 from cirkit.backend.torch.layers.inner import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import Semiring
+from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
 class TorchTuckerLayer(TorchInnerLayer):
@@ -141,6 +140,10 @@ class TorchCPTLayer(TorchInnerLayer):
             )
         self.weight = weight
 
+        # prepare max and argmaxing functions across folds and batches
+        self._max_fn = torch.vmap(torch.vmap(lambda x: torch.amax(x, dim=-1)))
+        self._argmax_fn = torch.vmap(torch.vmap(lambda x: torch.argmax(x, dim=-1)))
+
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
         if w.num_folds != self.num_folds:
             return False
@@ -165,35 +168,79 @@ class TorchCPTLayer(TorchInnerLayer):
     def forward(self, x: Tensor) -> Tensor:
         # x: (F, B, Ki)
         x = self.semiring.prod(x, dim=1, keepdim=False)
-        # weight: (F, Ko, Ki)
+        # weight: (F, B, Ko, Ki)
         weight = self.weight()
         return self.semiring.einsum(
-            "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbi,fboi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
+    def max(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        # x: (F, B, Ki)
+        x = self.semiring.prod(x, dim=1, keepdim=False)
+
+        # weight: (F, B, K_o, Ki)
+        weight = self.weight()
+
+        # intermediary weighted results are computed in the sum product semiring
+        # since very small products leading to underflow would not be selected
+        # by max anyway
+        x = SumProductSemiring.map_from(x, self.semiring)
+        # weighted_x: (F, B, H * Ki, Ko)
+        weighted_x = self.semiring.map_from(
+            torch.einsum("fbi,fboi->fboi", x, weight), SumProductSemiring
+        )
+
+        return self._argmax_fn(weighted_x), self._max_fn(weighted_x)
+
     def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        r"""Sample from a CP-T sum layer based on the weight paramerters.
+
+        The sampled index is given in raveled form. Given the index $i$ it is possible
+        to recover the index of the sampled input element as $i // I$ and
+        the unit of that element as $i mod I$ where $I$ is the number of inputs of this
+        layer (i.e. the number of units of each element that is input to this layer).
+
+        Args:
+            x (Tensor): The input to the layer.
+
+        Returns:
+            tuple[Tensor, Tensor]: A tuple where the first tensor is the raveled index
+                of the sampled input to the layer and the second value is the input weighted
+                by that element value.
+        """
+        # weight: (F, B, K_o, H * Ki)
         weight = self.weight()
         negative = torch.any(weight < 0.0)
         if negative:
-            raise ValueError("Sampling only works with positive weights")
+            raise TypeError("Sampling in sum layers only works with positive weights.")
+
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
-            raise ValueError("Sampling only works with a normalized parametrization")
+            # normalize weight as a probability distribution
+            eps = torch.finfo(weight.dtype).eps
+            weight = (weight + eps) / (weight + eps).sum(dim=-1, keepdim=True)
 
-        # x: (F, H, K, num_samples, D)
-        x = torch.sum(x, dim=1)  # (F, K, num_samples, D)
+        # x: (F, B, Ki)
+        x = self.semiring.prod(x, dim=1, keepdim=False)
 
-        num_samples = x.shape[2]
-        d = x.shape[3]
+        # weight: (F, B, K_o, Ki)
+        weight = self.weight()
 
-        # mixing_distribution: (F, O, K)
-        mixing_distribution = torch.distributions.Categorical(probs=weight)
-        mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
+        # intermediary weighted results are computed in the sum product semiring
+        x = SumProductSemiring.map_from(x, self.semiring)
+        # weighted_x: (F, B, H * Ki, Ko)
+        weighted_x = self.semiring.map_from(
+            torch.einsum("fbi,fboi->fboi", x, weight), SumProductSemiring
+        )
 
-        x = torch.gather(x, dim=1, index=mixing_indices)
-        return x, mixing_samples
+        # sample indexes based on weight
+        dist = torch.distributions.Categorical(probs=weight)
+        idxs = dist.sample((x.size(1),)).squeeze(-2).permute(1, 0, 2)
+        # gather the weighted value
+        # TODO: find a better way rather than squeezing and unsqueezing
+        val = torch.gather(weighted_x, index=idxs.unsqueeze(-1), dim=-1).squeeze(-1)
+
+        return idxs, val
 
 
 class TorchTensorDotLayer(TorchInnerLayer):
@@ -253,7 +300,7 @@ class TorchTensorDotLayer(TorchInnerLayer):
                 f"but found {weight.num_folds} and {weight.shape}, respectively"
             )
         self.weight = weight
-        self._num_contract_units = weight.shape[1]
+        self._num_contract_units = weight.shape[-1]
         self._num_batch_units = num_input_units // self._num_contract_units
 
     def _valid_weight_shape(self, w: TorchParameter) -> bool:
@@ -281,11 +328,11 @@ class TorchTensorDotLayer(TorchInnerLayer):
         # x: (F, B, Ki) -> (F, B, Kj, Kq) -> (F, B, Kq, Kj)
         x = x.view(x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units)
         x = x.permute(0, 1, 3, 2)
-        # weight: (F, Kk, Kj)
+        # weight: (F, B, Kk, Kj)
         weight = self.weight()
         # y: (F, B, Kq, Kj)
         y = self.semiring.einsum(
-            "fbqj,fkj->fbqk", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
+            "fbqj,fbkj->fbqk", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
         # return y: (F, B, Kq * Kk) = (F, B, Ko)
         return y.view(y.shape[0], y.shape[1], self.num_output_units)

@@ -104,6 +104,16 @@ class TensorParameter(ParameterInput):
             "dtype": self.dtype,
         }
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"shape={self._shape}, "
+            f"learnable={self.learnable}, "
+            f"dtype={self.dtype}, "
+            f"initializer={self.initializer}"
+            ")"
+        )
+
 
 class ConstantParameter(TensorParameter):
     """A symbolic tensor parameter representing a constant tensor, i.e.,
@@ -136,6 +146,79 @@ class ConstantParameter(TensorParameter):
     @property
     def config(self) -> dict[str, Any]:
         return {"shape": self.shape, "value": self.value}
+
+
+class GateFunctionParameter(TensorParameter):
+    """A symbolic parameter whose value is computed by an externally-provided function.
+    For example, this function can be the evaluation of a neural network.
+    """
+
+    def __init__(self, *shape: int, name: str, index: int):
+        """Initialize a symbolic function parameter.
+
+        Args:
+            shape: The shape of the parameter tensor, which is specified by the combination
+                of the arguments "function", "name" and "index" below.
+            name: The gate function name. This is a string identifier of the function that
+                will output a mapping between parameter tensor identifiers and their value.
+            index: An index that selects the parameter tensor specified by the name.
+                That is, this index will be used to slice the parameter tensor
+                along the first dimension.
+
+        Raises:
+            ValueError: If the shape is not valid.
+            ValueError: If the index is a negative integer.
+        """
+        if len(shape) < 1 or any(d <= 0 for d in shape):
+            raise ValueError(
+                f"The shape {shape} must be non-empty and have positive dimension sizes"
+            )
+        if name is None:
+            raise ValueError(f"The name must not be None.")
+        if index is None:
+            raise ValueError(f"The index must not be None.")
+        if index is not None and index < 0:
+            raise ValueError("The index must be a non-negative integer")
+
+        initializer = ConstantTensorInitializer(0.0)
+        super().__init__(
+            *shape,
+            initializer=initializer,
+            learnable=False,
+        )
+
+        self._shape = shape
+        self._name = name
+        self._index = index
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self._shape
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def index(self) -> int:
+        return self._index
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {
+            "shape": self.shape,
+            "name": self.name,
+            "index": self.index,
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"shape={self.shape}, "
+            f"name='{self.name}', "
+            f"index={self.index}"
+            ")"
+        )
 
 
 class ReferenceParameter(ParameterInput):
@@ -975,7 +1058,11 @@ class Parameter(RootedDiAcyclicGraph[ParameterNode]):
         # become references to the tensors of the 'self' parameter's computational graph.
         # All the other nodes are new objects.
         def _replace_ref_or_copy(n: ParameterNode) -> ParameterNode:
-            return ReferenceParameter(n) if isinstance(n, TensorParameter) else copy(n)
+            return (
+                ReferenceParameter(n)
+                if isinstance(n, (TensorParameter, GateFunctionParameter))
+                else copy(n)
+            )
 
         return self._process_nodes(_replace_ref_or_copy)
 
