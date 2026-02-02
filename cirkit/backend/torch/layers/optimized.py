@@ -7,7 +7,7 @@ from torch import Tensor
 
 from cirkit.backend.torch.layers.inner import TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import Semiring
+from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
 class TorchTuckerLayer(TorchInnerLayer):
@@ -171,8 +171,21 @@ class TorchCPTLayer(TorchInnerLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    @torch.no_grad()
+    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor]:
+        # x: (F, H, K, num_samples, E?, D)
+        x = self.semiring.prod(x, dim=1)  # (F, K, num_samples, E?, D)
+        
         weight = self.weight()
+        if evidence is not None:
+            evidence = self.semiring.prod(evidence, dim=1)
+            # The evidence is repeated for all B, so just pick the first
+            ev_prob = x.select(2, 0).masked_fill(evidence.select(2, 0).isnan(), self.semiring.multiplicative_identity)
+            ev_prob = self.semiring.prod(ev_prob, dim=-1).movedim(-1, 1).flatten(start_dim=2)
+            ev_prob = SumProductSemiring.map_from(ev_prob, self.semiring)
+            weight = weight.unsqueeze(2) * ev_prob.unsqueeze(1)
+            weight /= weight.sum(-1, keepdim=True)
+        
         negative = torch.any(weight < 0.0)
         if negative:
             raise ValueError("Sampling only works with positive weights")
@@ -180,20 +193,19 @@ class TorchCPTLayer(TorchInnerLayer):
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
-        # x: (F, H, K, num_samples, D)
-        x = torch.sum(x, dim=1)  # (F, K, num_samples, D)
-
         num_samples = x.shape[2]
-        d = x.shape[3]
+        d = x.shape[-1]
 
         # mixing_distribution: (F, O, K)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
+        mixing_samples = mixing_samples.movedim(0, 2)
+        mixing_indices = mixing_samples.unsqueeze(-1).repeat([1] * len(mixing_samples.shape) + [d])
 
         x = torch.gather(x, dim=1, index=mixing_indices)
-        return x, mixing_samples
+        if evidence is not None:
+            evidence = evidence[:, :1].expand_as(x)
+        return x, evidence, mixing_samples
 
 
 class TorchTensorDotLayer(TorchInnerLayer):

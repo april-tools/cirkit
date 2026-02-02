@@ -91,11 +91,14 @@ class TorchInputLayer(TorchLayer, ABC):
         """
         raise TypeError(f"Integration is not supported for layers of type {type(self)}")
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    @torch.no_grad()
+    def sample(self, num_samples: int = 1, evidence: Tensor | None = None) -> Tensor:
         r"""If the input layer encodes a probability distribution, then sample from it.
 
         Args:
             num_samples: The number of data points to sample.
+            evidence: Observed evidence tensor of shize [..., K] for conditional sampling,
+                    with NaNs if unobserved. Observed values are copied to the samples.
 
         Returns:
             Tensor: The tensorized sample, having shape $(F, K, N)$, where
@@ -105,7 +108,37 @@ class TorchInputLayer(TorchLayer, ABC):
         Raises:
             TypeError: If sampling is not supported by the layer.
         """
+        sample_shape = (num_samples,) if evidence is None else tuple([num_samples] + list(evidence.shape[1:-1]))
+        assert self.num_variables == 1 or evidence is None, "Conditional sampling is only implemented for uni-dimensional input nodes"
+        
+        # samples: (sample_shape, F, K)
+        samples = self.sample_(sample_shape)
+        if evidence is not None:  # TODO Document this behaviour (setting 1 all evidence to as if marginalized out)
+            reshaped_evidence = evidence.permute(-2, *range(len(evidence.shape)-2), -1).unsqueeze(0)
+            samples = samples.where(torch.isnan(reshaped_evidence), reshaped_evidence)
+
+        rearrange = lambda x: x.flatten(end_dim=-3).flatten(start_dim=1).T.view(x.shape[-2:] + x.shape[:-2])
+        samples = rearrange(samples) # (F, K, sample_shape)
+        return samples
+
+    def sample_(self, sample_shape: tuple[int]) -> Tensor:
         raise TypeError(f"Sampling is not supported for layers of type {type(self)}")
+
+    @torch.no_grad()
+    def sample_and_eval_evidence(self, num_samples: int, evidence: Tensor | None = None):
+        """
+            This function samples from the input distribution and then fill the entries
+            that correspond to the evidence inputs with their probability (in the semiring space)
+        """
+        if evidence is None:
+            return self.sample(num_samples)
+
+        prob_or_logprob = self(evidence.where(~evidence.isnan(), self.sample()[:,:1]))  # Replace by valid values (n_samples = 1)
+        # prob_or_logprob = torch.ones_like(prob_or_logprob) * float('inf')
+        samples = self.sample(num_samples, evidence * 0 + prob_or_logprob)  # Sample and put the (log)prob only where there is evidence
+        
+        return samples
+
 
     def extra_repr(self) -> str:
         return (
@@ -420,7 +453,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         logits = self.logits()
         return torch.logsumexp(logits, dim=2)
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    @torch.no_grad()
+    def sample_(self, sample_shape: tuple[int]) -> Tensor:
         # logits: (F, K, N)
         if self.logits is None:
             assert self.probs is not None
@@ -428,10 +462,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         else:
             logits = self.logits()
         dist = distributions.Categorical(logits=logits)
-        # samples: (N, F, K)
-        samples = dist.sample((num_samples,))
-        samples = samples.permute(1, 2, 0)  # (F, K, N)
-        return samples
+        return dist.sample(sample_shape) # samples: (N, F, K)
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
@@ -548,7 +579,8 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             device = self.logits.device
         return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    @torch.no_grad()
+    def sample_(self, sample_shape: tuple[int]) -> Tensor:
         if self.logits is None:
             assert self.probs is not None
             probs = self.probs()  # (F, 1, K)
@@ -556,10 +588,8 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         else:
             logits = self.logits()  # (F, 1, K)
             dist = distributions.Binomial(self.total_count, logits=logits)
-        samples = dist.sample((num_samples,))  # (num_samples, F, K)
-        samples = samples.permute(1, 2, 0)  # (F, K, num_samples)
-        return samples
-
+        return dist.sample(sample_shape)  # (num_samples, F, K)
+        
 
 class TorchGaussianLayer(TorchExpFamilyLayer):
     """The Gaussian distribution layer. Optionally, this layer can encode unnormalized Gaussian
@@ -677,11 +707,10 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         log_partition = self.log_partition()  # (F, K)
         return log_partition.unsqueeze(dim=1)  # (F, 1, K)
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    @torch.no_grad()
+    def sample_(self, sample_shape: tuple[int]) -> Tensor:
         dist = distributions.Normal(loc=self.mean(), scale=self.stddev())
-        # samples: (N, F, K)
-        samples = dist.sample((num_samples,))
-        samples = samples.permute(1, 2, 0)  # (F, K, N)
+        samples = dist.sample(sample_shape) # samples: (sample_shape, F, K)
         return samples
 
 
@@ -803,13 +832,13 @@ class TorchEvidenceLayer(TorchConstantLayer):
         x = self.layer(obs)  # (F, 1, K)
         return x.expand(x.shape[0], batch_size, x.shape[2])
 
-    def sample(self, num_samples: int = 1) -> Tensor:
+    @torch.no_grad()
+    def sample_(self, sample_shape: tuple[int]) -> Tensor:
         if self.num_variables != 1:
             raise NotImplementedError("Sampling a multivariate Evidence layer is not implemented")
         # Sampling an evidence layer translates to return the given observation
         obs = self.observation()  # (F, D=1)
-        obs = obs.unsqueeze(dim=-1)  # (F, 1, 1)
-        return obs.expand(size=(-1, -1, self.num_output_units, num_samples))
+        return obs.expand(size=list(sample_shape) + [-1, self.num_output_units])
 
 
 class TorchPolynomialLayer(TorchInputFunctionLayer):

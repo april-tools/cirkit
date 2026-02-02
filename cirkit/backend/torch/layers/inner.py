@@ -8,7 +8,7 @@ from torch import Tensor
 
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
-from cirkit.backend.torch.semiring import Semiring
+from cirkit.backend.torch.semiring import Semiring, SumProductSemiring
 
 
 class TorchInnerLayer(TorchLayer, ABC):
@@ -63,7 +63,7 @@ class TorchInnerLayer(TorchLayer, ABC):
                 is the number of output units.
         """
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
+    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
         """Perform a forward sampling step.
 
         Args:
@@ -71,6 +71,7 @@ class TorchInnerLayer(TorchLayer, ABC):
                 $(F, H, C, K, N, D)$, where $F$ is the number of folds, $H$ is the arity,
                 $C$ is the number of channels, $K$ is the numbe rof input units, $N$ is the number
                 of samples, $D$ is the number of variables.
+            evidence: Book tensor of size $(F, H, C, K, N, D)$ indicating what variables are evidence.
 
         Returns:
             Tensor: A new tensor representing the new variable assignements the layers gives
@@ -126,11 +127,17 @@ class TorchHadamardLayer(TorchInnerLayer):
     def forward(self, x: Tensor) -> Tensor:
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
-    def sample(self, x: Tensor) -> tuple[Tensor, None]:
+    @torch.no_grad()
+    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, None]:
         # Concatenate samples over disjoint variables through a sum
-        # x: (F, H, C, K, num_samples, D)
-        x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
-        return x, None
+        # x: (F, H, K, num_samples, D)
+        # All elements but 1 in the H axis will be "1" (in the semiring)
+        x = self.semiring.prod(x, dim=1)  # (F, K, num_samples, D)
+        if evidence is None:
+            return x, None
+
+        evidence = self.semiring.prod(evidence, dim=1)
+        return x, evidence
 
 
 class TorchKroneckerLayer(TorchInnerLayer):
@@ -186,15 +193,22 @@ class TorchKroneckerLayer(TorchInnerLayer):
         # y0: (F, B, Ko=Ki ** arity)
         return y0
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor | None]:
-        # x: (F, H, C, K, num_samples, D)
+    @torch.no_grad()
+    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
+        # x:        (F, H, K, num_samples, E?, D)
+        # evidence: (F, H, K, num_samples, E, D)
         y0 = x[:, 0]
+        evidence = evidence[:, :, :1, :1] # Evidence should be exactly the same for K and num_samples
         for i in range(1, x.shape[1]):
-            y0 = y0.unsqueeze(dim=3)  # (F, C, K, 1, num_samples, D)
-            y1 = x[:, i].unsqueeze(dim=2)  # (F, C, 1, Ki, num_samples, D)
-            y0 = torch.flatten(y0 + y1, start_dim=2, end_dim=3)
-        # y0: (F, C, Ko=Ki ** arity, num_samples, D)
-        return y0, None
+            y0 = y0.unsqueeze(dim=3)  # (F, K, 1, num_samples, D)
+            y1 = x[:, i].unsqueeze(dim=2)  # (F, 1, Ki, num_samples, D)
+            y0 = torch.flatten(self.semiring.mul(y0, y1), start_dim=2, end_dim=3)
+        # y0: (F, Ko=Ki ** arity, num_samples, D)
+        if evidence is None:
+            return y0, None
+
+        raise NotImplementedError("This needs to be properly implemented :)")
+        return y0, evidence
 
 
 class TorchSumLayer(TorchInnerLayer):
@@ -272,29 +286,50 @@ class TorchSumLayer(TorchInnerLayer):
             "fbi,foi->fbo", inputs=(x,), operands=(weight,), dim=-1, keepdim=True
         )  # shape (F, B, K_o).
 
-    def sample(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    @torch.no_grad()
+    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor]:
+        # F = Fold, H = Arity, Ki = Input Dim, Ko = Output Dim, B = Batch size, E = Evidence size, D = Data dim
+        # x:        (F, H, Ki, B, E?, D)
+        # evidence: (F, H, Ki, B, E, D)
+        # weight:   (F, Ko, H * Ki)
         weight = self.weight()
+        if evidence is not None:
+            # The evidence is repeated for all B, so just pick the first
+            # Replace observations (samples) with 1s (in the semiring space)
+            ev_prob = x.select(3, 0).masked_fill(evidence.select(3, 0).isnan(), self.semiring.multiplicative_identity)
+            ev_prob = self.semiring.prod(ev_prob, dim=-1).movedim(-1, 1).flatten(start_dim=2)
+            ev_prob = SumProductSemiring.map_from(ev_prob, self.semiring)
+            weight = weight.unsqueeze(2) * ev_prob.unsqueeze(1)
+            weight /= weight.sum(-1, keepdim=True)
+
         negative = torch.any(weight < 0.0)
         normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if negative or not normalized:
             raise TypeError("Sampling in sum layers only works with positive weights summing to 1")
 
-        # x: (F, H, Ki, num_samples, D) -> (F, H * Ki, num_samples, D)
+        # x: (F, H, Ki, B, E?, D) -> (F, H * Ki, B, E?, D)
         x = x.flatten(1, 2)
 
         num_samples = x.shape[2]
-        d = x.shape[3]
+        d = x.shape[-1]
 
-        # mixing_distribution: (F, Ko, H * Ki)
+        # mixing_distribution: (F, Ko, E?, H * Ki)
         mixing_distribution = torch.distributions.Categorical(probs=weight)
 
-        # mixing_samples: (num_samples, F, Ko) -> (F, Ko, num_samples)
+        # mixing_samples: (B, F, Ko, E?) -> (F, Ko, E?, B)
         mixing_samples = mixing_distribution.sample((num_samples,))
-        mixing_samples = E.rearrange(mixing_samples, "n f k -> f k n")
+        mixing_samples = mixing_samples.movedim(0, 2)
 
-        # mixing_indices: (F, Ko, num_samples, D)
-        mixing_indices = E.repeat(mixing_samples, "f k n -> f k n d", d=d)
+        # mixing_indices: (F, Ko, E?, B, D)
+        mixing_indices = mixing_samples.unsqueeze(-1).repeat([1] * len(mixing_samples.shape) + [d])
 
-        # x: (F, Ko, num_samples, D)
+        # x: (F, E?, Ko, B, D)
+        # x: (F, Ko, B, E?, D) 
         x = torch.gather(x, dim=1, index=mixing_indices)
-        return x, mixing_samples
+
+        # (F, Ko, E, D)
+        if evidence is not None:
+            evidence = evidence.flatten(1, 2)
+            evidence = evidence[:, :1].expand_as(x)
+        return x, evidence, mixing_samples
+        

@@ -35,14 +35,14 @@ class ParameterAddressBook(AddressBook[TorchParameterNode]):
     """
 
     def lookup(
-        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+        self, module_outputs: list[list[Tensor]], *, in_graph: Tensor | None = None
     ) -> Iterator[tuple[TorchParameterNode | None, tuple]]:
         def _select_index(mids: list[int], idx: Tensor | tuple[slice | None, ...]) -> Tensor:
             # A useful function combining the modules outputs, and then possibly applying an index
             if len(mids) == 1:
-                t = module_outputs[mids[0]]
+                t = module_outputs[mids[0]][0]
             else:
-                t = torch.cat([module_outputs[mid] for mid in mids], dim=0)
+                t = torch.cat([module_outputs[mid][0] for mid in mids], dim=0)
             return t[idx]
 
         # Loop through the entries and yield inputs

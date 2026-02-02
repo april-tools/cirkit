@@ -28,7 +28,7 @@ class LayerAddressBook(AddressBook[TorchLayer]):
     """
 
     def lookup(
-        self, module_outputs: list[Tensor], *, in_graph: Tensor | None = None
+        self, module_outputs: list[list[Tensor]], *in_graph: Tensor | None
     ) -> Iterator[tuple[TorchLayer | None, tuple]]:
         # Loop through the entries and yield inputs
         for entry in self:
@@ -39,36 +39,41 @@ class LayerAddressBook(AddressBook[TorchLayer]):
             if in_layer_ids:
                 in_fold_idx_h = in_fold_idx[0]
                 in_layer_ids_h = in_layer_ids[0]
-                if len(in_layer_ids_h) == 1:
-                    x = module_outputs[in_layer_ids_h[0]]
-                else:
-                    x = torch.cat([module_outputs[mid] for mid in in_layer_ids_h], dim=0)
-                x = x[in_fold_idx_h]
-                yield layer, (x,)
+
+                def unpack_input(i):
+                    if len(in_layer_ids_h) == 1:
+                        x = module_outputs[in_layer_ids_h[0]][i]
+                    else:
+                        x = torch.cat([module_outputs[mid][i] for mid in in_layer_ids_h], dim=0)
+                    return x[in_fold_idx_h]
+                    
+                yield layer, tuple(map(unpack_input, range(len(module_outputs[in_layer_ids_h[0]]))))
                 continue
 
             # Catch the case there are no inputs coming from other modules
             # That is, we are gathering the inputs of input layers
             assert isinstance(layer, TorchInputLayer)
             if layer.num_variables:
-                if in_graph is None:
+                if len(in_graph) == 0:
                     yield layer, ()
                     continue
-                # in_graph: An input batch (assignments to variables) of shape (B, D)
+                # in_graph: A list of input batches (assignments to variables) of shape (B, D)
                 # scope_idx: The scope of the layers in each fold, a tensor of shape (F, D'), D' < D
                 # x: (B, D) -> (B, F, D') -> (F, B, D')
-                if len(in_graph.shape) != 2:
-                    raise ValueError(
-                        "The input to the circuit should have shape (B, D), "
-                        "where B is the batch size and D is the number of variables "
-                        "the circuit is defined on"
-                    )
-                x = in_graph[..., layer.scope_idx].permute(1, 0, 2)
-                yield layer, (x,)
+                def unpack_input(x):
+                    if len(x.shape) != 2:
+                        raise ValueError(
+                            "The input to the circuit should have shape (B, D), "
+                            "where B is the batch size and D is the number of variables "
+                            "the circuit is defined on"
+                        )
+                    return x[..., layer.scope_idx].permute(1, 0, 2)
+                
+                yield layer, tuple(map(unpack_input, in_graph))
                 continue
 
             # Pass the wanted batch dimension to constant layers
-            yield layer, (1 if in_graph is None else in_graph.shape[0],)
+            yield layer, (1 if in_graph[0] is None else in_graph[0].shape[0],)
 
     @classmethod
     def from_index_info(
