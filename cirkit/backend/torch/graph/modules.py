@@ -301,7 +301,7 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
         return self.__class__(nodes, in_nodes, outputs=roots)
 
     def evaluate(
-        self, x: Tensor | None = None, module_fn: ModuleEvalFunctional | None = None
+        self, *args: Tensor | None, module_fn: ModuleEvalFunctional | None = None
     ) -> Tensor:
         """Evaluate the Torch graph by following the topological ordering,
             and by using the address book information to retrieve the inputs to each module.
@@ -323,14 +323,18 @@ class TorchDiAcyclicGraph(nn.Module, DiAcyclicGraph[TorchModuleT], ABC):
         # and by using the book address information to retrieve the inputs to each
         # (possibly folded) torch module.
         module_outputs: list[Tensor] = []
-        for module, inputs in self._address_book.lookup(module_outputs, in_graph=x):
+        for module, inputs in self._address_book.lookup(module_outputs, *args):
             if module is None:
-                (output,) = inputs
-                return output
+                return inputs[0] 
+
             if module_fn is None:
                 y = module(*inputs)
             else:
                 y = module_fn(module, *inputs)
+
+            if type(y) not in [list, tuple]:
+                y = (y,)
+                
             module_outputs.append(y)
         raise RuntimeError("The address book is malformed")
 

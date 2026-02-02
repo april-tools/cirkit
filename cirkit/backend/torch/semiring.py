@@ -25,6 +25,10 @@ class SemiringImpl(ABC):
     regardless of the global setting.
     """
 
+    # Attributes providing easy access to the additive and multiplicative elements of the ring (0 and 1 for the Sum-Prod semiring)
+    additive_identity: float | complex
+    multiplicative_identity: float | complex
+
     # A registry from semiring string identifiers to semiring class implementations
     _registry: ClassVar[dict[str, Semiring]] = {}
 
@@ -306,6 +310,9 @@ class SemiringImpl(ABC):
 class SumProductSemiring(SemiringImpl):
     """The linear space computation."""
 
+    additive_identity: float = 0
+    multiplicative_identity: float = 1
+
     @classmethod
     def cast(cls, x: Tensor) -> Tensor:
         """Cast a tensor to the data type required by the semiring.
@@ -353,6 +360,9 @@ class SumProductSemiring(SemiringImpl):
 @SemiringImpl.register("lse-sum")
 class LSESumSemiring(SemiringImpl):
     """The log space computation."""
+
+    additive_identity: float = float('-inf')
+    multiplicative_identity: float = 0
 
     @classmethod
     def cast(cls, x: Tensor) -> Tensor:
@@ -411,6 +421,9 @@ class LSESumSemiring(SemiringImpl):
 @SemiringImpl.register("complex-lse-sum")
 class ComplexLSESumSemiring(SemiringImpl):
     """The complex log space computation."""
+
+    additive_identity: complex = float('-inf') + float('-inf')*1j
+    multiplicative_identity: complex = 0
 
     @classmethod
     def cast(cls, x: Tensor) -> Tensor:

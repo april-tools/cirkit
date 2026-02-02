@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 
 from cirkit.backend.torch.circuits import TorchCircuit
-from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
+from cirkit.backend.torch.layers import TorchSumLayer, TorchInnerLayer, TorchInputLayer, TorchLayer
 from cirkit.utils.scope import Scope
 
 
@@ -208,68 +208,91 @@ class SamplingQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, num_samples: int = 1) -> tuple[Tensor, list[Tensor]]:
+    def __call__(self, num_samples: int = 1, evidence: Tensor | None = None) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points.
 
         Args:
             num_samples: The number of samples to return.
+            evidence:    The evidence to conditionally generate samples from of size (num_evidence, num_variables)
+                         and where values not to condition on must be NaNs
 
         Return:
             A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
             variables the circuit is defined on, and (ii) the samples of the finitely-discrete
             latent variables associated to the sum units. The samples (i) are returned as a
-            tensor of shape (num_samples, num_variables).
+            tensor of shape (num_samples, num_variables) if evidence is None and 
+            (num_samples, num_evidence, num_variables) otherwise.
 
         Raises:
             ValueError: if the number of samples is not a positive number.
         """
         if num_samples <= 0:
             raise ValueError("The number of samples must be a positive number")
-
+            
         mixture_samples: list[Tensor] = []
-        # samples: (O, K, num_samples, D)
+        # samples: (O, K, num_samples, E?, D)
         samples = self._circuit.evaluate(
+            *([evidence] if evidence is not None else []), 
             module_fn=functools.partial(
                 self._layer_fn,
                 num_samples=num_samples,
                 mixture_samples=mixture_samples,
             ),
         )
-        # samples: (num_samples, O, K, D)
-        samples = samples.permute(2, 0, 1, 3)
+        # samples: (num_samples, E?, O, K, D)
+        samples = samples.movedim(0, -2).movedim(0, -2)
         # TODO: fix for the case of multi-output circuits, i.e., O != 1 or K != 1
-        samples = samples[:, 0, 0]  # (num_samples, D)
+        samples = samples[..., 0, 0, :]  # (num_samples, D)
+        if evidence is not None:
+            evidence = evidence[None,]
+            samples = samples.where(evidence.isnan(), evidence)
         return samples, mixture_samples
 
     def _layer_fn(
         self, layer: TorchLayer, *inputs: Tensor, num_samples: int, mixture_samples: list[Tensor]
     ) -> Tensor:
         # Sample from an input layer
-        if not inputs:
-            assert isinstance(layer, TorchInputLayer)
-            samples = layer.sample(num_samples)
-            samples = self._pad_samples(samples, layer.scope_idx)
+        if isinstance(layer, TorchInputLayer):
+            assert len(inputs) <= 1
+            samples = layer.sample_and_eval_evidence(num_samples, *inputs)
+            samples = self._pad_samples(samples, layer.scope_idx, value=layer.semiring.multiplicative_identity)
             mixture_samples.append(samples)
-            return samples
+            if len(inputs) == 1:
+                evidence = inputs[0][:, None].squeeze(-1)
+                evidence = self._pad_samples(evidence, layer.scope_idx, value=layer.semiring.multiplicative_identity)
+                evidence = evidence.unsqueeze(2)
+                evidence = evidence.expand_as(samples)
+                return samples, evidence
+            
+            return samples, 
 
         # Sample through an inner layer
+        assert len(inputs) == 1 or inputs[0].shape == inputs[1].shape
         assert isinstance(layer, TorchInnerLayer)
-        samples, mix_samples = layer.sample(*inputs)
-        if mix_samples is not None:
-            mixture_samples.append(mix_samples)
-        return samples
+        samples, *evidence_or_more = layer.sample(*inputs)
+        if len(evidence_or_more) == 2:  # Sum Layer
+            evidence, mix_samples = evidence_or_more
+            if mix_samples is not None:
+                mixture_samples.append(mix_samples)        
+        else:
+            evidence = evidence_or_more[0]
 
-    def _pad_samples(self, samples: Tensor, scope_idx: Tensor) -> Tensor:
+        if evidence is None:
+            return samples,
+
+        return samples, evidence
+
+    def _pad_samples(self, samples: Tensor, scope_idx: Tensor, value: float = 0) -> Tensor:
         """Pads univariate samples to the size of the scope of the circuit (output dimension)
         according to scope for compatibility in downstream inner nodes.
         """
         if scope_idx.shape[1] != 1:
             raise NotImplementedError("Padding is only implemented for univariate samples")
 
-        # padded_samples: (F, K, num_samples, D)
-        padded_samples = torch.zeros(
+        # padded_samples: (F, K, num_samples, E?, D)
+        padded_samples = torch.ones(
             (*samples.shape, len(self._circuit.scope)), device=samples.device, dtype=samples.dtype
-        )
+        ) * value
         fold_idx = torch.arange(samples.shape[0], device=samples.device)
-        padded_samples[fold_idx, :, :, scope_idx.squeeze(dim=1)] = samples
+        padded_samples[fold_idx, ..., scope_idx.squeeze(dim=1)] = samples
         return padded_samples
