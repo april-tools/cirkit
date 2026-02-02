@@ -422,7 +422,7 @@ class LSESumSemiring(SemiringImpl):
 class ComplexLSESumSemiring(SemiringImpl):
     """The complex log space computation."""
 
-    additive_identity: complex = float('-inf') + float('-inf')*1j
+    additive_identity: complex = float('-inf') + 0*1j
     multiplicative_identity: complex = 0
 
     @classmethod
