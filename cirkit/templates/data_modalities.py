@@ -226,12 +226,12 @@ def tabular_data(
 
     Raises:
         ValueError:
-          - If one of the names of the input layers is not known, or the related arguments.
-          - If the number of input layers (the length of the list) does not match the number
+            - If one of the names of the input layers is not known, or the related arguments.
+            - If the number of input layers (the length of the list) does not match the number
                 of features (`num_features` or inferred from `data`).
-          - If `region_graph="random-binary-tree"` but `num_features` is `None` and `data` is None.
-          - If `region_graph="chow-liu-tree"` but `data` is `None`.
-          - If `region_graph` is not one of the supported strings.
+            - If `region_graph="random-binary-tree"` but `num_features` is `None` and `data` is None.
+            - If `region_graph="chow-liu-tree"` but `data` is `None`.
+            - If `region_graph` is not one of the supported strings.
     """
 
     match region_graph:

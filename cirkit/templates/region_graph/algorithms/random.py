@@ -20,8 +20,8 @@ def RandomBinaryTree(
     """Construct a RG with random binary trees.
 
     See:
-        - *Random sum-product networks: A simple but effective approach to probabilistic deep learning.*  [🔗](https://proceedings.mlr.press/v115/peharz20a.html)  
-          Robert Peharz, Antonio Vergari, Karl Stelzner, Alejandro Molina, Xiaoting Shao, Martin Trapp, Kristian Kersting, and Zoubin Ghahramani.  
+        - *Random sum-product networks: A simple but effective approach to probabilistic deep learning.*  [🔗](https://proceedings.mlr.press/v115/peharz20a.html)
+          Robert Peharz, Antonio Vergari, Karl Stelzner, Alejandro Molina, Xiaoting Shao, Martin Trapp, Kristian Kersting, and Zoubin Ghahramani.
           In Uncertainty in Artificial Intelligence, pp. 334-344. PMLR, 2020.
 
     Args:

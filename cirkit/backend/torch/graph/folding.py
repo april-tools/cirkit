@@ -71,6 +71,34 @@ def build_folded_graph(
     list[TorchModuleT],
     FoldIndexInfo[TorchModuleT],
 ]:
+    """Find and apply all possible folding on a graph.
+
+    Args:
+        ordering (Iterable[list[TorchModuleT]]):
+            Module in the graph in the layerwise topological order.
+        outputs (Iterable[TorchModuleT]): Outputs of the graph.
+        incomings_fn (Callable[[TorchModuleT],Sequence[TorchModuleT]]):
+            Function returning the input modules of a given module.
+        fold_group_fn (Callable[[list[TorchModuleT]], TorchModuleT]):
+            Function returning a folded module givena group of modules.
+
+    Returns:
+        tuple[
+            list[TorchModuleT],
+            dict[TorchModuleT, list[TorchModuleT]],
+            list[TorchModuleT],
+            FoldIndexInfo[TorchModuleT],
+        ]:
+            - The final, potentially folded, modules.
+            - The adjacency list updated with the folded modules.
+            - The list of modules that acts as output of the graph.
+            - A `FoldIndexInfo` objects which stores the information necessary
+            to retrieve "locate" a unfolded module into the folded circuit.
+            It is basically a map between a module from the unfolded circuit
+            and a pair (id_folded_module, fold_id).
+
+
+    """
     # A useful data structure mapping each unfolded module to
     # (i) a 'fold_id' (a natural number) pointing to the module layer it is associated to; and
     # (ii) a 'slice_idx' (a natural number) within the output of the folded module,
@@ -130,12 +158,27 @@ def build_folded_graph(
     # Construct the sequence of folded output modules
     outputs = list(dict.fromkeys(modules[fi[0]] for fi in out_fold_idx))
 
-    return modules, in_modules, outputs, FoldIndexInfo(modules, in_fold_idx, out_fold_idx)
+    return (
+        modules,
+        in_modules,
+        outputs,
+        FoldIndexInfo(modules, in_fold_idx, out_fold_idx),
+    )
 
 
 def group_foldable_modules(
     modules: list[TorchModuleT],
 ) -> list[list[TorchModuleT]]:
+    """Groups module that can be folded together.
+
+    Args:
+        modules (list[TorchModuleT]): Modules from the same level in the graph's
+            layerwise topological ordering.
+
+    Returns:
+        list[list[TorchModuleT]]: List of grouped torch module that can be folded together.
+    """
+
     def _gather_fold_settings(module: AbstractTorchModule) -> tuple[Any, ...]:
         ss = [type(m), *m.fold_settings]
         for _, sub_module in module.sub_modules.items():

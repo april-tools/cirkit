@@ -251,7 +251,8 @@ class PICInnerNet(nn.Module):
             with torch.no_grad():
                 param = self()  # initialize tensor_parameter with PIC output
                 tensor_parameter._ptensor = param
-            # Register a forward hook that replaces the TensorParameter output with PICInnerNet output
+            # Register a forward hook that replaces the TensorParameter
+            # output with PICInnerNet output
             self._register_forward_hook(tensor_parameter)
 
     def _register_forward_hook(self, tensor_parameter: TorchTensorParameter) -> None:
@@ -473,9 +474,7 @@ def pc2qpc(
                     if num_dim == 0:
                         num_dim = 1
 
-                    z_quad, w_quad = zw_quadrature(
-                        integration_method=integration_method, nip=nip
-                    )
+                    z_quad, w_quad = zw_quadrature(integration_method=integration_method, nip=nip)
 
                     inner_net = PICInnerNet(
                         num_dim=num_dim,

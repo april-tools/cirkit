@@ -21,11 +21,11 @@ def ChowLiuTree(
     list of predecessors (Bayesian net) or as region graph (HCLT).
 
     See:
-        - *Approximating discrete probability distributions with dependence trees* [🔗](https://ieeexplore.ieee.org/abstract/document/1054142)  
-          CKCN Chow and Cong Liu.  
+        - *Approximating discrete probability distributions with dependence trees* [🔗](https://ieeexplore.ieee.org/abstract/document/1054142)
+          CKCN Chow and Cong Liu.
           In IEEE transactions on Information Theory, 14(3):462–467, 1968b.
 
-        - *What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?* [🔗](https://openreview.net/forum?id=Y7dRmpGiHj)  
+        - *What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?* [🔗](https://openreview.net/forum?id=Y7dRmpGiHj)
           Lorenzo Loconte and Antonio Mari and Gennaro Gala and Robert Peharz and Cassio de Campos and Erik Quaeghebeur and Gennaro Vessio and Antonio Vergari
           In Transactions on Machine Learning Research, 2025.
 

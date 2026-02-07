@@ -174,7 +174,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
         return scope
 
-    def smooth(self):
+    def smooth(self) -> "LogicalCircuit":
         """Convert the current graph to a smooth graph in place.
         see https://yoojungchoi.github.io/files/ProbCirc20.pdf and
         https://proceedings.neurips.cc/paper/2019/file/940392f5f32a7ade1cc201767cf83e31-Paper.pdf
