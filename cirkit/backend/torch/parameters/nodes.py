@@ -221,7 +221,7 @@ class TorchTensorParameter(TorchParameterInput):
 
 
 class TorchPointerParameter(TorchParameterInput):
-    """Reprensents fold based slices of an existing [TorchTensorParameter][cirkit.backend.torch.nodes.TorchTensorParameter].
+    """Reprensents fold based slices of an existing [TorchTensorParameter][cirkit.backend.torch.parameters.nodes.TorchTensorParameter].
     These slices can be:
     - A single fold index.
     - A list of potentially non contiguous fold index.
@@ -287,8 +287,8 @@ class TorchParameterOp(TorchParameterNode, ABC):
 
         Args:
             *in_shapes (tuple[int,...]): The shapes of each input that the
-            parameter accepts. **Important**: This shape does not include
-            the fold dimension : $(K_1,\dots,K_n)$.
+                parameter accepts. **Important**: This shape does not include
+                the fold dimension: $(K_1,\dots,K_n)$.
             num_folds: The number of folds used for all inputs.
         """
         super().__init__(num_folds=num_folds)

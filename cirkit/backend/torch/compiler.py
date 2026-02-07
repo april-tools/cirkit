@@ -213,7 +213,7 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         """Return the initialisation function corresponding to a symbolic initializer.
 
         Args:
-            layer (Initializer): Symbolic initializer.
+            initializer (Initializer): Symbolic initializer.
 
         Returns:
             Callable[[Tensor], Tensor]: Initialization function.

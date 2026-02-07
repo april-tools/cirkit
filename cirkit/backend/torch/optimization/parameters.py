@@ -30,7 +30,7 @@ class KroneckerOutParameterPattern(ParameterOptPatternDefn):
     It is used when performing the tensor dot trick on sum or dot layers that have
     weights coming from such node.
 
-    See [DenseKroneckerPattern][torch.cirkit.backend.optimization.layers.DenseKroneckerPattern].
+    See [DenseKroneckerPattern][cirkit.backend.torch.optimization.layers.DenseKroneckerPattern].
     """
 
     @classmethod

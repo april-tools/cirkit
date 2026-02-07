@@ -173,7 +173,7 @@ def group_foldable_modules(
 
     Args:
         modules (list[TorchModuleT]): Modules from the same level in the graph's
-        layerwise topological ordering.
+            layerwise topological ordering.
 
     Returns:
         list[list[TorchModuleT]]: List of grouped torch module that can be folded together.

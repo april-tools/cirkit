@@ -110,7 +110,7 @@ class GraphOptPatternDefn(Generic[TorchModuleT]):
 
         Returns:
             Sequence[Mapping[str, type[GraphOptPatternDefn]]]: List of dictionaries that
-             map layer's parameter names to a `ParameterOptPattern`
+                map layer's parameter names to a `ParameterOptPattern`
         """
         return ()
 
