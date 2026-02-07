@@ -120,6 +120,7 @@ GraphOptPattern = type[GraphOptPatternDefn[TorchModuleT]]
 
 class GraphOptMatch(Generic[TorchModuleT]):
     """Class storing data related to a single match:
+
     - pattern (GraphOptPattern[TorchModuleT]): the pattern of the match.
     - entries (Sequence[TorchModuleT]): Modules, from the graph being searched,
         matching the `entries` types of the pattern.
