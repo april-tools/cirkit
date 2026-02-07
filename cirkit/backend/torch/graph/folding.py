@@ -139,9 +139,7 @@ def build_folded_graph(
             # Check if we are folding input modules
             in_modules_idx: list[list[tuple[int, int]]]
             if in_group_modules[0]:
-                in_modules_idx = [
-                    [fold_idx[mi] for mi in msi] for msi in in_group_modules
-                ]
+                in_modules_idx = [[fold_idx[mi] for mi in msi] for msi in in_group_modules]
             else:
                 in_modules_idx = []
 
@@ -221,9 +219,7 @@ def build_address_book_stacked_entry(
     )
 
     # Build the bookkeeping entry
-    cum_fold_idx = [
-        [cum_module_ids[idx[0]] + idx[1] for idx in fi] for fi in in_fold_idx
-    ]
+    cum_fold_idx = [[cum_module_ids[idx[0]] + idx[1] for idx in fi] for fi in in_fold_idx]
 
     # Check if we are computing the output stacked address book entry
     # If so, then squeeze the fold dimension that is equal to one

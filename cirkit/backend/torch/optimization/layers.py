@@ -159,9 +159,7 @@ class TensorDotKroneckerPattern(LayerOptPatternDefn):
         return [{}]
 
 
-def apply_sum_collapse(
-    compiler: "TorchCompiler", match: LayerOptMatch
-) -> tuple[TorchSumLayer]:
+def apply_sum_collapse(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchSumLayer]:
     """Fuse two sum nodes together.
 
     This function simply develop the two node into one
@@ -200,9 +198,7 @@ def apply_sum_collapse(
     return (dense,)
 
 
-def apply_tucker(
-    compiler: "TorchCompiler", match: LayerOptMatch
-) -> tuple[TorchTuckerLayer]:
+def apply_tucker(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchTuckerLayer]:
     r"""Create a Tucker layer that compute the sum of a kronecker product.
 
     This optimization consists of rewriting the full operation in a single
@@ -261,9 +257,7 @@ def apply_tucker(
     return (tucker,)
 
 
-def apply_candecomp(
-    compiler: "TorchCompiler", match: LayerOptMatch
-) -> tuple[TorchCPTLayer]:
+def apply_candecomp(compiler: "TorchCompiler", match: LayerOptMatch) -> tuple[TorchCPTLayer]:
     r"""Construct the CPT layer fusing one Sum and one Hadamard layer.
 
     Args:

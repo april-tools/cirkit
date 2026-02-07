@@ -17,8 +17,8 @@ def QuadTree(shape: tuple[int, int, int], *, num_patch_splits: int = 2) -> Regio
     r"""Constructs a Quad Tree region graph.
 
     See:
-        - *Unifying and understanding overparameterized circuit representations via low-rank tensor decompositions.* [🔗](https://openreview.net/forum?id=1btutFdIya)  
-          Mari, Antonio, Gennaro Vessio, and Antonio Vergari.  
+        - *Unifying and understanding overparameterized circuit representations via low-rank tensor decompositions.* [🔗](https://openreview.net/forum?id=1btutFdIya)
+          Mari, Antonio, Gennaro Vessio, and Antonio Vergari.
           In The 6th Workshop on Tractable Probabilistic Modeling. 2023.
 
     Args:
@@ -41,8 +41,8 @@ def QuadGraph(shape: tuple[int, int, int]) -> RegionGraph:
     r"""Constructs a Quad Graph region graph.
 
     See:
-        - *Unifying and understanding overparameterized circuit representations via low-rank tensor decompositions.* [🔗](https://openreview.net/forum?id=1btutFdIya)  
-          Mari, Antonio, Gennaro Vessio, and Antonio Vergari.  
+        - *Unifying and understanding overparameterized circuit representations via low-rank tensor decompositions.* [🔗](https://openreview.net/forum?id=1btutFdIya)
+          Mari, Antonio, Gennaro Vessio, and Antonio Vergari.
           In The 6th Workshop on Tractable Probabilistic Modeling. 2023.
 
     Args:

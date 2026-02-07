@@ -182,9 +182,7 @@ class TorchCPTLayer(TorchInnerLayer):
         negative = torch.any(weight < 0.0)
         if negative:
             raise ValueError("Sampling only works with positive weights")
-        normalized = torch.allclose(
-            torch.sum(weight, dim=-1), torch.ones(1, device=weight.device)
-        )
+        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
@@ -290,9 +288,7 @@ class TorchTensorDotLayer(TorchInnerLayer):
         # x: (F, H=1, B, Ki) -> (F, B, Ki)
         x = x.squeeze(dim=1)
         # x: (F, B, Ki) -> (F, B, Kj, Kq) -> (F, B, Kq, Kj)
-        x = x.view(
-            x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units
-        )
+        x = x.view(x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units)
         x = x.permute(0, 1, 3, 2)
         # weight: (F, Kk, Kj)
         weight = self.weight()

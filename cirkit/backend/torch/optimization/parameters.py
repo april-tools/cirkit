@@ -124,9 +124,7 @@ def _emit_outer_reduce_flatten_parameter(
     in_idx1: tuple[int, ...] = tuple(range(len(in_shape1)))
     # in_idx2 = [0, 1, 2, ..., N + 1, ..., N - 1]
     in_idx2: tuple[int, ...] = (
-        tuple(range(outer_dim))
-        + (len(in_shape1),)
-        + tuple(range(outer_dim + 1, len(in_shape1)))
+        tuple(range(outer_dim)) + (len(in_shape1),) + tuple(range(outer_dim + 1, len(in_shape1)))
     )
     # Apply the reduction to the indices, as to get the output indices of the einsum
     reduce_idx: list[tuple[int] | tuple[int, int]] = (
@@ -139,9 +137,7 @@ def _emit_outer_reduce_flatten_parameter(
 
     # If we are reducing the dimension along which we compute the Kronecker product,
     # we just need an einsum
-    einsum = TorchEinsumParameter(
-        (in_shape1, in_shape2), einsum=(in_idx1, in_idx2, out_idx)
-    )
+    einsum = TorchEinsumParameter((in_shape1, in_shape2), einsum=(in_idx1, in_idx2, out_idx))
     if outer_dim == reduce_dim:
         return (einsum,)
 
@@ -178,9 +174,7 @@ def apply_sum_outer_prod_einsum(  # pylint: disable=unused-argument
         raise NotImplementedError()
     outer_dim = outer_prod.dim
     reduce_dim = reduce_sum.dim
-    return _emit_outer_reduce_flatten_parameter(
-        in_shape1, in_shape2, outer_dim, reduce_dim
-    )
+    return _emit_outer_reduce_flatten_parameter(in_shape1, in_shape2, outer_dim, reduce_dim)
 
 
 DEFAULT_PARAMETER_OPT_RULES: Mapping[ParameterOptPattern, ParameterOptApplyFunc] = {

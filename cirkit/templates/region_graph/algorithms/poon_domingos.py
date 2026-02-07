@@ -24,8 +24,8 @@ def PoonDomingos(
     r"""Constructs a region graph with the Poon-Domingos structure.
 
     See:
-        - *Sum-Product Networks: A New Deep Architecture* [🔗](https://arxiv.org/abs/1202.3732)  
-          Hoifung Poon and Pedro Domingos.  
+        - *Sum-Product Networks: A New Deep Architecture* [🔗](https://arxiv.org/abs/1202.3732)
+          Hoifung Poon and Pedro Domingos.
           In Uncertainty in Artificial Intelligence 2011.
 
     Args:

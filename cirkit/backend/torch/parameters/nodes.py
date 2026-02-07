@@ -256,9 +256,7 @@ class TorchPointerParameter(TorchParameterInput):
         super().__init__(num_folds=num_folds)
         self._parameter = parameter
         self._fold_idx: Tensor
-        self.register_buffer(
-            "_fold_idx", None if fold_idx is None else torch.tensor(fold_idx)
-        )
+        self.register_buffer("_fold_idx", None if fold_idx is None else torch.tensor(fold_idx))
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -886,9 +884,7 @@ class TorchGaussianProductMean(TorchParameterOp):
             "in_stddev2_shape": self.in_shapes[3],
         }
 
-    def forward(
-        self, mean1: Tensor, stddev1: Tensor, mean2: Tensor, stddev2: Tensor
-    ) -> Tensor:
+    def forward(self, mean1: Tensor, stddev1: Tensor, mean2: Tensor, stddev2: Tensor) -> Tensor:
         var1 = torch.square(stddev1)  # (F, K1, C)
         var2 = torch.square(stddev2)  # (F, K2, C)
         inv_var12 = torch.reciprocal(
@@ -976,9 +972,7 @@ class TorchGaussianProductLogPartition(TorchParameterOp):
         var2 = torch.square(stddev2)  # (F, K2, C)
         var12 = var1.unsqueeze(dim=2) + var2.unsqueeze(dim=1)  # (F, K1, K2, C)
         inv_var12 = torch.reciprocal(var12)
-        sq_mahalanobis = (
-            torch.square(mean1.unsqueeze(dim=2) - mean2.unsqueeze(dim=1)) * inv_var12
-        )
+        sq_mahalanobis = torch.square(mean1.unsqueeze(dim=2) - mean2.unsqueeze(dim=1)) * inv_var12
         log_partition = -0.5 * (self._log_two_pi + torch.log(var12) + sq_mahalanobis)
         return log_partition.view(-1, *self.shape)  # (F, K1 * K2, C)
 
@@ -1003,9 +997,7 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
             fft = torch.fft.rfft
             ifft = torch.fft.irfft
 
-        degp1 = (
-            x1.shape[-1] + x2.shape[-1] - 1
-        )  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
+        degp1 = x1.shape[-1] + x2.shape[-1] - 1  # deg1p1 + deg2p1 - 1 = (deg1 + deg2) + 1.
 
         spec1 = fft(x1, n=degp1, dim=-1)  # shape (F, K1, dp1).
         spec2 = fft(x2, n=degp1, dim=-1)  # shape (F, K2, dp1).
@@ -1019,9 +1011,7 @@ class TorchPolynomialProduct(TorchBinaryParameterOp):
 
 
 class TorchPolynomialDifferential(TorchUnaryParameterOp):
-    def __init__(
-        self, in_shape: tuple[int, ...], *, num_folds: int = 1, order: int = 1
-    ) -> None:
+    def __init__(self, in_shape: tuple[int, ...], *, num_folds: int = 1, order: int = 1) -> None:
         if order <= 0:
             raise ValueError("The order of differentiation must be positive.")
         super().__init__(in_shape, num_folds=num_folds)
@@ -1032,9 +1022,7 @@ class TorchPolynomialDifferential(TorchUnaryParameterOp):
         # if dp1>order, i.e., deg>=order, then diff, else const 0.
         return (
             self.in_shapes[0][0],
-            self.in_shapes[0][1] - self.order
-            if self.in_shapes[0][1] > self.order
-            else 1,
+            self.in_shapes[0][1] - self.order if self.in_shapes[0][1] > self.order else 1,
         )
 
     @classmethod

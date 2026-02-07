@@ -307,9 +307,7 @@ def optimize_graph(
             for i, om in enumerate(opt_modules):
                 if not i:
                     in_modules[om] = [
-                        match_exit_points[module_matches[mi]]
-                        if mi in module_matches
-                        else mi
+                        match_exit_points[module_matches[mi]] if mi in module_matches else mi
                         for mi in incomings_fn(match_entry_points[match])
                     ]
                 else:
@@ -320,8 +318,7 @@ def optimize_graph(
 
     # Retrieve the sequence of output modules of the computational graph
     opt_outputs = [
-        match_exit_points[module_matches[m]] if m in module_matches else m
-        for m in outputs
+        match_exit_points[module_matches[m]] if m in module_matches else m for m in outputs
     ]
 
     return modules, in_modules, opt_outputs
@@ -336,9 +333,7 @@ def match_optimization_patterns(
     outcomings_fn: Callable[[TorchModuleT], Sequence[TorchModuleT]],
     pattern_matcher_fn: PatternMatcherFunc[TorchModuleT],
     strategy: OptMatchStrategy = OptMatchStrategy.LARGEST_MATCH,
-) -> tuple[
-    list[GraphOptMatch[TorchModuleT]], dict[TorchModuleT, GraphOptMatch[TorchModuleT]]
-]:
+) -> tuple[list[GraphOptMatch[TorchModuleT]], dict[TorchModuleT, GraphOptMatch[TorchModuleT]]]:
     """Find and filter sections of a graph matching patterns.
     The function works as follows:
     1. Use `pattern_matcher_function` to retrieve all matches
@@ -367,9 +362,7 @@ def match_optimization_patterns(
     outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
 
     # A map from modules to the list of found matches they belong to
-    module_matches: dict[TorchModuleT, list[GraphOptMatch[TorchModuleT]]] = defaultdict(
-        list
-    )
+    module_matches: dict[TorchModuleT, list[GraphOptMatch[TorchModuleT]]] = defaultdict(list)
 
     # For each given pattern, match it on the graph
     for pattern in patterns:
