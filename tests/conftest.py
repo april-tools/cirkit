@@ -18,6 +18,6 @@ def _setup_global_state() -> None:
     torch.backends.cudnn.benchmark = False
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     # Use high precision computation.
-    torch.set_default_dtype(torch.float64)  # type: ignore[no-untyped-call]
+    torch.set_default_dtype(torch.float64)
     # Disable autograd because we do not need it in most cases.
     torch.set_grad_enabled(False)
