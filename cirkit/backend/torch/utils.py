@@ -10,7 +10,7 @@ from torch import Tensor, autograd
 class SafeLog(autograd.Function):
     @staticmethod
     def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
-        return torch.log(x)
+        return torch.log(x).clamp_min(-708.3964185322641)
 
     @staticmethod
     def setup_context(  # pylint: disable=arguments-differ
@@ -32,7 +32,11 @@ safelog = SafeLog.apply
 class ComplexSafeLog(autograd.Function):
     @staticmethod
     def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
-        return torch.log(x)
+        y =  torch.log(x)
+        y.real.clamp_min_(-708.3964185322641)
+        y.imag.clamp_min_(-708.3964185322641)
+        return y
+
 
     @staticmethod
     def setup_context(  # pylint: disable=arguments-differ
