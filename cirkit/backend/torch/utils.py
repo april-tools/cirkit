@@ -34,7 +34,8 @@ class ComplexSafeLog(autograd.Function):
     def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         y =  torch.log(x)
         y.real.clamp_min_(-708.3964185322641)
-        y.imag.clamp_min_(-708.3964185322641)
+        if torch.is_complex(y):
+            y.imag.clamp_min_(-708.3964185322641)
         return y
 
 
