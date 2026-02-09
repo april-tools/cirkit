@@ -183,8 +183,10 @@ class TorchCPTLayer(TorchInnerLayer):
             ev_prob = x.select(2, 0).masked_fill(evidence.select(2, 0).isnan(), self.semiring.multiplicative_identity)
             ev_prob = self.semiring.prod(ev_prob, dim=-1).movedim(-1, 1).flatten(start_dim=2)
             ev_prob = SumProductSemiring.map_from(ev_prob, self.semiring)
-            weight = weight.unsqueeze(2) * ev_prob.unsqueeze(1)
-            weight /= weight.sum(-1, keepdim=True)
+            weight = self.semiring.map_from(weight, SumProductSemiring)
+            weight = self.semiring.mul(weight.unsqueeze(2), ev_prob.unsqueeze(1))
+            weight = self.semiring.div(weight, self.semiring.sum(weight, dim=-1, keepdim=True))
+            weight = SumProductSemiring.map_from(weight, self.semiring)
         
         negative = torch.any(weight < 0.0)
         if negative:

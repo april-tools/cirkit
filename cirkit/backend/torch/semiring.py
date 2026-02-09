@@ -274,6 +274,19 @@ class SemiringImpl(ABC):
 
     @classmethod
     @abstractmethod
+    def div(cls, x1: Tensor, x2: Tensor) -> Tensor:
+        """Divide broadcastable tensors, x1 / x2.
+
+        Args:
+            x1 (Tensor): The input "numerator" tensor.
+            x2 (Tensor): The input "denominator" tensor.
+
+        Returns:
+            Tensor: The divide result.
+        """
+
+    @classmethod
+    @abstractmethod
     def apply_reduce(
         cls,
         func: EinsumFunc,
@@ -347,6 +360,10 @@ class SumProductSemiring(SemiringImpl):
         return functools.reduce(torch.mul, xs)
 
     @classmethod
+    def div(cls, x1: Tensor, x2: Tensor) -> Tensor:
+        return x1 / x2
+
+    @classmethod
     def apply_reduce(
         cls,
         func: EinsumFunc,
@@ -388,6 +405,10 @@ class LSESumSemiring(SemiringImpl):
     @classmethod
     def mul(cls, *xs: Tensor) -> Tensor:
         return functools.reduce(torch.add, xs)
+        
+    @classmethod
+    def div(cls, x1: Tensor, x2: Tensor) -> Tensor:
+        return x1 - x2
 
     @classmethod
     def apply_reduce(
@@ -449,7 +470,11 @@ class ComplexLSESumSemiring(SemiringImpl):
     @classmethod
     def mul(cls, *xs: Tensor) -> Tensor:
         return functools.reduce(torch.add, xs)
-
+        
+    @classmethod
+    def div(cls, x1: Tensor, x2: Tensor) -> Tensor:
+        return x1 - x2
+        
     @classmethod
     def apply_reduce(
         cls,
