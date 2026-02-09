@@ -172,19 +172,23 @@ class TorchCPTLayer(TorchInnerLayer):
         )
 
     @torch.no_grad()
-    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor, ev_score: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, Tensor | None, Tensor | None]:
         # x: (F, H, K, num_samples, E?, D)
         x = self.semiring.prod(x, dim=1)  # (F, K, num_samples, E?, D)
         
         weight = self.weight()
-        if evidence is not None:
-            evidence = self.semiring.prod(evidence, dim=1)
-            # The evidence is repeated for all B, so just pick the first
-            ev_prob = x.select(2, 0).masked_fill(evidence.select(2, 0).isnan(), self.semiring.multiplicative_identity)
-            ev_prob = self.semiring.prod(ev_prob, dim=-1).movedim(-1, 1).flatten(start_dim=2)
-            ev_prob = SumProductSemiring.map_from(ev_prob, self.semiring)
-            weight = weight.unsqueeze(2) * ev_prob.unsqueeze(1)
-            weight /= weight.sum(-1, keepdim=True)
+        if ev_score is not None:
+            ev_score = self.semiring.prod(ev_score, dim=1)
+            ev_mask = ev_mask.any(dim=1)
+
+            # The ev_score is repeated for all B, so just pick the first
+            score = ev_score.select(2, 0).masked_fill(~ev_mask.select(2, 0), self.semiring.multiplicative_identity)
+            score = self.semiring.prod(score, dim=-1).movedim(-1, 1).flatten(start_dim=2)
+            score = SumProductSemiring.map_from(score, self.semiring)
+            weight = self.semiring.map_from(weight, SumProductSemiring)
+            weight = self.semiring.mul(weight.unsqueeze(2), score.unsqueeze(1))
+            weight = self.semiring.div(weight, self.semiring.sum(weight, dim=-1, keepdim=True))
+            weight = SumProductSemiring.map_from(weight, self.semiring)
         
         negative = torch.any(weight < 0.0)
         if negative:
@@ -203,9 +207,10 @@ class TorchCPTLayer(TorchInnerLayer):
         mixing_indices = mixing_samples.unsqueeze(-1).repeat([1] * len(mixing_samples.shape) + [d])
 
         x = torch.gather(x, dim=1, index=mixing_indices)
-        if evidence is not None:
-            evidence = evidence[:, :1].expand_as(x)
-        return x, evidence, mixing_samples
+        if ev_score is not None:
+            ev_score = ev_score[:, :1].expand_as(x)
+            ev_mask = ev_mask[:, :1].expand_as(x)
+        return x, ev_score, ev_mask, mixing_samples
 
 
 class TorchTensorDotLayer(TorchInnerLayer):

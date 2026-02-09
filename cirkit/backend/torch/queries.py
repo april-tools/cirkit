@@ -208,13 +208,13 @@ class SamplingQuery(Query):
         super().__init__()
         self._circuit = circuit
 
-    def __call__(self, num_samples: int = 1, evidence: Tensor | None = None) -> tuple[Tensor, list[Tensor]]:
+    def __call__(self, num_samples: int = 1, evidence: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points.
 
         Args:
             num_samples: The number of samples to return.
-            evidence:    The evidence to conditionally generate samples from of size (num_evidence, num_variables)
-                         and where values not to condition on must be NaNs
+            evidence:    The evidence to conditionally generate samples from of size (num_evidence, num_variables).
+            ev_mask:     The mask of which variables _are_ evidence and which ones are not.
 
         Return:
             A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
@@ -228,11 +228,13 @@ class SamplingQuery(Query):
         """
         if num_samples <= 0:
             raise ValueError("The number of samples must be a positive number")
+
+        assert (evidence is None) == (ev_mask is None), "Both evidence and evidence_mask should be None or not simultaneously."
             
         mixture_samples: list[Tensor] = []
         # samples: (O, K, num_samples, E?, D)
         samples = self._circuit.evaluate(
-            *([evidence] if evidence is not None else []), 
+            *([evidence, ev_mask] if evidence is not None else []), 
             module_fn=functools.partial(
                 self._layer_fn,
                 num_samples=num_samples,
@@ -245,7 +247,7 @@ class SamplingQuery(Query):
         samples = samples[..., 0, 0, :]  # (num_samples, D)
         if evidence is not None:
             evidence = evidence[None,]
-            samples = samples.where(evidence.isnan(), evidence)
+            samples = samples.where(~ev_mask, evidence)
         return samples, mixture_samples
 
     def _layer_fn(
@@ -253,34 +255,39 @@ class SamplingQuery(Query):
     ) -> Tensor:
         # Sample from an input layer
         if isinstance(layer, TorchInputLayer):
-            assert len(inputs) <= 1
-            samples = layer.sample_and_eval_evidence(num_samples, *inputs)
+            assert len(inputs) <= 2
+            samples, ev_score = layer.sample_and_eval_evidence(num_samples, *inputs)
             samples = self._pad_samples(samples, layer.scope_idx, value=layer.semiring.multiplicative_identity)
             mixture_samples.append(samples)
-            if len(inputs) == 1:
-                evidence = inputs[0][:, None].squeeze(-1)
-                evidence = self._pad_samples(evidence, layer.scope_idx, value=layer.semiring.multiplicative_identity)
-                evidence = evidence.unsqueeze(2)
-                evidence = evidence.expand_as(samples)
-                return samples, evidence
+            if len(inputs) == 2:
+                ev_score = self._pad_samples(ev_score, layer.scope_idx, value=layer.semiring.multiplicative_identity)
+                ev_score = ev_score.expand_as(samples)
+                assert ev_score.shape == samples.shape
+
+                ev_mask = inputs[1][:, None].squeeze(-1)
+                ev_mask = self._pad_samples(ev_mask, layer.scope_idx, value=False)
+                ev_mask = ev_mask.unsqueeze(2).expand_as(samples)
+                assert ev_mask.shape == samples.shape
+                
+                return samples, ev_score, ev_mask
             
             return samples, 
 
         # Sample through an inner layer
         assert len(inputs) == 1 or inputs[0].shape == inputs[1].shape
         assert isinstance(layer, TorchInnerLayer)
-        samples, *evidence_or_more = layer.sample(*inputs)
-        if len(evidence_or_more) == 2:  # Sum Layer
-            evidence, mix_samples = evidence_or_more
+        samples, *args = layer.sample(*inputs)
+        if len(args) == 3:  # Sum Layer
+            ev_score, ev_mask, mix_samples = args
             if mix_samples is not None:
                 mixture_samples.append(mix_samples)        
         else:
-            evidence = evidence_or_more[0]
+            ev_score, ev_mask = args[:2]
 
-        if evidence is None:
+        if ev_score is None:
             return samples,
 
-        return samples, evidence
+        return samples, ev_score, ev_mask
 
     def _pad_samples(self, samples: Tensor, scope_idx: Tensor, value: float = 0) -> Tensor:
         """Pads univariate samples to the size of the scope of the circuit (output dimension)
