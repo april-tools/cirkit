@@ -408,7 +408,7 @@ class LSESumSemiring(SemiringImpl):
         
     @classmethod
     def div(cls, x1: Tensor, x2: Tensor) -> Tensor:
-        return x1 - x2
+        return (x1 - x2).clamp_min(-708.3964185322641)
 
     @classmethod
     def apply_reduce(
@@ -473,8 +473,10 @@ class ComplexLSESumSemiring(SemiringImpl):
         
     @classmethod
     def div(cls, x1: Tensor, x2: Tensor) -> Tensor:
-        return x1 - x2
-        
+        y = x1 - x2
+        _clamp_complex(y)
+        return y
+
     @classmethod
     def apply_reduce(
         cls,
