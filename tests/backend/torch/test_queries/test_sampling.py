@@ -110,13 +110,13 @@ def test_query_conditional_sampling(fold: bool, optimize: bool, semiring: str):
 
 
     evidence = samples.clone().to(dtype=torch.get_default_dtype())
-    evidence[torch.randn_like(samples.float()) < 0.5] = float('nan')
-    cond_samples, _ = query(num_samples=7, evidence=evidence)
+    ev_mask = torch.randn_like(samples.float()) > 0.5
+    cond_samples, _ = query(num_samples=7, evidence=evidence, ev_mask=ev_mask)
 
     assert cond_samples.shape[0] == 7 and cond_samples.shape[1:] == evidence.shape
     assert torch.allclose(
-        cond_samples[~evidence.isnan().unsqueeze(0).repeat(7,1,1)], 
-        evidence[~evidence.isnan()].unsqueeze(0).repeat(7,1,1).flatten()
+        cond_samples[ev_mask.unsqueeze(0).repeat(7,1,1)], 
+        evidence[ev_mask].unsqueeze(0).repeat(7,1,1).flatten()
     )
     
     # Map samples to indices of the probabilities computed above
@@ -129,10 +129,11 @@ def test_query_conditional_sampling(fold: bool, optimize: bool, semiring: str):
     _, counts = torch.unique(samples_idx, return_counts=True)
     ratios = counts / mask.sum()
 
-    evidence = [float('nan')] * 5
-    evidence[0] = 0
+    evidence = [0] * 5
     evidence = torch.tensor(evidence)[None,]
-    samples, _ = query(num_samples=num_samples, evidence=evidence)
+    ev_mask = torch.tensor([False] * 5)[None,]
+    ev_mask[:, 0] = True
+    samples, _ = query(num_samples=num_samples, evidence=evidence, ev_mask=ev_mask)
     samples = samples.flatten(end_dim=1)
     samples_idx = samples * torch.tensor(list(reversed([2**i for i in range(tc.num_variables)])))
     samples_idx = torch.sum(samples_idx, dim=-1)
@@ -165,13 +166,13 @@ def test_query_conditional_sampling_image_pc(fold: bool, optimize: bool, semirin
 
     sampling_query = SamplingQuery(tc)
     evidence = torch.randn((10, 3*3))
-    evidence[evidence < 0] = float('nan')
-    samples, _ = sampling_query(num_samples=3, evidence=evidence)
+    ev_mask = evidence < 0
+    samples, _ = sampling_query(num_samples=3, evidence=evidence, ev_mask=ev_mask)
 
     # This test is only checking the tensor shape for now.
     assert samples.shape == torch.Size([3, 10, 1*3*3])
     assert torch.allclose(
-        samples[~evidence.isnan().unsqueeze(0).repeat(3,1,1)], 
-        evidence[~evidence.isnan()].unsqueeze(0).repeat(3,1,1).flatten()
+        samples[ev_mask.unsqueeze(0).repeat(3,1,1)], 
+        evidence[ev_mask].unsqueeze(0).repeat(3,1,1).flatten()
     )
     

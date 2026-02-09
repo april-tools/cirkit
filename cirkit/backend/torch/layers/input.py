@@ -92,13 +92,13 @@ class TorchInputLayer(TorchLayer, ABC):
         raise TypeError(f"Integration is not supported for layers of type {type(self)}")
 
     @torch.no_grad()
-    def sample(self, num_samples: int = 1, evidence: Tensor | None = None) -> Tensor:
+    def sample(self, num_samples: int = 1, evidence: Tensor | None = None, ev_mask: Tensor | None = None) -> Tensor:
         r"""If the input layer encodes a probability distribution, then sample from it.
 
         Args:
             num_samples: The number of data points to sample.
-            evidence: Observed evidence tensor of shize [..., K] for conditional sampling,
-                    with NaNs if unobserved. Observed values are copied to the samples.
+            evidence: Observed evidence tensor of shize [..., K] for conditional sampling.
+            ev_mask: Mask with observed values.
 
         Returns:
             Tensor: The tensorized sample, having shape $(F, K, N)$, where
@@ -113,10 +113,7 @@ class TorchInputLayer(TorchLayer, ABC):
         
         # samples: (sample_shape, F, K)
         samples = self.sample_(sample_shape)
-        if evidence is not None:  # TODO Document this behaviour (setting 1 all evidence to as if marginalized out)
-            reshaped_evidence = evidence.permute(-2, *range(len(evidence.shape)-2), -1).unsqueeze(0)
-            samples = samples.where(torch.isnan(reshaped_evidence), reshaped_evidence)
-
+        
         rearrange = lambda x: x.flatten(end_dim=-3).flatten(start_dim=1).T.view(x.shape[-2:] + x.shape[:-2])
         samples = rearrange(samples) # (F, K, sample_shape)
         return samples
@@ -125,19 +122,19 @@ class TorchInputLayer(TorchLayer, ABC):
         raise TypeError(f"Sampling is not supported for layers of type {type(self)}")
 
     @torch.no_grad()
-    def sample_and_eval_evidence(self, num_samples: int, evidence: Tensor | None = None):
+    def sample_and_eval_evidence(self, num_samples: int, evidence: Tensor | None = None, ev_mask: Tensor | None = None):
         """
             This function samples from the input distribution and then fill the entries
             that correspond to the evidence inputs with their probability (in the semiring space)
         """
         if evidence is None:
-            return self.sample(num_samples)
+            return self.sample(num_samples), None
 
-        prob_or_logprob = self(evidence.where(~evidence.isnan(), self.sample()[:,:1]))  # Replace by valid values (n_samples = 1)
-        # prob_or_logprob = torch.ones_like(prob_or_logprob) * float('inf')
-        samples = self.sample(num_samples, evidence * 0 + prob_or_logprob)  # Sample and put the (log)prob only where there is evidence
+        samples = self.sample(num_samples, evidence, ev_mask) 
+        score = self(evidence.where(ev_mask, self.sample()[:,:1]))  # Replace by valid values (n_samples = 1)
+        score = score.movedim(-1, -2).unsqueeze(-2)
         
-        return samples
+        return samples, score
 
 
     def extra_repr(self) -> str:

@@ -63,7 +63,7 @@ class TorchInnerLayer(TorchLayer, ABC):
                 is the number of output units.
         """
 
-    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
+    def sample(self, x: Tensor, ev_score: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
         """Perform a forward sampling step.
 
         Args:
@@ -71,7 +71,8 @@ class TorchInnerLayer(TorchLayer, ABC):
                 $(F, H, C, K, N, D)$, where $F$ is the number of folds, $H$ is the arity,
                 $C$ is the number of channels, $K$ is the numbe rof input units, $N$ is the number
                 of samples, $D$ is the number of variables.
-            evidence: Book tensor of size $(F, H, C, K, N, D)$ indicating what variables are evidence.
+            ev_score: A tensor of size $(F, H, C, K, N, D)$ with the evidence scores.
+            ev_mask: A tensor of the same size as ev_score indicating what values are observed.
 
         Returns:
             Tensor: A new tensor representing the new variable assignements the layers gives
@@ -128,16 +129,17 @@ class TorchHadamardLayer(TorchInnerLayer):
         return self.semiring.prod(x, dim=1, keepdim=False)  # shape (F, H, B, K) -> (F, B, K).
 
     @torch.no_grad()
-    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, None]:
+    def sample(self, x: Tensor, ev_score: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, Tensor | None, Tensor | None]:
         # Concatenate samples over disjoint variables through a sum
         # x: (F, H, K, num_samples, D)
         # All elements but 1 in the H axis will be "1" (in the semiring)
         x = self.semiring.prod(x, dim=1)  # (F, K, num_samples, D)
-        if evidence is None:
-            return x, None
+        if ev_score is None:
+            return x, None, None
 
-        evidence = self.semiring.prod(evidence, dim=1)
-        return x, evidence
+        ev_score = self.semiring.prod(ev_score, dim=1)
+        ev_mask = ev_mask.any(dim=1)
+        return x, ev_score, ev_mask
 
 
 class TorchKroneckerLayer(TorchInnerLayer):
@@ -194,21 +196,22 @@ class TorchKroneckerLayer(TorchInnerLayer):
         return y0
 
     @torch.no_grad()
-    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
+    def sample(self, x: Tensor, ev_score: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, Tensor | None, Tensor | None]:
         # x:        (F, H, K, num_samples, E?, D)
         # evidence: (F, H, K, num_samples, E, D)
         y0 = x[:, 0]
-        evidence = evidence[:, :, :1, :1] # Evidence should be exactly the same for K and num_samples
+        ev_score = ev_score[:, :, :1, :1] # ev_score should be exactly the same for K and num_samples
+        ev_mask = ev_mask[:, :, :1, :1] # ev_mask should be exactly the same for K and num_samples
         for i in range(1, x.shape[1]):
             y0 = y0.unsqueeze(dim=3)  # (F, K, 1, num_samples, D)
             y1 = x[:, i].unsqueeze(dim=2)  # (F, 1, Ki, num_samples, D)
             y0 = torch.flatten(self.semiring.mul(y0, y1), start_dim=2, end_dim=3)
         # y0: (F, Ko=Ki ** arity, num_samples, D)
-        if evidence is None:
-            return y0, None
+        if ev_score is None:
+            return y0, None, None
 
         raise NotImplementedError("This needs to be properly implemented :)")
-        return y0, evidence
+        return y0, ev_score, ev_mask
 
 
 class TorchSumLayer(TorchInnerLayer):
@@ -287,19 +290,19 @@ class TorchSumLayer(TorchInnerLayer):
         )  # shape (F, B, K_o).
 
     @torch.no_grad()
-    def sample(self, x: Tensor, evidence: Tensor | None = None) -> tuple[Tensor, Tensor]:
+    def sample(self, x: Tensor, ev_score: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, Tensor | None, Tensor | None]:
         # F = Fold, H = Arity, Ki = Input Dim, Ko = Output Dim, B = Batch size, E = Evidence size, D = Data dim
         # x:        (F, H, Ki, B, E?, D)
-        # evidence: (F, H, Ki, B, E, D)
+        # ev_score: (F, H, Ki, B, E, D)
         # weight:   (F, Ko, H * Ki)
         weight = self.weight()
-        if evidence is not None:
-            # The evidence is repeated for all B, so just pick the first
+        if ev_score is not None:
+            # The ev_score is repeated for all B, so just pick the first
             # Replace observations (samples) with 1s (in the semiring space)
-            ev_prob = x.select(3, 0).masked_fill(evidence.select(3, 0).isnan(), self.semiring.multiplicative_identity)
-            ev_prob = self.semiring.prod(ev_prob, dim=-1).movedim(-1, 1).flatten(start_dim=2)
+            score = ev_score.select(3, 0).masked_fill(~ev_mask.select(3, 0), self.semiring.multiplicative_identity)
+            score = self.semiring.prod(score, dim=-1).movedim(-1, 1).flatten(start_dim=2)
             weight = self.semiring.map_from(weight, SumProductSemiring)
-            weight = self.semiring.mul(weight.unsqueeze(2), ev_prob.unsqueeze(1))
+            weight = self.semiring.mul(weight.unsqueeze(2), score.unsqueeze(1))
             weight = self.semiring.div(weight, self.semiring.sum(weight, dim=-1, keepdim=True))
             weight = SumProductSemiring.map_from(weight, self.semiring)
             
@@ -329,8 +332,12 @@ class TorchSumLayer(TorchInnerLayer):
         x = torch.gather(x, dim=1, index=mixing_indices)
 
         # (F, Ko, E, D)
-        if evidence is not None:
-            evidence = evidence.flatten(1, 2)
-            evidence = evidence[:, :1].expand_as(x)
-        return x, evidence, mixing_samples
+        if ev_score is not None:
+            ev_score = ev_score.flatten(1, 2)
+            ev_score = ev_score[:, :1].expand_as(x)
+
+            ev_mask = ev_mask.flatten(1, 2)
+            ev_mask = ev_mask[:, :1].expand_as(x)
+
+        return x, ev_score, ev_mask, mixing_samples
         
