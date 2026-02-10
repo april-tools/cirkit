@@ -247,7 +247,7 @@ class SamplingQuery(Query):
         samples = samples[..., 0, 0, :]  # (num_samples, D)
         if evidence is not None:
             evidence = evidence[None,]
-            samples = samples.where(~ev_mask, evidence)
+            samples = samples.where(~ev_mask[None,], evidence)
         return samples, mixture_samples
 
     def _layer_fn(

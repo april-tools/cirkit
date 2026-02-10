@@ -208,7 +208,7 @@ class TorchCPTLayer(TorchInnerLayer):
 
         x = torch.gather(x, dim=1, index=mixing_indices)
         if ev_score is not None:
-            ev_score = ev_score[:, :1].expand_as(x)
+            ev_score = torch.gather(ev_score, dim=1, index=mixing_indices)
             ev_mask = ev_mask[:, :1].expand_as(x)
         return x, ev_score, ev_mask, mixing_samples
 
