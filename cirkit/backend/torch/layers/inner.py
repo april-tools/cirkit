@@ -334,7 +334,7 @@ class TorchSumLayer(TorchInnerLayer):
         # (F, Ko, E, D)
         if ev_score is not None:
             ev_score = ev_score.flatten(1, 2)
-            ev_score = ev_score[:, :1].expand_as(x)
+            ev_score = torch.gather(ev_score, dim=1, index=mixing_indices)
 
             ev_mask = ev_mask.flatten(1, 2)
             ev_mask = ev_mask[:, :1].expand_as(x)
