@@ -172,15 +172,16 @@ class TorchCPTLayer(TorchInnerLayer):
         )
 
     @torch.no_grad()
-    def sample(self, x: Tensor, ev_score: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, Tensor | None, Tensor | None]:
+    def sample(self, x: Tensor, ev_score: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
         # x: (F, H, K, num_samples, E?, D)
         x = self.semiring.prod(x, dim=1)  # (F, K, num_samples, E?, D)
         
         weight = self.weight()
         if ev_score is not None:
-            ev_score = self.semiring.prod(ev_score, dim=1)
-            ev_mask = ev_mask.any(dim=1)
-
+            ev_mask = (~ev_score.isnan()).any(dim=1)
+            ev_score = self.semiring.prod(ev_score.nan_to_num_(self.semiring.multiplicative_identity), dim=1)
+            ev_score[~ev_mask.expand_as(ev_score)] = torch.nan
+        
             # The ev_score is repeated for all B, so just pick the first
             score = ev_score.select(2, 0).masked_fill(~ev_mask.select(2, 0), self.semiring.multiplicative_identity)
             score = self.semiring.prod(score, dim=-1).movedim(-1, 1).flatten(start_dim=2)
@@ -209,8 +210,7 @@ class TorchCPTLayer(TorchInnerLayer):
         x = torch.gather(x, dim=1, index=mixing_indices)
         if ev_score is not None:
             ev_score = torch.gather(ev_score, dim=1, index=mixing_indices)
-            ev_mask = ev_mask[:, :1].expand_as(x)
-        return x, ev_score, ev_mask, mixing_samples
+        return x, ev_score, mixing_samples
 
 
 class TorchTensorDotLayer(TorchInnerLayer):

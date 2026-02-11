@@ -132,6 +132,7 @@ class TorchInputLayer(TorchLayer, ABC):
 
         samples = self.sample(num_samples, evidence, ev_mask) 
         score = self(evidence.where(ev_mask, self.sample()[:,:1]))  # Replace by valid values (n_samples = 1)
+        score[~ev_mask.expand_as(score)] = torch.nan
         score = score.movedim(-1, -2).unsqueeze(-2)
         
         return samples, score
