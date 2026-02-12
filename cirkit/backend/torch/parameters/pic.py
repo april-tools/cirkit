@@ -102,6 +102,7 @@ class PICInputNet(nn.Module):
         z_quad: torch.Tensor | None = None,
         tensor_parameter: TorchTensorParameter | None = None,
         reparam: TorchParameterOp | None = None,
+        num_channels: int | None = 1,
     ):
         super().__init__()
         assert sharing in {"none", "f", "c"}
@@ -110,12 +111,21 @@ class PICInputNet(nn.Module):
         self.sharing = sharing
         self.tensor_parameter = tensor_parameter
         self.reparam = reparam
+        self.num_channels = num_channels
         if z_quad is not None:
             self.register_buffer("z_quad", z_quad)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
-        inner_conv_groups = 1 if sharing in {"f", "c"} else num_variables
-        last_conv_groups = 1 if sharing == "f" else num_variables
+        # For RGB images, output num_channels * num_param neurons
+        if num_channels > 1:
+            output_features = num_channels * num_param
+            inner_conv_groups = 1  # Always use single group for channel-wise data
+            last_conv_groups = 1
+        else:
+            output_features = num_param
+            inner_conv_groups = 1 if sharing in {"f", "c"} else num_variables
+            last_conv_groups = 1 if sharing == "f" else num_variables
+        
         self.net = nn.Sequential(
             FourierLayer(1, ff_dim, sigma=ff_sigma, learnable=learn_ff),
             nn.Conv1d(
@@ -128,7 +138,7 @@ class PICInputNet(nn.Module):
             nn.Tanh(),
             nn.Conv1d(
                 net_dim * last_conv_groups,
-                num_param * last_conv_groups,
+                output_features * last_conv_groups,
                 1,
                 groups=last_conv_groups,
                 bias=bias,
@@ -159,13 +169,30 @@ class PICInputNet(nn.Module):
         z_quad = self.z_quad if z_quad is None else z_quad
         assert z_quad.ndim == 1
         self.net[1].groups = 1
-        self.net[-1].groups = 1 if self.sharing in {"f", "c"} else self.num_variables
+        self.net[-1].groups = 1
+            
         param = torch.cat(
             [self.net(chunk.unsqueeze(1)) for chunk in z_quad.chunk(n_chunks, dim=0)], dim=1
         )
-        if self.sharing == "f":
-            param = param.unsqueeze(0).expand(self.num_variables, -1, -1)
-        param = param.view(self.num_variables, self.num_param, len(z_quad)).transpose(1, 2)
+        
+        if self.num_channels > 1:
+            # For RGB images: output is (1, nip, num_channels * num_param)
+            # e.g., (1, 64, 768) where 768 = 3 * 256
+            # Reshape to (1, nip, num_channels, num_param) -> (nip, num_channels, num_param)
+            nip = len(z_quad)
+            param = param.view(1, nip, self.num_channels, self.num_param)
+            # Transpose to (num_channels, nip, num_param)
+            param = param.squeeze(0).transpose(0, 1)  # (nip, num_channels, num_param) -> (num_channels, nip, num_param)
+            # Expand from (num_channels, nip, num_param) to (num_folds, nip, num_param)
+            pixels_per_channel = self.num_variables // self.num_channels
+            param = param.repeat_interleave(pixels_per_channel, dim=0)
+        else:
+            # Original behavior for non-channel data
+            self.net[-1].groups = 1 if self.sharing in {"f", "c"} else self.num_variables
+            if self.sharing == "f":
+                param = param.unsqueeze(0).expand(self.num_variables, -1, -1)
+            param = param.view(self.num_variables, self.num_param, len(z_quad)).transpose(1, 2)
+        
         if self._output_shape is not None:
             param = param.view(self._output_shape)
         if self.reparam is not None:
@@ -343,6 +370,7 @@ def pc2qpc(
     ff_dim: int | None = None,
     ff_sigma: float | None = 1.0,
     learn_ff: bool | None = False,
+    num_channels: int = 1,
 ):
     """Convert a Probabilistic Circuit to a Quadrature Probabilistic Circuit.
 
@@ -362,6 +390,9 @@ def pc2qpc(
         ff_dim: Fourier feature dimension.
         ff_sigma: Fourier feature sigma.
         learn_ff: Whether to learn Fourier features.
+        num_channels: Number of channels for multi-channel data (e.g., 3 for RGB images).
+            PICInputNet will generate parameters for num_channels and expand to num_folds
+            using repeat_interleave. Default is 1 (no channel sharing).
     """
 
     def param_to_buffer(model: torch.nn.Module):
@@ -401,6 +432,7 @@ def pc2qpc(
                 z_quad=z_quad,
                 tensor_parameter=tensor_parameter,
                 reparam=reparam,
+                num_channels=num_channels,
             )
             if node.logits is None:
                 node.probs = input_net
