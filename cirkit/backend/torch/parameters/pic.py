@@ -103,6 +103,7 @@ class PICInputNet(nn.Module):
         tensor_parameter: TorchTensorParameter | None = None,
         reparam: TorchParameterOp | None = None,
         num_channels: int | None = 1,
+        channel_idx: torch.Tensor | None = None,
     ):
         super().__init__()
         assert sharing in {"none", "f", "c"}
@@ -114,18 +115,12 @@ class PICInputNet(nn.Module):
         self.num_channels = num_channels
         if z_quad is not None:
             self.register_buffer("z_quad", z_quad)
+        if channel_idx is not None:
+            self.register_buffer("channel_idx", channel_idx)
 
         ff_dim = net_dim if ff_dim is None else ff_dim
-        # For RGB images, output num_channels * num_param neurons
-        if num_channels > 1:
-            output_features = num_channels * num_param
-            inner_conv_groups = 1  # Always use single group for channel-wise data
-            last_conv_groups = 1
-        else:
-            output_features = num_param
-            inner_conv_groups = 1 if sharing in {"f", "c"} else num_variables
-            last_conv_groups = 1 if sharing == "f" else num_variables
-        
+        inner_conv_groups = num_channels * (1 if sharing in {"f", "c"} else num_variables)
+        last_conv_groups = num_channels * (1 if sharing == "f" else num_variables)
         self.net = nn.Sequential(
             FourierLayer(1, ff_dim, sigma=ff_sigma, learnable=learn_ff),
             nn.Conv1d(
@@ -138,7 +133,7 @@ class PICInputNet(nn.Module):
             nn.Tanh(),
             nn.Conv1d(
                 net_dim * last_conv_groups,
-                output_features * last_conv_groups,
+                num_param * last_conv_groups,
                 1,
                 groups=last_conv_groups,
                 bias=bias,
@@ -148,10 +143,12 @@ class PICInputNet(nn.Module):
         # initialize all heads to be equal when using composite sharing
         if sharing == "c":
             self.net[-1].weight.data = (
-                self.net[-1].weight.data[:num_param].repeat(num_variables, 1, 1)
+                self.net[-1].weight.data[:num_param * num_channels].repeat(num_variables, 1, 1)
             )
             if self.net[-1].bias is not None:
-                self.net[-1].bias.data = self.net[-1].bias.data[:num_param].repeat(num_variables)
+                self.net[-1].bias.data = (
+                    self.net[-1].bias.data[:num_param * num_channels].repeat(num_variables)
+                )
 
         self._output_shape: tuple[int, ...] | None = None
         if tensor_parameter is not None and z_quad is not None:
@@ -169,32 +166,30 @@ class PICInputNet(nn.Module):
         z_quad = self.z_quad if z_quad is None else z_quad
         assert z_quad.ndim == 1
         self.net[1].groups = 1
-        self.net[-1].groups = 1
-            
+        self.net[-1].groups = self.num_channels * (
+            1 if self.sharing in {"f", "c"} else self.num_variables
+        )
         param = torch.cat(
             [self.net(chunk.unsqueeze(1)) for chunk in z_quad.chunk(n_chunks, dim=0)], dim=1
         )
-        
-        if self.num_channels > 1:
-            # For RGB images: output is (1, nip, num_channels * num_param)
-            # e.g., (1, 64, 768) where 768 = 3 * 256
-            # Reshape to (1, nip, num_channels, num_param) -> (nip, num_channels, num_param)
-            nip = len(z_quad)
-            param = param.view(1, nip, self.num_channels, self.num_param)
-            # Transpose to (num_channels, nip, num_param)
-            param = param.squeeze(0).transpose(0, 1)  # (nip, num_channels, num_param) -> (num_channels, nip, num_param)
-            # Expand from (num_channels, nip, num_param) to (num_folds, nip, num_param)
-            pixels_per_channel = self.num_variables // self.num_channels
-            param = param.repeat_interleave(pixels_per_channel, dim=0)
-        else:
-            # Original behavior for non-channel data
-            self.net[-1].groups = 1 if self.sharing in {"f", "c"} else self.num_variables
-            if self.sharing == "f":
-                param = param.unsqueeze(0).expand(self.num_variables, -1, -1)
-            param = param.view(self.num_variables, self.num_param, len(z_quad)).transpose(1, 2)
-        
+        if self.sharing == "f":
+            param = param.unsqueeze(0)
+        param = param.view(-1, self.num_param * self.num_channels, len(z_quad)).transpose(1, 2)
         if self._output_shape is not None:
-            param = param.view(self._output_shape)
+            if self.num_channels > 1:
+                # param: (num_vars_or_1, nip, C * num_param) -> (num_vars_or_1, nip, C, num_param)
+                nip = param.shape[1]
+                param = param.view(-1, nip, self.num_channels, self.num_param)
+                # Expand for sharing="f": (1, nip, C, num_param) -> (num_vars, nip, C, num_param)
+                if self.sharing == "f" and param.shape[0] == 1:
+                    param = param.expand(self.num_variables, -1, -1, -1)
+                # channel_idx: (num_folds, 2) with columns [pixel_idx, channel_idx].
+                # Index to get the correct channel for each fold: (num_folds, nip, num_param)
+                param = param[self.channel_idx[:, 0], :, self.channel_idx[:, 1]]
+            else:
+                if self.sharing == "f" and param.shape[0] == 1 and self.num_variables > 1:
+                    param = param.repeat(self.num_variables, 1, 1)
+                param = param.view(self._output_shape)
         if self.reparam is not None:
             param = self.reparam(param)
         return param
@@ -420,8 +415,19 @@ def pc2qpc(
             else:
                 tensor_parameter = node.logits.nodes[0]
                 reparam = node.logits.nodes[1] if len(node.logits.nodes) == 2 else None
+            num_vars = node.num_variables * node.num_folds // num_channels
+            # Build per-fold (pixel_idx, channel_idx) from scope_idx.
+            # scope_idx encodes flat indices into (C, H, W), so
+            # channel = scope // num_pixels, pixel = scope % num_pixels.
+            channel_idx = None
+            if num_channels > 1:
+                scopes = node.scope_idx.squeeze(dim=1)  # (num_folds,)
+                num_pixels = num_vars // node.num_variables
+                pixel_idx = scopes % num_pixels
+                ch_idx = scopes // num_pixels
+                channel_idx = torch.stack([pixel_idx, ch_idx], dim=1)  # (num_folds, 2)
             input_net = PICInputNet(
-                num_variables=node.num_variables * node.num_folds,
+                num_variables=num_vars,
                 num_param=node.num_categories,
                 net_dim=net_dim,
                 bias=bias,
@@ -433,6 +439,7 @@ def pc2qpc(
                 tensor_parameter=tensor_parameter,
                 reparam=reparam,
                 num_channels=num_channels,
+                channel_idx=channel_idx,
             )
             if node.logits is None:
                 node.probs = input_net
