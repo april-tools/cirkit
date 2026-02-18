@@ -138,7 +138,7 @@ class TorchHadamardLayer(TorchInnerLayer):
             return x, None
 
         ev_mask = (~ev_score.isnan()).any(dim=1)
-        ev_score = self.semiring.prod(ev_score.nan_to_num_(self.semiring.multiplicative_identity), dim=1)
+        ev_score = self.semiring.prod(ev_score.nan_to_num(self.semiring.multiplicative_identity), dim=1)
         ev_score[~ev_mask.expand_as(ev_score)] = torch.nan
         return x, ev_score
 
@@ -294,17 +294,18 @@ class TorchSumLayer(TorchInnerLayer):
     def sample(self, x: Tensor, ev_score: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
         # F = Fold, H = Arity, Ki = Input Dim, Ko = Output Dim, B = Batch size, E = Evidence size, D = Data dim
         # x:        (F, H, Ki, B, E?, D)
-        # ev_score: (F, H, Ki, B, E, D)
+        # ev_score: (F, H, Ki, B, E)
         # weight:   (F, Ko, H * Ki)
         weight = self.weight()
         if ev_score is not None:
             # The ev_score is repeated for all B, so just pick the first
             # Replace observations (samples) with 1s (in the semiring space)
             score = ev_score.select(3, 0).masked_fill(ev_score.select(3, 0).isnan(), self.semiring.multiplicative_identity)
-            score = self.semiring.prod(score, dim=-1).movedim(-1, 1).flatten(start_dim=2)
+            score = score.movedim(-1, 1).flatten(start_dim=2)
             weight = self.semiring.map_from(weight, SumProductSemiring)
             weight = self.semiring.mul(weight.unsqueeze(2), score.unsqueeze(1))
-            weight = self.semiring.div(weight, self.semiring.sum(weight, dim=-1, keepdim=True))
+            score = self.semiring.sum(weight, dim=-1, keepdim=True)
+            weight = self.semiring.div(weight, score)
             weight = SumProductSemiring.map_from(weight, self.semiring)
             
         negative = torch.any(weight < 0.0)
@@ -334,8 +335,9 @@ class TorchSumLayer(TorchInnerLayer):
 
         # (F, Ko, E, D)
         if ev_score is not None:
-            ev_score = ev_score.flatten(1, 2)
-            ev_score = torch.gather(ev_score, dim=1, index=mixing_indices)
+            ev_mask = (~ev_score.flatten(1,2).isnan()).any(dim=1, keepdim=True)
+            ev_score = score.movedim(-1, -2).expand_as(x[...,0])
+            ev_score[~ev_mask.expand_as(ev_score)] = torch.nan
 
         return x, ev_score, mixing_samples
         

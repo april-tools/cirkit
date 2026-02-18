@@ -260,16 +260,15 @@ class SamplingQuery(Query):
             samples = self._pad_samples(samples, layer.scope_idx, value=layer.semiring.multiplicative_identity)
             mixture_samples.append(samples)
             if len(inputs) == 2:
-                ev_score = self._pad_samples(ev_score, layer.scope_idx, value=layer.semiring.multiplicative_identity)
-                ev_score = ev_score.expand_as(samples)
-                assert ev_score.shape == samples.shape
+                ev_score = ev_score.expand_as(samples[...,-1])
+                assert ev_score.shape == samples.shape[:-1]
 
                 return samples, ev_score
             
             return samples, 
 
         # Sample through an inner layer
-        assert len(inputs) == 1 or inputs[0].shape == inputs[1].shape
+        assert len(inputs) == 1 or inputs[0].shape[:-1] == inputs[1].shape
         assert isinstance(layer, TorchInnerLayer)
         samples, *args = layer.sample(*inputs)
         if len(args) == 2:  # Sum Layer
