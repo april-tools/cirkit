@@ -260,34 +260,28 @@ class SamplingQuery(Query):
             samples = self._pad_samples(samples, layer.scope_idx, value=layer.semiring.multiplicative_identity)
             mixture_samples.append(samples)
             if len(inputs) == 2:
-                ev_score = self._pad_samples(ev_score, layer.scope_idx, value=layer.semiring.multiplicative_identity)
-                ev_score = ev_score.expand_as(samples)
-                assert ev_score.shape == samples.shape
+                ev_score = ev_score.expand_as(samples[...,-1])
+                assert ev_score.shape == samples.shape[:-1]
 
-                ev_mask = inputs[1][:, None].squeeze(-1)
-                ev_mask = self._pad_samples(ev_mask, layer.scope_idx, value=False)
-                ev_mask = ev_mask.unsqueeze(2).expand_as(samples)
-                assert ev_mask.shape == samples.shape
-                
-                return samples, ev_score, ev_mask
+                return samples, ev_score
             
             return samples, 
 
         # Sample through an inner layer
-        assert len(inputs) == 1 or inputs[0].shape == inputs[1].shape
+        assert len(inputs) == 1 or inputs[0].shape[:-1] == inputs[1].shape
         assert isinstance(layer, TorchInnerLayer)
         samples, *args = layer.sample(*inputs)
-        if len(args) == 3:  # Sum Layer
-            ev_score, ev_mask, mix_samples = args
+        if len(args) == 2:  # Sum Layer
+            ev_score, mix_samples = args
             if mix_samples is not None:
                 mixture_samples.append(mix_samples)        
         else:
-            ev_score, ev_mask = args[:2]
+            ev_score = args[0]
 
         if ev_score is None:
             return samples,
 
-        return samples, ev_score, ev_mask
+        return samples, ev_score
 
     def _pad_samples(self, samples: Tensor, scope_idx: Tensor, value: float = 0) -> Tensor:
         """Pads univariate samples to the size of the scope of the circuit (output dimension)

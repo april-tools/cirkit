@@ -172,22 +172,23 @@ class TorchCPTLayer(TorchInnerLayer):
         )
 
     @torch.no_grad()
-    def sample(self, x: Tensor, ev_score: Tensor | None = None, ev_mask: Tensor | None = None) -> tuple[Tensor, Tensor | None, Tensor | None]:
-        # x: (F, H, K, num_samples, E?, D)
-        x = self.semiring.prod(x, dim=1)  # (F, K, num_samples, E?, D)
+    def sample(self, x: Tensor, ev_score: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
+        # x: (F, H, K, B, E?, D)
+        x = self.semiring.prod(x, dim=1)  # (F, K, B, E?, D)
         
         weight = self.weight()
         if ev_score is not None:
-            ev_score = self.semiring.prod(ev_score, dim=1)
-            ev_mask = ev_mask.any(dim=1)
-
+            ev_mask = (~ev_score.isnan()).any(dim=1)
+            ev_score = self.semiring.prod(ev_score.nan_to_num(self.semiring.multiplicative_identity), dim=1)
+            ev_score[~ev_mask.expand_as(ev_score)] = torch.nan
+        
             # The ev_score is repeated for all B, so just pick the first
             score = ev_score.select(2, 0).masked_fill(~ev_mask.select(2, 0), self.semiring.multiplicative_identity)
-            score = self.semiring.prod(score, dim=-1).movedim(-1, 1).flatten(start_dim=2)
-            score = SumProductSemiring.map_from(score, self.semiring)
+            score = score.movedim(-1, 1).flatten(start_dim=2)
             weight = self.semiring.map_from(weight, SumProductSemiring)
             weight = self.semiring.mul(weight.unsqueeze(2), score.unsqueeze(1))
-            weight = self.semiring.div(weight, self.semiring.sum(weight, dim=-1, keepdim=True))
+            score = self.semiring.sum(weight, dim=-1, keepdim=True)
+            weight = self.semiring.div(weight, score)
             weight = SumProductSemiring.map_from(weight, self.semiring)
         
         negative = torch.any(weight < 0.0)
@@ -208,9 +209,11 @@ class TorchCPTLayer(TorchInnerLayer):
 
         x = torch.gather(x, dim=1, index=mixing_indices)
         if ev_score is not None:
-            ev_score = torch.gather(ev_score, dim=1, index=mixing_indices)
-            ev_mask = ev_mask[:, :1].expand_as(x)
-        return x, ev_score, ev_mask, mixing_samples
+            ev_mask = (~ev_score.isnan()).any(dim=1, keepdim=True)
+            ev_score = score.movedim(-1, -2).expand_as(x[...,0])
+            ev_score[~ev_mask.expand_as(ev_score)] = torch.nan
+            
+        return x, ev_score, mixing_samples
 
 
 class TorchTensorDotLayer(TorchInnerLayer):
