@@ -416,24 +416,36 @@ def _prioritize_optimization_strategy(
     if not in_place:
         module_matches = module_matches.copy()
     prioritized_module_matches: dict[TorchModuleT, GraphOptMatch[TorchModuleT]] = {}
+    ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
 
-    # Follow the topological ordering of the computational graph and prune
+    # Follow the reversed topological ordering of the computational graph and prune
     # pattern matches, according to the given prioritization strategy
-    for module in ordering:
+    for module in reversed(ordering):
         matches = module_matches[module]
         if not matches:
             continue
         if len(matches) == 1:
-            prioritized_module_matches[module] = matches[0]
-
-        # Sort the matches based on the given strategy
-        sorted_matches = _sort_matches_priority(matches, strategy=strategy)
-
+            # If there is a single optimization match, then we select it
+            prioritized_match = matches[0]
+            remaining_matches = []
+        else:
+            # Check whether an optimization match for this module has already been prioritized
+            prioritized_match = next(
+                (m for m in matches if m in prioritized_module_matches.values()), None
+            )
+            if prioritized_match is not None:
+                # If that is the case, then we select such optimization match
+                remaining_matches = [m for m in matches if m is not prioritized_match]
+            else:
+                # Otherwise, sort the matches based on the given strategy
+                sorted_matches = _sort_matches_priority(matches, strategy=strategy)
+                prioritized_match = sorted_matches[0]
+                remaining_matches = sorted_matches[1:]
+        prioritized_module_matches[module] = prioritized_match
         # Prune the 'excess' pattern matches
-        for match in sorted_matches[1:]:
+        for match in remaining_matches:
             for m in match.entries:
                 module_matches[m].remove(match)
-        prioritized_module_matches[module] = sorted_matches[0]
 
     return prioritized_module_matches
 
