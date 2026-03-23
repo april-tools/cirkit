@@ -399,6 +399,9 @@ def _prioritize_optimization_strategy(
     in_place: bool = True,
 ) -> dict[TorchModuleT, GraphOptMatch[TorchModuleT]]:
     """Sort matches according to an optimization strategy and select the highest priority.
+    An optimization pattern match is currently a composition of torch modules, i.e., part of the circuit or a part of the parameter computational graph.
+    Each torch module can take part in one or more optimization pattern matches.
+    This function resolves such optimization conflicts by using a given optimization prioritization strategy.
 
     Args:
         ordering (Iterable[TorchModuleT]): List of compiled module in the graph.
@@ -422,27 +425,33 @@ def _prioritize_optimization_strategy(
     # pattern matches, according to the given prioritization strategy
     for module in reversed(ordering):
         matches = module_matches[module]
+        # If the module does not appear in any optimization pattern match, then skip it
         if not matches:
             continue
         if len(matches) == 1:
-            # If there is a single optimization match, then we select it
+            # If the module appears in a single optimization pattern match, then we select it
             prioritized_match = matches[0]
             remaining_matches = []
         else:
-            # Check whether an optimization match for this module has already been prioritized
+            # Check whether an optimization pattern match involving this module
+            # has already been selected during a previous iteration
             prioritized_match = next(
                 (m for m in matches if m in prioritized_module_matches.values()), None
             )
             if prioritized_match is not None:
-                # If that is the case, then we select such optimization match
+                # If an optimization pattern match has already been selected, then we select it,
+                # and mark all the other optimization pattern matches involving the module to be removed next
                 remaining_matches = [m for m in matches if m is not prioritized_match]
             else:
-                # Otherwise, sort the matches based on the given strategy
+                # Otherwise, we sort the matches based on the given strategy
+                # We select the optimization pattern match having the highest
+                # priority according to the given strategy (e.g., largest pattern)
+                # The remaining optimization pattern matches involving the module are then marked to be removed
                 sorted_matches = _sort_matches_priority(matches, strategy=strategy)
                 prioritized_match = sorted_matches[0]
                 remaining_matches = sorted_matches[1:]
         prioritized_module_matches[module] = prioritized_match
-        # Prune the 'excess' pattern matches
+        # Prune the remaining optimization pattern matches
         for match in remaining_matches:
             for m in match.entries:
                 module_matches[m].remove(match)
