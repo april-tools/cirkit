@@ -419,11 +419,11 @@ def _prioritize_optimization_strategy(
     if not in_place:
         module_matches = module_matches.copy()
     prioritized_module_matches: dict[TorchModuleT, GraphOptMatch[TorchModuleT]] = {}
-    ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
+    ordering_seq = list(ordering)
 
     # Follow the reversed topological ordering of the computational graph and prune
     # pattern matches, according to the given prioritization strategy
-    for module in reversed(ordering):
+    for module in reversed(ordering_seq):
         matches = module_matches[module]
         # If the module does not appear in any optimization pattern match, then skip it
         if not matches:
@@ -435,12 +435,13 @@ def _prioritize_optimization_strategy(
         else:
             # Check whether an optimization pattern match involving this module
             # has already been selected during a previous iteration
-            prioritized_match = next(
+            prioritized_match_optional = next(
                 (m for m in matches if m in prioritized_module_matches.values()), None
             )
-            if prioritized_match is not None:
+            if prioritized_match_optional is not None:
                 # If an optimization pattern match has already been selected, then we select it,
                 # and mark all the other optimization pattern matches involving the module to be removed next
+                prioritized_match = prioritized_match_optional
                 remaining_matches = [m for m in matches if m is not prioritized_match]
             else:
                 # Otherwise, we sort the matches based on the given strategy
