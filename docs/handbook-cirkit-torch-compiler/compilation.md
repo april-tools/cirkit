@@ -38,25 +38,23 @@ Here is a flowchart describing the process of compiling a single layer:
 
 ```mermaid
 flowchart TD
-    A["Symbolic Layer"] -- compile_layer --> B("Compile Layer")
-    B -- Layer Type --> LReg("LayerRegistry")
-    LReg -- Call Layer Rule --> LFunc("Layer Compilation Rule")
-    LFunc --> hasP{"Has Parameters"}
+    A["Symbolic Layer"] -- Layer Type --> LReg("LayerRegistry")
+    LReg -- Call Layer Rule --> hasP{"Has Parameters"}
     hasP -- No --> CL["Compiled Layer"]
     hasP -- Yes --> PComp("Compile TorchParameter Graph")
 
-    PComp --> nextPara("Next parameter node")
+    subgraph Compile Parameter
+      PComp --> nextPara("Next parameter node")
 
-    nextPara -- Parameter Type --> PReg("ParameterRegistry")
-    PReg --  Call Parameter Rule --> PFunc("Parameter Compilation Rule")
-    PFunc --> hasI{"Has Initializer"}
-    hasI -- No --> CL
-    hasI -- Yes --> IComp("Compile Initializer")
-    IComp -- Initializer Type --> IReg("InitializerRegistry")
-    IReg -- Call Initializer Rule --> IFunc("Initializer Compilation Rule")
-    IFunc--> ILParam{"Is last Parameter Node ?"}
-    ILParam -- Yes --> CL
-    ILParam -- No --> nextPara
+      nextPara -- Parameter Type --> PReg("ParameterRegistry")
+      PReg --  Call Parameter Rule --> hasI{"Has Initializer"}
+      hasI -- No --> CL
+      hasI -- Yes --> IComp("Compile Initializer")
+      IComp -- Initializer Type --> IReg("InitializerRegistry")
+      IReg -- Call Initializer Rule --> ILParam{"Is last Parameter Node ?"}
+      ILParam -- Yes --> CL
+      ILParam -- No --> nextPara
+    end
 ```
 
 As we can see, the compilation rule of a layer might call the compilation rule

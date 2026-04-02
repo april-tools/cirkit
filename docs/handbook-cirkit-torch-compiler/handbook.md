@@ -52,16 +52,16 @@ the compilation:
 
 - `TorchParameter` are computational graphs, they are made of
   `Torch Parameter Node` objects of two types:
-- Input node, which can be a randomly initialized constant or a number provided
-  by an external process (such as learned parameters).
-- Operation node: computations applied to parameters, e.g., Softmax.
+  - Input node, which can be a randomly initialized constant or a number provided
+    by an external process (such as learned parameters).
+  - Operation node: computations applied to parameters, e.g., Softmax.
 - The compiler registries (`CompilerRegistry`) are mappings between types and
   _Rules_ (Functions). They specify how to transform a symbolic layer / parameter / initializer
   into concrete PyTorch Graph element.
   There are three types of compiler registries:
-- `CompilerLayerRegistry`
-- `CompilerParameterRegistry`
-- `CompilerInitializerRegistry`
+  - `CompilerLayerRegistry`
+  - `CompilerParameterRegistry`
+  - `CompilerInitializerRegistry`
 - The `Semiring` object stores the concrete operations to use for addition and
   multiplication as well as the domain.
 - The `CompiledCircuitsMap` which stores bidirectional mappings between symbolic
