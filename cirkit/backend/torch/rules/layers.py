@@ -5,7 +5,11 @@ import torch
 
 from cirkit.backend.compiler import LayerCompilationSign
 from cirkit.backend.torch.layers.base import TorchLayer
-from cirkit.backend.torch.layers.inner import TorchHadamardLayer, TorchKroneckerLayer, TorchSumLayer
+from cirkit.backend.torch.layers.inner import (
+    TorchHadamardLayer,
+    TorchKroneckerLayer,
+    TorchSumLayer,
+)
 from cirkit.backend.torch.layers.input import (
     TorchBinomialLayer,
     TorchCategoricalLayer,
@@ -33,7 +37,9 @@ if TYPE_CHECKING:
     from cirkit.backend.torch.compiler import TorchCompiler
 
 
-def compile_embedding_layer(compiler: "TorchCompiler", sl: EmbeddingLayer) -> TorchEmbeddingLayer:
+def compile_embedding_layer(
+    compiler: "TorchCompiler", sl: EmbeddingLayer
+) -> TorchEmbeddingLayer:
     weight = compiler.compile_parameter(sl.weight)
     return TorchEmbeddingLayer(
         torch.tensor(tuple(sl.scope)),
@@ -65,7 +71,9 @@ def compile_categorical_layer(
     )
 
 
-def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> TorchBinomialLayer:
+def compile_binomial_layer(
+    compiler: "TorchCompiler", sl: BinomialLayer
+) -> TorchBinomialLayer:
     if sl.logits is None:
         assert sl.probs is not None
         probs = compiler.compile_parameter(sl.probs)
@@ -84,7 +92,9 @@ def compile_binomial_layer(compiler: "TorchCompiler", sl: BinomialLayer) -> Torc
     )
 
 
-def compile_gaussian_layer(compiler: "TorchCompiler", sl: GaussianLayer) -> TorchGaussianLayer:
+def compile_gaussian_layer(
+    compiler: "TorchCompiler", sl: GaussianLayer
+) -> TorchGaussianLayer:
     mean = compiler.compile_parameter(sl.mean)
     stddev = compiler.compile_parameter(sl.stddev)
     if sl.log_partition is not None:
@@ -114,12 +124,20 @@ def compile_polynomial_layer(
     )
 
 
-def compile_hadamard_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchHadamardLayer:
-    return TorchHadamardLayer(sl.num_input_units, arity=sl.arity, semiring=compiler.semiring)
+def compile_hadamard_layer(
+    compiler: "TorchCompiler", sl: HadamardLayer
+) -> TorchHadamardLayer:
+    return TorchHadamardLayer(
+        sl.num_input_units, arity=sl.arity, semiring=compiler.semiring
+    )
 
 
-def compile_kronecker_layer(compiler: "TorchCompiler", sl: KroneckerLayer) -> TorchKroneckerLayer:
-    return TorchKroneckerLayer(sl.num_input_units, arity=sl.arity, semiring=compiler.semiring)
+def compile_kronecker_layer(
+    compiler: "TorchCompiler", sl: KroneckerLayer
+) -> TorchKroneckerLayer:
+    return TorchKroneckerLayer(
+        sl.num_input_units, arity=sl.arity, semiring=compiler.semiring
+    )
 
 
 def compile_sum_layer(compiler: "TorchCompiler", sl: SumLayer) -> TorchSumLayer:
@@ -145,15 +163,21 @@ def compile_constant_value_layer(
     )
 
 
-def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> TorchEvidenceLayer:
+def compile_evidence_layer(
+    compiler: "TorchCompiler", sl: EvidenceLayer
+) -> TorchEvidenceLayer:
     layer = compiler.compile_layer(sl.layer)
     observation = compiler.compile_parameter(sl.observation)
     return TorchEvidenceLayer(
-        cast(TorchInputLayer, layer), observation=observation, semiring=compiler.semiring
+        cast(TorchInputLayer, layer),
+        observation=observation,
+        semiring=compiler.semiring,
     )
 
 
-DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, Callable[..., TorchLayer]] = {
+DEFAULT_LAYER_COMPILATION_RULES: dict[
+    LayerCompilationSign, Callable[..., TorchLayer]
+] = {
     EmbeddingLayer: compile_embedding_layer,
     CategoricalLayer: compile_categorical_layer,
     BinomialLayer: compile_binomial_layer,
