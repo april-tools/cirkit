@@ -13,30 +13,30 @@ operations on.
 
 Different layers / parameter nodes will require different conditions to decide
 if they can be folded with another layer. These conditions are defined in
-the `fold_settings()` method of each module. In general, these conditions are
+the [`fold_settings()`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.AbstractTorchModule.fold_settings) method of each module. In general, these conditions are
 defined in the inheritance process for a family of modules, but they can
 also be overriden for more specific restrictions.
 
-### `TorchParameterNode`
+### [`TorchParameterNode`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchParameterNode)
 
-Any class that inherits from `TorchParameterNode` and does not override
-`fold_settings()` will specify that a node can only be folded with another
+Any class that inherits from [`TorchParameterNode`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchParameterNode) and does not override
+[`fold_settings()`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.AbstractTorchModule.fold_settings) will specify that a node can only be folded with another
 node if they share the exact same `config` dictionary.
 
-### `TorchTensorParameter`
+### [`TorchTensorParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchTensorParameter)
 
-A `TorchTensorParameter` can be folded with another tensor parameter if they have the same
+A [`TorchTensorParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchTensorParameter) can be folded with another tensor parameter if they have the same
 shape, data type and the same gradient requirements (either both `True` or both `False`)
 
-### `TorchInnerLayer`
+### [`TorchInnerLayer`](../../api/cirkit/backend/torch/layers/inner/index.html#cirkit.backend.torch.layers.inner.TorchInnerLayer)
 
-Any class that inherits from `TorchInnerLayer` and does not override `fold_settings()`
-will specify that a layer can be folded with another layer if they share the same
+Any class that inherits from [`TorchInnerLayer`](../../api/cirkit/backend/torch/layers/inner/index.html#cirkit.backend.torch.layers.inner.TorchInnerLayer) and does not override
+[`fold_settings()`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.AbstractTorchModule.fold_settings) will specify that a layer can be folded with another layer if they share the same
 `config` dictionary **and** if their parameters have the same shape.
 
-### `TorchInputLayer`
+### [`TorchInputLayer`](../../api/cirkit/backend/torch/layers/input/index.html#cirkit.backend.torch.layers.input.TorchInputLayer)
 
-Any class that inherits from `TorchInputLayer` and does not override `fold_settings()`
+Any class that inherits from [`TorchInputLayer`](../../api/cirkit/backend/torch/layers/input/index.html#cirkit.backend.torch.layers.input.TorchInputLayer) and does not override [`fold_settings()`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.AbstractTorchModule.fold_settings)
 will specify that a layer can be folded with another layer if they share the same
 number of inputs, `config` dictionary **and** if their parameters have the same shape.
 
@@ -46,13 +46,14 @@ To handle the folding procedure, the compiler calls the `_fold_circuit` function
 defined in `cirkit.backend.torch.compiler.py`. This function simply retrieves
 a layer-wise topological ordering of the circuit
 (see [Basic Terminology](./handbook.md#basic-terminology))
-and feeds it to the `build_folded_graph` function.
+and feeds it to the [`build_folded_graph`](../../api/cirkit/backend/torch/graph/folding/index.html#cirkit.backend.torch.graph.folding.build_folded_graph) function.
 
 ### Fold Group Function (`fold_group_fn`)
 
 Fold group functions are functions that take into entry:
 
-- A list of Torch Modules: either `TorchParameter` or `TorchLayer` depending on the
+- A list of Torch Modules: either [`TorchParameter`](../../api/cirkit/backend/torch/parameters/parameter/index.html#cirkit.backend.torch.parameters.parameter.TorchParameter)
+  or [`TorchLayer`](../../api/cirkit/backend/torch/layers/base/index.html#cirkit.backend.torch.layers.base.TorchLayer) depending on the
   implementation.
 - The current compiler.
 
@@ -64,8 +65,8 @@ finding potential folding opportunities!
 
 #### Fold Group of Layer (`_fold_layer_group`)
 
-As explained above, this function transforms a list of `TorchLayer` objects into
-a single folded `TorchLayer`.
+As explained above, this function transforms a list of [`TorchLayer`](../../api/cirkit/backend/torch/layers/base/index.html#cirkit.backend.torch.layers.base.TorchLayer) objects into
+a single folded [`TorchLayer`](../../api/cirkit/backend/torch/layers/base/index.html#cirkit.backend.torch.layers.base.TorchLayer).
 
 The algorithm works as follows:
 
@@ -97,7 +98,7 @@ functools.partial(
 
 Now to fold parameters, we identify three cases:
 
-1. The parameters to fold are `TorchTensorParameter`.
+1. The parameters to fold are [`TorchTensorParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchTensorParameter).
    1. In this case, create a new parameter with the same config as the first in
       the list.
    2. For the `initializer` parameter, create a new partial function using the
@@ -117,19 +118,19 @@ Now to fold parameters, we identify three cases:
       }
       ```
 
-2. The parameters to fold are `TorchPointerParameter`.
+2. The parameters to fold are [`TorchPointerParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchPointerParameter).
    1. We assume that all pointer parameters in the group point to the same base
-      `TorchTensorParameter`.
+      [`TorchTensorParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchTensorParameter).
    2. We create a new pointer parameter that collects all fold indices that
       are selected by each parameter in the group.
 
-3. The parameters to fold are `TorchParameterOp` (like sum, product, etc.)
+3. The parameters to fold are [`TorchParameterOp`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchParameterOp) (like sum, product, etc.)
    1. In this case, construct a new parameter operation with the same config and
       the updated number of folds (number of elements in the group).
 
-##### Small Explanation on `TorchPointerParameter`
+##### Small Explanation on [`TorchPointerParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchPointerParameter)
 
-`TorchPointerParameter` are objects that represent a fold slice of a larger `TorchTensorParameter`.
+[`TorchPointerParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchPointerParameter) are objects that represent a fold slice of a larger [`TorchTensorParameter`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchTensorParameter).
 The slice can be:
 
 - The full tensor.
@@ -146,19 +147,19 @@ contain fold both **inside** a single parameter graph but also **between**
 parameter graphs.
 
 Once we have the layer-wise topological ordering of all the nodes in
-all the graphs, we use the `build_folded_graph` function to obtain the structure
-of the folded parameter graph and instantiate a new `TorchParameter` using
-these informations.
+all the graphs, we use the [`build_folded_graph`](../../api/cirkit/backend/torch/graph/folding/index.html#cirkit.backend.torch.graph.folding.build_folded_graph) function to obtain the structure
+of the folded parameter graph and instantiate a new [`TorchParameter`](../../api/cirkit/backend/torch/parameters/parameter/index.html#cirkit.backend.torch.parameters.parameter.TorchParameter)
+using these informations.
 
 ### Finding Potential Fold (`group_foldable_modules`)
 
-This function, defined in `cirkit.backend.torch.graph.foldin.py`, is responsible
+This function, defined in `cirkit.backend.torch.graph.folding.py`, is responsible
 for finding potential folding in a given group corresponding to a level in the graph
 layer-wise topological ordering.
 
 It works as follows:
 
-1. Define the `_gather_fold_settings` function that retrieves all the `fold_settings()`
+1. Define the `_gather_fold_settings` function that retrieves all the [`fold_settings()`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.AbstractTorchModule.fold_settings)
    properties of the module and its submodules
    (See [What Can We Fold?](#what-can-we-fold))
    This tuple also includes the type of the module, which is a fundamental condition.
@@ -171,7 +172,7 @@ It works as follows:
 
 This function constructs the groups simply by using a mapping of conditions.
 
-### Main Logic (`build_folded_graph`)
+### Main Logic ([`build_folded_graph`](../../api/cirkit/backend/torch/graph/folding/index.html#cirkit.backend.torch.graph.folding.build_folded_graph))
 
 This function, defined in `cirkit.backend.torch.graph.folding.py`, is the main
 entry point to fold a circuit. It takes as parameters:
@@ -186,7 +187,7 @@ and returns a tuple with:
 - The final, potentially folded, modules.
 - The adjacency list updated with the folded modules.
 - The list of modules that acts as output of the graph.
-- A `FoldIndexInfo` object which stores the information necessary
+- A [`FoldIndexInfo`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.FoldIndexInfo) object which stores the information necessary
   to "locate" a unfolded module within the folded circuit.
   It is basically a map between a module in the unfolded circuit
   and a pair (id_folded_module, fold_id).
@@ -228,5 +229,5 @@ The algorithm will use the following data structures:
       8. Append the current folded module to `modules`.
 2. Retrieve the folded module corresponding to the unfolded `outputs` modules
    using `fold_idx` and `modules`.
-3. Create a `FoldIndexInfo` object from the `modules`, `in_fold_idx` and `out_fold_idx`.
+3. Create a [`FoldIndexInfo`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.FoldIndexInfo) object from the `modules`, `in_fold_idx` and `out_fold_idx`.
 4. Return `modules`, `in_modules`, `outputs` and the fold index info.

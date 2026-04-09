@@ -50,21 +50,21 @@ A graph is described by:
 Here you will find a short explanation of some important components used for
 the compilation:
 
-- `TorchParameter` are computational graphs, they are made of
-  `Torch Parameter Node` objects of two types:
+- [`TorchParameter`](../../api/cirkit/backend/torch/parameters/parameter/index.html#cirkit.backend.torch.parameters.parameter.TorchParameter) are computational graphs, they are made of
+  [`TorchParameterNode`](../../api/cirkit/backend/torch/parameters/nodes/index.html#cirkit.backend.torch.parameters.nodes.TorchParameterNode) objects of two types:
   - Input node, which can be a randomly initialized constant or a number provided
     by an external process (such as learned parameters).
   - Operation node: computations applied to parameters, e.g., Softmax.
-- The compiler registries (`CompilerRegistry`) are mappings between types and
+- The compiler registries ([`CompilerRegistry`](../../api/cirkit/backend/registry/index.html#cirkit.backend.registry.CompilerRegistry)) are mappings between types and
   _Rules_ (Functions). They specify how to transform a symbolic layer / parameter / initializer
   into concrete PyTorch Graph element.
   There are three types of compiler registries:
-  - `CompilerLayerRegistry`
-  - `CompilerParameterRegistry`
-  - `CompilerInitializerRegistry`
-- The `Semiring` object stores the concrete operations to use for addition and
+  - [`CompilerLayerRegistry`](../../api/cirkit/backend/compiler/index.html#cirkit.backend.compiler.CompilerLayerRegistry)
+  - [`CompilerParameterRegistry`](../../api/cirkit/backend/compiler/index.html#cirkit.backend.compiler.CompilerParameterRegistry)
+  - [`CompilerInitializerRegistry`](../../api/cirkit/backend/compiler/index.html#cirkit.backend.compiler.CompilerInitializerRegistry)
+- The [`Semiring`](../../api/cirkit/backend/torch/semiring/index.html#cirkit.backend.torch.semiring.Semiring) object stores the concrete operations to use for addition and
   multiplication as well as the domain.
-- The `CompiledCircuitsMap` which stores bidirectional mappings between symbolic
+- The [`CompiledCircuitsMap`](../../api/cirkit/backend/compiler/index.html#cirkit.backend.compiler.CompiledCircuitsMap) which stores bidirectional mappings between symbolic
   and compiled circuits.
 
 ## The Compilation Process

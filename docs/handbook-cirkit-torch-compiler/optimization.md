@@ -9,7 +9,7 @@ how cirkit detects possible optimizations.
 
 Currently, cirkit can perform three optimizations on Torch graphs:
 
-- Merge / Fuse nodes in `TorchParameter` graphs.
+- Merge / Fuse nodes in [`TorchParameter`](../../api/cirkit/backend/torch/parameters/parameter/index.html#cirkit.backend.torch.parameters.parameter.TorchParameter) graphs.
 - Merge / Fuse layers in the compiled circuit (`TorchCircuit`).
 - Shatter one layer into multiple layers in the compiled circuit.
 
@@ -18,22 +18,7 @@ cirkit uses _patterns_.
 
 Here is a graph recapitulating how the functions interact.
 
-```mermaid
-flowchart TD
- subgraph pmf["pattern_matching_function"]
-        mpnp("_match_parameter_nodes_pattern")
-        mlp("_match_layer_pattern")
-  end
-    mop("match_optimization_pattern") --> pos("_prioritize_optimization_strategy")
-    mop -- for each pattern --> mpg("_match_pattern_graph")
-    mpg --> mpnp & mlp
-    mlp -- for each parameter graph --> mop
-    mpnp --> if["incomings_fn"] & of["outcomings_fn"]
-    mlp --> if & of
-    pos -- for each modules --> smp("_sort_matches_priority")
-```
-
-### The `match_optimization_patterns` Function
+### The [`match_optimization_patterns`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.match_optimization_patterns) Function
 
 This function is the high level matching "engine", handling all the
 logic to return all high priority matches given a graph and a set
@@ -41,12 +26,12 @@ of patterns.
 
 It takes as input:
 
-- The elements of the graph as an iterable of `TorchModuleT`.
-- The outputs of the graph as an iterable of `TorchModuleT`.
+- The elements of the graph as an iterable of [`TorchModuleT`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.TorchModuleT).
+- The outputs of the graph as an iterable of [`TorchModuleT`](../../api/cirkit/backend/torch/graph/modules/index.html#cirkit.backend.torch.graph.modules.TorchModuleT).
 - A list of patterns to search in the graph.
 - A function that returns the inputs of a given modules.
 - A function that returns the outputs of a given modules.
-- A **pattern matching function** that returns a list of `GraphOptMatch`.
+- A **pattern matching function** that returns a list of [`GraphOptMatch`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptMatch).
 - An optimization strategy.
 
 We will see later what exactly a pattern matching function is.
@@ -59,9 +44,9 @@ High Level Algorithm:
    keeping exactly one match per matched node. (one node could
    match with multiple pattern).
 
-It returns a list of `GraphOptMatch` (See [Storing Matches in GraphOptMatch](#storing-matches-in-graphoptmatch))
+It returns a list of [`GraphOptMatch`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptMatch)(See [Storing Matches in GraphOptMatch](#storing-matches-in-graphoptmatch))
 and a dictionary mapping the root module that matched a pattern (the first
-module in the `entries` list) and the corresponding `GraphOptMatch`.
+module in the `entries` list) and the corresponding [`GraphOptMatch`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptMatch).
 
 #### Optimization Strategy
 
@@ -71,7 +56,7 @@ several patterns.
 
 Currently, only one strategy is implemented:
 
-- `OptMatchStrategy.LARGEST_MATCH` which counts the number of
+- [`OptMatchStrategy.LARGEST_MATCH`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.OptMatchStrategy) which counts the number of
   modules involved in the match and keeps the one with the highest count.
 
 #### The `_match_pattern_graph` Function
@@ -82,18 +67,18 @@ in an iterable.
 ### Pattern Declaration
 
 There are two types of patterns; both inherits the generic
-interface `GraphOptPatternDefn`:
+interface [`GraphOptPatternDefn`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn):
 
-- `ParameterOptPattern` for patterns on `TorchParameter` graphs.
-- `LayerOptPattern` for patterns on `TorchCircuit`.
+- [`ParameterOptPattern`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.ParameterOptPattern) for patterns on [`TorchParameter`](../../api/cirkit/backend/torch/parameters/parameter/index.html#cirkit.backend.torch.parameters.parameter.TorchParameter) graphs.
+- [`LayerOptPattern`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.LayerOptPattern) for patterns on [`TorchCircuit`](../../api/cirkit/backend/torch/circuits/index.html#cirkit.backend.torch.circuits.TorchCircuit).
 
 The pattern class can define up to 4 methods to describe the pattern.
 
-#### Output layers only: `is_output()`
+#### Output layers only: [`is_output()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.is_output)
 
 Returns True to search the pattern only in the output layers.
 
-#### Base pattern: `entries()`
+#### Base pattern: [`entries()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.entries)
 
 Returns an ordered sequence of layer / parameter node types that need to be
 matched _when going through the graph in the reverse topological order_.
@@ -104,7 +89,7 @@ _Example_, the entry `[LayerType3, LayerType2]` will match the graph:
 
 The match will be the graph rooted at `LayerType3`.
 
-#### Match layer with specific configuration: `config_patterns()`
+#### Match layer with specific configuration: [`config_patterns()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.config_patterns)
 
 Returns a list of dictionaries that map a config name to a config value.
 The "config" of a layer / parameter node is simply the dictionary returned
@@ -133,9 +118,9 @@ class ExamplePattern(LayerOptPatternDefn):
     return [TorchSumLayer]
 ```
 
-#### Matching parameters of a layer: `sub_patterns()`
+#### Matching parameters of a layer: [`sub_patterns()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.sub_patterns)
 
-Returns a list of dictionaries that map a layer's parameter names to a `ParameterOptPattern`.
+Returns a list of dictionaries that map a layer's parameter names to a [`ParameterOptPattern`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.ParameterOptPattern).
 The dictionary at position x in the list defines the config for the x-th element of
 the `entries` list.
 
@@ -163,21 +148,23 @@ class ParameterPatternOne(ParameterOptPatternDefn):
 TorchSumLayer(1,1,1,weight=ParameterType(...))
 ```
 
-_`ParameterOptPattern` only uses `is_output()` and `entries()`_
+_[`ParameterOptPattern`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.ParameterOptPattern) only uses
+[`is_output()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.is_output)
+and [`entries()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.entries)_
 
 ### Storing Matches in `GraphOptMatch`
 
-`GraphOptMatch` is an abstract class which stores:
+[`GraphOptMatch`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptMatch) is an abstract class which stores:
 
 - A pattern.
-- A list of modules matching the pattern (`entries`).
-- A list of dictionaries storing, for each element in `entries`, a mapping between
-  a parameter's name and the associated matches (from `sub_patterns()`).
+- A list of modules matching the pattern ([`entries()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.entries)).
+- A list of dictionaries storing, for each element in [`entries()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.entries), a mapping between
+  a parameter's name and the associated matches (from [`sub_patterns()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.sub_patterns)).
 
 There are two implementations of this abstract class :
 
-- `ParameterOptMatch`
-- `LayerOptMatch`
+- [`ParameterOptMatch`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.ParameterOptMatch)
+- [`LayerOptMatch`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.LayerOptMatch)
 
 These objects will be built by **pattern matching functions**.
 
@@ -192,7 +179,7 @@ A pattern matching function takes as arguments:
 - A function that returns the inputs of a given module.
 - A function that returns the outputs of a given module.
 
-It returns either an instance of `GraphOptMatch` if the pattern matches,
+It returns either an instance of [`GraphOptMatch`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptMatch) if the pattern matches,
 or `None` if the pattern fails.
 
 There are two pattern matching functions in
@@ -216,7 +203,7 @@ Data structures:
 Algorithm:
 
 1. Set the _current node_ as the value of the _starting node_.
-2. For every entry in the pattern's `entries()`:
+2. For every entry in the pattern's [`entries()`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.GraphOptPatternDefn.entries):
    1. Return `None` if the current node is not the current entry.
    2. Return `None` if the current node has more than one input and is not the
       last entry.
@@ -255,7 +242,8 @@ Algorithm:
       input; it is possible to create a malformed pattern that would create an error.
 
 3. If the code reaches the end of the loop, it means the pattern matches;
-   we return a new `ParameterOptMatch` containing the pattern and `matched_nodes`.
+   we return a new [`ParameterOptMatch`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.ParameterOptMatch)
+   containing the pattern and `matched_nodes`.
 
 #### Layer Pattern Matching (`_match_layer_pattern`)
 
@@ -291,15 +279,15 @@ Algorithm:
    8. Finally, if the current entry is not the last, replace the current node
       with its sole input.
 3. Finishing the loop means that the pattern is matching; we return a new
-   `LayerOptMatch` object containing the pattern, the `matched_layers` and
-   the `matched_parameters`.
+   [`LayerOptMatch`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.LayerOptMatch) object containing
+   the pattern, the `matched_layers` and the `matched_parameters`.
 
 ## Applying Matched Patterns
 
 ### Optimization Rules
 
-Pattern rules are classes inheriting from either `ParameterOptApplyFunc`
-or `LayerOptApplyFunc`. These two interfaces require the implementation
+Pattern rules are classes inheriting from either [`ParameterOptApplyFunc`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.ParameterOptApplyFunc)
+or [`LayerOptApplyFunc`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.LayerOptApplyFunc). These two interfaces require the implementation
 of the `__call__` method as follows:
 
 ```python
@@ -316,12 +304,12 @@ returns a tuple of torch modules to replace those matched by the pattern.
 
 ### Optimizer Registries
 
-The `TorchCompiler` uses three optimizer registries to store the `pattern:rule`
+The [`TorchCompiler`](../../api/cirkit/backend/torch/compiler/index.html#cirkit.backend.torch.compiler.TorchCompiler) uses three optimizer registries to store the `pattern:rule`
 associations:
 
-- One `LayerOptRegistry` for patterns that _shatter_ layers.
-- One `LayerOptRegistry` for patterns that _fuse_ layers.
-- One `ParameterOptRegistry` for patterns that act on parameter nodes.
+- One [`LayerOptRegistry`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.LayerOptRegistry) for patterns that _shatter_ layers.
+- One [`LayerOptRegistry`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.LayerOptRegistry) for patterns that _fuse_ layers.
+- One [`ParameterOptRegistry`](../../api/cirkit/backend/torch/optimization/registry/index.html#cirkit.backend.torch.optimization.registry.ParameterOptRegistry) for patterns that act on parameter nodes.
   (Only fuse for now)
 
 The two layer registries are stored in a dictionary called `_layer_optimization_registry`
@@ -338,7 +326,7 @@ These functions are directly defined _inside_ `_optimize_parameter_nodes` and
 `_optimize_layers`. They act as _closures_ in the sense that they access the
 compiler object from the context of the outer function.
 
-## Optimize Graph Function (`optimize_graph`)
+## Optimize Graph Function ([`optimize_graph`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.optimize_graph))
 
 ### Principle
 
@@ -473,7 +461,7 @@ The function will:
 1. Retrieve the parameter registry and create a match optimizer.
 2. For each layer in the circuit:
    1. For each parameter in the layer:
-      1. Call the `optimize_graph` function.
+      1. Call the [`optimize_graph`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.optimize_graph) function.
       2. If the result is `None`, go to the next layer.
       3. Otherwise, replace the original parameter graph with the optimized one.
 3. If one parameter graph was optimized, return the circuit and `True`.
@@ -491,10 +479,10 @@ This function takes as parameters:
 Depending on the boolean variable, the function will:
 
 1. Retrieve the right registry and match optimizer.
-2. Call the `optimize_graph` function.
+2. Call the [`optimize_graph`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.optimize_graph) function.
 3. If the results is `None`, return the current circuit and `False`.
 4. Otherwise, construct a new circuit from the optimized modules returned by
-   `optimize_graph` and the information from the original compiled circuit.
+   [`optimize_graph`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.optimize_graph) and the information from the original compiled circuit.
 5. Return the optimized circuit and `True`.
 
 ## Existing Implementations
@@ -504,19 +492,19 @@ Depending on the boolean variable, the function will:
 The default patterns for **layers** are stored in `cirkit/backend/torch/optimization/layers.py`.
 You can find the mapping defined at the end of the file:
 
-- `DEFAULT_LAYER_FUSE_OPT_RULES` for layer fusion patterns.
-- `DEFAULT_LAYER_SHATTER_OPT_RULES` for layer shattering patterns.
+- [`DEFAULT_LAYER_FUSE_OPT_RULES`](../../api/cirkit/backend/torch/optimization/layers/index.html#cirkit.backend.torch.optimization.layers.DEFAULT_LAYER_FUSE_OPT_RULES) for layer fusion patterns.
+- [`DEFAULT_LAYER_SHATTER_OPT_RULES`](../../api/cirkit/backend/torch/optimization/layers/index.html#cirkit.backend.torch.optimization.layers.DEFAULT_LAYER_SHATTER_OPT_RULES) for layer shattering patterns.
 
 The default patterns for **parameters** are stored in `cirkit/backend/torch/optimization/parameters.py`.
 
-- `DEFAULT_PARAMETER_OPT_RULES` for parameter graph patterns.
+- [`DEFAULT_PARAMETER_OPT_RULES`](../../api/cirkit/backend/torch/optimization/parameters/index.html#cirkit.backend.torch.optimization.parameters.DEFAULT_PARAMETER_OPT_RULES) for parameter graph patterns.
 
 You can find a list of [implemented patterns](./optimization_implemented.md) in
 a separate file.
 
 ### Existing Strategies
 
-There is only one **strategy** implemented as of today: the `LARGEST_MATCH` strategy.
+There is only one **strategy** implemented as of today: the [`LARGEST_MATCH`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.OptMatchStrategy.LARGEST_MATCH) strategy.
 
-The strategies are declared in the `OptMatchStrategy` enumeration in
+The strategies are declared in the [`OptMatchStrategy`](../../api/cirkit/backend/torch/graph/optimize/index.html#cirkit.backend.torch.graph.optimize.OptMatchStrategy) enumeration in
 `cirkit/backend/torch/graph/optimize.py`.

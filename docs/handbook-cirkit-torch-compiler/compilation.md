@@ -21,19 +21,19 @@ Algorithm :
 2. Once all the layers are compiled, create the sequence `outputs` which stores
    the compiled output layers. To do so, you just retrieve the compiled layers
    corresponding to the symbolic circuit's output layers.
-3. Create the fully compiled circuit, a `TorchCircuit` object, using the
+3. Create the fully compiled circuit, a [`TorchCircuit`](../../api/cirkit/backend/torch/circuits/index.html#cirkit.backend.torch.circuits.TorchCircuit) object, using the
    mappings and sequence previously built.
-4. Run the circuit post processing function `TorchCompiler._post_process_circuit`
+4. Run the circuit post processing function [`TorchCompiler._post_process_circuit`](../../api/cirkit/backend/torch/compiler/index.html#cirkit.backend.torch.compiler.TorchCompiler._post_process_circuit)
    (optimization and folding).
-5. Initialize all the parameters of the circuit (`TorchCircuit.reset_parameters`).
+5. Initialize all the parameters of the circuit ([`TorchCircuit.reset_parameters`](../../api/cirkit/backend/torch/circuits/index.html#cirkit.backend.torch.circuits.TorchCircuit.reset_parameters)).
    It's a function that recursively calls the compiled initializer of all the
    circuit's parameters.
-6. Register the compiled circuit in the `CompiledCircuitsMap`.
+6. Register the compiled circuit in the [`CompiledCircuitsMap`](../../api/cirkit/backend/compiler/index.html#cirkit.backend.compiler.CompiledCircuitsMap).
 
-## Layer Compilation Process (`TorchCompiler.compile_layer`)
+## Layer Compilation Process ([`TorchCompiler.compile_layer`](../../api/cirkit/backend/torch/compiler/index.html#cirkit.backend.torch.compiler.TorchCompiler.compile_layer))
 
 The function, in itself, only retrieves the layer _rule_ corresponding to the
-input type from the `CompilerLayerRegistry` and applies it.
+input type from the [`CompilerLayerRegistry`](../../api/cirkit/backend/compiler/index.html#cirkit.backend.compiler.CompilerLayerRegistry) and applies it.
 Here is a flowchart describing the process of compiling a single layer:
 
 ```mermaid
@@ -59,10 +59,10 @@ flowchart TD
 
 As we can see, the compilation rule of a layer might call the compilation rule
 of a parameter which might itself call the compilation rule of an initializer.
-Furthermore, as `TorchParameter` objects are graphs themselves, we need to iterate
+Furthermore, as [`TorchParameter`](../../api/cirkit/backend/torch/parameters/parameter/index.html#cirkit.backend.torch.parameters.parameter.TorchParameter) objects are graphs themselves, we need to iterate
 through all parameter nodes to compile them.
 
-### Compile a Parameter Graph (`TorchCompiler.compile_parameter`)
+### Compile a Parameter Graph ([`TorchCompiler.compile_parameter`](../../api/cirkit/backend/torch/compiler/index.html#cirkit.backend.torch.compiler.TorchCompiler.compile_parameter))
 
 Data structures:
 
@@ -85,5 +85,5 @@ Algorithm:
 2. Once all the nodes are compiled, create the sequence `outputs` which stores
    the compiled output nodes. To do so, you simply retrieve the compiled nodes
    corresponding to the parameter graph output nodes.
-3. Create the fully compiled graph, a `TorchParameter` object, using the
+3. Create the fully compiled graph, a [`TorchParameter`](../../api/cirkit/backend/torch/parameters/parameter/index.html#cirkit.backend.torch.parameters.parameter.TorchParameter) object, using the
    mappings and sequence previously built.
