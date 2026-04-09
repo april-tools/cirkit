@@ -25,6 +25,7 @@ from cirkit.symbolic.parameters import (
     ParameterFactory,
     SigmoidParameter,
     SoftmaxParameter,
+    SoftplusParameter,
     TensorParameter,
     UnaryParameterOp,
 )
@@ -189,6 +190,8 @@ def name_to_parameter_activation(
             if "vmin" not in kwargs:
                 kwargs["vmin"] = 1e-18
             return functools.partial(ClampParameter, **kwargs)
+        case "softplus":
+            return functools.partial(SoftplusParameter, **kwargs)
         case _:
             raise ValueError
 
