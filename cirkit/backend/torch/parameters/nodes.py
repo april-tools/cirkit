@@ -728,6 +728,17 @@ class TorchClampParameter(TorchEntrywiseParameterOp):
         return torch.clamp(x, min=self.vmin, max=self.vmax)
 
 
+class TorchSoftplusParameter(TorchEntrywiseParameterOp):
+    """Softmax reparameterization.
+
+    Range: (0, + inf), 0 available if input is masked.
+    Constraints: Positive.
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.nn.functional.softplus(x)
+
+
 class TorchConjugateParameter(TorchEntrywiseParameterOp):
     """Conjugate parameterization."""
 
