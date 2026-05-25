@@ -6,8 +6,20 @@ import torch
 from torch import Tensor
 
 from cirkit.backend.torch.circuits import TorchCircuit
-from cirkit.backend.torch.layers import TorchInnerLayer, TorchInputLayer, TorchLayer
+from cirkit.backend.torch.graph.modules import AddressBookEntry
+from cirkit.backend.torch.layers import (
+    TorchCategoricalLayer,
+    TorchCPTLayer,
+    TorchHadamardLayer,
+    TorchInnerLayer,
+    TorchInputLayer,
+    TorchLayer,
+    TorchSumLayer,
+)
 from cirkit.utils.scope import Scope
+
+# (sample_ids, folds, units) — all 1-D tensors of the same length P.
+_Selection = tuple[Tensor, Tensor, Tensor]
 
 
 class Query(ABC):
@@ -187,7 +199,7 @@ class IntegrateQuery(Query):
 class SamplingQuery(Query):
     """The sampling query object."""
 
-    def __init__(self, circuit: TorchCircuit) -> None:
+    def __init__(self, circuit: TorchCircuit, backward: bool = False) -> None:
         """Initialize a sampling query object. Currently, only sampling from the joint distribution
             is supported, i.e., sampling won't work in the case of circuits obtained by
             marginalization, or by observing evidence. Conditional sampling is currently not
@@ -195,6 +207,10 @@ class SamplingQuery(Query):
 
         Args:
             circuit: The circuit to sample from.
+            backward: If True, use top-down (backward) ancestral sampling: walk the address
+                book in reverse from the root and at each layer track only the active paths.
+                If False (default), use the bottom-up forward sampler that materializes
+                samples for every (fold, unit) of every layer.
 
         Raises:
             ValueError: If the circuit to sample from is not normalised.
@@ -207,6 +223,7 @@ class SamplingQuery(Query):
         # TODO: add a check to verify the circuit is monotonic and normalized?
         super().__init__()
         self._circuit = circuit
+        self._backward = backward
 
     def __call__(self, num_samples: int = 1) -> tuple[Tensor, list[Tensor]]:
         """Sample a number of data points.
@@ -218,13 +235,18 @@ class SamplingQuery(Query):
             A pair (samples, mixture_samples), consisting of (i) an assignment to the observed
             variables the circuit is defined on, and (ii) the samples of the finitely-discrete
             latent variables associated to the sum units. The samples (i) are returned as a
-            tensor of shape (num_samples, num_variables).
+            tensor of shape (num_samples, num_variables). In backward mode `mixture_samples`
+            is always an empty list.
 
         Raises:
             ValueError: if the number of samples is not a positive number.
         """
         if num_samples <= 0:
             raise ValueError("The number of samples must be a positive number")
+
+        if self._backward:
+            samples = _backward_sample(self._circuit, num_samples)
+            return samples, []
 
         mixture_samples: list[Tensor] = []
         # samples: (O, K, num_samples, D)
@@ -273,3 +295,266 @@ class SamplingQuery(Query):
         fold_idx = torch.arange(samples.shape[0], device=samples.device)
         padded_samples[fold_idx, :, :, scope_idx.squeeze(dim=1)] = samples
         return padded_samples
+
+
+# --- Backward (top-down) sampling ---------------------------------------------------------
+#
+# Walks the circuit's address book in reverse. For each entry we track the active paths as
+# (sample_ids, folds, units) — three parallel 1-D tensors. At sum / CPT layers we sample
+# which input to follow; at Hadamard layers we broadcast to all arity branches; at input
+# layers we sample a value and write it to the output buffer.
+
+
+@torch.no_grad()
+def _backward_sample(circuit: TorchCircuit, num_samples: int) -> Tensor:
+    """Top-down ancestral sampling. See SamplingQuery for the user-facing API."""
+    device = next(circuit.parameters()).device
+    entries = list(circuit.address_book)
+    num_entries = len(entries)
+
+    selections: dict[int, _Selection] = {}
+
+    # Initialize root: all N samples start at fold=0, unit=0.
+    output_entry = entries[-1]
+    root_idx = output_entry.in_module_ids[0][0]
+    all_sample_ids = torch.arange(num_samples, dtype=torch.long, device=device)
+    selections[root_idx] = (
+        all_sample_ids,
+        torch.zeros(num_samples, dtype=torch.long, device=device),
+        torch.zeros(num_samples, dtype=torch.long, device=device),
+    )
+
+    samples = torch.zeros(num_samples, circuit.num_variables, dtype=torch.long, device=device)
+
+    for entry_idx in range(num_entries - 2, -1, -1):
+        entry = entries[entry_idx]
+        if entry.module is None or entry_idx not in selections:
+            continue
+
+        if isinstance(entry.module, TorchInputLayer):
+            _backward_sample_input(entry, selections[entry_idx], samples)
+        elif isinstance(entry.module, TorchCPTLayer):
+            _backward_sample_cpt(entry, selections[entry_idx], entries, selections)
+        elif isinstance(entry.module, TorchSumLayer):
+            _backward_sample_sum(entry, selections[entry_idx], entries, selections)
+        elif isinstance(entry.module, TorchHadamardLayer):
+            _backward_sample_hadamard(entry, selections[entry_idx], entries, selections)
+        else:
+            raise NotImplementedError(
+                f"Backward sampling not implemented for {type(entry.module).__name__}"
+            )
+
+        del selections[entry_idx]
+
+    return samples
+
+
+def _remap_folds(folds: Tensor, num_folds: int, param_folds: int) -> Tensor:
+    # Shared (replicated) parameters: collapse actual fold indices onto parameter folds.
+    if param_folds == num_folds:
+        return folds
+    return folds % param_folds
+
+
+def _get_fold_offsets(in_layer_ids: list[int], entries: list[AddressBookEntry]) -> dict[int, int]:
+    offsets: dict[int, int] = {}
+    cum = 0
+    for mid in in_layer_ids:
+        offsets[mid] = cum
+        cum += entries[mid].module.num_folds
+    return offsets
+
+
+def _append_selection(
+    selections: dict[int, _Selection],
+    mid: int,
+    sample_ids: Tensor,
+    folds: Tensor,
+    units: Tensor,
+) -> None:
+    if mid in selections:
+        old_sids, old_folds, old_units = selections[mid]
+        selections[mid] = (
+            torch.cat([old_sids, sample_ids]),
+            torch.cat([old_folds, folds]),
+            torch.cat([old_units, units]),
+        )
+    else:
+        selections[mid] = (sample_ids, folds, units)
+
+
+def _dispatch_to_children(
+    sample_ids: Tensor,
+    concat_folds: Tensor,
+    unit_values: Tensor,
+    in_layer_ids: list[int],
+    fold_offsets: dict[int, int],
+    entries: list[AddressBookEntry],
+    selections: dict[int, _Selection],
+) -> None:
+    # When multiple input modules are concatenated, fold_idx values index into the
+    # concatenated fold space. Resolve back to (child_entry, local_fold) using offsets.
+    for mid in in_layer_ids:
+        offset = fold_offsets[mid]
+        child_num_folds = entries[mid].module.num_folds
+        mask = (concat_folds >= offset) & (concat_folds < offset + child_num_folds)
+        if not mask.any():
+            continue
+        idx = mask.nonzero(as_tuple=True)[0]
+        _append_selection(
+            selections,
+            mid,
+            sample_ids[idx],
+            concat_folds[idx] - offset,
+            unit_values[idx],
+        )
+
+
+def _backward_sample_input(
+    entry: AddressBookEntry[TorchLayer],
+    selection: _Selection,
+    samples: Tensor,
+) -> None:
+    if not isinstance(entry.module, TorchCategoricalLayer):
+        raise NotImplementedError(
+            f"Backward sampling not implemented for input layer {type(entry.module).__name__}"
+        )
+
+    sample_ids, folds, units = selection
+
+    if entry.module.logits is None:
+        assert entry.module.probs is not None
+        logits = torch.log(entry.module.probs())
+    else:
+        logits = entry.module.logits()
+
+    param_folds = _remap_folds(folds, entry.module.num_folds, logits.shape[0])
+    selected_logits = logits[param_folds, units]  # (P, C)
+    sampled_values = torch.distributions.Categorical(logits=selected_logits).sample()  # (P,)
+
+    var_indices = entry.module.scope_idx[folds, 0]  # scope_idx uses actual folds
+    samples[sample_ids, var_indices] = sampled_values
+
+
+def _backward_sample_sum(
+    entry: AddressBookEntry[TorchLayer],
+    selection: _Selection,
+    entries: list[AddressBookEntry],
+    selections: dict[int, _Selection],
+) -> None:
+    """Sum layer: sample which of Ki*H inputs each path follows."""
+    sample_ids, folds, units = selection
+
+    weight = entry.module.weight()
+    param_folds = _remap_folds(folds, entry.module.num_folds, weight.shape[0])
+    selected_weights = weight[param_folds, units]  # (P, Ki*H)
+    input_idx = torch.distributions.Categorical(probs=selected_weights).sample()  # (P,)
+    arity_branch = input_idx // entry.module.num_input_units
+    unit_within = input_idx % entry.module.num_input_units
+
+    fold_idx_h = entry.in_fold_idx[0]
+    in_layer_ids = entry.in_module_ids[0]
+    fold_offsets = _get_fold_offsets(in_layer_ids, entries)
+
+    if isinstance(fold_idx_h, tuple):
+        child_mid = in_layer_ids[0]
+        if fold_idx_h == (None,):
+            # unsqueeze dim=0: all parent folds map to child fold = arity_branch (or 0)
+            child_folds = (
+                arity_branch if entry.module.arity > 1 else torch.zeros_like(arity_branch)
+            )
+        else:
+            # (slice(None), None) — unsqueeze dim=1: parent fold f maps to child fold f
+            child_folds = folds
+        _append_selection(selections, child_mid, sample_ids, child_folds, unit_within)
+    elif isinstance(fold_idx_h, Tensor):
+        if fold_idx_h.shape[1] == 1 and entry.module.arity == 1:
+            child_concat_folds = fold_idx_h[folds, 0]
+        else:
+            child_concat_folds = fold_idx_h[folds, arity_branch]
+        _dispatch_to_children(
+            sample_ids,
+            child_concat_folds,
+            unit_within,
+            in_layer_ids,
+            fold_offsets,
+            entries,
+            selections,
+        )
+
+
+def _backward_sample_cpt(
+    entry: AddressBookEntry[TorchLayer],
+    selection: _Selection,
+    entries: list[AddressBookEntry],
+    selections: dict[int, _Selection],
+) -> None:
+    """CPT = Hadamard + Sum fused: sample a unit, then broadcast to all arity branches."""
+    sample_ids, folds, units = selection
+
+    weight = entry.module.weight()
+    param_folds = _remap_folds(folds, entry.module.num_folds, weight.shape[0])
+    selected_weights = weight[param_folds, units]  # (P, Ki)
+    unit_within = torch.distributions.Categorical(probs=selected_weights).sample()  # (P,)
+
+    fold_idx_h = entry.in_fold_idx[0]
+    in_layer_ids = entry.in_module_ids[0]
+    fold_offsets = _get_fold_offsets(in_layer_ids, entries)
+
+    if isinstance(fold_idx_h, tuple):
+        child_mid = in_layer_ids[0]
+        if fold_idx_h == (None,):
+            for h in range(entry.module.arity):
+                child_folds = torch.full_like(unit_within, h)
+                _append_selection(selections, child_mid, sample_ids, child_folds, unit_within)
+        else:
+            for _ in range(entry.module.arity):
+                _append_selection(selections, child_mid, sample_ids, folds.clone(), unit_within)
+    elif isinstance(fold_idx_h, Tensor):
+        for h in range(entry.module.arity):
+            child_concat_folds = fold_idx_h[folds, h]
+            _dispatch_to_children(
+                sample_ids,
+                child_concat_folds,
+                unit_within,
+                in_layer_ids,
+                fold_offsets,
+                entries,
+                selections,
+            )
+
+
+def _backward_sample_hadamard(
+    entry: AddressBookEntry[TorchLayer],
+    selection: _Selection,
+    entries: list[AddressBookEntry],
+    selections: dict[int, _Selection],
+) -> None:
+    """Hadamard: independence between children — broadcast parent selection unchanged."""
+    sample_ids, folds, units = selection
+
+    fold_idx_h = entry.in_fold_idx[0]
+    in_layer_ids = entry.in_module_ids[0]
+    fold_offsets = _get_fold_offsets(in_layer_ids, entries)
+
+    if isinstance(fold_idx_h, Tensor):
+        for h in range(entry.module.arity):
+            child_concat_folds = fold_idx_h[folds, h]
+            _dispatch_to_children(
+                sample_ids,
+                child_concat_folds,
+                units,
+                in_layer_ids,
+                fold_offsets,
+                entries,
+                selections,
+            )
+    elif isinstance(fold_idx_h, tuple):
+        child_mid = in_layer_ids[0]
+        if fold_idx_h == (None,):
+            for h in range(entry.module.arity):
+                child_folds = torch.full_like(units, h)
+                _append_selection(selections, child_mid, sample_ids, child_folds, units)
+        else:
+            for _ in range(entry.module.arity):
+                _append_selection(selections, child_mid, sample_ids, folds.clone(), units)
