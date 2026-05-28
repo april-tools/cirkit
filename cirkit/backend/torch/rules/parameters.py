@@ -31,6 +31,7 @@ from cirkit.backend.torch.parameters.nodes import (
     TorchScaledSigmoidParameter,
     TorchSigmoidParameter,
     TorchSoftmaxParameter,
+    TorchSoftplusParameter,
     TorchSquareParameter,
     TorchSumParameter,
     TorchTensorParameter,
@@ -61,6 +62,7 @@ from cirkit.symbolic.parameters import (
     ScaledSigmoidParameter,
     SigmoidParameter,
     SoftmaxParameter,
+    SoftplusParameter,
     SquareParameter,
     SumParameter,
     TensorParameter,
@@ -188,6 +190,13 @@ def compile_clamp_parameter(compiler: "TorchCompiler", p: ClampParameter) -> Tor
     return TorchClampParameter(in_shape, vmin=p.vmin, vmax=p.vmax)
 
 
+def compile_softplus_parameter(
+    compiler: "TorchCompiler", p: SoftplusParameter
+) -> TorchSoftplusParameter:
+    (in_shape,) = p.in_shapes
+    return TorchSoftplusParameter(in_shape)
+
+
 def compile_conjugate_parameter(
     compiler: "TorchCompiler", p: ClampParameter
 ) -> TorchConjugateParameter:
@@ -285,6 +294,7 @@ DEFAULT_PARAMETER_COMPILATION_RULES: dict[
     SigmoidParameter: compile_sigmoid_parameter,
     ScaledSigmoidParameter: compile_scaled_sigmoid_parameter,
     ClampParameter: compile_clamp_parameter,
+    SoftplusParameter: compile_softplus_parameter,
     ConjugateParameter: compile_conjugate_parameter,
     ReduceSumParameter: compile_reduce_sum_parameter,
     ReduceProductParameter: compile_reduce_product_parameter,

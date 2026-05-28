@@ -170,10 +170,10 @@ If you use cirkit in your publications, please cite:
 
 ```
 @software{The_APRIL_Lab_cirkit_2024,
-author = {The APRIL Lab},
+author = {{The april Lab}},
 license = {GPL-3.0},
 month = oct,
-title = {{cirkit}},
+title = {{cirkit: a python framework to build, learn and reason about probabilistic circuits and tensor networks}},
 url = {https://github.com/april-tools/cirkit},
 version = {0.1},
 year = {2024}
