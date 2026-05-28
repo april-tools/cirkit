@@ -11,7 +11,7 @@ version = "0.2.1"
 description = "a python framework to build, learn and reason about probabilistic circuits and tensor networks"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text="GPLv3" }
+license = { text = "GPLv3" }
 keywords = [
   "probabilistic-modeling",
   "tractable-models",
@@ -21,11 +21,9 @@ keywords = [
   "probabilistic-reasoning",
   "tensor-network-decompositions",
   "tractable-inference",
-  "tensor-net"
+  "tensor-net",
 ]
-authors = [
-  { name="The APRIL Lab." }
-]
+authors = [{ name = "The APRIL Lab." }]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
@@ -40,7 +38,7 @@ dependencies = [
   "opt_einsum>=3.4.0",
   "einops~=0.8.0",
   "scipy~=1.14.0",
-  "graphviz~=0.20.3"
+  "graphviz~=0.20.3",
 ]
 
 [project.urls]
@@ -66,6 +64,7 @@ docs = [
   "mkdocs-literate-nav",
   "mkdocs-section-index",
   "mkdocs-jupyter",
+  "mkdocs-video",
 ]
 notebooks = [
   "notebook",
@@ -87,9 +86,7 @@ notebooks = [
 [tool.pytest.ini_options]
 pythonpath = "."
 testpaths = ["tests"]
-markers = [
-  "slow: marks tests as slow (deselect with '-m \"not slow\"')"
-]
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 
 # code coverage
 [tool.coverage.run]
@@ -97,7 +94,7 @@ branch = true
 source = ["cirkit"]
 [tool.coverage.report]
 show_missing = true
-exclude_also = [  # regex for exclusion
+exclude_also = [ # regex for exclusion
   '@overload',
 ]
 
@@ -114,7 +111,7 @@ required-version = "25"
 py_version = 310
 profile = "black"
 line_length = 100
-extra_standard_library = [  # we treat these as stdlib
+extra_standard_library = [ # we treat these as stdlib
   "typing_extensions",
 ]
 
@@ -122,8 +119,8 @@ extra_standard_library = [  # we treat these as stdlib
 [tool.pylint.main]
 py-version = "3.10"
 fail-under = 9.5
-load-plugins = [  # as available in pylint/extensions
-  "pylint_per_file_ignores",  # TODO: wait for native support in pylint
+load-plugins = [ # as available in pylint/extensions
+  "pylint_per_file_ignores",                                     # TODO: wait for native support in pylint
   "pylint.extensions.broad_try_clause",
   "pylint.extensions.check_elif",
   "pylint.extensions.code_style",
@@ -138,19 +135,19 @@ load-plugins = [  # as available in pylint/extensions
   "pylint.extensions.private_import",
   "pylint.extensions.redefined_loop_name",
   "pylint.extensions.redefined_variable_type",
-  "pylint.extensions.set_membership"
+  "pylint.extensions.set_membership",
 ]
-per-file-ignores = [  # TODO: wait for native support in pylint
-    "/tests/:missing-function-docstring,missing-return-doc",
+per-file-ignores = [ # TODO: wait for native support in pylint
+  "/tests/:missing-function-docstring,missing-return-doc",
 ]
 
 [tool.pylint."design"]
-max-statements = 60  # default=50
-max-branches = 15  # default=12
-max-locals = 25  # default=15
-max-args = 12  # default=5: many functions require lots of hyperparameters
-max-positional-arguments = 12  # default=5: many functions require lots of hyperparameters
-max-parents = 8  # default=7: there is a deep hierarchy of parameter operation nodes
+max-statements = 60           # default=50
+max-branches = 15             # default=12
+max-locals = 25               # default=15
+max-args = 12                 # default=5: many functions require lots of hyperparameters
+max-positional-arguments = 12 # default=5: many functions require lots of hyperparameters
+max-parents = 8               # default=7: there is a deep hierarchy of parameter operation nodes
 
 [tool.pylint."messages control"]
 max-line-length = 100
