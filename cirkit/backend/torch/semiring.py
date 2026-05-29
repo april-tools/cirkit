@@ -7,7 +7,7 @@ from typing import ClassVar, Protocol, cast
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.utils import csafelog
+from cirkit.backend.torch.utils import csafelog, safelog
 
 Semiring = type["SemiringImpl"]
 
@@ -365,19 +365,19 @@ class LSESumSemiring(SemiringImpl):
 
     @classmethod
     def sum(cls, x: Tensor, dim: int, *, keepdim: bool = False) -> Tensor:
-        return x.logsumexp(dim=dim, keepdim=keepdim)
+        return x.logsumexp(dim=dim, keepdim=keepdim).clamp_min(-708.3964185322641)
 
     @classmethod
     def add(cls, *xs: Tensor) -> Tensor:
-        return functools.reduce(torch.logaddexp, xs)
+        return functools.reduce(torch.logaddexp, xs).clamp_min(-708.3964185322641)
 
     @classmethod
     def prod(cls, x: Tensor, dim: int, *, keepdim: bool = False) -> Tensor:
-        return x.sum(dim=dim, keepdim=keepdim)
+        return x.sum(dim=dim, keepdim=keepdim).clamp_min(-708.3964185322641)
 
     @classmethod
     def mul(cls, *xs: Tensor) -> Tensor:
-        return functools.reduce(torch.add, xs)
+        return functools.reduce(torch.add, xs).clamp_min(-708.3964185322641)
 
     @classmethod
     def apply_reduce(
@@ -405,7 +405,13 @@ class LSESumSemiring(SemiringImpl):
         reduced_max_xs = functools.reduce(torch.add, max_xs)  # Do n-1 add instead of n.
         if not keepdim:
             reduced_max_xs = reduced_max_xs.squeeze(dim)  # To match shape of func_exp_x.
-        return torch.log(func_exp_xs) + reduced_max_xs
+        return safelog(func_exp_xs) + reduced_max_xs
+
+
+# Helper function to clamp both values of complex tensors
+def _clamp_complex(y) -> None:
+    y.real.clamp_min_(-708.3964185322641)
+    y.imag.clamp_min_(-708.3964185322641)
 
 
 @SemiringImpl.register("complex-lse-sum")
@@ -423,19 +429,27 @@ class ComplexLSESumSemiring(SemiringImpl):
 
     @classmethod
     def sum(cls, x: Tensor, dim: int, *, keepdim: bool = False) -> Tensor:
-        return x.logsumexp(dim=dim, keepdim=keepdim)
+        y = x.logsumexp(dim=dim, keepdim=keepdim)
+        _clamp_complex(y)
+        return y
 
     @classmethod
     def add(cls, *xs: Tensor) -> Tensor:
-        return functools.reduce(torch.logaddexp, xs)
+        y = functools.reduce(torch.logaddexp, xs)
+        _clamp_complex(y)
+        return y
 
     @classmethod
     def prod(cls, x: Tensor, dim: int, *, keepdim: bool = False) -> Tensor:
-        return x.sum(dim=dim, keepdim=keepdim)
+        y = x.sum(dim=dim, keepdim=keepdim)
+        _clamp_complex(y)
+        return y
 
     @classmethod
     def mul(cls, *xs: Tensor) -> Tensor:
-        return functools.reduce(torch.add, xs)
+        y = functools.reduce(torch.add, xs)
+        _clamp_complex(y)
+        return y
 
     @classmethod
     def apply_reduce(
@@ -492,7 +506,7 @@ def _(x: Tensor) -> Tensor:
 
 @LSESumSemiring.register_map_from(SumProductSemiring)
 def _(x: Tensor) -> Tensor:
-    return torch.log(x)
+    return safelog(x)
 
 
 @LSESumSemiring.register_map_from(ComplexLSESumSemiring)
