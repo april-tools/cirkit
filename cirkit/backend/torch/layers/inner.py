@@ -113,7 +113,11 @@ class TorchHadamardLayer(TorchInnerLayer):
         if arity < 2:
             raise ValueError("The arity should be at least 2")
         super().__init__(
-            num_input_units, num_input_units, arity=arity, semiring=semiring, num_folds=num_folds
+            num_input_units,
+            num_input_units,
+            arity=arity,
+            semiring=semiring,
+            num_folds=num_folds,
         )
 
     @property
@@ -232,7 +236,11 @@ class TorchSumLayer(TorchInnerLayer):
         if arity < 1:
             raise ValueError("The arity must be a positive integer")
         super().__init__(
-            num_input_units, num_output_units, arity=arity, semiring=semiring, num_folds=num_folds
+            num_input_units,
+            num_output_units,
+            arity=arity,
+            semiring=semiring,
+            num_folds=num_folds,
         )
         if not self._valid_weight_shape(weight):
             raise ValueError(
@@ -298,3 +306,19 @@ class TorchSumLayer(TorchInnerLayer):
         # x: (F, Ko, num_samples, D)
         x = torch.gather(x, dim=1, index=mixing_indices)
         return x, mixing_samples
+
+    def em_accumulate(self):
+        # The gradient automatically accumulate for sum weights
+        pass
+
+    def em_step(self, step_size: float, pseudocount: float, alpha: float):
+        weight = list(self.parameters())[0]
+        if not weight.requires_grad:
+            return
+        weight_grad = weight.grad.clamp(0.0)
+        unn_exp_weight = weight * weight_grad
+        exp_weight = (unn_exp_weight + pseudocount / self.weight.shape[-1]) / (
+            unn_exp_weight.sum(dim=-1, keepdim=True) + pseudocount
+        )
+
+        weight.data.lerp_(exp_weight, weight=step_size)

@@ -164,7 +164,9 @@ class TorchConstantLayer(TorchInputLayer, ABC):
                 Defaults to [SumProductSemiring][cirkit.backend.torch.semiring.SumProductSemiring].
         """
         super().__init__(
-            torch.empty(size=(num_folds, 0), dtype=torch.int64), num_output_units, semiring=semiring
+            torch.empty(size=(num_folds, 0), dtype=torch.int64),
+            num_output_units,
+            semiring=semiring,
         )
 
     def __call__(self, batch_size: int) -> Tensor:
@@ -273,9 +275,22 @@ class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
     possibly-unnormalized log-likelihood. The second one is the ```log_partition_function```,
     used to compute the logarithm of the partition function."""
 
+    _em_cache_input: Tensor | None = None
+    _em_cache_output: Tensor | None = None
+
+    _em_numerator: Tensor | None = None
+    _em_denominator: Tensor | None = None
+
     def forward(self, x: Tensor) -> Tensor:
-        x = self.log_unnormalized_likelihood(x)
-        return self.semiring.map_from(x, LSESumSemiring)
+        out = self.log_unnormalized_likelihood(x)
+        out = self.semiring.map_from(out, LSESumSemiring)
+
+        if self._use_em and list(self.parameters())[0].requires_grad:
+            if out.requires_grad:
+                out.retain_grad()
+            self._em_cache_input = x
+            self._em_cache_output = out
+        return out
 
     def integrate(self) -> Tensor:
         log_partition = self.log_partition_function()
@@ -303,6 +318,47 @@ class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
                 Note that it will be a tensor of zeros if the layer encodes already normalized
                 exponential family distributions.
         """
+
+    def _sufficient_statistic(self) -> Tensor:
+        """Compute sufficient statistics for each parameters
+
+        Returns:
+            Tensor with each paramater's sufficient statistic stacked along the last dimension
+
+        Raises:
+            NotImplementedError: Raised if the sufficient statistics is not implemented.
+        """
+        raise NotImplementedError(
+            f"Sufficient statistic is not implemented for {self.__class__.__name__}"
+        )
+
+    def _comp_em_numerator(self) -> Tensor:
+        """Compute the numerator of the EM update.
+
+        We allow the user to override this instead of just the computation of the sufficient statistic
+        as some layer, such as the Categorical layer, can use tricks to compute the numerator with
+        less memory."""
+        suff_stat = self._sufficient_statistic()
+        pl = self._em_cache_output.grad.unsqueeze(-1)
+        return torch.sum(suff_stat * pl, dim=1)
+
+    def em_accumulate(self):
+        if self._em_numerator is None:
+            self._em_numerator = self._comp_em_numerator().detach()
+        else:
+            self._em_numerator += self._comp_em_numerator().detach()
+
+        pl = self._em_cache_output.grad.clamp(0.0).unsqueeze(-1)
+        if self._em_denominator is None:
+            self._em_denominator = torch.sum(pl, dim=1)
+        else:
+            self._em_denominator += torch.sum(pl, dim=1)
+
+        # Updates have been computed so we need to reset the gradient
+        self.zero_grad()
+
+    def em_step(self, step_size: float, pseudocount: float, alpha: float):
+        raise NotImplementedError(f"EM step not implemented for {self.__class__.__name__}")
 
 
 class TorchCategoricalLayer(TorchExpFamilyLayer):
@@ -415,7 +471,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         if self.logits is None:
             assert self.probs is not None
             return torch.zeros(
-                size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
+                size=(self.num_folds, 1, self.num_output_units),
+                device=self.probs.device,
             )
         logits = self.logits()
         return torch.logsumexp(logits, dim=2)
@@ -432,6 +489,24 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
+
+    def _sufficient_statistic(self) -> Tensor:
+        stat = torch.nn.functional.one_hot(
+            self._em_cache_input.long(), num_classes=self.num_categories
+        ).squeeze(2)
+        return stat
+
+    def _comp_em_numerator(self) -> Tensor:
+        pl = self._em_cache_output.grad.clamp(0.0)
+        return torch.einsum("ilj, ilk->ijk", pl, self._sufficient_statistic().type(pl.type()))
+
+    def em_step(self, step_size: float, pseudocount: float, alpha: float):
+        exp_params = (self._em_numerator + pseudocount / self.num_categories) / (
+            self._em_denominator.squeeze(-1) + pseudocount
+        ).unsqueeze(-1)
+        list(self.parameters())[0].data.lerp_(exp_params, weight=step_size)
+        self._em_numerator = None
+        self._em_denominator = None
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
@@ -683,6 +758,17 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
+
+    def _sufficient_statistic(self) -> Tensor:
+        return torch.stack((self._em_cache_input, self._em_cache_input**2), dim=-1)
+
+    def em_step(self, step_size: float, pseudocount: float, alpha: float):
+        exp_params = self._em_numerator / self._em_denominator.clamp(min=alpha)
+        mean, stdev = list(self.parameters())
+        new_mean = exp_params[..., 0]
+        new_stddev = torch.sqrt((exp_params[..., 1] - exp_params[..., 0] ** 2).clamp(min=alpha))
+        mean.data.lerp_(new_mean, weight=step_size)
+        stdev.data.lerp_(new_stddev, weight=step_size)
 
 
 class TorchConstantValueLayer(TorchConstantLayer):
