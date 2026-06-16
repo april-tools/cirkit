@@ -96,7 +96,7 @@ def test_train_em_gaussian_pc():
 
     optim = EM(cc, lr=1, pseudocount=1e-8)
     losses = []
-    for epoch in range(10):
+    for epoch in range(100):
         ll = cc(dataset)
         loss = ll.mean()
         loss.backward()
@@ -166,7 +166,7 @@ def test_train_em_categorical_pc():
 
     optim = EM(cc, lr=1, pseudocount=1e-8)
     losses = []
-    for epoch in range(10):
+    for epoch in range(100):
         ll = cc(dataset)
         loss = ll.mean()
         loss.backward()
