@@ -21,12 +21,15 @@ def ChowLiuTree(
     list of predecessors (Bayesian net) or as region graph (HCLT).
 
     See:
-        - *Approximating discrete probability distributions with dependence trees* [🔗](https://ieeexplore.ieee.org/abstract/document/1054142)
+        - *Approximating discrete probability distributions with dependence trees*
+          [🔗](https://ieeexplore.ieee.org/abstract/document/1054142)
           CKCN Chow and Cong Liu.
           In IEEE transactions on Information Theory, 14(3):462–467, 1968b.
 
-        - *What is the Relationship between Tensor Factorizations and Circuits (and How Can We Exploit it)?* [🔗](https://openreview.net/forum?id=Y7dRmpGiHj)
-          Lorenzo Loconte and Antonio Mari and Gennaro Gala and Robert Peharz and Cassio de Campos and Erik Quaeghebeur and Gennaro Vessio and Antonio Vergari
+        - *What is the Relationship between Tensor Factorizations and Circuits (and How Can We
+          Exploit it)?* [🔗](https://openreview.net/forum?id=Y7dRmpGiHj)
+          Lorenzo Loconte and Antonio Mari and Gennaro Gala and Robert Peharz and Cassio de
+          Campos and Erik Quaeghebeur and Gennaro Vessio and Antonio Vergari
           In Transactions on Machine Learning Research, 2025.
 
     Args:
@@ -66,8 +69,7 @@ def ChowLiuTree(
             data.long(), num_categories=num_categories, chunk_size=chunk_size
         )
     elif input_type == "gaussian":
-        # todo: implement chunked computation
-        mutual_info = -0.5 * torch.log(1 - torch.corrcoef(data.t()) ** 2)
+        mutual_info = _gaussian_mutual_info(data, chunk_size=chunk_size)
     else:
         raise NotImplementedError(f"MI computation not implemented for {input_type} input units")
 
@@ -151,13 +153,74 @@ def _categorical_mutual_info(
     return (joints * (joints.log() - outers.log())).sum(dim=(2, 3)).fill_diagonal_(0)
 
 
+def _gaussian_mutual_info(
+    data: Tensor,
+    chunk_size: int | None = None,
+) -> Tensor:
+    """Computes the mutual information (MI) matrix assuming jointly Gaussian variables.
+
+    For a pair of jointly Gaussian variables the MI has the closed form
+    I(X_i, X_j) = -0.5 * log(1 - rho_ij ** 2), where rho_ij is their Pearson
+    correlation coefficient. The unnormalized covariance is accumulated over chunks
+    of samples, this reduces the centered-data scratch space from
+    O(n_samples * n_features) to O(chunk_size * n_features).
+
+    Args:
+        data (Tensor): The input data over which computing the MI matrix, it must be in
+            tabular form, i.e., a matrix of shape (num_samples, num_features).
+        chunk_size (int | None): Number of samples per chunk. If None, all samples are
+            processed at once.
+
+    Returns:
+        Tensor: The mutual information matrix, with main diagonal equal to 0.
+
+    Raises:
+        ValueError: If data is not a real floating-point matrix with at least two samples
+            and one feature, or if chunk_size is not a positive integer.
+    """
+    n_samples, n_features = data.size()
+
+    assert not torch.is_complex(data)
+    assert torch.is_floating_point(data)
+    assert n_samples > 1
+    assert n_features > 0
+
+    if chunk_size is None:
+        chunk_size = n_samples
+    elif not isinstance(chunk_size, int) or isinstance(chunk_size, bool) or chunk_size <= 0:
+        raise ValueError(f"Expected chunk_size to be a positive integer, but found {chunk_size}")
+
+    gaussian_correlation_epsilon = torch.finfo(data.dtype).eps
+    mean = data.mean(dim=0)
+    covariance = torch.zeros(n_features, n_features, dtype=data.dtype, device=data.device)
+
+    # Accumulate S = sum_n (x_n - mean)(x_n - mean)^T over sample chunks
+    for chunk in data.split(chunk_size):
+        centered = chunk - mean
+        covariance = covariance + centered.t() @ centered
+
+    variance = covariance.diagonal()
+    inv_std = torch.zeros_like(variance)
+    non_constant = variance > 0
+    inv_std[non_constant] = variance[non_constant].rsqrt()
+
+    # rho_ij = S_ij / sqrt(S_ii S_jj)
+    correlation = covariance.mul(inv_std.unsqueeze(1)).mul(inv_std.unsqueeze(0))
+    # I(X_i, X_j) = -0.5 * log(1 - rho_ij^2)
+    squared_correlation = correlation.square().clamp_max(1.0 - gaussian_correlation_epsilon)
+    mutual_info = -0.5 * torch.log1p(-squared_correlation)
+
+    return mutual_info.fill_diagonal_(0)
+
+
 def _heterogeneous_mutual_info(
     data: Tensor, is_categorical_mask: list[bool], normalize: bool = True
 ) -> Tensor:
     """Computes the mutual information (MI) matrix for heterogeneous data
     (both discrete/categorical data and continuous).
     The MI among continuous variables is computed as if they were a Multivariate Gaussian.
-    The MI among discrete variables is computed using the categorical mutual information defined above.
+    The MI among discrete variables is computed using the categorical mutual information
+    defined above.
     The MI between a continuous variable C and discrete variable D is computed using the formula:
         I(C, D) = H(C) - H(C | D)
     assuming gaussian distributions p(C|D) for continuous variables when conditioned on discrete
@@ -187,12 +250,9 @@ def _heterogeneous_mutual_info(
 
     # Compute mutual information for continuous variables as they were a Multivariate Gaussian
     if len(continuous_subset) > 1:
-        mi_matrix[continuous_subset.unsqueeze(1), continuous_subset] = (
-            -0.5
-            * torch.log(
-                1 - torch.corrcoef(data[:, continuous_subset].t()).fill_diagonal_(0) ** 2
-            ).float()
-        )
+        mi_matrix[continuous_subset.unsqueeze(1), continuous_subset] = _gaussian_mutual_info(
+            data[:, continuous_subset]
+        ).float()
 
     # Compute mutual information for discrete variables
     if len(discrete_subset) > 1:
