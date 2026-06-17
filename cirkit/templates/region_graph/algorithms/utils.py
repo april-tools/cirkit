@@ -91,7 +91,7 @@ def tree2rg(tree: np.ndarray) -> RegionGraph:
             else:
                 p_scope = Scope([v]) | prev_partition.scope
                 partitions[prev_v] = PartitionNode(p_scope)
-            cur_v, prev_v = prev_v, tree[cur_v]
+            cur_v, prev_v = prev_v, int(tree[cur_v])
 
     for part_node in partitions:
         if part_node is not None:
