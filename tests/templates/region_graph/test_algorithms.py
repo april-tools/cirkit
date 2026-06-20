@@ -149,43 +149,80 @@ def test_rg_algorithm_poon_domingos(
     check_region_graph_save_load(rg)
 
 
-def _chow_liu_data(input_type: str, num_variables: int, num_samples: int) -> "torch.Tensor":
+def _chow_liu_tree_data(
+    input_type: str, parents: list[int], is_categorical: list[bool], num_samples: int
+):
     torch.manual_seed(42)
+    coupling = 0.9
+    num_categories = 4
+    num_variables = len(parents)
     if input_type == "categorical":
-        data = torch.randint(0, 5, (num_samples, num_variables))
-        data[:, 1] = torch.where(torch.rand(num_samples) < 0.8, data[:, 0], data[:, 1])
-    elif input_type == "gaussian":
-        data = torch.randn(num_samples, num_variables)
-        data[:, 1] += 0.7 * data[:, 0]
-    else:  # heterogeneous: half continuous, half discrete columns
-        num_continuous = num_variables // 2
-        continuous = torch.randn(num_samples, num_continuous)
-        continuous[:, 1 % num_continuous] += 0.7 * continuous[:, 0]
-        discrete = torch.randint(0, 4, (num_samples, num_variables - num_continuous)).float()
-        data = torch.cat([continuous, discrete], dim=1)
-    return data
+        columns = [torch.randint(0, num_categories, (num_samples,))]
+        for parent in parents[1:]:
+            noise = torch.randint(0, num_categories, (num_samples,))
+            # child = parent with coupling probability, else child = random noise
+            mask = torch.rand(num_samples) < coupling
+            columns.append(torch.where(mask, columns[parent], noise))
+        return torch.stack(columns, dim=1)
+    latent = [torch.randn(num_samples)]
+    for parent in parents[1:]:
+        noise = torch.randn(num_samples)
+        latent.append(coupling * latent[parent] + (1 - coupling**2) ** 0.5 * noise)
+    if input_type == "gaussian":
+        return torch.stack(latent, dim=1)
+    # heterogeneous data
+    probs = torch.arange(1, num_categories, dtype=torch.float32) / num_categories
+    cut_points = torch.distributions.Normal(0.0, 1.0).icdf(probs)
+    columns = [
+        torch.bucketize(latent[v], cut_points).float() if is_categorical[v] else latent[v]
+        for v in range(num_variables)
+    ]
+    return torch.stack(columns, dim=1)
 
 
 @pytest.mark.parametrize(
-    "input_type,chunk_size",
-    itertools.product(["categorical", "gaussian", "heterogeneous"], [None, 256]),
+    "input_type,chunk_size,bin_for_mi",
+    [
+        (input_type, chunk_size, bin_for_mi)
+        for input_type in ["categorical", "gaussian", "heterogeneous"]
+        for chunk_size in [None, 256]
+        for bin_for_mi in ([None, 10] if input_type == "heterogeneous" else [None])
+    ],
 )
-def test_rg_algorithm_chow_liu_tree(input_type: str, chunk_size: int | None):
-    num_variables = 6
-    num_samples = 2000
-    data = _chow_liu_data(input_type, num_variables, num_samples)
+def test_rg_algorithm_chow_liu_tree(
+    input_type: str, chunk_size: int | None, bin_for_mi: int | None
+):
+    # parent index for each variable, -1 when the variable is the root
+    parents = [-1, 0, 0, 1, 1, 2]
+    # for heterogeneous input_type only
+    is_categorical = [False, False, True, False, True, True]
+    num_samples = 8000
+    num_variables = len(parents)
+    data = _chow_liu_tree_data(input_type, parents, is_categorical, num_samples)
     if input_type == "heterogeneous":
-        num_continuous = num_variables // 2
-        rg_input_type: str | list[str] = ["gaussian"] * num_continuous + ["categorical"] * (
-            num_variables - num_continuous
-        )
+        rg_input_type = ["categorical" if c else "gaussian" for c in is_categorical]
     else:
         rg_input_type = input_type
 
-    rg = ChowLiuTree(
-        data=data, input_type=rg_input_type, chunk_size=chunk_size, as_region_graph=True
+    tree = ChowLiuTree(
+        data=data,
+        input_type=rg_input_type,
+        root=0,
+        chunk_size=chunk_size,
+        bin_for_mi=bin_for_mi,
+        as_region_graph=False,
     )
+    assert tree.shape == (num_variables,)
+    assert np.array_equal(tree, np.asarray(parents))
 
+    rg = ChowLiuTree(
+        data=data,
+        input_type=rg_input_type,
+        root=0,
+        chunk_size=chunk_size,
+        bin_for_mi=bin_for_mi,
+        as_region_graph=True,
+    )
     assert isinstance(rg, RegionGraph)
     root: RegionNode
     (root,) = list(rg.outputs)

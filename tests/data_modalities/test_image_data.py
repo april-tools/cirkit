@@ -112,9 +112,8 @@ def test_image_data_chow_liu_tree_options(
         sum_weight_param=utils.Parameterization(activation="softmax", initialization="normal"),
     )
 
-    # Check if the finite log-likelihoods has the expected shape
     assert len(symbolic_circuit.scope) == num_variables
     circuit = compile(symbolic_circuit)
-    ll = circuit(data)
-    assert ll.shape == (num_samples, 1, 1)
-    assert torch.isfinite(ll).all()
+    output = circuit(data)
+    assert output.shape == (num_samples, 1, 1)
+    assert torch.isfinite(output).all()

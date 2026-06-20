@@ -16,6 +16,7 @@ def ChowLiuTree(
     num_categories: int | None = None,
     num_bins: int | None = None,
     as_region_graph: bool = True,
+    bin_for_mi: int | None = None,
 ) -> np.ndarray | RegionGraph:
     """Learns a Chow-Liu Tree and returns it either as a
     list of predecessors (Bayesian net) or as region graph (HCLT).
@@ -46,6 +47,9 @@ def ChowLiuTree(
             which is useful for images.
         as_region_graph (Optional[bool]): True to returns a region graph,
             False to return a list of predecessors. Defaults to True.
+        bin_for_mi (int | None): For heterogeneous (list) input, the number of bins used to
+            discretize the continuous features so the whole MI matrix is estimated with the
+            categorical estimator; if None, the mixed Gaussian/categorical estimator is used.
 
     Returns:
         A Chow-Liu Tree, either a list of predecessors or as a region graph.
@@ -57,8 +61,13 @@ def ChowLiuTree(
     assert data.ndim == 2
     assert root is None or -1 < root < data.size(-1)
     if isinstance(input_type, list):
-        mutual_info = _heterogeneous_mutual_info(
-            data, is_categorical_mask=[name == "categorical" for name in input_type]
+        is_categorical_mask = [name == "categorical" for name in input_type]
+        mutual_info = (
+            _heterogeneous_mutual_info(data, is_categorical_mask=is_categorical_mask)
+            if bin_for_mi is None
+            else _heterogeneous_mutual_info_bin(
+                data, is_categorical_mask=is_categorical_mask, bins=bin_for_mi
+            )
         )
     elif input_type == "categorical":
         if num_bins is not None:
@@ -211,6 +220,23 @@ def _gaussian_mutual_info(
     mutual_info = -0.5 * torch.log1p(-squared_correlation)
 
     return mutual_info.fill_diagonal_(0)
+
+
+def _heterogeneous_mutual_info_bin(
+    data: Tensor, is_categorical_mask: list[bool], bins: int = 10
+) -> Tensor:
+
+    is_categorical = torch.tensor(is_categorical_mask, dtype=torch.bool, device=data.device)
+    continuous_subset = torch.where(~is_categorical)[0]
+
+    x = data[:, continuous_subset].clone()
+    x = (x - x.min(dim=0, keepdim=True).values) * bins / x.max(dim=0, keepdim=True).values
+    x = x.round()
+
+    discretized_data = data.clone()
+    discretized_data[:, continuous_subset] = x
+
+    return _categorical_mutual_info(discretized_data.long()).float()
 
 
 def _heterogeneous_mutual_info(
