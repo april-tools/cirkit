@@ -222,23 +222,6 @@ def _gaussian_mutual_info(
     return mutual_info.fill_diagonal_(0)
 
 
-def _heterogeneous_mutual_info_bin(
-    data: Tensor, is_categorical_mask: list[bool], bins: int = 10
-) -> Tensor:
-
-    is_categorical = torch.tensor(is_categorical_mask, dtype=torch.bool, device=data.device)
-    continuous_subset = torch.where(~is_categorical)[0]
-
-    x = data[:, continuous_subset].clone()
-    x = (x - x.min(dim=0, keepdim=True).values) * bins / x.max(dim=0, keepdim=True).values
-    x = x.round()
-
-    discretized_data = data.clone()
-    discretized_data[:, continuous_subset] = x
-
-    return _categorical_mutual_info(discretized_data.long()).float()
-
-
 def _heterogeneous_mutual_info(
     data: Tensor, is_categorical_mask: list[bool], normalize: bool = True
 ) -> Tensor:
@@ -338,3 +321,39 @@ def _heterogeneous_mutual_info(
         mi_matrix = 2 * mi_matrix / (entropy.unsqueeze(0) + entropy.unsqueeze(1))
 
     return mi_matrix.fill_diagonal_(0)
+
+
+def _heterogeneous_mutual_info_bin(
+    data: Tensor, is_categorical_mask: list[bool], bins: int = 10
+) -> Tensor:
+    """Computes the mutual information (MI) matrix for heterogeneous data by binning.
+
+    Differently from `_heterogeneous_mutual_info`, which treats the continuous variables as a
+    Multivariate Gaussian, this estimator discretizes each continuous variable into integer bins
+    (by rescaling and rounding) and then computes the whole MI matrix with the categorical mutual
+    information estimator. This avoids any Gaussian assumption on the continuous variables, at the
+    cost of a binning approximation.
+
+    Args:
+        data: The input data over which computing the MI matrix,
+            it must be in tabular form (i.e. a matrix).
+        is_categorical_mask: A boolean mask of the same length as the number of columns in `data`,
+            indicating if the column has to be considered categorical. The columns that are not
+            categorical (i.e. continuous) are the ones being discretized into bins.
+        bins: The number of bins into which each continuous variable is discretized.
+
+    Returns:
+        The mutual information matrix (main diagonal is 0).
+    """
+
+    is_categorical = torch.tensor(is_categorical_mask, dtype=torch.bool, device=data.device)
+    continuous_subset = torch.where(~is_categorical)[0]
+
+    x = data[:, continuous_subset].clone()
+    x = (x - x.min(dim=0, keepdim=True).values) * bins / x.max(dim=0, keepdim=True).values
+    x = x.round()
+
+    discretized_data = data.clone()
+    discretized_data[:, continuous_subset] = x
+
+    return _categorical_mutual_info(discretized_data.long()).float()

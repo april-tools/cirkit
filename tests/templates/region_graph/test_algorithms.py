@@ -151,7 +151,7 @@ def test_rg_algorithm_poon_domingos(
 
 def _chow_liu_tree_data(
     input_type: str, parents: list[int], is_categorical: list[bool], num_samples: int
-):
+) -> torch.Tensor:
     torch.manual_seed(42)
     coupling = 0.9
     num_categories = 4
