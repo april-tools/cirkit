@@ -457,16 +457,29 @@ def _backward_sample_sum(
     fold_offsets = _get_fold_offsets(in_layer_ids, entries)
 
     if isinstance(fold_idx_h, tuple):
-        child_mid = in_layer_ids[0]
+        # The tuple shape encodes an identity (unsqueeze) mapping over the *concatenated*
+        # child-fold space. With a single child we can append directly; with multiple children
+        # we must dispatch the concatenated fold to the right child.
         if fold_idx_h == (None,):
-            # unsqueeze dim=0: all parent folds map to child fold = arity_branch (or 0)
-            child_folds = (
+            # unsqueeze dim=0: parent has 1 fold; arity slot h reads child concat-fold = h.
+            child_concat_folds = (
                 arity_branch if entry.module.arity > 1 else torch.zeros_like(arity_branch)
             )
         else:
-            # (slice(None), None) — unsqueeze dim=1: parent fold f maps to child fold f
-            child_folds = folds
-        _append_selection(selections, child_mid, sample_ids, child_folds, unit_within)
+            # (slice(None), None) — unsqueeze dim=1: arity is 1; parent fold f reads concat-fold f.
+            child_concat_folds = folds
+        if len(in_layer_ids) == 1:
+            _append_selection(selections, in_layer_ids[0], sample_ids, child_concat_folds, unit_within)
+        else:
+            _dispatch_to_children(
+                sample_ids,
+                child_concat_folds,
+                unit_within,
+                in_layer_ids,
+                fold_offsets,
+                entries,
+                selections,
+            )
     elif isinstance(fold_idx_h, Tensor):
         if fold_idx_h.shape[1] == 1 and entry.module.arity == 1:
             child_concat_folds = fold_idx_h[folds, 0]
@@ -502,14 +515,28 @@ def _backward_sample_cpt(
     fold_offsets = _get_fold_offsets(in_layer_ids, entries)
 
     if isinstance(fold_idx_h, tuple):
-        child_mid = in_layer_ids[0]
-        if fold_idx_h == (None,):
-            for h in range(entry.module.arity):
-                child_folds = torch.full_like(unit_within, h)
-                _append_selection(selections, child_mid, sample_ids, child_folds, unit_within)
-        else:
-            for _ in range(entry.module.arity):
-                _append_selection(selections, child_mid, sample_ids, folds.clone(), unit_within)
+        single_child = len(in_layer_ids) == 1
+        for h in range(entry.module.arity):
+            if fold_idx_h == (None,):
+                # unsqueeze dim=0: arity slot h reads child concat-fold = h.
+                child_concat_folds = torch.full_like(unit_within, h)
+            else:
+                # (slice(None), None): arity is 1 here; concat-fold = parent fold f.
+                child_concat_folds = folds.clone()
+            if single_child:
+                _append_selection(
+                    selections, in_layer_ids[0], sample_ids, child_concat_folds, unit_within
+                )
+            else:
+                _dispatch_to_children(
+                    sample_ids,
+                    child_concat_folds,
+                    unit_within,
+                    in_layer_ids,
+                    fold_offsets,
+                    entries,
+                    selections,
+                )
     elif isinstance(fold_idx_h, Tensor):
         for h in range(entry.module.arity):
             child_concat_folds = fold_idx_h[folds, h]
@@ -550,11 +577,23 @@ def _backward_sample_hadamard(
                 selections,
             )
     elif isinstance(fold_idx_h, tuple):
-        child_mid = in_layer_ids[0]
-        if fold_idx_h == (None,):
-            for h in range(entry.module.arity):
-                child_folds = torch.full_like(units, h)
-                _append_selection(selections, child_mid, sample_ids, child_folds, units)
-        else:
-            for _ in range(entry.module.arity):
-                _append_selection(selections, child_mid, sample_ids, folds.clone(), units)
+        single_child = len(in_layer_ids) == 1
+        for h in range(entry.module.arity):
+            if fold_idx_h == (None,):
+                child_concat_folds = torch.full_like(units, h)
+            else:
+                child_concat_folds = folds.clone()
+            if single_child:
+                _append_selection(
+                    selections, in_layer_ids[0], sample_ids, child_concat_folds, units
+                )
+            else:
+                _dispatch_to_children(
+                    sample_ids,
+                    child_concat_folds,
+                    units,
+                    in_layer_ids,
+                    fold_offsets,
+                    entries,
+                    selections,
+                )
