@@ -181,16 +181,16 @@ def _chow_liu_tree_data(
 
 
 @pytest.mark.parametrize(
-    "input_type,chunk_size,bin_for_mi",
+    "input_type,chunk_size,heter_cont_bins",
     [
-        (input_type, chunk_size, bin_for_mi)
+        (input_type, chunk_size, heter_cont_bins)
         for input_type in ["categorical", "gaussian", "heterogeneous"]
         for chunk_size in [None, 256]
-        for bin_for_mi in ([None, 10] if input_type == "heterogeneous" else [None])
+        for heter_cont_bins in ([None, 10] if input_type == "heterogeneous" else [None])
     ],
 )
 def test_rg_algorithm_chow_liu_tree(
-    input_type: str, chunk_size: int | None, bin_for_mi: int | None
+    input_type: str, chunk_size: int | None, heter_cont_bins: int | None
 ):
     # parent index for each variable, -1 when the variable is the root
     parents = [-1, 0, 0, 1, 1, 2]
@@ -209,7 +209,7 @@ def test_rg_algorithm_chow_liu_tree(
         input_type=rg_input_type,
         root=0,
         chunk_size=chunk_size,
-        bin_for_mi=bin_for_mi,
+        heter_cont_bins=heter_cont_bins,
         as_region_graph=False,
     )
     assert tree.shape == (num_variables,)
@@ -220,7 +220,7 @@ def test_rg_algorithm_chow_liu_tree(
         input_type=rg_input_type,
         root=0,
         chunk_size=chunk_size,
-        bin_for_mi=bin_for_mi,
+        heter_cont_bins=heter_cont_bins,
         as_region_graph=True,
     )
     assert isinstance(rg, RegionGraph)
