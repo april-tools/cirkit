@@ -14,9 +14,9 @@ def ChowLiuTree(
     root: int | None = None,
     chunk_size: int | None = None,
     num_categories: int | None = None,
-    num_bins: int | None = None,
+    cat_bins: int | None = None,
     as_region_graph: bool = True,
-    bin_for_mi: int | None = None,
+    heter_cont_bins: int | None = None,
 ) -> np.ndarray | RegionGraph:
     """Learns a Chow-Liu Tree and returns it either as a
     list of predecessors (Bayesian net) or as region graph (HCLT).
@@ -42,12 +42,12 @@ def ChowLiuTree(
         chunk_size (int | None): Chunked computation, useful in case of large input data.
         num_categories (int | None): Specifies the number of categories in case of
             categorical data.
-        num_bins (int | None): In case of categorical input, it is used to rescale
+        cat_bins (int | None): In case of categorical input, it is used to rescale
             categories in bins for ordinal features, e.g. [0, 255] -> [0, 7],
             which is useful for images.
         as_region_graph (Optional[bool]): True to returns a region graph,
             False to return a list of predecessors. Defaults to True.
-        bin_for_mi (int | None): For heterogeneous (list) input, the number of bins used to
+        heter_cont_bins (int | None): For heterogeneous (list) input, the number of bins used to
             discretize the continuous features so the whole MI matrix is estimated with the
             categorical estimator; if None, the mixed Gaussian/categorical estimator is used.
 
@@ -64,16 +64,16 @@ def ChowLiuTree(
         is_categorical_mask = [name == "categorical" for name in input_type]
         mutual_info = (
             _heterogeneous_mutual_info(data, is_categorical_mask=is_categorical_mask)
-            if bin_for_mi is None
+            if heter_cont_bins is None
             else _heterogeneous_mutual_info_bin(
-                data, is_categorical_mask=is_categorical_mask, bins=bin_for_mi
+                data, is_categorical_mask=is_categorical_mask, bins=heter_cont_bins
             )
         )
     elif input_type == "categorical":
-        if num_bins is not None:
+        if cat_bins is not None:
             if num_categories is None:
                 raise ValueError("Number of categories must be known if rescaling in bins")
-            data = torch.div(data, num_categories // num_bins, rounding_mode="floor")
+            data = torch.div(data, num_categories // cat_bins, rounding_mode="floor")
         mutual_info = _categorical_mutual_info(
             data.long(), num_categories=num_categories, chunk_size=chunk_size
         )
