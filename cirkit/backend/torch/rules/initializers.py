@@ -37,9 +37,7 @@ def normalize_initializer(init: Callable[[torch.Tensor], torch.Tensor]):
 
     def norm_init(tensor: torch.Tensor):
         init(tensor)
-        print(f"apply softmax {tensor}")
         tensor.copy_(tensor.softmax(dim=-1))
-        print(f"after softmax {tensor}")
         return tensor
 
     return norm_init
@@ -57,7 +55,9 @@ def compile_uniform_initializer(
     compiler: "TorchCompiler", init: UniformInitializer
 ) -> InitializerFunc:
     if init.convex:
-        return normalize_initializer(functools.partial(nn.init.uniform_, a=init.a, b=init.b))
+        return normalize_initializer(
+            functools.partial(nn.init.uniform_, a=init.a, b=init.b)
+        )
     else:
         return functools.partial(nn.init.uniform_, a=init.a, b=init.b)
 

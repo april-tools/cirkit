@@ -15,9 +15,27 @@ def _create_hook(layer: TorchLayer):
 
 
 class EM(Optimizer):
-    """Expectation Maximization optimizer for torch backend."""
+    """Expectation Maximization optimizer for torch backend.
 
-    def __init__(self, pc: TorchCircuit, lr: float, pseudocount: float, alpha: float = 1e-8):
+    WARNING: This optimizer should be used by calling the model ONLY on the training data.
+    Doing something like:
+    ```python
+        ll=model(train_data)
+        model(random_data)
+
+        ll.sum().backward()
+        optim.step()
+    ```
+
+    Will cause the cached input used for the update to be `random_data` instead of `train_data`
+
+    Also, it should be noted that this is a maximiser, so it should be trained with log-likelihood and
+    not negative log log-likelihood.
+    """
+
+    def __init__(
+        self, pc: TorchCircuit, lr: float, pseudocount: float, alpha: float = 1e-8
+    ):
         """Initialize the optimizer.
 
         Args:
@@ -38,7 +56,7 @@ class EM(Optimizer):
         for layer in self.pc.layers:
             layer.enable_em()
 
-            # Accumulate the update right after the gradient are computed
+            # Accumulate the update right after the gradients are computed
             # we use the first parameter of the layer to trigger the layer update
             # which updates all parameters.
             params = list(layer.parameters())
@@ -57,3 +75,6 @@ class EM(Optimizer):
                 self.param_groups[0]["pseudocount"],
                 self.param_groups[0]["alpha"],
             )
+
+    def zero_grad(self, set_to_none=True):
+        self.pc.zero_grad(set_to_none=set_to_none)

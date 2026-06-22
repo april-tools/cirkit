@@ -37,7 +37,9 @@ class TorchInputLayer(TorchLayer, ABC):
         if len(scope_idx.shape) == 1:
             scope_idx = scope_idx.unsqueeze(dim=0)
         elif len(scope_idx.shape) > 2:
-            raise ValueError(f"The scope index must be a matrix, but found shape {scope_idx.shape}")
+            raise ValueError(
+                f"The scope index must be a matrix, but found shape {scope_idx.shape}"
+            )
         num_folds, num_variables = scope_idx.shape
         super().__init__(
             num_input_units=num_variables,
@@ -320,7 +322,7 @@ class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
         """
 
     def _sufficient_statistic(self) -> Tensor:
-        """Compute sufficient statistics for each parameters
+        """Compute sufficient statistics for each parameter
 
         Returns:
             Tensor with each paramater's sufficient statistic stacked along the last dimension
@@ -339,14 +341,15 @@ class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
         as some layer, such as the Categorical layer, can use tricks to compute the numerator with
         less memory."""
         suff_stat = self._sufficient_statistic()
-        pl = self._em_cache_output.grad.unsqueeze(-1)
+        pl = self._em_cache_output.grad.unsqueeze(-1).clamp(0.0)
         return torch.sum(suff_stat * pl, dim=1)
 
     def em_accumulate(self):
-        if self._em_numerator is None:
-            self._em_numerator = self._comp_em_numerator().detach()
-        else:
-            self._em_numerator += self._comp_em_numerator().detach()
+        with torch.no_grad():
+            if self._em_numerator is None:
+                self._em_numerator = self._comp_em_numerator()
+            else:
+                self._em_numerator += self._comp_em_numerator()
 
         pl = self._em_cache_output.grad.clamp(0.0).unsqueeze(-1)
         if self._em_denominator is None:
@@ -358,7 +361,9 @@ class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
         self.zero_grad()
 
     def em_step(self, step_size: float, pseudocount: float, alpha: float):
-        raise NotImplementedError(f"EM step not implemented for {self.__class__.__name__}")
+        raise NotImplementedError(
+            f"EM step not implemented for {self.__class__.__name__}"
+        )
 
 
 class TorchCategoricalLayer(TorchExpFamilyLayer):
@@ -411,7 +416,9 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         )
         self.num_categories = num_categories
         if not (logits is None) ^ (probs is None):
-            raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
+            raise ValueError(
+                "Exactly one between 'logits' and 'probs' must be specified"
+            )
         if logits is None:
             assert probs is not None
             if not self._valid_parameter_shape(probs):
@@ -498,15 +505,18 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
 
     def _comp_em_numerator(self) -> Tensor:
         pl = self._em_cache_output.grad.clamp(0.0)
-        return torch.einsum("ilj, ilk->ijk", pl, self._sufficient_statistic().type(pl.type()))
+        return torch.bmm(
+            pl.permute(0, 2, 1), self._sufficient_statistic().type(pl.type())
+        )
 
     def em_step(self, step_size: float, pseudocount: float, alpha: float):
-        exp_params = (self._em_numerator + pseudocount / self.num_categories) / (
-            self._em_denominator.squeeze(-1) + pseudocount
-        ).unsqueeze(-1)
-        list(self.parameters())[0].data.lerp_(exp_params, weight=step_size)
-        self._em_numerator = None
-        self._em_denominator = None
+        if list(self.parameters())[0].requires_grad:
+            exp_params = (self._em_numerator + pseudocount / self.num_categories) / (
+                self._em_denominator.squeeze(-1) + pseudocount
+            ).unsqueeze(-1)
+            list(self.parameters())[0].data.lerp_(exp_params, weight=step_size)
+            self._em_numerator = None
+            self._em_denominator = None
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
@@ -561,7 +571,9 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
         )
         self.total_count = total_count
         if not (logits is None) ^ (probs is None):
-            raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
+            raise ValueError(
+                "Exactly one between 'logits' and 'probs' must be specified"
+            )
         if logits is None:
             assert probs is not None
             if not self._valid_parameter_shape(probs):
@@ -621,7 +633,9 @@ class TorchBinomialLayer(TorchExpFamilyLayer):
             device = self.probs.device
         else:
             device = self.logits.device
-        return torch.zeros(size=(self.num_folds, 1, self.num_output_units), device=device)
+        return torch.zeros(
+            size=(self.num_folds, 1, self.num_output_units), device=device
+        )
 
     def sample(self, num_samples: int = 1) -> Tensor:
         if self.logits is None:
@@ -694,7 +708,9 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
                 f"and shape {self._mean_stddev_shape} for 'stddev', found"
                 f"{stddev.num_folds} and {stddev.shape}, respectively"
             )
-        if log_partition is not None and not self._valid_log_partition_shape(log_partition):
+        if log_partition is not None and not self._valid_log_partition_shape(
+            log_partition
+        ):
             raise ValueError(
                 f"Expected number of folds {self.num_folds} "
                 f"and shape {self._log_partition_shape} for 'log_partition', found"
@@ -763,12 +779,15 @@ class TorchGaussianLayer(TorchExpFamilyLayer):
         return torch.stack((self._em_cache_input, self._em_cache_input**2), dim=-1)
 
     def em_step(self, step_size: float, pseudocount: float, alpha: float):
-        exp_params = self._em_numerator / self._em_denominator.clamp(min=alpha)
-        mean, stdev = list(self.parameters())
-        new_mean = exp_params[..., 0]
-        new_stddev = torch.sqrt((exp_params[..., 1] - exp_params[..., 0] ** 2).clamp(min=alpha))
-        mean.data.lerp_(new_mean, weight=step_size)
-        stdev.data.lerp_(new_stddev, weight=step_size)
+        if list(self.parameters())[0].requires_grad:
+            exp_params = self._em_numerator / self._em_denominator.clamp(min=alpha)
+            mean, stdev = list(self.parameters())
+            new_mean = exp_params[..., 0]
+            new_stddev = torch.sqrt(
+                (exp_params[..., 1] - exp_params[..., 0] ** 2).clamp(min=alpha)
+            )
+            mean.data.lerp_(new_mean, weight=step_size)
+            stdev.data.lerp_(new_stddev, weight=step_size)
 
 
 class TorchConstantValueLayer(TorchConstantLayer):
@@ -808,7 +827,8 @@ class TorchConstantValueLayer(TorchConstantLayer):
             )
         if value.shape != (num_output_units,):
             raise ValueError(
-                f"The shape of the value must be ({num_output_units},), " f"but found {value.shape}"
+                f"The shape of the value must be ({num_output_units},), "
+                f"but found {value.shape}"
             )
         self.value = value
         self.log_space = log_space
@@ -825,7 +845,9 @@ class TorchConstantValueLayer(TorchConstantLayer):
     def forward(self, batch_size: int) -> Tensor:
         value = self.value()  # (F, Ko)
         # value: (F, B, Ko)
-        value = value.unsqueeze(dim=1).expand(value.shape[0], batch_size, value.shape[1])
+        value = value.unsqueeze(dim=1).expand(
+            value.shape[0], batch_size, value.shape[1]
+        )
         return self.semiring.map_from(value, self._source_semiring)
 
 
@@ -860,7 +882,8 @@ class TorchEvidenceLayer(TorchConstantLayer):
             )
         if len(observation.shape) != 1:
             raise ValueError(
-                f"Expected observation of shape (num_variables,), " f"but found {observation.shape}"
+                f"Expected observation of shape (num_variables,), "
+                f"but found {observation.shape}"
             )
         if observation.shape[0] != layer.num_variables:
             raise ValueError(
@@ -891,7 +914,9 @@ class TorchEvidenceLayer(TorchConstantLayer):
 
     def sample(self, num_samples: int = 1) -> Tensor:
         if self.num_variables != 1:
-            raise NotImplementedError("Sampling a multivariate Evidence layer is not implemented")
+            raise NotImplementedError(
+                "Sampling a multivariate Evidence layer is not implemented"
+            )
         # Sampling an evidence layer translates to return the given observation
         obs = self.observation()  # (F, D=1)
         obs = obs.unsqueeze(dim=-1)  # (F, 1, 1)
@@ -971,7 +996,9 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
             coeff.unbind(dim=2)
         ):  # Reverse iterator of the degree axis, shape (F, Ko).
             # a_n shape (F, Ko) -> (F, 1, Ko).
-            y = torch.addcmul(a_n.unsqueeze(dim=1), x, y)  # y = a_n + x * y, by Horner's method.
+            y = torch.addcmul(
+                a_n.unsqueeze(dim=1), x, y
+            )  # y = a_n + x * y, by Horner's method.
         return y  # shape (F, B, Ko).
 
     @property
@@ -987,4 +1014,6 @@ class TorchPolynomialLayer(TorchInputFunctionLayer):
 
     def forward(self, x: Tensor) -> Tensor:
         coeff = self.coeff()  # shape (F, Ko, dp1)
-        return self.semiring.map_from(TorchPolynomialLayer._polyval(coeff, x), SumProductSemiring)
+        return self.semiring.map_from(
+            TorchPolynomialLayer._polyval(coeff, x), SumProductSemiring
+        )

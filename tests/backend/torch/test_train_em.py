@@ -94,7 +94,7 @@ def test_train_em_gaussian_pc():
     cc = compiler.compile(sc)
     cc = cc.train()
 
-    optim = EM(cc, lr=1, pseudocount=1e-8)
+    optim = EM(cc, lr=1, pseudocount=0.0)
     losses = []
     for epoch in range(100):
         ll = cc(dataset)
@@ -105,7 +105,7 @@ def test_train_em_gaussian_pc():
 
         losses.append(-loss)
 
-    assert sorted(losses, reverse=True) == losses, "Loss should be strictly decreasing"
+    assert sorted(losses, reverse=True) == losses, "Loss should be decreasing"
 
 
 def build_cat_symbolic_circuit(units, n_cat) -> Circuit:
@@ -164,7 +164,7 @@ def test_train_em_categorical_pc():
     cc = compiler.compile(sc)
     cc = cc.train()
 
-    optim = EM(cc, lr=1, pseudocount=1e-8)
+    optim = EM(cc, lr=1, pseudocount=0.0)
     losses = []
     for epoch in range(100):
         ll = cc(dataset)
@@ -175,4 +175,4 @@ def test_train_em_categorical_pc():
 
         losses.append(-loss)
 
-    assert sorted(losses, reverse=True) == losses, "Loss should be strictly decreasing"
+    assert sorted(losses, reverse=True) == losses, "Loss should be decreasing"
