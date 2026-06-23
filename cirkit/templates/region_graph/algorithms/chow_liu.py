@@ -1,3 +1,4 @@
+from warnings import warn
 import numpy as np
 import torch
 from scipy import sparse as sp
@@ -17,6 +18,7 @@ def ChowLiuTree(
     cat_bins: int | None = None,
     as_region_graph: bool = True,
     heter_cont_bins: int | None = None,
+    num_bins: int | None = None,
 ) -> np.ndarray | RegionGraph:
     """Learns a Chow-Liu Tree and returns it either as a
     list of predecessors (Bayesian net) or as region graph (HCLT).
@@ -50,6 +52,7 @@ def ChowLiuTree(
         heter_cont_bins (int | None): For heterogeneous (list) input, the number of bins used to
             discretize the continuous features so the whole MI matrix is estimated with the
             categorical estimator; if None, the mixed Gaussian/categorical estimator is used.
+        num_bins: Deprecated parameters, equivalent to cat_bins
 
     Returns:
         A Chow-Liu Tree, either a list of predecessors or as a region graph.
@@ -60,6 +63,12 @@ def ChowLiuTree(
     """
     assert data.ndim == 2
     assert root is None or -1 < root < data.size(-1)
+
+    if num_bins is not None:
+        warn("Argument `num_bins` will soon be removed, you should use `cat_bins` instead.")
+        assert cat_bins is None, "Cannot set both `num_bins` and `cat_bins`"
+        cat_bins = num_bins
+
     if isinstance(input_type, list):
         is_categorical_mask = [name == "categorical" for name in input_type]
         mutual_info = (
@@ -266,7 +275,9 @@ def _heterogeneous_mutual_info(
     # Compute mutual information for discrete variables
     if len(discrete_subset) > 1:
         mi_matrix[discrete_subset.unsqueeze(1), discrete_subset] = _categorical_mutual_info(
-            data=data[:, discrete_subset].long(), num_categories=None, chunk_size=None
+            data=data[:, discrete_subset].long(),
+            num_categories=None,
+            chunk_size=None,
         ).float()
 
     def gaussian_entropy(x: Tensor) -> Tensor:
@@ -316,7 +327,9 @@ def _heterogeneous_mutual_info(
             list(h_c.values()), dtype=torch.float32, device=data.device
         )
         entropy[discrete_subset] = torch.tensor(
-            [-(p.log() * p).sum() for p in p_d.values()], dtype=torch.float32, device=data.device
+            [-(p.log() * p).sum() for p in p_d.values()],
+            dtype=torch.float32,
+            device=data.device,
         )
         mi_matrix = 2 * mi_matrix / (entropy.unsqueeze(0) + entropy.unsqueeze(1))
 
