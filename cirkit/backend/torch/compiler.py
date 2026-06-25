@@ -448,7 +448,8 @@ def _fold_parameters(
 def _fold_parameter_nodes_group(
     group: list[TorchParameterNode], *, compiler: TorchCompiler
 ) -> TorchParameterNode:
-    """Fold a list of [TorchParameterNode][cirkit.backend.torch.parameters.nodes.TorchParameterNode].
+    """Fold a list of
+    [TorchParameterNode][cirkit.backend.torch.parameters.nodes.TorchParameterNode].
 
     Args:
         group (list[TorchParameterNode]): List of parameter to fold.

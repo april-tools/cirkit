@@ -178,8 +178,8 @@ class PICInputNet(nn.Module):
         )
 
 
-class PICInnerNet(nn.Module):
-    def __init__(
+class PICInnerNet(nn.Module):  # pylint: disable=too-many-instance-attributes
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         num_dim: int,
         num_funcs: int,
@@ -259,7 +259,7 @@ class PICInnerNet(nn.Module):
         """Register a forward hook on the tensor parameter to call this PICInnerNet."""
         pic_net = self  # Capture reference to self
 
-        def forward_hook(module, input, output):
+        def forward_hook(_module, _input, _output):
             # Replace the output with the PICInnerNet's output
             return pic_net()
 
@@ -333,7 +333,7 @@ def _is_mixing_weight_tensor(
 
 
 @torch.no_grad()
-def pc2qpc(
+def pc2qpc(  # pylint: disable=too-many-locals,too-many-branches,protected-access
     pc: TorchCircuit,
     integration_method: str,
     net_dim: int | None = 128,

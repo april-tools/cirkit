@@ -221,7 +221,8 @@ class TorchTensorParameter(TorchParameterInput):
 
 
 class TorchPointerParameter(TorchParameterInput):
-    """Reprensents fold based slices of an existing [TorchTensorParameter][cirkit.backend.torch.parameters.nodes.TorchTensorParameter].
+    """Reprensents fold based slices of an existing
+    [TorchTensorParameter][cirkit.backend.torch.parameters.nodes.TorchTensorParameter].
     These slices can be:
     - A single fold index.
     - A list of potentially non contiguous fold index.
@@ -736,7 +737,7 @@ class TorchSoftplusParameter(TorchEntrywiseParameterOp):
     """
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.nn.functional.softplus(x)
+        return torch.nn.functional.softplus(x)  # pylint: disable=not-callable
 
 
 class TorchConjugateParameter(TorchEntrywiseParameterOp):

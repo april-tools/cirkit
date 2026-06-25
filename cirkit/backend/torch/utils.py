@@ -8,6 +8,12 @@ from torch import Tensor, autograd
 
 # pylint: disable-next=abstract-method
 class SafeLog(autograd.Function):
+    """A numerically safe natural logarithm autograd function.
+
+    In the backward pass, it replaces the NaNs and infinities
+    arising in the gradient with zeros.
+    """
+
     @staticmethod
     def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         return torch.log(x)
@@ -30,6 +36,12 @@ safelog = SafeLog.apply
 
 # pylint: disable-next=abstract-method
 class ComplexSafeLog(autograd.Function):
+    """A numerically safe natural logarithm autograd function for complex inputs.
+
+    In the backward pass, it replaces the NaNs and infinities
+    arising in the gradient with zeros.
+    """
+
     @staticmethod
     def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         return torch.log(x)

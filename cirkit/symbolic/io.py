@@ -8,7 +8,7 @@ from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.layers import HadamardLayer, InputLayer, KroneckerLayer, ProductLayer, SumLayer
 
 
-def plot_circuit(
+def plot_circuit(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     circuit: Circuit,
     out_path: str | PathLike[str] | None = None,
     orientation: str = "vertical",

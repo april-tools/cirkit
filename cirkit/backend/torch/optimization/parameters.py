@@ -55,6 +55,8 @@ class LogSoftmaxPattern(ParameterOptPatternDefn):
 
 
 class ReduceSumOuterProductPattern(ParameterOptPatternDefn):
+    """Detect a reduce-sum node applied to the result of an outer-product node."""
+
     @classmethod
     def is_output(cls) -> bool:
         return False

@@ -341,7 +341,7 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
         return RegionGraph(nodes, in_nodes, outputs=outputs)
 
     # TODO: refactor the following method as to simplify its structure (e.g., remove inline methods)
-    def build_circuit(
+    def build_circuit(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         self,
         *,
         input_factory: InputLayerFactory | Mapping[Scope, InputLayerFactory],
@@ -365,7 +365,8 @@ class RegionGraph(DiAcyclicGraph[RegionGraphNode]):
 
         Args:
             input_factory: A factory that builds an input layer. If a Mapping between scopes and
-                input layer factories is given, then a different input layer is built for each feature.
+                input layer factories is given, then a different input layer is built for
+                each feature.
                 In this case, an input layer should be specified for each variable/scope.
             sum_product: The sum-product layer to use. It can be None, 'cp', 'cp-t', or 'tucker'.
             sum_weight_factory: The factory to construct the weights of the sum layers.

@@ -48,9 +48,11 @@ class GraphOptPatternDefn(Generic[TorchModuleT]):
     def config_patterns(cls) -> Sequence[Mapping[str, Any]]:
         """Returns a list of dictionaries that match a config name to a config value.
 
-        The “config” of a layer / parameter node is simply the dictionary returned by `Layer.config`.
+        The “config” of a layer / parameter node is simply the dictionary returned
+        by `Layer.config`.
 
-        The dictionary at position x in the list define the config for the x-th element of the `entries` list.
+        The dictionary at position x in the list define the config for the x-th element
+        of the `entries` list.
 
         For example, the sum layer with config:
 
@@ -80,11 +82,14 @@ class GraphOptPatternDefn(Generic[TorchModuleT]):
 
     @classmethod
     def sub_patterns(cls) -> Sequence[Mapping[str, type["GraphOptPatternDefn"]]]:
-        """Returns a list of dictionaries that map layer's parameter names to a `ParameterOptPattern`.
+        """Returns a list of dictionaries that map layer's parameter names to a
+        `ParameterOptPattern`.
 
-        The dictionary at position x in the list define the config for the x-th element of the `entries` list.
+        The dictionary at position x in the list define the config for the x-th element
+        of the `entries` list.
 
-        For example, you can match the weight parameter of a sum layer to be of a certain `ParameterType`:
+        For example, you can match the weight parameter of a sum layer to be of a certain
+        `ParameterType`:
 
         ```python
         class LayerPatternOne(LayerOptPatternDefn):
@@ -357,7 +362,8 @@ def match_optimization_patterns(
     Returns:
         tuple[list[GraphOptMatch[TorchModuleT]], dict[TorchModuleT, GraphOptMatch[TorchModuleT]]]:
             - List of all the matches after priority-based  filtering
-            - Mapping from the module that matches the root of the pattern to the corresponding match.
+            - Mapping from the module that matches the root of the pattern to the
+              corresponding match.
     """
     ordering = list(ordering) if isinstance(ordering, Iterator) else ordering
     outputs = list(outputs) if isinstance(outputs, Iterator) else outputs
@@ -399,21 +405,24 @@ def _prioritize_optimization_strategy(
     in_place: bool = True,
 ) -> dict[TorchModuleT, GraphOptMatch[TorchModuleT]]:
     """Sort matches according to an optimization strategy and select the highest priority.
-    An optimization pattern match is currently a composition of torch modules, i.e., part of the circuit or a part of the parameter computational graph.
+    An optimization pattern match is currently a composition of torch modules, i.e.,
+    part of the circuit or a part of the parameter computational graph.
     Each torch module can take part in one or more optimization pattern matches.
-    This function resolves such optimization conflicts by using a given optimization prioritization strategy.
+    This function resolves such optimization conflicts by using a given optimization
+    prioritization strategy.
 
     Args:
         ordering (Iterable[TorchModuleT]): List of compiled module in the graph.
-        module_matches (dict[TorchModuleT, list[GraphOptMatch[TorchModuleT]]]): mapping between modules
-            and list of matches.
+        module_matches (dict[TorchModuleT, list[GraphOptMatch[TorchModuleT]]]):
+            mapping between modules and list of matches.
         strategy (OptMatchStrategy, optional): The strategy to use when sorting the matches.
              Defaults to OptMatchStrategy.LARGEST_MATCH.
         in_place (bool, optional): if True, the function will directly modify `module_matches`.
              Defaults to True.
 
     Returns:
-        dict[TorchModuleT, GraphOptMatch[TorchModuleT]]: mapping between modules and exactly one match.
+        dict[TorchModuleT, GraphOptMatch[TorchModuleT]]: mapping between modules
+            and exactly one match.
     """
 
     if not in_place:
@@ -440,14 +449,16 @@ def _prioritize_optimization_strategy(
             )
             if prioritized_match_optional is not None:
                 # If an optimization pattern match has already been selected, then we select it,
-                # and mark all the other optimization pattern matches involving the module to be removed next
+                # and mark all the other optimization pattern matches involving the
+                # module to be removed next
                 prioritized_match = prioritized_match_optional
                 remaining_matches = [m for m in matches if m is not prioritized_match]
             else:
                 # Otherwise, we sort the matches based on the given strategy
                 # We select the optimization pattern match having the highest
                 # priority according to the given strategy (e.g., largest pattern)
-                # The remaining optimization pattern matches involving the module are then marked to be removed
+                # The remaining optimization pattern matches involving the module are
+                # then marked to be removed
                 sorted_matches = _sort_matches_priority(matches, strategy=strategy)
                 prioritized_match = sorted_matches[0]
                 remaining_matches = sorted_matches[1:]

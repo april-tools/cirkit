@@ -13,6 +13,8 @@ Semiring = type["SemiringImpl"]
 
 
 class EinsumFunc(Protocol):
+    """Protocol for einsum-like tensor-contraction callables."""
+
     def __call__(self, *xs: Tensor) -> Tensor: ...
 
 
