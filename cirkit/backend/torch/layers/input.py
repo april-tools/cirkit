@@ -107,6 +107,25 @@ class TorchInputLayer(TorchLayer, ABC):
         """
         raise TypeError(f"Sampling is not supported for layers of type {type(self)}")
 
+    def backward_sample(
+        self,
+        selection: tuple[Tensor, Tensor, Tensor],
+        samples: Tensor,
+    ) -> None:
+        """Perform a top-down sampling step at this input layer, writing into `samples`.
+
+        Args:
+            selection: `(sample_ids, folds, units)` — the active paths reaching this layer.
+            samples: The `(num_samples, num_variables)` output buffer. The layer writes the
+                sampled value for variable `scope_idx[fold, 0]` at row `sample_ids[i]`.
+
+        Raises:
+            TypeError: If backward sampling is not supported by the layer.
+        """
+        raise TypeError(
+            f"Backward sampling not implemented for input layer {type(self).__name__}"
+        )
+
     def extra_repr(self) -> str:
         return (
             "  ".join(
@@ -432,6 +451,24 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         samples = dist.sample((num_samples,))
         samples = samples.permute(1, 2, 0)  # (F, K, N)
         return samples
+
+    def backward_sample(
+        self,
+        selection: tuple[Tensor, Tensor, Tensor],
+        samples: Tensor,
+    ) -> None:
+        sample_ids, folds, units = selection
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
+        # Shared-parameter layers replicate `logits` across folds — collapse fold index.
+        param_folds = folds % logits.shape[0]
+        selected_logits = logits[param_folds, units]  # (P, C)
+        sampled = distributions.Categorical(logits=selected_logits).sample()  # (P,)
+        var_indices = self.scope_idx[folds, 0]
+        samples[sample_ids, var_indices] = sampled
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import einops as E
@@ -9,6 +10,28 @@ from torch import Tensor
 from cirkit.backend.torch.layers.base import TorchLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
+
+
+# (sample_ids, folds, units) — three parallel 1-D tensors of length P, where P is the number
+# of active paths at a layer during top-down (backward) sampling.
+BackwardSelection = tuple[Tensor, Tensor, Tensor]
+
+
+@dataclass
+class ArityBranch:
+    """The local result of `backward_sample` for one arity slot of an inner layer.
+
+    `sample_ids` and `folds` are subsets of the parent's selection (subset = identity
+    when all paths are active at this slot, e.g. Hadamard/CPT). `units` is the unit
+    each path selects in the child at this slot.
+
+    The driver translates `folds` (parent fold) through `entry.in_fold_idx[0]` to find
+    the child concat-fold, then dispatches across children via `entry.in_module_ids[0]`.
+    """
+
+    sample_ids: Tensor
+    folds: Tensor
+    units: Tensor
 
 
 class TorchInnerLayer(TorchLayer, ABC):
@@ -81,6 +104,23 @@ class TorchInnerLayer(TorchLayer, ABC):
         """
         raise TypeError(f"Sampling not implemented for {type(self)}")
 
+    def backward_sample(self, selection: BackwardSelection) -> list[ArityBranch]:
+        """Perform a single top-down (backward) sampling step at this layer.
+
+        Args:
+            selection: `(sample_ids, folds, units)` — the active paths reaching this layer
+                from above. All three are 1-D tensors of the same length P.
+
+        Returns:
+            A list of length `arity`; entry `h` describes what to propagate to arity slot `h`.
+            Sum layers return a non-trivial subset per slot (paths whose sampled input falls
+            in slot `h`); Hadamard/CPT broadcast the full selection to every slot.
+
+        Raises:
+            TypeError: If backward sampling is not supported by the layer.
+        """
+        raise TypeError(f"Backward sampling not implemented for {type(self).__name__}")
+
 
 class TorchHadamardLayer(TorchInnerLayer):
     """The Hadamard product layer, which computes an element-wise (or Hadamard) product of
@@ -131,6 +171,11 @@ class TorchHadamardLayer(TorchInnerLayer):
         # x: (F, H, C, K, num_samples, D)
         x = torch.sum(x, dim=1)  # (F, C, K, num_samples, D)
         return x, None
+
+    def backward_sample(self, selection: BackwardSelection) -> list[ArityBranch]:
+        # Independence across children: broadcast the selection unchanged to every arity slot.
+        sample_ids, folds, units = selection
+        return [ArityBranch(sample_ids, folds, units) for _ in range(self.arity)]
 
 
 class TorchKroneckerLayer(TorchInnerLayer):
@@ -298,3 +343,25 @@ class TorchSumLayer(TorchInnerLayer):
         # x: (F, Ko, num_samples, D)
         x = torch.gather(x, dim=1, index=mixing_indices)
         return x, mixing_samples
+
+    def backward_sample(self, selection: BackwardSelection) -> list[ArityBranch]:
+        # Sample which of (Ki * arity) inputs each path follows, then split by arity slot.
+        sample_ids, folds, units = selection
+        weight = self.weight()
+        # Shared-parameter layers replicate `weight` across folds — collapse fold index.
+        param_folds = folds % weight.shape[0]
+        selected_weights = weight[param_folds, units]  # (P, Ki*H)
+        input_idx = torch.distributions.Categorical(probs=selected_weights).sample()  # (P,)
+        arity_branch = input_idx // self.num_input_units
+        unit_within = input_idx % self.num_input_units
+
+        branches: list[ArityBranch] = []
+        for h in range(self.arity):
+            mask = arity_branch == h
+            if mask.any():
+                idx = mask.nonzero(as_tuple=True)[0]
+                branches.append(ArityBranch(sample_ids[idx], folds[idx], unit_within[idx]))
+            else:
+                empty = torch.empty(0, dtype=torch.long, device=sample_ids.device)
+                branches.append(ArityBranch(empty, empty, empty))
+        return branches

@@ -5,7 +5,7 @@ import einops as E
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.layers.inner import TorchInnerLayer
+from cirkit.backend.torch.layers.inner import ArityBranch, BackwardSelection, TorchInnerLayer
 from cirkit.backend.torch.parameters.parameter import TorchParameter
 from cirkit.backend.torch.semiring import Semiring
 
@@ -200,6 +200,15 @@ class TorchCPTLayer(TorchInnerLayer):
 
         x = torch.gather(x, dim=1, index=mixing_indices)
         return x, mixing_samples
+
+    def backward_sample(self, selection: BackwardSelection) -> list[ArityBranch]:
+        # CPT = fused product + sum: sample a unit, broadcast it to every arity slot.
+        sample_ids, folds, units = selection
+        weight = self.weight()
+        param_folds = folds % weight.shape[0]
+        selected_weights = weight[param_folds, units]  # (P, Ki)
+        unit_within = torch.distributions.Categorical(probs=selected_weights).sample()  # (P,)
+        return [ArityBranch(sample_ids, folds, unit_within) for _ in range(self.arity)]
 
 
 class TorchTensorDotLayer(TorchInnerLayer):

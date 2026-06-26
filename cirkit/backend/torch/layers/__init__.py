@@ -1,4 +1,6 @@
 from .base import TorchLayer as TorchLayer
+from .inner import ArityBranch as ArityBranch
+from .inner import BackwardSelection as BackwardSelection
 from .inner import TorchHadamardLayer as TorchHadamardLayer
 from .inner import TorchInnerLayer as TorchInnerLayer
 from .inner import TorchKroneckerLayer as TorchKroneckerLayer
