@@ -1,16 +1,19 @@
 import itertools
 from collections.abc import Sequence
-from typing import Any, Callable
+from typing import Any, Callable, Final
 
 import torch
 from torch import Tensor, autograd
+
+
+LOG_CLAMP_MIN: Final = -708.3964185322641
 
 
 # pylint: disable-next=abstract-method
 class SafeLog(autograd.Function):
     @staticmethod
     def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
-        return torch.log(x).clamp_min(-708.3964185322641)
+        return torch.log(x).clamp_min(LOG_CLAMP_MIN)
 
     @staticmethod
     def setup_context(  # pylint: disable=arguments-differ
@@ -33,9 +36,9 @@ class ComplexSafeLog(autograd.Function):
     @staticmethod
     def forward(x: Tensor) -> Tensor:  # pylint: disable=arguments-differ
         y = torch.log(x)
-        y.real.clamp_min_(-708.3964185322641)
+        y.real.clamp_min_(LOG_CLAMP_MIN)
         if torch.is_complex(y):
-            y.imag.clamp_min_(-708.3964185322641)
+            y.imag.clamp_min_(LOG_CLAMP_MIN)
         return y
 
     @staticmethod

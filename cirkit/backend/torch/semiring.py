@@ -7,7 +7,7 @@ from typing import ClassVar, Protocol, cast
 import torch
 from torch import Tensor
 
-from cirkit.backend.torch.utils import csafelog, safelog
+from cirkit.backend.torch.utils import LOG_CLAMP_MIN, csafelog, safelog
 
 Semiring = type["SemiringImpl"]
 
@@ -365,19 +365,19 @@ class LSESumSemiring(SemiringImpl):
 
     @classmethod
     def sum(cls, x: Tensor, dim: int, *, keepdim: bool = False) -> Tensor:
-        return x.logsumexp(dim=dim, keepdim=keepdim).clamp_min(-708.3964185322641)
+        return x.logsumexp(dim=dim, keepdim=keepdim).clamp_min(LOG_CLAMP_MIN)
 
     @classmethod
     def add(cls, *xs: Tensor) -> Tensor:
-        return functools.reduce(torch.logaddexp, xs).clamp_min(-708.3964185322641)
+        return functools.reduce(torch.logaddexp, xs).clamp_min(LOG_CLAMP_MIN)
 
     @classmethod
     def prod(cls, x: Tensor, dim: int, *, keepdim: bool = False) -> Tensor:
-        return x.sum(dim=dim, keepdim=keepdim).clamp_min(-708.3964185322641)
+        return x.sum(dim=dim, keepdim=keepdim).clamp_min(LOG_CLAMP_MIN)
 
     @classmethod
     def mul(cls, *xs: Tensor) -> Tensor:
-        return functools.reduce(torch.add, xs).clamp_min(-708.3964185322641)
+        return functools.reduce(torch.add, xs).clamp_min(LOG_CLAMP_MIN)
 
     @classmethod
     def apply_reduce(
@@ -410,8 +410,9 @@ class LSESumSemiring(SemiringImpl):
 
 # Helper function to clamp both values of complex tensors
 def _clamp_complex(y) -> None:
-    y.real.clamp_min_(-708.3964185322641)
-    y.imag.clamp_min_(-708.3964185322641)
+    y.real.clamp_min_(LOG_CLAMP_MIN)
+    if torch.is_complex(y):
+        y.imag.clamp_min_(LOG_CLAMP_MIN)
 
 
 @SemiringImpl.register("complex-lse-sum")
