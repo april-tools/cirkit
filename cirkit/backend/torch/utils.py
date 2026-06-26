@@ -5,7 +5,6 @@ from typing import Any, Callable, Final
 import torch
 from torch import Tensor, autograd
 
-
 LOG_CLAMP_MIN: Final = -708.3964185322641
 
 
