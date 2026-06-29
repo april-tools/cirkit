@@ -25,16 +25,16 @@ from cirkit.backend.torch.em_optimizer import EM
 def build_gaus_symbolic_circuit(units) -> Circuit:
     weight_factory = utils.parameterization_to_factory(
         utils.Parameterization(
-            activation="none",  # Parameterize the sum weights by using a softmax activation
-            initialization="uniform",  # Initialize the sum weights by sampling from a standard normal distribution
+            activation="none",  # We do not use any activation when training with EM
+            initialization="uniform",  # Initialize the sum weights by sampling from a uniform distribution
             initialization_kwargs={"convex": True},
         )
     )
 
     mean_factory = utils.parameterization_to_factory(
         utils.Parameterization(
-            activation="none",  # Parameterize the sum weights by using a softmax activation
-            initialization="uniform",  # Initialize the sum weights by sampling from a standard normal distribution
+            activation="none",  # We do not use any activation when training with EM
+            initialization="uniform",  # Initialize the sum weights by sampling from a uniform distribution
         )
     )
 
@@ -111,8 +111,8 @@ def build_cat_symbolic_circuit(units, n_cat) -> Circuit:
     # This parametrizes the mixture weights such that they add up to one.
     weight_factory = utils.parameterization_to_factory(
         utils.Parameterization(
-            activation="none",  # Parameterize the sum weights by using a softmax activation
-            initialization="uniform",  # Initialize the sum weights by sampling from a standard normal distribution
+            activation="none",  # We do not use any activation when training with EM
+            initialization="uniform",  # Initialize the sum weights by sampling from a uniform distribution
             initialization_kwargs={"convex": True},
         )
     )
@@ -182,7 +182,9 @@ def build_cat_symbolic_circuit_test_update(n_cat) -> Circuit:
         utils.Parameterization(
             activation="none",  # Parameterize the sum weights with no activation
             initialization="uniform",  # Initialize the sum weights by sampling from a uniform distribution
-            initialization_kwargs={"convex": True}, # This initializes the mixture weights such that they add up to one.
+            initialization_kwargs={
+                "convex": True
+            },  # This initializes the mixture weights such that they add up to one.
         )
     )
 
@@ -227,7 +229,7 @@ def test_em_update_categorical_pc():
     torch.set_grad_enabled(True)
     assert torch.is_grad_enabled()
 
-    N_CAT = 3 # Each variable X0, X1 has 3 categories (0, 1, 2)
+    N_CAT = 3  # Each variable X0, X1 has 3 categories (0, 1, 2)
     sc = build_cat_symbolic_circuit_test_update(N_CAT)
     compiler = TorchCompiler(semiring="lse-sum", fold=True, optimize=True)
     cc = compiler.compile(sc)
@@ -243,11 +245,19 @@ def test_em_update_categorical_pc():
     sum_weights = torch.tensor([0.3, 0.7])
 
     # Manually set our custom parameters
-    shape_probs = list(filter(lambda x: hasattr(x, '_ptensor'), cc.layers[0].modules()))[0]._ptensor.data.shape
-    list(filter(lambda x: hasattr(x, '_ptensor'), cc.layers[0].modules()))[0]._ptensor.data = cat_probs.clone().reshape(shape_probs)
+    shape_probs = list(
+        filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules())
+    )[0]._ptensor.data.shape
+    list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules()))[
+        0
+    ]._ptensor.data = cat_probs.clone().reshape(shape_probs)
 
-    shape_weights = list(filter(lambda x: hasattr(x, '_ptensor'), cc.layers[2].modules()))[0]._ptensor.data.shape
-    list(filter(lambda x: hasattr(x, '_ptensor'), cc.layers[2].modules()))[0]._ptensor.data = sum_weights.clone().reshape(shape_weights)
+    shape_weights = list(
+        filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules())
+    )[0]._ptensor.data.shape
+    list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules()))[
+        0
+    ]._ptensor.data = sum_weights.clone().reshape(shape_weights)
 
     # Single training instance (X0=0, X1=2)
     train_instance = torch.tensor([[0.0, 2.0]])
@@ -263,23 +273,26 @@ def test_em_update_categorical_pc():
 
     # Compare updated parameters to their expected update
     # Updates are computed manually using the formulas in the [Einsum Networks](https://arxiv.org/abs/2004.06231v2) paper
-    
+
     # With a single training instance, probabilities are replaced with the observed counts
-    new_probs = list(filter(lambda x: hasattr(x, '_ptensor'), cc.layers[0].modules()))[0]._ptensor.data.clone()
+    new_probs = list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules()))[
+        0
+    ]._ptensor.data.clone()
 
     expected_probs = torch.tensor(
-        [[1.0, 0.0, 0.0],
-         [0.0, 0.0, 1.0],
-         [1.0, 0.0, 0.0],
-         [0.0, 0.0, 1.0]
-         ]).reshape(shape_probs)
-    
-    assert allclose(new_probs, expected_probs), "Probabilities have not been updated as expected"
-    
+        [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    ).reshape(shape_probs)
+
+    assert allclose(new_probs, expected_probs), (
+        "Probabilities have not been updated as expected"
+    )
+
     # The circuit should compute p(x0=0, x1=2) = 0.3 * 0.3 * 0.7 + 0.7 * 0.4 * 0.3 = 0.147
-    likelihood = loss.detach().exp() # Should be 0.147
+    likelihood = loss.detach().exp()  # Should be 0.147
     expected_likelihood = 0.147
-    assert allclose(likelihood, expected_likelihood), "Likelihood has not been computed as expected"
+    assert allclose(likelihood, expected_likelihood), (
+        "Likelihood has not been computed as expected"
+    )
 
     # Following the notation of the Einsum nets paper,
     # the sum weights should be updated for a single training instance as follows.
@@ -291,9 +304,15 @@ def test_em_update_categorical_pc():
     # Overall, weights are then updated by:
     # w0 <- w0 * n0 / D = 0.3 * 0.3 * 0.7 / 0.147 = 0.4285...
     # w1 <- w1 * n1 / D = 0.7 * 0.4 * 0.3 / 0.147 = 0.5714...
-    new_sum_weights = list(filter(lambda x: hasattr(x, '_ptensor'), cc.layers[2].modules()))[0]._ptensor.data.clone()
-    expected_weight_0 = 0.063 / 0.147 # Should be approx 0.4286
-    expected_weight_1 = 0.084 / 0.147 # Should be approx 0.5714
-    expected_sum_weights = torch.tensor([expected_weight_0, expected_weight_1]).reshape(shape_weights)
+    new_sum_weights = list(
+        filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules())
+    )[0]._ptensor.data.clone()
+    expected_weight_0 = 0.063 / 0.147  # Should be approx 0.4286
+    expected_weight_1 = 0.084 / 0.147  # Should be approx 0.5714
+    expected_sum_weights = torch.tensor([expected_weight_0, expected_weight_1]).reshape(
+        shape_weights
+    )
 
-    assert allclose(new_sum_weights, expected_sum_weights), "Sum weights have not been updated as expected"
+    assert allclose(new_sum_weights, expected_sum_weights), (
+        "Sum weights have not been updated as expected"
+    )
