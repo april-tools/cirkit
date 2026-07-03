@@ -39,6 +39,14 @@ class ElementwiseInitializer(Initializer, ABC):
     Therefore, an elementwise initializer allows any parameter shape by default.
     """
 
+    def __init__(self, convex: bool):
+        """Initialize common values for elementwise initializer
+
+        Args:
+            convex: Determine wether the parameter should sum to one.
+        """
+        self.convex = convex
+
     def allows_shape(self, shape: tuple[int, ...]) -> bool:
         return True
 
@@ -79,16 +87,18 @@ class UniformInitializer(ElementwiseInitializer):
     """A symbolic uniform initializer, which initializes all the entries of a tensor
     by sampling independently from a univariate uniform distribution."""
 
-    def __init__(self, a: float = 0.0, b: float = 1.0) -> None:
+    def __init__(self, a: float = 0.0, b: float = 1.0, convex: bool = False) -> None:
         """Initializes a uniform initializer, given minimum and maximum.
 
         Args:
             a: The minimum.
             b: The maximum.
+            convex: Determine wether the parameter should sum to one.
 
         Raises:
             ValueError: If the minimum is not strictly less than the maximum.
         """
+        super().__init__(convex)
         if a >= b:
             raise ValueError("The minimum should be strictly less than the maximum")
         self.a = a
@@ -103,16 +113,18 @@ class NormalInitializer(ElementwiseInitializer):
     """A symbolic normal initializer, which initializes all the entries of a tensor
     by sampling independently from a univariate normal distribution."""
 
-    def __init__(self, mean: float = 0.0, stddev: float = 1.0) -> None:
+    def __init__(self, mean: float = 0.0, stddev: float = 1.0, convex: bool = False) -> None:
         """Initializes a normal initializer, given mean and standard deviation.
 
         Args:
             mean: The mean.
             stddev: The standard deviation.
+            convex: Determine wether the parameter should sum to one.
 
         Raises:
             ValueError: If the standard deviation is not a positive number.
         """
+        super().__init__(convex)
         if stddev <= 0.0:
             raise ValueError("The standard deviation should be a positive number")
         self.mean = mean

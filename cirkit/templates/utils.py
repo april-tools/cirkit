@@ -241,12 +241,16 @@ def name_to_initializer(name: str, **kwargs: Any) -> Initializer:
                 kwargs["a"] = 0.0
             if "b" not in kwargs:
                 kwargs["b"] = 1.0
+            if "convex" not in kwargs:
+                kwargs["convex"] = False
             return UniformInitializer(**kwargs)
         case "normal":
             if "mean" not in kwargs:
                 kwargs["mean"] = 0.0
             if "stddev" not in kwargs:
                 kwargs["stddev"] = 1.0
+            if "convex" not in kwargs:
+                kwargs["convex"] = False
             return NormalInitializer(**kwargs)
         case "dirichlet":
             if "alpha" not in kwargs:

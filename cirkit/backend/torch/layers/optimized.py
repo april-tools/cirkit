@@ -182,7 +182,9 @@ class TorchCPTLayer(TorchInnerLayer):
         negative = torch.any(weight < 0.0)
         if negative:
             raise ValueError("Sampling only works with positive weights")
-        normalized = torch.allclose(torch.sum(weight, dim=-1), torch.ones(1, device=weight.device))
+        normalized = torch.allclose(
+            torch.sum(weight, dim=-1), torch.ones(1, device=weight.device)
+        )
         if not normalized:
             raise ValueError("Sampling only works with a normalized parametrization")
 
@@ -200,6 +202,22 @@ class TorchCPTLayer(TorchInnerLayer):
 
         x = torch.gather(x, dim=1, index=mixing_indices)
         return x, mixing_samples
+
+    def em_accumulate(self):
+        # The gradient automatically accumulates for sum weights
+        pass
+
+    def em_step(self, step_size: float, pseudocount: float, alpha: float):
+        if list(self.parameters())[0].requires_grad:
+            weight = list(self.parameters())[0]
+
+            weight_grad = weight.grad.clamp(0.0)
+            unn_exp_weight = weight * weight_grad
+            exp_weight = (unn_exp_weight + pseudocount / self.weight.shape[-1]) / (
+                unn_exp_weight.sum(dim=-1, keepdim=True) + pseudocount
+            )
+
+            weight.data.lerp_(exp_weight, weight=step_size)
 
 
 class TorchTensorDotLayer(TorchInnerLayer):
@@ -288,7 +306,9 @@ class TorchTensorDotLayer(TorchInnerLayer):
         # x: (F, H=1, B, Ki) -> (F, B, Ki)
         x = x.squeeze(dim=1)
         # x: (F, B, Ki) -> (F, B, Kj, Kq) -> (F, B, Kq, Kj)
-        x = x.view(x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units)
+        x = x.view(
+            x.shape[0], x.shape[1], self._num_contract_units, self._num_batch_units
+        )
         x = x.permute(0, 1, 3, 2)
         # weight: (F, Kk, Kj)
         weight = self.weight()

@@ -1,0 +1,80 @@
+from typing import Callable
+
+import torch
+from torch.optim import Optimizer
+
+from cirkit.backend.torch.circuits import TorchCircuit
+from cirkit.backend.torch.layers.base import TorchLayer
+
+
+def _create_hook(layer: TorchLayer):
+    def _hook(*args, **kwargs):
+        layer.em_accumulate()
+
+    return _hook
+
+
+class EM(Optimizer):
+    """Expectation Maximization optimizer for torch backend.
+
+    WARNING: This optimizer should be used by calling the model ONLY on the training data.
+    Doing something like:
+    ```python
+        ll=model(train_data)
+        model(random_data)
+
+        ll.sum().backward()
+        optim.step()
+    ```
+
+    Will cause the cached input used for the update to be `random_data` instead of `train_data`
+
+    Also, it should be noted that this is a maximiser, so it should be trained with log-likelihood and
+    not negative log log-likelihood.
+    """
+
+    def __init__(
+        self, pc: TorchCircuit, lr: float, pseudocount: float, alpha: float = 1e-8
+    ):
+        """Initialize the optimizer.
+
+        Args:
+            pc: Compiled circuit to optimized.
+            lr: Learning rate / Step size.
+            pseudocount: Pseudocount for laplace smoothing (when implemented).
+            alpha: Minimal value for clamping gradients.
+
+        Raises:
+            ValueError: Raised if the step size is not between 0 and 1.
+        """
+        if not 0.0 <= lr <= 1.0:
+            raise ValueError("lr must be in [0,1]")
+        defaults = dict(lr=lr, pseudocount=pseudocount, alpha=alpha)
+        super().__init__(pc.parameters(), defaults)
+        self.pc = pc
+
+        for layer in self.pc.layers:
+            layer.enable_em()
+
+            # Accumulate the update right after the gradients are computed
+            # we use the first parameter of the layer to trigger the layer update
+            # which updates all parameters.
+            params = list(layer.parameters())
+            if len(params) > 0:
+                params[0].register_post_accumulate_grad_hook(_create_hook(layer))
+
+    def step(self, closure: Callable | None = None):
+        """Update parameters.
+
+        Args:
+            closure: Not used, present for compatibility.
+        """
+        for layer in self.pc.layers:
+            layer.em_step(
+                self.param_groups[0]["lr"],
+                self.param_groups[0]["pseudocount"],
+                self.param_groups[0]["alpha"],
+            )
+
+    def zero_grad(self, set_to_none=True):
+        self.pc.zero_grad(set_to_none=set_to_none)

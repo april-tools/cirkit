@@ -48,6 +48,13 @@ class TorchLayer(AbstractTorchModule, ABC):
         self.num_output_units = num_output_units
         self.arity = arity
         self.semiring = semiring if semiring is not None else SumProductSemiring
+        self._use_em = False
+
+    def enable_em(self):
+        self._use_em = True
+
+    def disable_em(self):
+        self._use_em = True
 
     @property
     @abstractmethod
@@ -117,3 +124,30 @@ class TorchLayer(AbstractTorchModule, ABC):
             + "\n"
             + f"output-shape: {(self.num_folds, -1, self.num_output_units)}"
         )
+
+    def em_accumulate(self):
+        """Accumulate update before performing steps.
+
+        This function is not always necessary as some layer can directly rely
+        on gradient accumulation.
+        """
+        pass
+
+    def em_step(self, step_size: float, pseudocount: float, alpha: float):
+        """Update parameters.
+
+        Args:
+            step_size: Step size for the update.
+                new_param = (1-step_size)*old_param + step_size*updated_param
+            pseudocount: Pseudocount used for Laplace smoothing.
+            alpha: Minimum value for gradient clamping.
+
+        Raises:
+            NotImplementedError: Raised when calling the method on a layer which
+                does not implement EM.
+        """
+        if len(self.params) == 0:
+            # No need to implement EM logic if there are no parameters
+            pass
+        else:
+            raise NotImplementedError(f"Missing EM step for {self.__class__.__name__}")
