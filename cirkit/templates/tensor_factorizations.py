@@ -59,7 +59,8 @@ def cp(
     with additional weights, i.e., a CP factorization of the form
 
     $$
-    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{i=1}^R w_i \: a^{(1)}_{X_1 i} \ldots a^{(n)}_{X_n i},
+    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n}
+    = \sum_{i=1}^R w_i \: a^{(1)}_{X_1 i} \ldots a^{(n)}_{X_n i},
     $$
 
     where $\mathbf{w}\in\mathbb{R}^R$ are additional weights.
@@ -74,7 +75,8 @@ def cp(
     $\mathcal{T}\in\mathbb{R}_+^{I_1\times \ldots\times I_n}$ as the distribution
 
     $$
-    p(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{i=1}^R p(Z=i) \: p(X_1\mid Z=i) \cdots p(X_n\mid Z=i),
+    p(X_1,\ldots,X_n) = t_{X_1\cdots X_n}
+    = \sum_{i=1}^R p(Z=i) \: p(X_1\mid Z=i) \cdots p(X_n\mid Z=i),
     $$
 
     where $Z$ is a discrete latent variable modelled by $p(Z)$.
@@ -150,12 +152,14 @@ def tucker(
     and $c$ computes a rank-$R$ Tucker factorization, i.e.,
 
     $$
-    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{r_1=1}^R \cdots \sum_{r_n=1}^R w_{r_1\cdots r_n} a^{(1)}_{X_1 r_1} \cdots a^{(n)}_{X_n r_n},
+    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n}
+    = \sum_{r_1=1}^R \cdots \sum_{r_n=1}^R w_{r_1\cdots r_n}
+    a^{(1)}_{X_1 r_1} \cdots a^{(n)}_{X_n r_n},
     $$
 
-    where for $1\leq j\leq n$ we have that $\mathbf{A}^{(j)}\in\mathbb{R}^{I_j\times R}$ is the $j$-th factor,
-    and $\mathcal{W}\in\mathbb{R}^{R\times\cdots\times R}$ is an $n$-dimensional tensor, sometimes called
-    the core tensor of the Tucker factorization.
+    where for $1\leq j\leq n$ we have that $\mathbf{A}^{(j)}\in\mathbb{R}^{I_j\times R}$ is the
+    $j$-th factor, and $\mathcal{W}\in\mathbb{R}^{R\times\cdots\times R}$ is an $n$-dimensional
+    tensor, sometimes called the core tensor of the Tucker factorization.
 
     This method allows you to specify different types of parameterizations for the factors and
     the core tensor. For example, if the arguments ```factor_param``` and
@@ -167,7 +171,9 @@ def tucker(
     $\mathcal{T}\in\mathbb{R}_+^{I_1\times \ldots\times I_n}$ as the distribution
 
     $$
-    p(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{r_1=1}^R \cdots \sum_{r_n=1}^R p(Z=(r_1,\ldots,r_n)) \: p(X_1\mid Z=r_1) \cdots p(X_n\mid Z=r_n),
+    p(X_1,\ldots,X_n) = t_{X_1\cdots X_n}
+    = \sum_{r_1=1}^R \cdots \sum_{r_n=1}^R p(Z=(r_1,\ldots,r_n)) \: p(X_1\mid Z=r_1)
+    \cdots p(X_n\mid Z=r_n),
     $$
 
     where $Z$ is a discrete latent variable taking value in $\{1,\ldots,R\}^n$ and modelled by
@@ -244,7 +250,9 @@ def tensor_train(
     and $c$ computes a rank-$R$ TT/MPS factorization, i.e.,
 
     $$
-    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n} = \sum_{r_1=1}^R \cdots \sum_{r_{n-1}=1}^R v^{(1)}_{X_1 r_1} v^{(2)}_{X_2 r_1 r_2} \cdots v^{(n-1)}_{X_{n-1} r_{n-2} r_{n-1}} v^{(n)}_{X_n r_{n-1}},  pylint: disable=line-too-long
+    c(X_1,\ldots,X_n) = t_{X_1\cdots X_n}
+    = \sum_{r_1=1}^R \cdots \sum_{r_{n-1}=1}^R v^{(1)}_{X_1 r_1} v^{(2)}_{X_2 r_1 r_2}
+    \cdots v^{(n-1)}_{X_{n-1} r_{n-2} r_{n-1}} v^{(n)}_{X_n r_{n-1}},
     $$
 
     where $\mathbf{V}^{(1)}\in\mathbb{R}^{I_1\times R}$,

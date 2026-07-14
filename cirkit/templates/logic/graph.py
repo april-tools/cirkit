@@ -1,8 +1,7 @@
 import itertools
 from abc import ABC
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from functools import cached_property
-from typing import cast
 
 from cirkit.symbolic.circuit import Circuit
 from cirkit.symbolic.initializers import ConstantTensorInitializer
@@ -73,10 +72,12 @@ class DisjunctionNode(LogicalCircuitNode):
 
 
 class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
+    """A logic circuit represented as a rooted directed acyclic graph."""
+
     def __init__(
         self,
         nodes: Sequence[LogicalCircuitNode],
-        in_nodes: dict[LogicalCircuitNode, Sequence[LogicalCircuitNode]],
+        in_nodes: Mapping[LogicalCircuitNode, Sequence[LogicalCircuitNode]],
         outputs: Sequence[LogicalCircuitNode],
     ) -> None:
         """A Logical circuit represented as a rooted acyclic graph.
@@ -92,7 +93,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             assert ValueError("A logic graphs can only have one output!")
         super().__init__(nodes, in_nodes, outputs)
 
-    def prune(self):
+    def prune(self) -> None:
         """Prune the current graph by applying unit propagation.
 
         Prune a graph in place by applying unit propagation to conjunction and disjunctions.
@@ -103,7 +104,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         absorbing_element = lambda n: BottomNode if isinstance(n, ConjunctionNode) else TopNode
         null_element = lambda n: TopNode if isinstance(n, ConjunctionNode) else BottomNode
 
-        def absorb_node(node):
+        def absorb_node(node: LogicalCircuitNode) -> LogicalCircuitNode:
             if isinstance(node, (ConjunctionNode, DisjunctionNode)):
                 children = [absorb_node(c) for c in self.node_inputs(node)]
 
@@ -115,7 +116,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             return node
 
         # apply node absorbion and remove null elements from conjunctions and disjunctions
-        in_nodes = {}
+        in_nodes: dict[LogicalCircuitNode, list[LogicalCircuitNode]] = {}
         for n, children in self._in_nodes.items():
             absorbed = absorb_node(n)
 
@@ -137,18 +138,23 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
 
         # re initialize the graph
-        self.__init__(nodes, in_nodes, list(self.outputs))
+        super().__init__(nodes, in_nodes, list(self.outputs))
 
     @property
     def inputs(self) -> Iterator[LogicalCircuitNode]:
-        return (cast(LogicalCircuitNode, node) for node in super().inputs)
+        return super().inputs
 
     @property
-    def outputs(self) -> Iterator[LogicalCircuitNode]:
-        return (cast(LogicalCircuitNode, node) for node in super().outputs)
+    def outputs(self) -> Sequence[LogicalCircuitNode]:
+        return super().outputs
 
     @cached_property
     def num_variables(self) -> int:
+        """The number of distinct variables in the logic circuit.
+
+        Returns:
+            int: The number of distinct literals appearing in the input nodes.
+        """
         return len({i.literal for i in self.inputs if isinstance(i, LogicalInputNode)})
 
     def node_scope(self, node: LogicalCircuitNode) -> Scope:
@@ -174,14 +180,11 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
 
         return scope
 
-    def smooth(self) -> "LogicalCircuit":
+    def smooth(self) -> None:
         """Convert the current graph to a smooth graph in place.
         see https://yoojungchoi.github.io/files/ProbCirc20.pdf and
         https://proceedings.neurips.cc/paper/2019/file/940392f5f32a7ade1cc201767cf83e31-Paper.pdf
         for more information.
-
-        Returns:
-            LogicalCircuit: A new logic graph that is smooth.
         """
         literal_map: dict[tuple[int, bool], LogicalCircuitNode] = {
             (node.literal, isinstance(node, LiteralNode)): node
@@ -192,7 +195,9 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
         smoothing_map: dict[int, DisjunctionNode] = {}
         disjunctions = [n for n in self.nodes if isinstance(n, DisjunctionNode)]
 
-        in_nodes = self._in_nodes
+        in_nodes: dict[LogicalCircuitNode, list[LogicalCircuitNode]] = {
+            node: list(inputs) for node, inputs in self.nodes_inputs.items()
+        }
         for d in disjunctions:
             d_scope = self.node_scope(d)
 
@@ -229,7 +234,7 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
                         in_nodes[d].insert(0, ad_hoc)
 
         nodes = list(set(itertools.chain(*in_nodes.values())).union(in_nodes.keys()))
-        self.__init__(nodes, in_nodes, self._outputs)
+        super().__init__(nodes, in_nodes, self._outputs)
 
     def build_circuit(
         self,
@@ -279,13 +284,15 @@ class LogicalCircuit(RootedDiAcyclicGraph[LogicalCircuitNode]):
             # default factory is locally imported when needed to avoid circular imports
             literal_input_factory = default_literal_input_factory(negated=False)
             negated_literal_input_factory = default_literal_input_factory(negated=True)
+        assert literal_input_factory is not None and negated_literal_input_factory is not None
 
         if weight_factory is None:
             # default to unitary weights
-            def weight_factory(n: tuple[int]) -> Parameter:
-                # locally import numpy to avoid dependency on the whole file
+            def default_weight_factory(shape: tuple[int, ...]) -> Parameter:
                 initializer = ConstantTensorInitializer(1.0)
-                return Parameter.from_input(TensorParameter(*n, initializer=initializer))
+                return Parameter.from_input(TensorParameter(*shape, initializer=initializer))
+
+            weight_factory = default_weight_factory
 
         # map each input literal to a symbolic input layer
         for i in self.inputs:

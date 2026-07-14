@@ -15,6 +15,8 @@ from cirkit.templates.logic.graph import (
 
 
 class SDD(LogicalCircuit):
+    """A Sentential Decision Diagram (SDD) represented as a logical circuit."""
+
     @staticmethod
     def load(filename: str) -> "SDD":
         """Load the SDD from a file.
@@ -53,7 +55,7 @@ class SDD(LogicalCircuit):
                         n_id, _, l = args
 
                         if l > 0:
-                            node = LiteralNode(abs(l) - 1)
+                            node: LogicalCircuitNode = LiteralNode(abs(l) - 1)
                             nodes_map[n_id] = node
                             literal_map[(abs(l), True)] = node
                         else:

@@ -286,7 +286,8 @@ def _apply_tensordot_rule(
     weight: TorchParameter,
     kronecker: TorchKroneckerParameter,
 ) -> tuple[TorchTensorDotLayer, TorchTensorDotLayer]:
-    r"""Returns the two dot layer representing a sum parameterized by the output of a Kronecker Product.
+    r"""Returns the two dot layer representing a sum parameterized by the output of a
+    Kronecker Product.
 
     This trick comes from (Zhang et al., 2025) Subsection 3.1.
     Given $W=A \otimes B$ the parameters of a sum or dot layer,
