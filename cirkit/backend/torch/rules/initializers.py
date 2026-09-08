@@ -55,9 +55,7 @@ def compile_uniform_initializer(
     compiler: "TorchCompiler", init: UniformInitializer
 ) -> InitializerFunc:
     if init.convex:
-        return normalize_initializer(
-            functools.partial(nn.init.uniform_, a=init.a, b=init.b)
-        )
+        return normalize_initializer(functools.partial(nn.init.uniform_, a=init.a, b=init.b))
     else:
         return functools.partial(nn.init.uniform_, a=init.a, b=init.b)
 
