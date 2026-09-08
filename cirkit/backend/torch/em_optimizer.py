@@ -33,9 +33,7 @@ class EM(Optimizer):
     not negative log log-likelihood.
     """
 
-    def __init__(
-        self, pc: TorchCircuit, lr: float, pseudocount: float, alpha: float = 1e-8
-    ):
+    def __init__(self, pc: TorchCircuit, lr: float, pseudocount: float, alpha: float = 1e-8):
         """Initialize the optimizer.
 
         Args:
