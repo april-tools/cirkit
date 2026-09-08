@@ -341,6 +341,8 @@ class TorchCompileCompiler(TorchCompiler):
 
     def _compile_circuit(self, sc: Circuit) -> TorchCircuit:
         cc = super()._compile_circuit(sc)
+        # Same as torch.compile(cc), compiles the foward pass of the cirkit
+        # https://docs.pytorch.org/tutorials/intermediate/torch_compile_tutorial.html#basic-usage
         cc.compile()
         return cc
 
