@@ -16,15 +16,15 @@ nav:
           - nb7: "notebooks/logic-circuits.ipynb"
           - nb8: "notebooks/compression-cp-factorization.ipynb"
           - nb9: "notebooks/generative-vs-discriminative-circuit.ipynb"
-  - Backends: "backends.md"
   - API documentation: "api/"
   - Handbooks:
-      - Compilation: "handbook-cirkit-torch-compiler/handbook.md"
-      - Compilation:
-          - Compiler: "handbook-cirkit-torch-compiler/compilation.md"
-          - Folding: "handbook-cirkit-torch-compiler/folding.md"
-          - Optimization: "handbook-cirkit-torch-compiler/optimization.md"
-          - Implemented Optimization: "handbook-cirkit-torch-compiler/optimization_implemented.md"
+      - Backends: "handbooks/backends.md"
+      - Torch Compilation: "handbooks/cirkit-torch-compiler/torch-compiler.md"
+      - Torch Compilation:
+          - Compiler: "handbooks/cirkit-torch-compiler/compilation.md"
+          - Folding: "handbooks/cirkit-torch-compiler/folding.md"
+          - Optimization: "handbooks/cirkit-torch-compiler/optimization.md"
+          - Implemented Optimization: "handbooks/cirkit-torch-compiler/optimization_implemented.md"
 plugins:
   - search
   - autorefs
