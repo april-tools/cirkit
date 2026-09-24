@@ -77,6 +77,9 @@ Compiling a symbolic circuit involves three main steps:
    optimization parameters.
 3. Folding the circuit
 
+The `torch-compile` backend (see [Backends](../backends.md)) additionally jit-compiles the resulting circuit with
+`torch.compile`.
+
 You can dive deeper into the different processes on these pages:
 
 - [Compilation](./compilation.md)

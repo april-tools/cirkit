@@ -332,6 +332,21 @@ class TorchCompiler(AbstractCompiler[TorchCircuit]):
         return cc
 
 
+class TorchCompileCompiler(TorchCompiler):
+    """A compiler that uses the same compilation strategy of
+    [TorchCompiler][cirkit.backend.torch.compiler.TorchCompiler], and in addition
+    just-in-time compiles the resulting circuit with ```torch.compile```.
+    It is registered under the backend name 'torch-compile'.
+    """
+
+    def _compile_circuit(self, sc: Circuit) -> TorchCircuit:
+        cc = super()._compile_circuit(sc)
+        # Same as torch.compile(cc), compiles the foward pass of the cirkit
+        # https://docs.pytorch.org/tutorials/intermediate/torch_compile_tutorial.html#basic-usage
+        cc.compile()
+        return cc
+
+
 def _fold_circuit(compiler: TorchCompiler, cc: TorchCircuit) -> TorchCircuit:
     """Apply all possible folding to a compiled circuit.
 

@@ -30,6 +30,14 @@ Algorithm :
    circuit's parameters.
 6. Register the compiled circuit in the [`CompiledCircuitsMap`](../../api/cirkit/backend/compiler/index.html#cirkit.backend.compiler.CompiledCircuitsMap).
 
+## Jit Compilation
+
+The `torch-compile` backend (see [Backends](../backends.md)) uses
+[`TorchCompileCompiler`](../../api/cirkit/backend/torch/compiler/index.html#cirkit.backend.torch.compiler.TorchCompileCompiler),
+which runs the algorithm above and then jit-compiles the circuit __in-place__ with
+[`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html).
+The mapping between symbolic and compiled circuits is preserved, and jit compilation happens lazily on the first execution.
+
 ## Layer Compilation Process ([`TorchCompiler.compile_layer`](../../api/cirkit/backend/torch/compiler/index.html#cirkit.backend.torch.compiler.TorchCompiler.compile_layer))
 
 The function, in itself, only retrieves the layer _rule_ corresponding to the

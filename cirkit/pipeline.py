@@ -32,11 +32,12 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuitT]):
             the compilation flags.
 
         Args:
-            backend: The compilation backend.  The only backend supported is 'torch'.
+            backend: The compilation backend. The supported backends are 'torch'
+                (the default) and 'torch-compile'.
             backend_kwargs: The compilation flags to pass to the compiler.
 
         Raises:
-            ValuerError: if the compilation backend is unknown.
+            NotImplementedError: if the compilation backend is unknown.
         """
         if backend not in SUPPORTED_BACKENDS:
             raise NotImplementedError(f"Backend '{backend}' is not implemented")
@@ -353,6 +354,11 @@ def retrieve_compiler(backend: str, **backend_kwargs: Any) -> AbstractCompiler:
         from cirkit.backend.torch.compiler import TorchCompiler
 
         return TorchCompiler(**backend_kwargs)
+    if backend == "torch-compile":
+        # pylint: disable-next=import-outside-toplevel
+        from cirkit.backend.torch.compiler import TorchCompileCompiler
+
+        return TorchCompileCompiler(**backend_kwargs)
     raise NotImplementedError()
 
 
