@@ -33,7 +33,7 @@ class PipelineContext(AbstractContextManager, Generic[CompiledCircuitT]):
 
         Args:
             backend: The compilation backend. The supported backends are 'torch'
-                (the default) and 'torch-compile'.
+                (the default), 'torch-compile' and 'xe-torch'.
             backend_kwargs: The compilation flags to pass to the compiler.
 
         Raises:
@@ -359,6 +359,16 @@ def retrieve_compiler(backend: str, **backend_kwargs: Any) -> AbstractCompiler:
         from cirkit.backend.torch.compiler import TorchCompileCompiler
 
         return TorchCompileCompiler(**backend_kwargs)
+    if backend == "xe-torch":
+        try:
+            # pylint: disable-next=import-outside-toplevel
+            from cirkit.backend.xe.compiler import XETorchCompiler
+        except ImportError as ex:
+            raise ImportError(
+                "The 'xe-torch' backend requires the optional dependency 'extended-einsum'. "
+                "Install it with: pip install 'libcirkit[xe]' (or pip install extended-einsum)"
+            ) from ex
+        return XETorchCompiler(**backend_kwargs)
     raise NotImplementedError()
 
 

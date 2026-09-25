@@ -8,7 +8,7 @@ from cirkit.symbolic.layers import Layer
 from cirkit.symbolic.parameters import ParameterNode
 from cirkit.utils.algorithms import BiMap
 
-SUPPORTED_BACKENDS = ["torch", "torch-compile"]
+SUPPORTED_BACKENDS = ["torch", "torch-compile", "xe-torch"]
 
 CompiledCircuitT = TypeVar("CompiledCircuitT")
 
