@@ -38,12 +38,8 @@ def build_gaus_symbolic_circuit(units) -> Circuit:
         )
     )
 
-    g0 = GaussianLayer(
-        Scope((0,)), units, mean_factory=mean_factory, stddev_factory=mean_factory
-    )
-    g1 = GaussianLayer(
-        Scope((1,)), units, mean_factory=mean_factory, stddev_factory=mean_factory
-    )
+    g0 = GaussianLayer(Scope((0,)), units, mean_factory=mean_factory, stddev_factory=mean_factory)
+    g1 = GaussianLayer(Scope((1,)), units, mean_factory=mean_factory, stddev_factory=mean_factory)
     prod = HadamardLayer(num_input_units=units, arity=2)
     sl = SumLayer(units, 1, 1, weight_factory=weight_factory)
 
@@ -117,12 +113,8 @@ def build_cat_symbolic_circuit(units, n_cat) -> Circuit:
         )
     )
 
-    c0 = CategoricalLayer(
-        Scope((0,)), units, num_categories=n_cat, probs_factory=weight_factory
-    )
-    c1 = CategoricalLayer(
-        Scope((1,)), units, num_categories=n_cat, probs_factory=weight_factory
-    )
+    c0 = CategoricalLayer(Scope((0,)), units, num_categories=n_cat, probs_factory=weight_factory)
+    c1 = CategoricalLayer(Scope((1,)), units, num_categories=n_cat, probs_factory=weight_factory)
     prod = HadamardLayer(num_input_units=units, arity=2)
     sl = SumLayer(units, 1, 1, weight_factory=weight_factory)
 
@@ -177,7 +169,7 @@ def test_train_em_categorical_pc():
     assert sorted(losses, reverse=True) == losses, "Loss should be decreasing"
 
 
-def build_cat_symbolic_circuit_test_update(n_cat) -> Circuit:
+def build_cat_symbolic_circuit_test_update(n_cat, *, categorical_logits: bool = False) -> Circuit:
     weight_factory = utils.parameterization_to_factory(
         utils.Parameterization(
             activation="none",  # Parameterize the sum weights with no activation
@@ -188,18 +180,15 @@ def build_cat_symbolic_circuit_test_update(n_cat) -> Circuit:
         )
     )
 
-    c0 = CategoricalLayer(
-        Scope((0,)), 1, num_categories=n_cat, probs_factory=weight_factory
+    categorical_factory = (
+        {"logits_factory": weight_factory}
+        if categorical_logits
+        else {"probs_factory": weight_factory}
     )
-    c1 = CategoricalLayer(
-        Scope((1,)), 1, num_categories=n_cat, probs_factory=weight_factory
-    )
-    c2 = CategoricalLayer(
-        Scope((0,)), 1, num_categories=n_cat, probs_factory=weight_factory
-    )
-    c3 = CategoricalLayer(
-        Scope((1,)), 1, num_categories=n_cat, probs_factory=weight_factory
-    )
+    c0 = CategoricalLayer(Scope((0,)), 1, num_categories=n_cat, **categorical_factory)
+    c1 = CategoricalLayer(Scope((1,)), 1, num_categories=n_cat, **categorical_factory)
+    c2 = CategoricalLayer(Scope((0,)), 1, num_categories=n_cat, **categorical_factory)
+    c3 = CategoricalLayer(Scope((1,)), 1, num_categories=n_cat, **categorical_factory)
     prod0 = HadamardLayer(num_input_units=1, arity=2)
     prod1 = HadamardLayer(num_input_units=1, arity=2)
     sl = SumLayer(1, 1, 2, weight_factory=weight_factory)
@@ -225,12 +214,13 @@ def build_cat_symbolic_circuit_test_update(n_cat) -> Circuit:
     )
 
 
-def test_em_update_categorical_pc():
+@pytest.mark.parametrize("categorical_logits", [False, True])
+def test_em_update_categorical_pc(categorical_logits: bool):
     torch.set_grad_enabled(True)
     assert torch.is_grad_enabled()
 
     N_CAT = 3  # Each variable X0, X1 has 3 categories (0, 1, 2)
-    sc = build_cat_symbolic_circuit_test_update(N_CAT)
+    sc = build_cat_symbolic_circuit_test_update(N_CAT, categorical_logits=categorical_logits)
     compiler = TorchCompiler(semiring="lse-sum", fold=True, optimize=True)
     cc = compiler.compile(sc)
     cc = cc.train()
@@ -245,16 +235,16 @@ def test_em_update_categorical_pc():
     sum_weights = torch.tensor([0.3, 0.7])
 
     # Manually set our custom parameters
-    shape_probs = list(
-        filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules())
-    )[0]._ptensor.data.shape
-    list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules()))[
+    shape_probs = list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules()))[
         0
-    ]._ptensor.data = cat_probs.clone().reshape(shape_probs)
+    ]._ptensor.data.shape
+    list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules()))[0]._ptensor.data = (
+        (cat_probs.log() if categorical_logits else cat_probs).clone().reshape(shape_probs)
+    )
 
-    shape_weights = list(
-        filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules())
-    )[0]._ptensor.data.shape
+    shape_weights = list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules()))[
+        0
+    ]._ptensor.data.shape
     list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules()))[
         0
     ]._ptensor.data = sum_weights.clone().reshape(shape_weights)
@@ -278,21 +268,19 @@ def test_em_update_categorical_pc():
     new_probs = list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[0].modules()))[
         0
     ]._ptensor.data.clone()
+    if categorical_logits:
+        new_probs = new_probs.exp()
 
     expected_probs = torch.tensor(
         [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
     ).reshape(shape_probs)
 
-    assert allclose(new_probs, expected_probs), (
-        "Probabilities have not been updated as expected"
-    )
+    assert allclose(new_probs, expected_probs), "Probabilities have not been updated as expected"
 
     # The circuit should compute p(x0=0, x1=2) = 0.3 * 0.3 * 0.7 + 0.7 * 0.4 * 0.3 = 0.147
     likelihood = loss.detach().exp()  # Should be 0.147
     expected_likelihood = 0.147
-    assert allclose(likelihood, expected_likelihood), (
-        "Likelihood has not been computed as expected"
-    )
+    assert allclose(likelihood, expected_likelihood), "Likelihood has not been computed as expected"
 
     # Following the notation of the Einsum nets paper,
     # the sum weights should be updated for a single training instance as follows.
@@ -304,15 +292,15 @@ def test_em_update_categorical_pc():
     # Overall, weights are then updated by:
     # w0 <- w0 * n0 / D = 0.3 * 0.3 * 0.7 / 0.147 = 0.4285...
     # w1 <- w1 * n1 / D = 0.7 * 0.4 * 0.3 / 0.147 = 0.5714...
-    new_sum_weights = list(
-        filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules())
-    )[0]._ptensor.data.clone()
+    new_sum_weights = list(filter(lambda x: hasattr(x, "_ptensor"), cc.layers[2].modules()))[
+        0
+    ]._ptensor.data.clone()
     expected_weight_0 = 0.063 / 0.147  # Should be approx 0.4286
     expected_weight_1 = 0.084 / 0.147  # Should be approx 0.5714
     expected_sum_weights = torch.tensor([expected_weight_0, expected_weight_1]).reshape(
         shape_weights
     )
 
-    assert allclose(new_sum_weights, expected_sum_weights), (
-        "Sum weights have not been updated as expected"
-    )
+    assert allclose(
+        new_sum_weights, expected_sum_weights
+    ), "Sum weights have not been updated as expected"
