@@ -362,7 +362,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: TorchCircuit) -> TorchCircuit:
         cc.layerwise_topological_ordering(),
         outputs=cc.outputs,
         incomings_fn=cc.layer_inputs,
-        fold_group_fn=functools.partial(_fold_layers_group, compiler=compiler),
+        fold_group_fn=functools.partial(fold_layers_group, compiler=compiler),
     )
 
     # Instantiate a folded circuit
@@ -376,7 +376,7 @@ def _fold_circuit(compiler: TorchCompiler, cc: TorchCircuit) -> TorchCircuit:
     )
 
 
-def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> TorchLayer:
+def fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> TorchLayer:
     """Fold a list of layer into a single Torch Layer
 
     Args:
@@ -410,18 +410,18 @@ def _fold_layers_group(layers: list[TorchLayer], *, compiler: TorchCompiler) -> 
             layer_submodules[n].append(sub_l)
 
     # Fold the parameters, if the layers have any
-    kwargs.update((n, _fold_parameters(compiler, ps)) for n, ps in layer_params.items())
+    kwargs.update((n, fold_parameters(compiler, ps)) for n, ps in layer_params.items())
 
     # Fold all sub-module layers, if the layers have any
     kwargs.update(
-        (n, _fold_layers_group(ls, compiler=compiler)) for n, ls in layer_submodules.items()
+        (n, fold_layers_group(ls, compiler=compiler)) for n, ls in layer_submodules.items()
     )
 
     # Instantiate a new folded layer, using the folded layer configuration and the folded parameters
     return fold_layer_cls(semiring=compiler.semiring, **kwargs)
 
 
-def _fold_parameters(
+def fold_parameters(
     compiler: TorchCompiler, parameters: Sequence[TorchParameter]
 ) -> TorchParameter:
     """Fold multiple Torch parameter graph into a single folded graph.

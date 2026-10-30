@@ -48,6 +48,7 @@ dependencies = [
 "Documentation" = "https://cirkit-docs.readthedocs.io"
 
 [project.optional-dependencies]
+xe = ["extended-einsum>=1.2.0; python_version >= '3.12'"]
 dev = [
   "black[jupyter]~=25.0",
   "mypy~=1.16.0",
@@ -139,6 +140,8 @@ load-plugins = [ # as available in pylint/extensions
 ]
 per-file-ignores = [ # TODO: wait for native support in pylint
   "/tests/:missing-function-docstring,missing-return-doc",
+  # The extended-einsum backend depends on the optional extended-einsum package
+  "/cirkit/backend/xe/:import-error",
 ]
 
 [tool.pylint."design"]
@@ -189,3 +192,10 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = ["graphviz.*", "scipy.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The extended-einsum package is an optional dependency (of the 'xe-torch' backend)
+# and requires Python 3.12, hence we do not follow its imports
+module = ["extended_einsum.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
