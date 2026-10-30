@@ -5,7 +5,7 @@ from typing import Any, Callable, Final
 import torch
 from torch import Tensor, autograd
 
-LOG_CLAMP_MIN: Final = -708.3964185322641
+LOG_CLAMP_MIN: Final = -1000.00
 
 
 # pylint: disable-next=abstract-method
