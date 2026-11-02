@@ -280,12 +280,17 @@ class TorchExpFamilyLayer(TorchInputFunctionLayer, ABC):
 
     _em_numerator: Tensor | None = None
     _em_denominator: Tensor | None = None
+    _em_uses_parameter_gradient = False
 
     def forward(self, x: Tensor) -> Tensor:
         out = self.log_unnormalized_likelihood(x)
         out = self.semiring.map_from(out, LSESumSemiring)
 
-        if self._use_em and list(self.parameters())[0].requires_grad:
+        if (
+            self._use_em
+            and list(self.parameters())[0].requires_grad
+            and not self._em_uses_parameter_gradient
+        ):
             if out.requires_grad:
                 out.retain_grad()
             self._em_cache_input = x
@@ -429,6 +434,7 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             )
         self.probs = probs
         self.logits = logits
+        self._em_uses_parameter_gradient = self.logits is not None and len(self.logits.nodes) == 1
 
     def _valid_parameter_shape(self, p: TorchParameter) -> bool:
         if p.num_folds != self.num_folds:
@@ -501,12 +507,39 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         pl = self._em_cache_output.grad.clamp(0.0)
         return torch.bmm(pl.permute(0, 2, 1), self._sufficient_statistic().type(pl.type()))
 
+    def em_accumulate(self) -> None:
+        # Other parameterizations still require the cached output-flow computation.
+        if not self._em_uses_parameter_gradient:
+            super().em_accumulate()
+            return
+
+        parameter = list(self.parameters())[0]
+        assert parameter.grad is not None
+        # For direct log parameters, autograd has already accumulated the category counts.
+        counts = parameter.grad.detach().clamp_min(0.0)
+        denominator = counts.sum(dim=-1, keepdim=True)
+        with torch.no_grad():
+            if self._em_numerator is None:
+                self._em_numerator = counts
+            else:
+                self._em_numerator += counts
+            if self._em_denominator is None:
+                self._em_denominator = denominator
+            else:
+                self._em_denominator += denominator
+        self.zero_grad()
+
     def em_step(self, step_size: float, pseudocount: float, alpha: float):
-        if list(self.parameters())[0].requires_grad:
+        parameter = list(self.parameters())[0]
+        if parameter.requires_grad:
             exp_params = (self._em_numerator + pseudocount / self.num_categories) / (
                 self._em_denominator.squeeze(-1) + pseudocount
             ).unsqueeze(-1)
-            list(self.parameters())[0].data.lerp_(exp_params, weight=step_size)
+            if self.logits is None:
+                parameter.data.lerp_(exp_params, weight=step_size)
+            else:
+                updated = torch.lerp(parameter.data.exp(), exp_params, step_size)
+                parameter.data.copy_(updated.clamp_min(torch.finfo(parameter.dtype).tiny).log())
             self._em_numerator = None
             self._em_denominator = None
 
