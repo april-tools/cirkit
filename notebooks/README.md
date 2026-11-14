@@ -19,6 +19,7 @@ graph TD;
     A-->C[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/region-graphs-and-parametrisation.ipynb'>Region Graphs and Parametrisation</a>];
     A-->D[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/learning-a-circuit-with-pic.ipynb'>Probabilistic Integral Circuits</a>];
     A-->H[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/generative-vs-discriminative-circuit.ipynb'>Building an MNIST Classifier using Cirkit</a>];
+    A-->J[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/data-driven-initialization.ipynb'>Data-driven Initialization</a>];
     B-->E[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/sum-of-squares-circuits.ipynb'>Sum of Squares Circuits</a>];
     C-->E;
     B-->F[<a href='https://github.com/april-tools/cirkit/blob/main/notebooks/compression-cp-factorization.ipynb'>CP Tensor Factorization</a>];

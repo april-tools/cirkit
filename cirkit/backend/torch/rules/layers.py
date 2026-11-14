@@ -18,6 +18,7 @@ from cirkit.backend.torch.layers.input import (
     TorchEvidenceLayer,
     TorchGaussianLayer,
     TorchInputLayer,
+    TorchMultichannelCategoricalLayer,
     TorchPolynomialLayer,
 )
 from cirkit.symbolic.layers import (
@@ -29,6 +30,7 @@ from cirkit.symbolic.layers import (
     GaussianLayer,
     HadamardLayer,
     KroneckerLayer,
+    MultichannelCategoricalLayer,
     PolynomialLayer,
     SumLayer,
 )
@@ -62,6 +64,29 @@ def compile_categorical_layer(
     return TorchCategoricalLayer(
         torch.tensor(tuple(sl.scope)),
         sl.num_output_units,
+        num_categories=sl.num_categories,
+        probs=probs,
+        logits=logits,
+        semiring=compiler.semiring,
+    )
+
+
+def compile_multichannel_categorical_layer(
+    compiler: "TorchCompiler", sl: MultichannelCategoricalLayer
+) -> TorchMultichannelCategoricalLayer:
+    """Compile a multichannel categorical input, preserving sorted channel order."""
+    if sl.logits is None:
+        assert sl.probs is not None
+        probs = compiler.compile_parameter(sl.probs)
+        logits = None
+    else:
+        assert sl.logits is not None
+        logits = compiler.compile_parameter(sl.logits)
+        probs = None
+    return TorchMultichannelCategoricalLayer(
+        torch.tensor(sorted(sl.scope)),
+        sl.num_output_units,
+        num_channels=sl.num_channels,
         num_categories=sl.num_categories,
         probs=probs,
         logits=logits,
@@ -162,6 +187,7 @@ def compile_evidence_layer(compiler: "TorchCompiler", sl: EvidenceLayer) -> Torc
 DEFAULT_LAYER_COMPILATION_RULES: dict[LayerCompilationSign, Callable[..., TorchLayer]] = {
     EmbeddingLayer: compile_embedding_layer,
     CategoricalLayer: compile_categorical_layer,
+    MultichannelCategoricalLayer: compile_multichannel_categorical_layer,
     BinomialLayer: compile_binomial_layer,
     GaussianLayer: compile_gaussian_layer,
     PolynomialLayer: compile_polynomial_layer,

@@ -1,7 +1,9 @@
 import functools
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, TypeAlias, get_args
+
+import numpy as np
 
 from cirkit.symbolic.dtypes import DataType
 from cirkit.symbolic.initializers import (
@@ -16,6 +18,7 @@ from cirkit.symbolic.layers import (
     EmbeddingLayer,
     GaussianLayer,
     InputLayer,
+    MultichannelCategoricalLayer,
     ProductLayer,
     SumLayer,
 )
@@ -30,6 +33,15 @@ from cirkit.symbolic.parameters import (
     UnaryParameterOp,
 )
 from cirkit.utils.scope import Scope
+
+InputSharing: TypeAlias = Literal["none", "full"]
+"""Whether categorical input parameters are independent or shared across all inputs."""
+
+POSITIVE_PARAMETER_MIN = float(np.sqrt(np.finfo(np.float32).tiny))
+"""Lower bound for raw positive parameters before taking their logarithm."""
+
+InputLayerName: TypeAlias = Literal["categorical", "binomial", "embedding", "gaussian"]
+SumProductLayerName: TypeAlias = Literal["cp", "cp-t", "tucker"]
 
 
 @dataclass(frozen=True)
@@ -159,6 +171,69 @@ def parameterization_to_factory(param: Parameterization) -> ParameterFactory:
         dtype=dtype,
         initializer=initializer,
     )
+
+
+def categorical_input_layer_factory(
+    *,
+    num_categories: int,
+    num_channels: int = 1,
+    sharing: InputSharing = "none",
+    **kwargs: Any,
+) -> InputLayerFactory:
+    """Create a categorical input factory with optional full parameter sharing.
+
+    Full sharing follows the PC input-sharing setup of Gala et al., *Scaling Continuous
+    Latent Variable Models as Probabilistic Integral Circuits*, NeurIPS 2024, Appendix D.2
+    (https://arxiv.org/abs/2406.06494). A new factory must be created for each circuit.
+
+    Args:
+        num_categories: Number of categories per variable, at least two.
+        num_channels: Number of variables per input scope. Values greater than one
+            construct MultichannelCategoricalLayer inputs, in sorted variable order.
+        sharing: 'none' for independent parameters or 'full' for references to the
+            first input's parameters. Shared inputs must have the same number of units.
+        **kwargs: Categorical layer constructor arguments, such as probs_factory.
+            Without custom parameters, uses softmax probabilities with normal initialization.
+
+    Returns:
+        A factory taking a scope and number of units and returning an input layer.
+
+    Raises:
+        ValueError: If sharing or dimensions are invalid, or shared shapes differ.
+    """
+    if sharing not in get_args(InputSharing):
+        raise ValueError(f"Unknown input sharing mode {sharing!r}")
+    if num_categories < 2 or num_channels < 1:
+        raise ValueError("Expected at least two categories and a positive number of channels")
+    shared_layer: CategoricalLayer | MultichannelCategoricalLayer | None = None
+
+    def factory(scope: Scope, num_units: int) -> InputLayer:
+        nonlocal shared_layer
+        layer_kwargs = kwargs.copy()
+        if shared_layer is not None:
+            if num_units != shared_layer.num_output_units:
+                raise ValueError("Shared categorical inputs must have the same number of units")
+            layer_kwargs = {
+                name: parameter.ref() for name, parameter in shared_layer.params.items()
+            }
+        layer: CategoricalLayer | MultichannelCategoricalLayer
+        if num_channels == 1:
+            layer = CategoricalLayer(
+                scope, num_units, num_categories=num_categories, **layer_kwargs
+            )
+        else:
+            layer = MultichannelCategoricalLayer(
+                scope,
+                num_units,
+                num_channels=num_channels,
+                num_categories=num_categories,
+                **layer_kwargs,
+            )
+        if sharing == "full" and shared_layer is None:
+            shared_layer = layer
+        return layer
+
+    return factory
 
 
 def name_to_parameter_activation(

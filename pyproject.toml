@@ -34,6 +34,7 @@ classifiers = [
 ]
 dependencies = [
   "torch>=2.3.0",
+  "fast-pytorch-kmeans~=0.2.2",
   "numpy>=2.1.0",
   "opt_einsum>=3.4.0",
   "einops~=0.8.0",
@@ -187,5 +188,5 @@ warn_unreachable = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-module = ["graphviz.*", "scipy.*"]
+module = ["graphviz.*", "scipy.*", "fast_pytorch_kmeans.*"]
 ignore_missing_imports = true

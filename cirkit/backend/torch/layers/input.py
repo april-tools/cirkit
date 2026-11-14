@@ -454,8 +454,8 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
         return {"logits": self.logits}
 
     def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
-        if x.is_floating_point():
-            x = x.long()  # The input to Categorical should be discrete
+        # Integer indices also prevent uint8 image values from acting as masks.
+        x = x.long()
         # x: (F, B, 1) -> (F, B)
         x = x.squeeze(dim=2)
         # logits: (F, K, N)
@@ -509,6 +509,128 @@ class TorchCategoricalLayer(TorchExpFamilyLayer):
             list(self.parameters())[0].data.lerp_(exp_params, weight=step_size)
             self._em_numerator = None
             self._em_denominator = None
+
+
+class TorchMultichannelCategoricalLayer(TorchExpFamilyLayer):
+    """Torch implementation of a product of per-channel categorical distributions.
+
+    Channels follow scope_idx order; parameter tensors have shape (F, K, C, N).
+    See the symbolic MultichannelCategoricalLayer for the model and paper reference.
+    """
+
+    # pylint: disable-next=too-many-arguments
+    def __init__(
+        self,
+        scope_idx: Tensor,
+        num_output_units: int,
+        *,
+        num_channels: int,
+        num_categories: int = 2,
+        probs: TorchParameter | None = None,
+        logits: TorchParameter | None = None,
+        semiring: Semiring | None = None,
+    ) -> None:
+        """Initialize a folded categorical product layer.
+
+        Args:
+            scope_idx: Variable indices of shape (F, C), or (C,) before folding.
+            num_output_units: Number of units K per fold.
+            num_channels: Number of independent channels C per unit.
+            num_categories: Number of categories N per channel, at least two.
+            probs: Normalized per-channel probabilities, or None when using logits.
+            logits: Unnormalized per-channel log-potentials, or None when using probs.
+            semiring: Semiring used for computation.
+
+        Raises:
+            ValueError: If scope, dimensions or parameter shapes are inconsistent.
+        """
+        num_variables = scope_idx.shape[-1]
+        if num_variables != num_channels:
+            raise ValueError(
+                f"The MultichannelCategorical layer expects {num_channels} variables, "
+                f"found {num_variables}"
+            )
+        if num_channels <= 0:
+            raise ValueError("The number of channels must be positive")
+        if num_categories < 2:
+            raise ValueError(
+                "The number of categories for Categorical distribution must be at least two"
+            )
+        super().__init__(
+            scope_idx,
+            num_output_units,
+            semiring=semiring,
+        )
+        self.num_channels = num_channels
+        self.num_categories = num_categories
+        if not (logits is None) ^ (probs is None):
+            raise ValueError("Exactly one between 'logits' and 'probs' must be specified")
+        if logits is None:
+            assert probs is not None
+            if not self._valid_parameter_shape(probs):
+                raise ValueError(
+                    f"Expected number of folds {self.num_folds} "
+                    f"and shape {self._probs_logits_shape} for 'probs', found"
+                    f"{probs.num_folds} and {probs.shape}, respectively"
+                )
+        elif not self._valid_parameter_shape(logits):
+            raise ValueError(
+                f"Expected number of folds {self.num_folds} "
+                f"and shape {self._probs_logits_shape} for 'logits', found"
+                f"{logits.num_folds} and {logits.shape}, respectively"
+            )
+        self.probs = probs
+        self.logits = logits
+
+    def _valid_parameter_shape(self, p: TorchParameter) -> bool:
+        if p.num_folds != self.num_folds:
+            return False
+        return p.shape == self._probs_logits_shape
+
+    @property
+    def _probs_logits_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels, self.num_categories
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_categories": self.num_categories,
+        }
+
+    @property
+    def params(self) -> Mapping[str, TorchParameter]:
+        if self.logits is None:
+            assert self.probs is not None
+            return {"probs": self.probs}
+        return {"logits": self.logits}
+
+    def log_unnormalized_likelihood(self, x: Tensor) -> Tensor:
+        x = x.long()
+        if x.shape[-1] != self.num_channels:
+            raise ValueError(
+                f"Expected input with {self.num_channels} channels, found {x.shape[-1]}"
+            )
+        if self.logits is None:
+            assert self.probs is not None
+            logits = torch.log(self.probs())
+        else:
+            logits = self.logits()
+        idx_fold = torch.arange(self.num_folds, device=logits.device)
+        channel_outputs = [
+            logits[idx_fold[:, None], :, c, x[:, :, c]] for c in range(self.num_channels)
+        ]
+        return torch.stack(channel_outputs, dim=0).sum(dim=0)
+
+    def log_partition_function(self) -> Tensor:
+        if self.logits is None:
+            assert self.probs is not None
+            return torch.zeros(
+                size=(self.num_folds, 1, self.num_output_units), device=self.probs.device
+            )
+        logits = self.logits()
+        return torch.logsumexp(logits, dim=3).sum(dim=2)
 
 
 class TorchBinomialLayer(TorchExpFamilyLayer):
