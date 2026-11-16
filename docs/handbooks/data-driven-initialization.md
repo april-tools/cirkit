@@ -108,23 +108,90 @@ $\alpha$ is a non-negative pseudocount added to every category. An empty populat
 therefore assigned a uniform distribution (including the $\alpha=0$ case, which is
 handled explicitly).
 
-For example, consider the observations $(0,0,0,1)$ and two categories. With
-$\alpha=2$, smoothing adds two pseudocounts to each category and gives
-$\widehat{p}=(5/8,3/8)$.
+For example, consider a single binary categorical variable $X \in \{0,1\}$ observed
+in four data samples with values $(0,0,0,1)$. Its category counts are therefore
+$n_0=3$ and $n_1=1$. With $\alpha=2$, smoothing adds two pseudocounts to each
+category and gives
 
-The same normalization is applied to the cluster sizes of a sum layer. If
-$m_h = |I_{c_h}|$, its estimated branch mass is
+$$
+\widehat{\mathbf{p}}
+= \left(\frac{3+2}{4+2\cdot2},\frac{1+2}{4+2\cdot2}\right)
+= \left(\frac{5}{8},\frac{3}{8}\right).
+$$
+
+At a sum layer with $H$ child layers $c_1,\ldots,c_H$, k-means assigns a population
+$I_{c_h}$ to each child $c_h$. Let
+
+$$
+m_h = |I_{c_h}|
+$$
+
+be the number of observations assigned to child $c_h$. Cirkit initializes the mixing
+probability of that branch by applying the same smoothed-count normalization used for
+categorical inputs:
 
 $$
 \widehat{\pi}_h =
 \frac{m_h + \alpha}
-     {\sum_{r=1}^{H} m_r + H\alpha}.
+     {\sum_{r=1}^{H} m_r + H\alpha},
+\qquad h \in \{1,\ldots,H\}.
 $$
 
-For a dense sum layer, the mass $\widehat{\pi}_h$ is distributed uniformly across the
-input units belonging to child $h$. For a mixing layer, the corresponding structured
-diagonal parameterization is retained; initialization does not replace it with a dense
-weight matrix.
+Thus, the initial branch probabilities sum to one, and a child with an empty population
+still receives positive mass when $\alpha>0$. For example, suppose a sum layer has
+$H=3$ children whose population sizes are
+
+$$
+(m_1,m_2,m_3)=(5,3,0).
+$$
+
+With $\alpha=1$, the initialized branch probabilities are
+
+$$
+\widehat{\boldsymbol{\pi}}
+= \left(\frac{5+1}{8+3},\frac{3+1}{8+3},\frac{0+1}{8+3}\right)
+= \left(\frac{6}{11},\frac{4}{11},\frac{1}{11}\right).
+$$
+
+Here, $(5,3,0)$ contains the numbers of observations assigned to the three children,
+not observed values of a categorical variable. The third child receives no observations,
+but its pseudocount still gives it an initial branch mass of $1/11$.
+
+Each child $c_h$ of a sum layer outputs a vector of $K$ units,
+$\mathbf{x}_h=(x_{h,1},\ldots,x_{h,K})$. The estimate $\widehat{\pi}_h$ assigns a total
+mass to the whole child, rather than separate masses to its individual units. How Cirkit
+turns this child-level estimate into weights depends on the sum-layer parameterization.
+
+In a dense sum layer, every output unit is connected to all $K$ units of every child.
+Because clustering provides no evidence for preferring one unit within a child, the
+initialization divides the child's mass equally among its units:
+
+$$
+w_{k,h,j}=\frac{\widehat{\pi}_h}{K}.
+$$
+
+Consequently, the $K$ weights connecting output unit $k$ to child $h$ sum to
+$\widehat{\pi}_h$. For example, if $K=3$ and two children have masses
+$(\widehat{\pi}_1,\widehat{\pi}_2)=(0.75,0.25)$, each output unit initially receives the
+weight vector
+
+$$
+(0.25,0.25,0.25,\;0.25/3,0.25/3,0.25/3).
+$$
+
+A mixing layer has a more restrictive connectivity pattern. Output unit $k$ connects
+only to input unit $k$ of each child:
+
+$$
+y_k=\sum_{h=1}^{H} v_{k,h}x_{h,k}.
+$$
+
+With the same example, the first output unit combines only $x_{1,1}$ and $x_{2,1}$
+with weights $0.75$ and $0.25$; it has no connections to units with indices $2$ or $3$.
+Cirkit preserves this diagonal structure by retaining the `MixingWeightParameter`
+operator. Data-driven initialization sets its $K H$ free mixing weights, but does not
+replace it with an unrestricted dense matrix containing $K^2H$ independently learnable
+connections.
 
 Multichannel categorical inputs estimate one marginal per channel. Their joint input
 function is a product of channel-wise categorical distributions, rather than a single
