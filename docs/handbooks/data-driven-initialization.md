@@ -1,8 +1,8 @@
 # Data-driven initialization of categorical circuits
 
 A probabilistic circuit separates two modeling choices: its **structure** determines
-which factorizations and mixtures can be represented, while its **parameters** determine
-the distribution encoded by that structure. Cirkit can initialize the parameters of an
+the algebraic form of the polynomial, while its **parameters** determine
+the distribution encoded by that structure and together they govern the **expressivity** of the circuit. Cirkit can initialize the parameters of an
 already constructed categorical circuit from observations before gradient-based
 training begins.
 
@@ -12,7 +12,7 @@ because it was built from a Region Graph. The procedure uses the data to:
 
 1. associate subsets of observations with layers in the fixed circuit;
 2. estimate mixture weights at sum layers;
-3. estimate categorical probabilities at input layers; and
+3. estimate categorical probabilities at input layers; 
 4. perturb replicated tensor units to break their initial symmetry.
 
 The resulting circuit is still a symbolic circuit. It is compiled separately with a
@@ -33,8 +33,8 @@ When the recursion reaches a leaf, the input distribution is estimated from the
 observations in its population, usually with smoothed empirical counts.
 
 Cirkit reuses the horizontal, population-based part of this idea on a tensorized circuit
-whose structure is already fixed. It does not perform independence tests, vertical
-splits, stopping tests, or structural recursion. Instead, it traverses the existing
+whose structure is already fixed. It does not perform independence tests or vertical
+splits. Instead, it traverses the existing
 circuit from its outputs towards its inputs and propagates observation indices according
 to the type of each layer.
 
@@ -246,13 +246,12 @@ for tensorized probabilistic circuits [3].
 
 ## Normalized and raw parameterizations
 
-Categorical inputs use softmax probabilities, with normally initialized logits or
-perturbed log empirical probabilities when initializing from data. Input logits remain
+Categorical inputs use softmax probabilities, input logits remain
 unconstrained throughout training and are never projected to positive values.
 `sum_weight_param` configures only the sum weights:
 
-- `activation="none"` adds no local activation to sum weights. Only these weights are
-  projected to `POSITIVE_PARAMETER_MIN` before the first forward pass and after each
+- `activation="none"` adds no local activation to sum weights. Only these weights if negative are
+  projected to $\approx 1.08 \times 10^{-19}$ before the first forward pass and after each
   optimizer step. Input logits are not clamped.
 - `activation="positive-clamp"` constrains sum weights locally, with no
   optimizer-side projection.
@@ -298,16 +297,6 @@ constructing derived circuits that reference the old parameters.
 The `image_data` template accepts every image region graph through `region_graph`:
 `quad-tree-2` (default), `quad-tree-4`, `quad-graph`, `random-binary-tree`,
 `poon-domingos`, `chow-liu-tree`, and `linear-tree`.
-
-Chow-Liu learns its structure from the supplied data, independently of whether
-data-driven parameter initialization is enabled. The optional `num_bins` (1 to 256)
-affects only structure learning; input distributions and parameter initialization retain
-all 256 pixel levels.
-The optional `mi_chunk_size` must be positive and limits the samples processed at once.
-Without these options, all pixel levels and all training samples are used. Chunking does
-not reduce the joint-count table, whose size is quadratic in both the number of variables
-and the number of bins. Both options are ignored for other region graphs.
-
 All region graphs support single-channel images with either input-sharing mode.
 Multichannel images support every region graph with `input_sharing="none"`; full sharing
 requires `quad-tree-2`, `quad-tree-4`, or `quad-graph`. The template supports `cp`, `cp-t`,
