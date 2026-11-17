@@ -78,13 +78,10 @@ $$
 I_c = I_\ell \qquad \text{for every child } c.
 $$
 
-Circuits are directed acyclic graphs rather than necessarily trees. If a layer is reached
-from several parents, Cirkit takes the union of their incoming row indices before
-processing it. An observation is counted once even if it reaches the shared layer along
-multiple paths.
-
-These rules preserve the given smooth and decomposable structure: they only decide
-which observations are used to initialize each existing parameter.
+If a layer is reached from several parents, Cirkit takes the union of their incoming row
+indices before processing it. An observation is counted once even if it reaches the shared
+layer along multiple paths. These rules preserve the given smooth and decomposable
+structure: they only decide which observations are used to initialize each existing parameter.
 
 ## Smoothed empirical estimates
 
