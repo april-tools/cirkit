@@ -51,12 +51,12 @@ the connectivity of the tensorized circuit.
 
 ## Population propagation
 
-Let $\mathcal{D} = \{\mathbf{x}^{(n)}\}_{n=1}^{N}$ be a categorical dataset and let
-$I_\ell \subseteq \{1,\ldots,N\}$ denote the population assigned to layer $\ell$.
+Let $\mathcal{D} = \lbrace\mathbf{x}^{(n)}\rbrace_{n=1}^{N}$ be a categorical dataset and let
+$I_\ell \subseteq \lbrace 1,\ldots,N\rbrace$ denote the population assigned to layer $\ell$.
 Every output layer starts with
 
 $$
-I_\ell = \{1,\ldots,N\}.
+I_\ell = \lbrace 1,\ldots,N\rbrace.
 $$
 
 Consider a sum layer with scope $V_\ell$, population $I_\ell$, and child layers
@@ -64,7 +64,7 @@ $c_1,\ldots,c_H$. Cirkit applies Euclidean k-means to the observations restricte
 that scope,
 
 $$
-\left\{\mathbf{x}^{(n)}_{V_\ell}: n \in I_\ell\right\},
+\left\lbrace\mathbf{x}^{(n)}_{V_\ell}: n \in I_\ell\right\rbrace,
 $$
 
 and obtains child populations $I_{c_1},\ldots,I_{c_H}$. When $H=1$, no clustering is
@@ -92,8 +92,8 @@ Suppose a categorical input for variable $X_j$ has $C$ categories. For a populat
 $I_\ell$, define
 
 $$
-n_c = \sum_{n \in I_\ell} \mathbb{1}\!\left[x_j^{(n)} = c\right],
-\qquad c \in \{0,\ldots,C-1\}.
+n_c = \sum_{n \in I_\ell} \mathbb{1}\left[x_j^{(n)} = c\right],
+\qquad c \in \lbrace 0,\ldots,C-1\rbrace.
 $$
 
 Cirkit converts these counts into probabilities using
@@ -108,7 +108,7 @@ $\alpha$ is a non-negative pseudocount added to every category. An empty populat
 therefore assigned a uniform distribution (including the $\alpha=0$ case, which is
 handled explicitly).
 
-For example, consider a single binary categorical variable $X \in \{0,1\}$ observed
+For example, consider a single binary categorical variable $X \in \lbrace 0,1\rbrace$ observed
 in four data samples with values $(0,0,0,1)$. Its category counts are therefore
 $n_0=3$ and $n_1=1$. With $\alpha=2$, smoothing adds two pseudocounts to each
 category and gives
@@ -134,11 +134,11 @@ $$
 \widehat{\pi}_h =
 \frac{m_h + \alpha}
      {\sum_{r=1}^{H} m_r + H\alpha},
-\qquad h \in \{1,\ldots,H\}.
+\qquad h \in \lbrace 1,\ldots,H\rbrace.
 $$
 
 Thus, the initial branch probabilities sum to one, and a child with an empty population
-still receives positive mass when $\alpha>0$. For example, suppose a sum layer has
+still receives positive mass for positive $\alpha$. For example, suppose a sum layer has
 $H=3$ children whose population sizes are
 
 $$
@@ -157,10 +157,15 @@ Here, $(5,3,0)$ contains the numbers of observations assigned to the three child
 not observed values of a categorical variable. The third child receives no observations,
 but its pseudocount still gives it an initial branch mass of $1/11$.
 
-Each child $c_h$ of a sum layer outputs a vector of $K$ units,
-$\mathbf{x}_h=(x_{h,1},\ldots,x_{h,K})$. The estimate $\widehat{\pi}_h$ assigns a total
-mass to the whole child, rather than separate masses to its individual units. How Cirkit
-turns this child-level estimate into weights depends on the sum-layer parameterization.
+Each child $c_h$ of a sum layer outputs a vector of $K$ units:
+
+$$
+\mathbf{x}_h=(x_{h,1},\ldots,x_{h,K}).
+$$
+
+The estimate $\widehat{\pi}_h$ assigns a total mass to the whole child, rather than
+separate masses to its individual units. How Cirkit turns this child-level estimate into
+weights depends on the sum-layer parameterization.
 
 In a dense sum layer, every output unit is connected to all $K$ units of every child.
 Because clustering provides no evidence for preferring one unit within a child, the
@@ -176,7 +181,7 @@ $(\widehat{\pi}_1,\widehat{\pi}_2)=(0.75,0.25)$, each output unit initially rece
 weight vector
 
 $$
-(0.25,0.25,0.25,\;0.25/3,0.25/3,0.25/3).
+(0.25,0.25,0.25,\quad 0.25/3,0.25/3,0.25/3).
 $$
 
 A mixing layer has a more restrictive connectivity pattern. Output unit $k$ connects
