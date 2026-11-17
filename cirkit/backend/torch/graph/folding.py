@@ -180,7 +180,7 @@ def group_foldable_modules(
     """
 
     def _gather_fold_settings(module: AbstractTorchModule) -> tuple[Any, ...]:
-        ss = [type(m), *m.fold_settings]
+        ss = [type(module), *module.fold_settings]
         for _, sub_module in module.sub_modules.items():
             sub_ss = _gather_fold_settings(sub_module)
             ss.extend(sub_ss)

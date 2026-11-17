@@ -18,6 +18,7 @@ nav:
           - nb9: "notebooks/generative-vs-discriminative-circuit.ipynb"
   - API documentation: "api/"
   - Handbooks:
+      - Data-driven Initialization: "handbooks/data-driven-initialization.md"
       - Backends: "handbooks/backends.md"
       - Torch Compilation: "handbooks/cirkit-torch-compiler/torch-compiler.md"
       - Torch Compilation:

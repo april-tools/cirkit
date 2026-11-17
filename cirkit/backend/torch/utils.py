@@ -5,7 +5,9 @@ from typing import Any, Callable, Final
 import torch
 from torch import Tensor, autograd
 
-LOG_CLAMP_MIN: Final = -1000.00
+# Keep log-space products finite without clipping valid high-dimensional log-likelihoods.
+# A floor based on log(finfo.tiny) would incorrectly saturate sums of many log factors.
+LOG_CLAMP_MIN: Final = float(torch.finfo(torch.float32).min)
 
 
 # pylint: disable-next=abstract-method

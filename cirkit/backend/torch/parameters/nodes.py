@@ -471,6 +471,10 @@ class TorchIndexParameter(TorchUnaryParameterOp):
         return self._indices.cpu().tolist()
 
     @property
+    def fold_settings(self) -> tuple[Any, ...]:
+        return self.in_shape, self.dim, tuple(self.indices)
+
+    @property
     def config(self) -> dict[str, Any]:
         config = super().config
         config["indices"] = self.indices
@@ -486,7 +490,7 @@ class TorchIndexParameter(TorchUnaryParameterOp):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        return x[:, self._indices]
+        return torch.index_select(x, dim=self.dim + 1, index=self._indices)
 
 
 class TorchSumParameter(TorchBinaryParameterOp):

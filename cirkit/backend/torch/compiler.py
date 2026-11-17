@@ -78,6 +78,9 @@ class TorchCompilerState:
         # Retrieve whether a tensor parameter has already been compiled
         return p in self._compiled_parameters
 
+    def has_symbolic_parameter(self, p: TorchTensorParameter) -> bool:
+        return p in self._symbolic_parameters
+
     def retrieve_compiled_parameter(self, p: TensorParameter) -> tuple[TorchTensorParameter, int]:
         # Retrieve the compiled parameter: we return the fold index as well.
         return self._compiled_parameters[p]
@@ -505,17 +508,22 @@ def _fold_parameter_nodes_group(
         assert all(isinstance(p, TorchPointerParameter) for p in group)
         group_pointers: Sequence[TorchPointerParameter] = group  # type: ignore[assignment]
         node_pointer = group_pointers[0]
-        if len(group) == 1:
-            # Catch the case we are not able to fold multiple tensor slicing operations
-            # In such a case, just have the slice as folded parameter (i.e., number of folds = 1)
-            return node_pointer
-        # Catch the case we are able to fold multiple tensor slicing operations
+        # Pointer parameters can target tensor parameters that have themselves been folded.
+        # Remap the target to the folded tensor registered in the compiler state; otherwise the
+        # pointer can keep referencing an unfolded tensor that is no longer part of the final
+        # parameter graph and therefore never gets initialized.
         in_folded_node = node_pointer.deref()
-        in_fold_idx: list[int] = list(
-            chain.from_iterable(
-                range(p.num_folds) if p.fold_idx is None else p.fold_idx for p in group_pointers
-            )
-        )
+        fold_idx_offset = 0
+
+        if compiler.state.has_symbolic_parameter(in_folded_node):
+            sp = compiler.state.retrieve_symbolic_parameter(in_folded_node)
+            in_folded_node, fold_idx_offset = compiler.state.retrieve_compiled_parameter(sp)
+
+        in_fold_idx: list[int] = [
+            fold_idx_offset + i
+            for p in group_pointers
+            for i in (range(p.num_folds) if p.fold_idx is None else p.fold_idx)
+        ]
         return TorchPointerParameter(in_folded_node, fold_idx=in_fold_idx)
     # We are folding an operator: just set the number of folds and copy the configuration parameters
     assert all(isinstance(p, TorchParameterOp) for p in group)

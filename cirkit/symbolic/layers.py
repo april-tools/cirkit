@@ -355,6 +355,107 @@ class CategoricalLayer(InputLayer):
         return {"logits": self.logits}
 
 
+class MultichannelCategoricalLayer(InputLayer):
+    """A product of categorical distributions, one for each channel of a variable group.
+
+    Parameters have shape (K, C, N): units, channels, categories. Channels follow
+    sorted variable IDs in the scope and are independent conditional on the unit.
+    This is not a categorical distribution over N**C joint assignments.
+
+    See:
+        Gala, de Campos, Vergari and Quaeghebeur, *Scaling Continuous Latent Variable
+        Models as Probabilistic Integral Circuits*, NeurIPS 2024, Appendix D.2,
+        https://arxiv.org/abs/2406.06494, for the RGB input representation and sharing.
+    """
+
+    def __init__(
+        self,
+        scope: Scope,
+        num_output_units: int,
+        *,
+        num_channels: int,
+        num_categories: int,
+        logits: Parameter | None = None,
+        probs: Parameter | None = None,
+        logits_factory: ParameterFactory | None = None,
+        probs_factory: ParameterFactory | None = None,
+    ) -> None:
+        """Initialize a multichannel categorical layer.
+
+        Args:
+            scope: Variable IDs, one per channel, interpreted in sorted order.
+            num_output_units: Number of product distributions represented by the layer.
+            num_channels: Number of channels, equal to the scope size and at least one.
+            num_categories: Number of states per channel, at least two.
+            logits: Optional unnormalized log-potentials of shape (K, C, N).
+            probs: Optional normalized per-channel probabilities of shape (K, C, N).
+            logits_factory: Constructs logits when neither explicit parameter is given.
+            probs_factory: Constructs probabilities when neither explicit parameter is given.
+                Without factories, uses a softmax over categories and normal initialization.
+
+        Raises:
+            ValueError: If dimensions, parameter shapes, or parameter/factory choices conflict.
+        """
+        if len(scope) != num_channels:
+            raise ValueError(
+                f"The MultichannelCategorical layer expects {num_channels} variables, "
+                f"but found scope {scope}"
+            )
+        if logits is not None and probs is not None:
+            raise ValueError("At most one between 'logits' and 'probs' can be specified")
+        if logits_factory is not None and probs_factory is not None:
+            raise ValueError(
+                "At most one between 'logits_factory' and 'probs_factory' can be specified"
+            )
+        if num_channels < 1:
+            raise ValueError("At least one channel must be specified")
+        if num_categories < 2:
+            raise ValueError("At least two categories must be specified")
+        super().__init__(scope, num_output_units)
+        self.num_channels = num_channels
+        self.num_categories = num_categories
+        if logits is None and probs is None:
+            if logits_factory is not None:
+                logits = logits_factory(self._probs_logits_shape)
+            elif probs_factory is not None:
+                probs = probs_factory(self._probs_logits_shape)
+            else:
+                probs = Parameter.from_unary(
+                    SoftmaxParameter(self._probs_logits_shape, axis=2),
+                    TensorParameter(*self._probs_logits_shape, initializer=NormalInitializer()),
+                )
+        if logits is not None and logits.shape != self._probs_logits_shape:
+            raise ValueError(
+                f"Expected parameter shape {self._probs_logits_shape}, found {logits.shape}"
+            )
+        if probs is not None and probs.shape != self._probs_logits_shape:
+            raise ValueError(
+                f"Expected parameter shape {self._probs_logits_shape}, found {probs.shape}"
+            )
+        self.probs = probs
+        self.logits = logits
+
+    @property
+    def _probs_logits_shape(self) -> tuple[int, ...]:
+        return self.num_output_units, self.num_channels, self.num_categories
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        return {
+            "scope": self.scope,
+            "num_output_units": self.num_output_units,
+            "num_channels": self.num_channels,
+            "num_categories": self.num_categories,
+        }
+
+    @property
+    def params(self) -> Mapping[str, Parameter]:
+        if self.logits is None:
+            assert self.probs is not None
+            return {"probs": self.probs}
+        return {"logits": self.logits}
+
+
 class BinomialLayer(InputLayer):
     """A symbolic Binomial layer, which is parameterized either by
     probabilities (yielding a normalized Binomial distribution) or by
